@@ -468,6 +468,22 @@ class SessionActions {
     String sessionId,
     String text, {
     String? requestId,
+  }) => _continue(sessionId, text, requestId: requestId, openTab: true);
+
+  /// [continueSession], kept where the person is: a session that has ended
+  /// is resumed at the server with no tab opened and no focus moved, and is
+  /// shown as starting until it is up.
+  Future<void> continueInBackground(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) => _continue(sessionId, text, requestId: requestId, openTab: false);
+
+  Future<void> _continue(
+    String sessionId,
+    String text, {
+    required bool openTab,
+    String? requestId,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
@@ -487,7 +503,12 @@ class SessionActions {
           );
     }
     if (row != null && installationSpeaksAcp(_ref, row.agentInstallationId)) {
-      return _continueOverProtocol(row, trimmed, requestId: requestId);
+      return _continueOverProtocol(
+        row,
+        trimmed,
+        requestId: requestId,
+        openTab: openTab,
+      );
     }
 
     // A PTY-hosted session is typed into, not messaged: chat and terminal are
@@ -544,7 +565,13 @@ class SessionActions {
         // A runtime left from an earlier one-off turn ends first: two
         // processes on one conversation.
         await engine.stop(sessionId);
-        await _resumeInPane(session, repo, installation, message: trimmed);
+        await _resumeInPane(
+          session,
+          repo,
+          installation,
+          message: trimmed,
+          openTab: openTab,
+        );
         return;
       }
       final permission = _ref
@@ -585,6 +612,7 @@ class SessionActions {
     Repository repo,
     AgentInstallation installation, {
     String? message,
+    bool openTab = true,
   }) async {
     final launcher = _ref.read(sessionLauncherProvider);
     final conversation = session.externalSessionId;
@@ -593,7 +621,7 @@ class SessionActions {
     // the message goes to it rather than being dropped.
     final twin = launcher.runningSessionWithExternalId(conversation);
     if (twin != null && message != null) {
-      await launcher.show(twin.id);
+      if (openTab) await launcher.show(twin.id);
       if (!await _ref.read(sessionInputProvider).send(twin.id, message)) {
         throw StateError(
           '"${twin.title}" is already running this conversation, but it could '
@@ -618,9 +646,14 @@ class SessionActions {
           existingWorktree: session.worktree,
           workingDirectory: session.workingDirectory,
           firstMessage: message,
+          openTab: openTab,
         ),
       );
-      _ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
+      if (openTab) {
+        _ref
+            .read(selectedSessionIdProvider.notifier)
+            .select(launched.session.id);
+      }
       final notice = launched.workingDirectoryNotice;
       if (notice != null) {
         _ref
@@ -704,26 +737,37 @@ class SessionActions {
     Session row,
     String text, {
     String? requestId,
+    bool openTab = true,
   }) async {
+    final runsNow =
+        row.status.claimsLive &&
+        _ref.read(sessionRunningOnHostProvider)(row.id);
     // A server that resumes on send does it in the same request, for every
     // client alike; only an older one is asked to resume first.
     final running =
-        _ref.read(capabilitiesProvider).sendResumesAtServer ||
-        (row.status.claimsLive &&
-            _ref.read(sessionRunningOnHostProvider)(row.id));
-    if (!running) {
-      final launched = await _ref
-          .read(sessionLauncherProvider)
-          .resumeAtServer(row.id);
-      final notice = launched.workingDirectoryNotice;
-      _log.info(
-        'Resumed ${row.id} at the server before sending'
-        '${notice == null ? '' : ': $notice'}',
-      );
+        _ref.read(capabilitiesProvider).sendResumesAtServer || runsNow;
+    // Kept where the person is, a session coming back says so until it has.
+    final starting = !openTab && !runsNow
+        ? (_ref.read(sessionsStartingProvider.notifier)..add(row.id))
+        : null;
+    final bool sent;
+    try {
+      if (!running) {
+        final launched = await _ref
+            .read(sessionLauncherProvider)
+            .resumeAtServer(row.id, openTab: openTab);
+        final notice = launched.workingDirectoryNotice;
+        _log.info(
+          'Resumed ${row.id} at the server before sending'
+          '${notice == null ? '' : ': $notice'}',
+        );
+      }
+      sent = await _ref
+          .read(sessionInputProvider)
+          .send(row.id, text, requestId: requestId);
+    } finally {
+      starting?.remove(row.id);
     }
-    final sent = await _ref
-        .read(sessionInputProvider)
-        .send(row.id, text, requestId: requestId);
     if (!sent) {
       throw StateError(
         'The server does not run this session, so nothing was sent. Resume '

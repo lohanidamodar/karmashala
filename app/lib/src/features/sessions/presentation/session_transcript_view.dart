@@ -103,11 +103,16 @@ class SessionTranscriptView extends ConsumerStatefulWidget {
     required this.sessionId,
     this.holdForPrompt = false,
     this.seenUntil,
+    this.resumesInBackground = false,
     super.key,
   });
 
   /// See [ChatTranscriptView.seenUntil].
   final DateTime? seenUntil;
+
+  /// The Agent dashboard's peek: a message to a session nothing runs resumes
+  /// it where the person is, with no tab opened.
+  final bool resumesInBackground;
 
   final String sessionId;
 
@@ -865,9 +870,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       _keyedText = text;
       _sendKey = newSessionInputId();
     }
-    await ref
-        .read(sessionActionsProvider)
-        .continueSession(widget.sessionId, text, requestId: _sendKey);
+    final actions = ref.read(sessionActionsProvider);
+    await (widget.resumesInBackground
+        ? actions.continueInBackground(
+            widget.sessionId,
+            text,
+            requestId: _sendKey,
+          )
+        : actions.continueSession(widget.sessionId, text, requestId: _sendKey));
     _keyedText = null;
     _sendKey = null;
   }

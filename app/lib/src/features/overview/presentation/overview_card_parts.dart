@@ -8,6 +8,7 @@ import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
+import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
 /// [text] as one plain paragraph: markdown marks and line breaks dropped.
@@ -380,6 +381,7 @@ class OverviewPhoneRow extends ConsumerWidget {
                         OverviewNewBadge(card: card),
                         const SizedBox(width: Insets.xs),
                         OverviewStatePill(card: card),
+                        OverviewCardMenu(card: card),
                       ],
                     ),
                     Text(

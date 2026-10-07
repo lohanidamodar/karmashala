@@ -53,6 +53,11 @@ class OverviewShowKeysIntent extends Intent {
   const OverviewShowKeysIntent();
 }
 
+/// R: Resume… a stopped or ended session.
+class OverviewResumeIntent extends Intent {
+  const OverviewResumeIntent();
+}
+
 /// The Overview board's keys. Bare letters, so they live on the board alone
 /// and never in the app-wide keymap, where a shell or a field would want them.
 final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
@@ -98,6 +103,7 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
   ),
   const SingleActivator(LogicalKeyboardKey.escape):
       const OverviewDismissIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyR): const OverviewResumeIntent(),
   const CharacterActivator('?'): const OverviewShowKeysIntent(),
 };
 
@@ -110,6 +116,7 @@ const List<(String keys, String does)> kOverviewTriageKeys = [
   ('T', 'Open the terminal of a terminal-only prompt'),
   ('↑ ↓  J K', 'Move between sessions'),
   ('Esc', 'Close the peek, or clear the selection'),
+  ('R', 'Resume a stopped or ended session'),
   ('?', 'Show these keys'),
 ];
 

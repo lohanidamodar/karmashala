@@ -90,9 +90,7 @@ void main() {
       '${dir.path}${Platform.pathSeparator}overview_device.json',
     );
     await until(
-      () =>
-          file.existsSync() &&
-          file.readAsStringSync().contains('context'),
+      () => file.existsSync() && file.readAsStringSync().contains('context'),
     );
 
     final second = open();
@@ -127,5 +125,15 @@ void main() {
     expect(OverviewCounter.needsYou.selectedIn(kept.filter), isFalse);
     expect(kept.filter.shows(AgentState.failed), isTrue);
     expect(kept.filter.shows(AgentState.needsYou), isFalse);
+  });
+
+  test("Resume…'s keep-here starts ticked, apart from New session's, and "
+      'is kept', () {
+    expect(const OverviewPrefs().resumeKeepsHere, isTrue);
+    final kept = OverviewPrefs.fromJson(
+      const OverviewPrefs(resumeKeepsHere: false).toJson(),
+    );
+    expect(kept.resumeKeepsHere, isFalse);
+    expect(kept.newSessionKeepsHere, isTrue);
   });
 }

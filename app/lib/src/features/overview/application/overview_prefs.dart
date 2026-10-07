@@ -25,6 +25,7 @@ class OverviewPrefs {
     this.density = OverviewDensity.cards,
     this.view = OverviewView.board,
     this.newSessionKeepsHere = true,
+    this.resumeKeepsHere = true,
   });
 
   final OverviewFilter filter;
@@ -35,18 +36,23 @@ class OverviewPrefs {
   /// Whether New session from here starts ticked to keep working here.
   final bool newSessionKeepsHere;
 
+  /// Whether Resume… from here starts ticked to keep working here.
+  final bool resumeKeepsHere;
+
   OverviewPrefs copyWith({
     OverviewFilter? filter,
     OverviewGroupBy? groupBy,
     OverviewDensity? density,
     OverviewView? view,
     bool? newSessionKeepsHere,
+    bool? resumeKeepsHere,
   }) => OverviewPrefs(
     filter: filter ?? this.filter,
     groupBy: groupBy ?? this.groupBy,
     density: density ?? this.density,
     view: view ?? this.view,
     newSessionKeepsHere: newSessionKeepsHere ?? this.newSessionKeepsHere,
+    resumeKeepsHere: resumeKeepsHere ?? this.resumeKeepsHere,
   );
 
   Map<String, Object?> toJson() => {
@@ -59,6 +65,7 @@ class OverviewPrefs {
     'density': density.name,
     'view': view.name,
     'newSessionKeepsHere': newSessionKeepsHere,
+    'resumeKeepsHere': resumeKeepsHere,
   };
 
   static OverviewPrefs fromJson(Object? json) {
@@ -99,6 +106,7 @@ class OverviewPrefs {
       ),
       view: named(OverviewView.values, json['view'], OverviewView.board),
       newSessionKeepsHere: json['newSessionKeepsHere'] != false,
+      resumeKeepsHere: json['resumeKeepsHere'] != false,
     );
   }
 }
@@ -179,6 +187,12 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
   void setNewSessionKeepsHere(bool keeps) {
     if (state.newSessionKeepsHere != keeps) {
       _set(state.copyWith(newSessionKeepsHere: keeps));
+    }
+  }
+
+  void setResumeKeepsHere(bool keeps) {
+    if (state.resumeKeepsHere != keeps) {
+      _set(state.copyWith(resumeKeepsHere: keeps));
     }
   }
 

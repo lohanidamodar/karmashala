@@ -24,13 +24,14 @@ extension SessionStartVerbs on SessionLauncher {
     SystemTerminal? externalTerminal,
   }) async {
     // A pane of ours already running this conversation is the answer to a
-    // resume of it: bring it forward rather than ask for anything.
+    // resume of it: bring it forward rather than ask for anything — or, kept
+    // where the person is, leave it where it is.
     final resuming = request.resumeExternalSessionId;
     if (resuming != null &&
         request.restartSessionId == null &&
         request.forkExternalSessionId == null) {
       final running = runningSessionWithExternalId(resuming);
-      if (running != null && reveal(running.id)) {
+      if (running != null && (!request.openTab || reveal(running.id))) {
         return SessionLaunchResult(
           session: running,
           paneId: livePaneFor(running.id),
