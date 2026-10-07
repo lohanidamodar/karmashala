@@ -322,6 +322,18 @@ void main() {
       );
     });
 
+    test('a colon in the prompt is part of it, and one after the project '
+        'only marks where it starts', () {
+      String? said(String text) =>
+          (plan(text).action! as StartCommand).firstMessage;
+      expect(
+        said('new codex in karmashala run this command: git log -1'),
+        'run this command: git log -1',
+      );
+      expect(said('new codex in karmashala: fix it'), 'fix it');
+      expect(said('new codex in karmashala : fix: it'), 'fix: it');
+    });
+
     test('the project completes, and an agent not installed is refused', () {
       final command = parse('new claude in kar');
       expect(command.pending, CommandArgKind.project);

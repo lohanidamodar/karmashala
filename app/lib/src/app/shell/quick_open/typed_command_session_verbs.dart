@@ -14,8 +14,8 @@ extension _SessionVerbs on _Parser {
       (committed.isNotEmpty ? committed.first : partial).toLowerCase() == 'all';
 
   /// What was typed after the first [n] arguments, as typed.
-  String _after(int n) {
-    var text = rest;
+  String _after(int n, {bool uncut = false}) {
+    var text = uncut ? uncutRest : rest;
     for (var i = 0; i < n; i++) {
       final word = RegExp(r'^\S+\s*').firstMatch(text);
       if (word == null) return '';
@@ -617,8 +617,14 @@ extension _SessionVerbs on _Parser {
       }
       project = found.single;
     }
-    final prompt =
-        message ?? (fromPartial ? null : _after(3).trim().nullIfEmpty);
+    // After the project everything is the prompt, colons and all; a colon
+    // right after the project only marks where it starts.
+    final prompt = fromPartial
+        ? message
+        : _after(
+            3,
+            uncut: true,
+          ).trim().replaceFirst(RegExp(r'^:\s*'), '').nullIfEmpty;
     final installation = project.installations
         .where((i) => i.agentId == agent.agentId)
         .firstOrNull;

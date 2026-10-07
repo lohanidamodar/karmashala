@@ -724,6 +724,7 @@ TypedCommand? parseTypedCommand(
   if (verb == null) return null;
   // `new api: fix the login bug` — what follows the colon is said first.
   String? message;
+  final uncut = input.trimLeft();
   final colon = verb == CommandVerb.start ? input.indexOf(':') : -1;
   if (colon >= 0) {
     final said = input.substring(colon + 1).trim();
@@ -748,6 +749,7 @@ TypedCommand? parseTypedCommand(
     partial: partial,
     message: message,
     rest: trimmed.substring(words.first.length).trimLeft(),
+    uncutRest: uncut.substring(words.first.length).trimLeft(),
   ).parse();
 }
 
@@ -780,7 +782,12 @@ class _Parser {
     required this.partial,
     this.message,
     this.rest = '',
+    this.uncutRest = '',
   });
+
+  /// [rest] before a colon cut `start`'s message off it: a prompt typed
+  /// after `new <agent> in <project>` may hold a colon of its own.
+  final String uncutRest;
 
   final CommandCatalog catalog;
   final CommandVerb verb;
