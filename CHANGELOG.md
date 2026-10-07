@@ -17,6 +17,43 @@ installs claim the same version name.
 
 ---
 
+## 1.34.1 — 2026-10-08 (build 68)
+
+- **A sturdier, richer chat.**
+  - A message that can't be drawn says so, with Show raw and Copy, instead
+    of blanking the chat.
+  - Long transcripts scroll smoothly and stay in place as earlier turns load.
+  - Code blocks have highlighting, Copy and folding. Long messages, prompts
+    and edits fold.
+  - File paths open a preview under the message, read through the server so
+    WSL and SSH sessions work too. Previews cover code, markdown, images,
+    PDF, CSV, JSON/YAML, mermaid, logs and HTML.
+  - Chart, maths, diff, JSON and coloured-output blocks are drawn inline,
+    and mermaid can zoom and pan.
+  - HTML shows a preview; its scripts run only in the browser, sandboxed.
+- **Automations, part 2.**
+  - GitHub triggers: a pull request comment or review, a failed check, a
+    merged pull request, an issue labelled or assigned.
+  - A "needs you" event.
+  - Run a command and Call a webhook steps.
+  - Runs an hour for every kind, with later triggers queued.
+  - Automations that agents propose stay off until you turn them on.
+  - Messages from an automation are labelled "Sent by automation".
+- **Dashboard power tools.**
+  - Ctrl+K acts on sessions: answer, allow or deny, message, stop, resume,
+    archive, open, and "new … in …".
+  - Batch replies.
+  - Pinned sessions, and two peeks side by side on wide screens.
+  - An optional chime when something needs you.
+  - Usage and limit warnings per session.
+- **Fixes:**
+  - The Timeline explains an older server.
+  - The delivery line no longer overflows on phones.
+  - No more phantom "blocked" reports.
+  - Claude chat sessions show "Opus 5.5" rather than the raw model id.
+  - Archive waits while a session resumes.
+  - Antigravity's model is read where it is recorded.
+
 ## 1.34.0 — 2026-10-07 (build 67)
 
 - **The Agent dashboard (was Overview) is somewhere to work from.**
