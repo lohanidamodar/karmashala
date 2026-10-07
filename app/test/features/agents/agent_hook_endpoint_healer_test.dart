@@ -174,9 +174,11 @@ void main() {
           DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
+      // Stopped before the read: the file exists as soon as the healer opens
+      // it, and on Windows reading it mid-write is refused.
+      await healer.stop();
       expect(endpointFile().readAsStringSync(), written);
 
-      await healer.stop();
       endpointFile().deleteSync();
       await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(endpointFile().existsSync(), isFalse);
