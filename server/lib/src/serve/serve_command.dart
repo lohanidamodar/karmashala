@@ -33,6 +33,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionNoticed,
         SessionQueueChanged,
         SessionSend,
+        SessionSent,
         TabReveal,
         TerminalOpen,
         UsageLimitNotice,
@@ -1333,6 +1334,15 @@ Future<int> _serve(
     queue: sessionQueue,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  // An event rule's "tell the agent" goes the way every send goes, so a chat
+  // session hears it too and a running turn queues it.
+  automations?.eventRules.send = (sessionId, text) async =>
+      await sessionInput.handle(
+            SessionSend(sessionId: sessionId, text: text),
+            null,
+            origin: QueuedMessageOrigin.automation,
+          )
+          as SessionSent;
   // Turns the last stop or crash cut off are continued now, each resume
   // claimed before any client can connect and reopen the same row; then
   // every turn this server runs is recorded open until it settles.
