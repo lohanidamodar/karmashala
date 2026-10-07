@@ -142,6 +142,9 @@ String triggerWords(Automation automation, {DateTime? now}) {
     final signed = automation.webhook!.requireSignature ? ' (signed)' : '';
     return 'When its webhook URL is called$signed';
   }
+  if (automation.github case final github?) {
+    return 'When ${github.kind.phrase} in ${github.repository}';
+  }
   final trigger = automation.trigger;
   if (trigger != null) return 'When ${_eventWords(trigger.kind)}';
   final schedule = automation.schedule;
@@ -168,8 +171,10 @@ String automationWords(
 }) {
   final parts = <String>[
     '${triggerWords(automation, now: now)}, in $checkout',
-    switch (automation.trigger?.action) {
+    switch (automation.github?.action ?? automation.trigger?.action) {
       AutomationEventAction.notifyOnly => 'start nothing',
+      AutomationEventAction.messageSession when automation.isGithub =>
+        'tell the session on its branch, or start $agent there',
       AutomationEventAction.messageSession => 'tell that session',
       _ => 'start $agent${automation.worktree ? ' in a worktree' : ''}',
     },
@@ -203,6 +208,7 @@ String nextRunWords(Automation automation, {required DateTime now}) {
         : 'Stopped after failures';
   }
   if (automation.webhook != null) return 'Listening';
+  if (automation.github != null) return 'Watching GitHub';
   if (automation.trigger != null) return 'On the next event';
   final schedule = automation.schedule;
   if (schedule.isOnce) {

@@ -3,6 +3,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'automation_steps.dart';
 import 'automation_trigger.dart';
 import 'automation_webhook.dart';
+import 'github_trigger.dart';
 
 /// The shortest interval an automation may repeat at.
 ///
@@ -158,6 +159,7 @@ class Automation {
     this.maxRuntime,
     this.trigger,
     this.webhook,
+    this.github,
     this.modelId,
     this.worktree = false,
     this.steps = AutomationSteps.standard,
@@ -216,6 +218,10 @@ class Automation {
   /// never on a clock or an event.
   final AutomationWebhook? webhook;
 
+  /// What makes this answer GitHub, or null. Polled at its own interval,
+  /// never on a clock or a session event.
+  final AutomationGithubTrigger? github;
+
   /// The model its agent starts with; null is the agent's default.
   final String? modelId;
 
@@ -229,13 +235,19 @@ class Automation {
 
   bool get isWebhook => webhook != null;
 
+  bool get isGithub => github != null;
+
   /// Whether the scheduler fires this on its [schedule].
-  bool get isScheduled => trigger == null && webhook == null;
+  bool get isScheduled => trigger == null && webhook == null && github == null;
 
   /// Whether a run needs an agent of its own. A message goes into a session
-  /// that already has one, so that rule names none.
-  bool get startsAgent =>
-      trigger == null || trigger!.action == AutomationEventAction.startSession;
+  /// that already has one, so that rule names none; a GitHub rule that tells
+  /// a branch's session starts one when no session owns the branch.
+  bool get startsAgent => switch (github?.action ?? trigger?.action) {
+    null || AutomationEventAction.startSession => true,
+    AutomationEventAction.messageSession => github != null,
+    AutomationEventAction.notifyOnly => false,
+  };
 
   /// Whether [consecutiveFailures] has reached the limit this was armed with.
   bool get hasFailedOut =>
@@ -259,6 +271,7 @@ class Automation {
     AutomationEventTrigger? trigger,
     AutomationWebhook? webhook,
     bool clearWebhook = false,
+    AutomationGithubTrigger? github,
     String? modelId,
     bool clearModel = false,
     bool? worktree,
@@ -282,6 +295,7 @@ class Automation {
     maxRuntime: clearMaxRuntime ? null : maxRuntime ?? this.maxRuntime,
     trigger: trigger ?? this.trigger,
     webhook: clearWebhook ? null : webhook ?? this.webhook,
+    github: github ?? this.github,
     modelId: clearModel ? null : modelId ?? this.modelId,
     worktree: worktree ?? this.worktree,
     steps: steps ?? this.steps,
@@ -289,5 +303,6 @@ class Automation {
 
   @override
   String toString() =>
-      'Automation($id, $name, ${webhook ?? trigger ?? schedule}, enabled: $enabled)';
+      'Automation($id, $name, ${webhook ?? github ?? trigger ?? schedule}, '
+      'enabled: $enabled)';
 }

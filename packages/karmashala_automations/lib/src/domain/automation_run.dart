@@ -6,6 +6,7 @@ enum AutomationRunCause {
   schedule,
   event,
   webhook,
+  github,
   runNow;
 
   static AutomationRunCause? fromName(String? name) {
@@ -19,6 +20,7 @@ enum AutomationRunCause {
     AutomationRunCause.schedule => 'Schedule',
     AutomationRunCause.event => 'Event',
     AutomationRunCause.webhook => 'Webhook',
+    AutomationRunCause.github => 'GitHub',
     AutomationRunCause.runNow => 'Run now',
   };
 }

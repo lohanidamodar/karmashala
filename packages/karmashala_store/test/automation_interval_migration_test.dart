@@ -21,7 +21,7 @@ void main() {
           fallback: row['dflt_value'],
         ),
     };
-    expect(db.schemaVersion, 86);
+    expect(db.schemaVersion, 87);
     expect(columns['every_seconds']?.notNull, 0);
     expect(columns['max_runtime_seconds']?.notNull, 0);
     expect(columns['disabled_reason']?.notNull, 0);

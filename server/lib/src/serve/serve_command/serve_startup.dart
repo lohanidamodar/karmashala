@@ -117,6 +117,7 @@ Future<DaemonAutomations?> _startAutomations({
   bool Function(ExecutionEnvironment environment)? reachesBox,
   AcpRuntimeFactory? acpRuntimes,
   WorktreeService? worktrees,
+  Duration? githubSweepEvery,
   AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
   acpAuth,
 }) async {
@@ -144,6 +145,7 @@ Future<DaemonAutomations?> _startAutomations({
     acpRuntimes: acpRuntimes,
     worktrees: worktrees,
     acpAuth: acpAuth,
+    githubSweepEvery: githubSweepEvery,
     onDecision: (decision) => data.applyAsServer(
       DecisionAppend(
         DecisionRecord(

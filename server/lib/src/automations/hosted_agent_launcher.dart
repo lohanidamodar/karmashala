@@ -299,8 +299,9 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   Future<String> launch(
     Automation automation,
     Repository repository,
-    AgentInstallation installation,
-  ) async => (await start(
+    AgentInstallation installation, {
+    String? branch,
+  }) async => (await start(
     HostedLaunch(
       repository: repository,
       installation: installation,
@@ -308,7 +309,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       permissionMode: automation.permissionMode?.canonical,
       prompt: automation.prompt,
       modelId: automation.modelId,
-      worktree: automation.worktree,
+      worktree: automation.worktree || branch != null,
+      worktreeExistingBranch: branch,
     ),
   )).id;
 

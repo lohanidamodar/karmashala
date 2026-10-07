@@ -1179,3 +1179,29 @@ void _migrateToV86(Database db) {
   if (columns.contains('variables')) return;
   db.execute('ALTER TABLE automation_runs ADD COLUMN variables TEXT;');
 }
+
+/// GitHub automations: the trigger on the row, and per automation when it
+/// last looked and every item it has answered, so a look never replays one.
+void _migrateToV87(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automations);')
+      .map((row) => row['name'] as String);
+  if (!columns.contains('github')) {
+    db.execute('ALTER TABLE automations ADD COLUMN github TEXT;');
+  }
+  db.execute(
+    'CREATE TABLE IF NOT EXISTS automation_github_state ('
+    'automation_id TEXT PRIMARY KEY REFERENCES automations(id) '
+    'ON DELETE CASCADE, '
+    'primed_at TEXT NOT NULL, '
+    'polled_at TEXT);',
+  );
+  db.execute(
+    'CREATE TABLE IF NOT EXISTS automation_github_seen ('
+    'automation_id TEXT NOT NULL REFERENCES automations(id) '
+    'ON DELETE CASCADE, '
+    'item_key TEXT NOT NULL, '
+    'seen_at TEXT NOT NULL, '
+    'PRIMARY KEY (automation_id, item_key));',
+  );
+}

@@ -569,6 +569,65 @@ void main() {
     expect(tester.widget<Switch>(tick).value, isTrue);
   });
 
+  testWidgets('a GitHub trigger reads its repository off the checkout, asks '
+      'for a label when it needs one, and saves', (tester) async {
+    makeReady();
+    server.repositoryRows.update(
+      repository().copyWith(canonicalId: 'github.com/acme/shop'),
+    );
+    await pump(
+      tester,
+      const AutomationDraft(repositoryId: 'r1', name: 'PR comments'),
+    );
+    await tester.tap(find.text(DraftTrigger.github.short));
+    await tester.pumpAndSettle();
+    final repo = tester.widget<TextField>(
+      find.byKey(const ValueKey('automation-github-repo')),
+    );
+    expect(repo.controller!.text, 'acme/shop');
+    expect(find.textContaining('first look only notes'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('automation-github-kind')));
+    await tester.pumpAndSettle();
+    await tester.tap(item(GithubTriggerKind.issueLabeled).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-prompt')),
+      'Triage {{github.issue.title}}',
+    );
+    await pickAgent(tester);
+    expect(save(tester).onPressed, isNull, reason: 'no label chosen yet');
+
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-github-label')),
+      'triage',
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('automation-save')));
+    await tester.tap(find.byKey(const ValueKey('automation-save')));
+    await tester.pumpAndSettle();
+    final stored = server.automationRows.getAll().single;
+    expect(stored.github!.kind, GithubTriggerKind.issueLabeled);
+    expect(stored.github!.repository, 'acme/shop');
+    expect(stored.github!.label, 'triage');
+    expect(stored.github!.authors, GithubAuthors.collaborators);
+    expect(stored.isScheduled, isFalse);
+
+    for (final (size, scale) in const [
+      (Size(360, 2400), 1.0),
+      (Size(1440, 1400), 1.0),
+      (Size(360, 3200), 1.6),
+    ]) {
+      await pump(
+        tester,
+        AutomationDraft.from(stored),
+        size: size,
+        textScale: scale,
+      );
+      expect(tester.takeException(), isNull, reason: '$size $scale');
+    }
+  });
+
   testWidgets('it fits a phone, a desktop and large text', (tester) async {
     for (final size in const [
       Size(360, 740),

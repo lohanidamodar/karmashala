@@ -7,6 +7,7 @@ import 'automation_run.dart';
 import 'automation_steps.dart';
 import 'automation_trigger.dart';
 import 'automation_webhook.dart';
+import 'github_trigger.dart';
 import 'project_check.dart';
 import 'scheduled_resume.dart';
 
@@ -61,6 +62,7 @@ Map<String, Object?> automationToJson(Automation a) => {
       'worktree': a.worktree,
       'callsPerHour': w.callsPerHour,
     },
+  if (a.github case final g?) 'github': g.toJson(),
 };
 
 AutomationWebhook? _webhook(Object? json) {
@@ -108,6 +110,7 @@ Automation automationFromJson(Map<String, Object?> json) {
       action: json['eventAction'] as String?,
     ),
     webhook: _webhook(json['webhook']),
+    github: AutomationGithubTrigger.fromJson(json['github']),
     modelId: json['modelId'] as String? ?? hook['modelId'] as String?,
     worktree: json['worktree'] as bool? ?? hook['worktree'] as bool? ?? false,
     steps: json.containsKey('steps')

@@ -59,7 +59,7 @@ void main() {
   test('v39 is the head and the keys stay contiguous', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    expect(db.schemaVersion, 86);
+    expect(db.schemaVersion, 87);
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);

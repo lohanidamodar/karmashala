@@ -9,7 +9,7 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 86', () => expect(db.schemaVersion, 86));
+  test('the head is 87', () => expect(db.schemaVersion, 87));
 
   test('v74 creates session_handoffs', () {
     final columns = db

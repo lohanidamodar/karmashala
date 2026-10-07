@@ -84,6 +84,7 @@ class AutomationPermissionModeField extends StatelessWidget {
       initialValue: selections.any((s) => s.canonical == resolved)
           ? resolved
           : null,
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Permission mode',
         helperText:
@@ -96,7 +97,10 @@ class AutomationPermissionModeField extends StatelessWidget {
             value: selection.canonical,
             // Whole selections rather than axes, so the familiar name is the
             // composed rung's — the one the unattended gate reads.
-            child: Text(describeSelectionFamiliar(support, selection)),
+            child: Text(
+              describeSelectionFamiliar(support, selection),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: (value) =>

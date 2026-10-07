@@ -3,6 +3,7 @@ import 'package:karmashala_core/verdicts.dart';
 import '../domain/automation.dart';
 import '../domain/automation_run.dart';
 import '../domain/automation_steps.dart';
+import '../domain/github_trigger.dart';
 import '../domain/scheduled_resume.dart';
 import 'automation_records.dart';
 import 'automation_step_io.dart';
@@ -120,7 +121,7 @@ class AutomationFollowUps {
           AutomationStepKind.tell => _tell(
             automation,
             run,
-            fillStepText(step.text.trim(), values),
+            fillAgentText(step.text.trim(), values),
           ),
           _ => _sendNotification(
             automation,

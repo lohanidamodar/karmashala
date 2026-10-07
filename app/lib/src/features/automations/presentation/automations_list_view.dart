@@ -100,10 +100,13 @@ IconData triggerIcon(DraftTrigger trigger) => switch (trigger) {
   DraftTrigger.schedule => AppIcons.clock,
   DraftTrigger.event => AppIcons.lightning,
   DraftTrigger.webhook => AppIcons.webhooksLogo,
+  DraftTrigger.github => AppIcons.gitBranch,
   DraftTrigger.once => AppIcons.calendarBlank,
 };
 
-DraftTrigger triggerOf(Automation a) => a.webhook != null
+DraftTrigger triggerOf(Automation a) => a.github != null
+    ? DraftTrigger.github
+    : a.webhook != null
     ? DraftTrigger.webhook
     : a.trigger != null
     ? DraftTrigger.event

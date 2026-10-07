@@ -12,6 +12,8 @@ import 'package:karmashala_automations/automations.dart'
 import 'package:karmashala_automations/webhooks.dart'
     show fillWebhookTemplate, webhookSampleBody, webhookTemplateFields;
 import 'package:karmashala_automations/check_runner.dart';
+import 'package:karmashala_automations/github.dart'
+    show GithubApi, kGithubVariables;
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart'
     show ScheduledResume, ScheduledResumeState;
@@ -58,6 +60,7 @@ import 'hosted_check_runner.dart';
 import 'server_event_rules.dart';
 import 'server_resume_runner.dart';
 import 'server_usage_limits.dart';
+import 'github/daemon_github.dart';
 import 'step_runners.dart';
 import 'session_mcp_access.dart';
 import '../domain/host_session.dart';
@@ -104,6 +107,9 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     acpAuth,
     StepCommandRunner? stepCommands,
     StepWebhookPoster? stepWebhooks,
+    GithubApi? Function(Automation automation)? githubApi,
+    Future<String?> Function(EnvironmentPath directory)? branchOf,
+    Duration? githubSweepEvery,
   }) : _db = database,
        _tell = tell,
        _registry = registry,
@@ -302,6 +308,29 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
           projectChecks.isVerificationEnabled(repositoryId) &&
           projectChecks.countFor(repositoryId) > 0,
     );
+    github = DaemonGithub(
+      dao: AutomationDao(database),
+      automations: automations,
+      scheduler: scheduler,
+      followUps: followUps,
+      resumes: resumes,
+      facts: facts,
+      liveSessions: sessions.getClaimingLive,
+      isRunning: (id) => running(id) != null || liveAcp(id) != null,
+      start: (automation, note, variables) => startWebhookRun(
+        automation,
+        note,
+        startedBy: AutomationRunCause.github,
+        variables: variables,
+      ),
+      now: now,
+      newId: ids,
+      branchOf: branchOf,
+      apiFor: githubApi,
+      local: remote,
+      sweepEvery: githubSweepEvery,
+      log: _log,
+    );
     eventRules = ServerEventRules(
       automations: automations,
       scheduler: scheduler,
@@ -413,6 +442,9 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   /// The server's session queue, which resumes then send through.
   set resumeQueue(ResumeQueue? queue) => _resumes.queue = queue;
 
+  /// GitHub automations: polled here, each item answered once.
+  late final DaemonGithub github;
+
   /// Event rules answered here (slice 5c): a turn finished or failed.
   late final ServerEventRules eventRules;
 
@@ -453,6 +485,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     Automation automation,
     String note, {
     AutomationRunCause? startedBy,
+    Map<String, String> variables = const {},
   }) {
     final at = DateTime.now().toUtc();
     final checkout = facts.repository(automation.repositoryId)?.path;
@@ -468,11 +501,18 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
             'where this server cannot start agents, so nothing was started.',
         finishedAt: at,
         startedBy: startedBy,
+        variables: variables,
       );
       _automations.insertRun(run);
       return Future.value(run);
     }
-    return _runner.start(automation, at, note: note, startedBy: startedBy);
+    return _runner.start(
+      automation,
+      at,
+      note: note,
+      startedBy: startedBy,
+      variables: variables,
+    );
   }
 
   /// Run now: the run a scheduled one would be, gated the same, queued behind
@@ -528,8 +568,17 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
         scheduledFor: at,
         firedAt: at,
         state: AutomationRunState.queued,
-        reason: note,
+        reason: automation.isGithub
+            ? 'Started with Run now, with sample values for GitHub\'s fields.'
+            : note,
         startedBy: AutomationRunCause.runNow,
+        // No pull request's branch: a sample has none to check out.
+        variables: automation.isGithub
+            ? {
+                for (final name in kGithubVariables.keys)
+                  if (name != 'github.pr.branch') name: 'example',
+              }
+            : const {},
       ),
     );
     await scheduler.drain(automation.repositoryId);
@@ -606,10 +655,12 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     settler.sweep(owns: _ownsSession);
     _resumes.failInterrupted();
     await scheduler.start();
+    github.startPolling();
   }
 
   Future<void> close() async {
     _stopped = true;
+    github.close();
     firstRunPrompts.close();
     scheduler.stop();
     await _statusChanges?.cancel();
