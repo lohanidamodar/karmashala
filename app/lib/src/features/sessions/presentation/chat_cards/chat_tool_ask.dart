@@ -10,6 +10,7 @@ import '../../../remote/application/remote_approval_bindings.dart'
     show chatOpenQuestionProvider;
 import '../../application/session_status_providers.dart';
 import '../approval_request_card.dart';
+import '../chat_transcript.dart' show ToolRowStandIn;
 import 'plan_approval_card.dart';
 
 /// Sessions whose open ask the chat is drawing under its call right now. The
@@ -126,6 +127,15 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
     }
   });
 
+  /// Told after the frame: the row is an ancestor, mid-build.
+  void _standIn(bool standsIn) {
+    final row = ToolRowStandIn.of(context);
+    if (row == null || row.value == standsIn) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) row.value = standsIn;
+    });
+  }
+
   /// A plan prompt read off the screen: an approval no hook named a call
   /// for, while this pending call is the agent's plan tool.
   bool _screenPlanPrompt(AgentStatusReport? report, AgentRegistry registry) =>
@@ -162,6 +172,8 @@ class _ChatToolAskState extends ConsumerState<ChatToolAsk> {
                 ) ==
                 widget.toolUseId;
     if (asking != _shown) _tell(asking);
+    // An open question says all its row would, so it stands in for the row.
+    _standIn(asking && !approval);
     if (!asking) return const SizedBox.shrink();
     if (ref.watch(
       chatAskRevealsProvider.select((s) => s.contains(widget.sessionId)),

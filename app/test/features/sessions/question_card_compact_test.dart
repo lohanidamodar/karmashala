@@ -387,7 +387,7 @@ void main() {
       ],
     );
 
-    Future<void> openChat(
+    Future<ChatCardHarness> openChat(
       WidgetTester tester,
       Size size, {
       double textScale = 1,
@@ -447,6 +447,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      return h;
     }
 
     bool inside(Rect inner, Rect outer) =>
@@ -454,6 +455,26 @@ void main() {
         inner.bottom <= outer.bottom + 0.5 &&
         inner.left >= outer.left - 0.5 &&
         inner.right <= outer.right + 0.5;
+
+    testWidgets('an open question stands in for its tool row, which comes '
+        'back once nothing is asked', (tester) async {
+      final h = await openChat(tester, const Size(390, 844));
+      // No frame or eyebrow around it: the card says all the row would.
+      expect(inline, findsOneWidget);
+      expect(find.text('Which'), findsNothing);
+
+      h.status(ChatCardHarness.statusOf(kind, AgentActivityStatus.working));
+      await tester.pumpAndSettle();
+      expect(inline, findsNothing);
+      expect(find.text('Which'), findsOneWidget);
+    });
+
+    testWidgets('standing in, the card still takes a choice', (tester) async {
+      await openChat(tester, const Size(390, 844));
+      await tester.tap(option(1));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(send).onPressed, isNotNull);
+    });
 
     for (final size in const [Size(390, 844), Size(360, 640)]) {
       final name = '${size.width.toInt()}×${size.height.toInt()}';
