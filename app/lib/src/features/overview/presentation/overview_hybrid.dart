@@ -10,6 +10,7 @@ import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import 'overview_cards.dart';
 import 'overview_filters.dart';
+import 'overview_done_card.dart';
 import 'overview_heartbeat.dart';
 import 'overview_queue_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
@@ -18,25 +19,27 @@ import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 typedef OverviewSections = ({
   List<OverviewCard> queue,
   List<OverviewCard> work,
+
+  /// Done with their turn, ready to close: the Done lane.
+  List<OverviewCard> ready,
   List<OverviewCard> done,
 });
 
 /// What is at work, as groups: each lane — project, machine or context — and
-/// its working and ready cards, in the board's lane order.
+/// its working cards, in the board's lane order.
 List<(OverviewLane, List<OverviewCard>)> overviewWorkGroupsOf(
   OverviewBoard board,
 ) => [
   for (final lane in board.lanes)
-    if ([
-      ...lane.cards(BoardColumn.working),
-      ...lane.cards(BoardColumn.ready),
-    ] case final cards when cards.isNotEmpty)
+    if (lane.cards(BoardColumn.working) case final cards
+        when cards.isNotEmpty)
       (lane, byUrgency(cards)),
 ];
 
 /// [board]'s cards as the Overview lays them out: what waits on you, asks
 /// before failures and oldest wait first; what is at work, lane by lane and
-/// most urgent first; what ended today, newest first.
+/// most urgent first; what is ready to close, newest first; what ended
+/// today, newest first.
 OverviewSections overviewSectionsOf(
   OverviewBoard board, {
   required DateTime? Function(String id) waitingSince,
@@ -57,6 +60,9 @@ OverviewSections overviewSectionsOf(
   return (
     queue: queue,
     work: [for (final (_, cards) in overviewWorkGroupsOf(board)) ...cards],
+    ready: [
+      for (final lane in board.lanes) ...lane.cards(BoardColumn.ready),
+    ]..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt)),
     done: done,
   );
 }
@@ -210,6 +216,24 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     ),
                 ], across),
               ],
+            if (sections.ready.isNotEmpty) ...[
+              EyebrowLabel(
+                'Done · ready to close · ${sections.ready.length}',
+                key: const ValueKey('overview-ready'),
+                padding: const EdgeInsets.only(
+                  top: Insets.md,
+                  bottom: Insets.sm,
+                ),
+              ),
+              ..._grid([
+                for (final card in sections.ready)
+                  OverviewDoneCard(
+                    key: ValueKey('overview-ready-card:${card.id}'),
+                    card: card,
+                    onOpen: onOpen,
+                  ),
+              ], across),
+            ],
           ],
         );
         final done = sections.done;

@@ -51,9 +51,7 @@ class OverviewTabView extends ConsumerWidget {
           onChanged: ref.read(overviewPrefsProvider.notifier).setView,
         ),
       ],
-      actions: [
-        if (view == OverviewView.board) const OverviewFilterButton(),
-      ],
+      actions: [if (view == OverviewView.board) const OverviewFilterButton()],
       body: switch (view) {
         OverviewView.board => const _BoardBody(),
         OverviewView.timeline => const _TimelineBody(),
@@ -163,7 +161,14 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   /// The ids ↑ and ↓ walk, as drawn.
   List<String> _order() {
     final sections = _sections();
-    return [for (final card in [...sections.queue, ...sections.work]) card.id];
+    return [
+      for (final card in [
+        ...sections.queue,
+        ...sections.work,
+        ...sections.ready,
+      ])
+        card.id,
+    ];
   }
 
   /// The session [step] places from [id] in [_order], or null past an end.
@@ -236,7 +241,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   /// The waiting item after [from], round the queue; null when none other.
   String? _nextWaiting(String? from) {
     final queue = [for (final card in _sections().queue) card.id];
-    final others = [for (final id in queue) if (id != from) id];
+    final others = [
+      for (final id in queue)
+        if (id != from) id,
+    ];
     if (others.isEmpty) return null;
     final at = queue.indexOf(from ?? '');
     if (at < 0) return others.first;
@@ -352,7 +360,12 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     OverviewMoveIntent: _Triage<OverviewMoveIntent>((intent) {
       final sections = _sections();
       final order = [
-        for (final card in [...sections.queue, ...sections.work]) card.id,
+        for (final card in [
+          ...sections.queue,
+          ...sections.work,
+          ...sections.ready,
+        ])
+          card.id,
       ];
       if (order.isEmpty) return;
       final focus = ref.read(overviewFocusProvider);
@@ -412,7 +425,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       final double peekWidth = _mode == OverviewPeekMode.docked
           ? _peekWidth.clamp(
               _peekMinWidth,
-              math.max(_peekMinWidth, math.min(_peekMaxWidth, width - kOverviewBoardMinWidth)),
+              math.max(
+                _peekMinWidth,
+                math.min(_peekMaxWidth, width - kOverviewBoardMinWidth),
+              ),
             )
           : math.min(kOverviewPeekWidth, width);
       final Widget laidOut = switch ((peek, _mode)) {

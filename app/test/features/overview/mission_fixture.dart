@@ -21,8 +21,11 @@ import 'package:karmashala/src/features/overview/presentation/overview_tab_view.
 import 'package:karmashala/src/features/overview/presentation/overview_peek.dart';
 import 'package:karmashala_git/git.dart' show FileDiffStat;
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
+import 'package:karmashala_session/delivery.dart' show OfferedAction, SessionDelivery;
+import 'package:karmashala/src/features/sessions/application/session_active_model_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show ActivityEntry, ActivityKind;
+    show ActiveModelSource, ActivityEntry, ActivityKind;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart' show SessionDiffStat;
@@ -62,6 +65,8 @@ class MissionFixture {
     this.stats = const {},
     this.panes = const {},
     this.fileStats = const {},
+    this.models = const {},
+    this.merges = const {},
     this.activity = const [],
     this.contexts = const [],
     this.contextOfProject = const {},
@@ -82,6 +87,13 @@ class MissionFixture {
 
   /// Lines added and removed per file, by checkout path.
   final Map<String, Map<String, FileDiffStat>> fileStats;
+
+  /// The model each session's agent says it runs, by label.
+  final Map<String, String> models;
+
+  /// The Merge the delivery strip offers each session, and the base it
+  /// would merge into.
+  final Map<String, (OfferedAction, String)> merges;
 
   /// The server's activity log, which the strips and the heartbeat draw.
   final List<ActivityEntry> activity;
@@ -554,6 +566,7 @@ class MissionFixture {
 
   /// [MissionFixture] with every reading above filled in.
   static MissionFixture full() => MissionFixture(
+    models: const {'ks-r32': 'Opus 5.5'},
     stats: realisticStats(),
     fileStats: const {
       '/src/ks-r32': {
@@ -643,6 +656,23 @@ class MissionFixture {
       ),
     ),
     overviewSessionPaneProvider.overrideWith((ref, id) => panes[id]),
+    sessionDeliveryActionsProvider.overrideWith(
+      (ref, id) => [?merges[id]?.$1],
+    ),
+    sessionDeliveryProvider.overrideWith(
+      (ref, id) async => SessionDelivery(baseBranch: merges[id]?.$2),
+    ),
+    sessionActiveModelProvider.overrideWith(
+      (ref, id) => switch (models[id]) {
+        final label? => SessionActiveModel(
+          modelId: label,
+          label: label,
+          observedAt: now,
+          source: ActiveModelSource.agent,
+        ),
+        null => null,
+      },
+    ),
     overviewFileStatsProvider.overrideWith(
       (ref, checkout) async => fileStats[checkout.path] ?? const {},
     ),

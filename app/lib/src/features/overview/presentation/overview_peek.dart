@@ -14,6 +14,7 @@ import '../../explorer/application/explorer_actions.dart';
 import '../../explorer/application/workspace_session_entry.dart';
 import '../../git/presentation/diff_view.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../sessions/application/session_active_model_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/end_session_action.dart';
@@ -252,6 +253,8 @@ class _PeekHeader extends ConsumerWidget {
     final theme = Theme.of(context);
     final muted = UiDensity.of(context).muted(theme);
     final agent = watchOverviewAgentName(ref, card);
+    // Left out until the agent says which model it runs.
+    final model = ref.watch(sessionActiveModelProvider(id))?.label;
     final place = watchOverviewPlace(ref, card);
     final directory = entry.directory;
     final branch = directory == null
@@ -313,6 +316,7 @@ class _PeekHeader extends ConsumerWidget {
                     Text(
                       [
                         ?agent,
+                        ?model,
                         if (place.isNotEmpty) place,
                         ?branch,
                       ].join(' · '),
@@ -321,7 +325,6 @@ class _PeekHeader extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: muted,
                     ),
-                    OverviewPeekModel(sessionId: id),
                   ],
                 ),
               ),
@@ -393,17 +396,6 @@ class _PeekHeader extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// Where the session's active model will be named. Empty until the session
-/// reports one.
-class OverviewPeekModel extends StatelessWidget {
-  const OverviewPeekModel({required this.sessionId, super.key});
-
-  final String sessionId;
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 /// The session's own terminal pane, live: what is typed here goes to it.
