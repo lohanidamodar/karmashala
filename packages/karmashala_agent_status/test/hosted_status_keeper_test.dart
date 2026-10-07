@@ -212,7 +212,10 @@ void main() {
           'questions': [
             {
               'question': 'Ship it?',
-              'options': ['Yes', 'No'],
+              'options': [
+                'Yes',
+                {'label': 'No', 'preview': '```\nnot yet\n```'},
+              ],
             },
           ],
         },
@@ -228,6 +231,10 @@ void main() {
       expect(back.question!.questions.single.options.map((o) => o.label), [
         'Yes',
         'No',
+      ]);
+      expect(back.question!.questions.single.options.map((o) => o.preview), [
+        '',
+        '```\nnot yet\n```',
       ]);
     });
   });

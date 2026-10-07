@@ -200,11 +200,14 @@ void main() {
     await launch(tester, const Size(1000, 700));
 
     // The toggle is the clearest witness: both halves are still there and both
-    // are still labelled to a screen reader, but the two words are gone.
-    // Since round 29 a group this narrow keeps it in ⋯.
+    // are still labelled to a screen reader, but the two words are gone. A
+    // group this narrow keeps it in ⋯, which stays in reach however wide the
+    // chips beside it are.
     expect(find.text('Terminal'), findsNothing);
     expect(find.text('Chat'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('session-more')).first);
+    final more = find.byKey(const ValueKey('session-more')).first;
+    expect(more.hitTestable(), findsOneWidget);
+    await tester.tap(more);
     await tester.pumpAndSettle();
     expect(find.text('Terminal'), findsNothing);
     expect(find.text('Chat'), findsNothing);

@@ -36,14 +36,22 @@ enum RemoteWaitKind {
 
 /// One option of an agent's question, in its own words.
 class RemoteQuestionOption {
-  const RemoteQuestionOption({required this.label, this.description = ''});
+  const RemoteQuestionOption({
+    required this.label,
+    this.description = '',
+    this.preview = '',
+  });
 
   final String label;
   final String description;
 
+  /// A mockup or snippet the agent drew for this option; empty when none.
+  final String preview;
+
   Map<String, Object?> toJson() => {
     'label': label,
     if (description.isNotEmpty) 'description': description,
+    if (preview.isNotEmpty) 'preview': preview,
   };
 }
 
@@ -105,10 +113,12 @@ class RemoteQuestion {
         final label = option is Map ? option['label'] : null;
         if (label is! String) return null;
         final description = (option as Map)['description'];
+        final preview = option['preview'];
         read.add(
           RemoteQuestionOption(
             label: label,
             description: description is String ? description : '',
+            preview: preview is String ? preview : '',
           ),
         );
       }

@@ -151,16 +151,15 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a session nothing ever checked is offered a check', (
-    tester,
-  ) async {
+  testWidgets('a session nothing ever checked is offered no first check on '
+      'the bar', (tester) async {
     insertSession();
     await pump(tester);
 
-    // The case the strip was given a verdict for: it can now say the record is
-    // empty, and the button beside it is what fills the gap.
-    expect(find.text('Not checked'), findsOneWidget);
-    expect(find.text('Check this'), findsOneWidget);
+    // Verification nobody runs was a "Not checked" and a button on every
+    // session (owner, 2026-10-07): the bar says nothing until a check has run.
+    expect(find.text('Not checked'), findsNothing);
+    expect(find.text('Check this'), findsNothing);
   });
 
   testWidgets('a check already running is offered nothing', (tester) async {
@@ -233,8 +232,8 @@ void main() {
     insertSession();
     await pump(tester);
 
-    // The verdict still draws — the gap in the record is a fact either way.
-    expect(find.text('Not checked'), findsOneWidget);
+    // Nothing checked draws nothing on the bar, and there is no button.
+    expect(find.text('Not checked'), findsNothing);
     expect(find.text('Check this'), findsNothing);
     expect(find.text('Check again'), findsNothing);
     expect(find.byIcon(AppIcons.listMagnifyingGlass), findsNothing);
@@ -252,9 +251,10 @@ void main() {
   testWidgets('the press is the say-so, and it goes through the one review '
       'path', (tester) async {
     insertSession();
+    insertRun(id: 'v1', verdict: VerificationVerdict.pass);
     await pump(tester);
 
-    await tester.tap(find.text('Check this'));
+    await tester.tap(find.text('Check again'));
     await tester.pumpAndSettle();
 
     // Launched by `ReviewSessionService`, not by anything the strip invented:
@@ -271,11 +271,12 @@ void main() {
   testWidgets('what pressing it will do is on the tooltip before it is '
       'pressed', (tester) async {
     insertSession();
+    insertRun(id: 'v1', verdict: VerificationVerdict.pass);
     await pump(tester);
 
     final tooltip = tester.widget<Tooltip>(
       find.ancestor(
-        of: find.text('Check this'),
+        of: find.text('Check again'),
         matching: find.byType(Tooltip),
       ),
     );
@@ -289,11 +290,12 @@ void main() {
     tester,
   ) async {
     insertSession();
+    insertRun(id: 'v1', verdict: VerificationVerdict.pass);
     await pump(tester, hostedOnTerminal: true);
 
     // The bar draws the verdict itself, through `DeliveryStateLine`; the
     // control belongs in the row of controls below it.
-    expect(find.text('Check this'), findsOneWidget);
+    expect(find.text('Check again'), findsOneWidget);
   });
 
   testWidgets('it survives the window matrix with the verdict beside it', (

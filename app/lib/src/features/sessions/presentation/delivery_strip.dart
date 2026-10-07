@@ -203,9 +203,14 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
 
     // In the row of controls, not in the line of facts: "facts above, controls
     // below" is this strip's redesign, and a pressable fact would undo it.
-    final invitation = ReviewInvitation.forVerdict(
+    // A first check is not offered on the bar: a verification nobody runs
+    // was a fact and a button on every session (owner, 2026-10-07). It
+    // stays in the Verification pane; a check that has run is still offered
+    // again here.
+    final offered = ReviewInvitation.forVerdict(
       ref.watch(sessionVerdictProvider(widget.sessionId)).state,
     );
+    final invitation = offered == ReviewInvitation.check ? null : offered;
     // Hidden rather than disabled when nobody can be asked: this strip is on
     // *every* session, so a dead control reads as a broken feature.
     final review =
@@ -637,7 +642,7 @@ List<Widget> _deliveryFacts(
       style: label,
     ),
     // Beside the stage: how far the work got, and whether anything checked it.
-    // Drawn in every state — a fact that vanishes reads as a clean bill.
+    // Nothing when nothing ever did (SessionVerdictMark).
     SessionVerdictMark(sessionId: sessionId),
     if (delivery.branch case final branch?)
       Row(

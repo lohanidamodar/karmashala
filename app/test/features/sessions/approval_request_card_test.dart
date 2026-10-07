@@ -457,7 +457,7 @@ void main() {
       expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
       await tester.tap(find.text('Banana'));
       await tester.pump();
-      await tester.tap(find.widgetWithText(FilledButton, 'Send answer'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Send'));
       await tester.pumpAndSettle();
 
       expect(sent.single.toolUseId, 'toolu_1');

@@ -1,9 +1,11 @@
 part of 'workbench.dart';
 
 /// The width, at 1x text, the bar is one status line from: facts and badges,
-/// Agent ▾, the next step, Ship ▾, ⋯ and the toggle. Below it the facts
-/// become a caption over the controls.
-const double _sessionBarThirdControlWidth = 820;
+/// the permission and model chips, the next step, Ship ▾, ⋯ and the toggle.
+/// Below it the facts become a caption over the controls. 1000, not 820, since
+/// the model and permission went back on the bar as chips of their own
+/// (owner, 2026-10-07): at 900 they no longer fit beside the rest on one line.
+const double _sessionBarThirdControlWidth = 1000;
 
 /// Below this, at 1x text, the action row draws its verbs as glyphs: a
 /// two-way split leaves a group 363px.
@@ -16,7 +18,7 @@ const double _sessionFactsScrollWidth = 240;
 /// before the controls beside them give way.
 const double _sessionStatusFactsFloor = 96;
 
-/// The most the Agent chip's `model · mode` may take before it ends.
+/// What the permission and model chips' labels share before they end.
 const double _sessionAgentLabelWidth = 160;
 
 /// The chrome under the surface: what belongs to the session on screen. It
@@ -438,12 +440,14 @@ class _SessionActionRow extends StatelessWidget {
                           compact: true,
                           folded: true,
                         ),
-                        // Short of room, the view toggle is in ⋯.
-                        SessionMoreButton(sessionId: sessionId, toggle: toggle),
                       ],
                     ),
                   ),
           ),
+          // Pinned outside the scroll: ⋯ holds the view toggle at this width,
+          // so it must never be scrolled out of reach behind the chips.
+          if (sessionId != null)
+            SessionMoreButton(sessionId: sessionId, toggle: toggle),
           if (sessionId == null && toggle != null) ...[
             const SizedBox(width: Insets.sm),
             toggle,

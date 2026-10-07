@@ -16,7 +16,11 @@ void main() {
         question: 'Pick a fruit',
         header: 'Fruit',
         options: [
-          RemoteQuestionOption(label: 'Apple', description: 'red'),
+          RemoteQuestionOption(
+            label: 'Apple',
+            description: 'red',
+            preview: '( )\n \\|',
+          ),
           RemoteQuestionOption(label: 'Banana'),
         ],
       ),
@@ -43,6 +47,8 @@ void main() {
       expect(read.waiting, RemoteWaitKind.question);
       expect(read.question!.toolUseId, 'toolu_1');
       expect(read.question!.questions.first.options.first.description, 'red');
+      expect(read.question!.questions.first.options.first.preview, '( )\n \\|');
+      expect(read.question!.questions.first.options.last.preview, isEmpty);
       expect(read.question!.questions.last.multiSelect, isTrue);
       expect(read.approveLabel, isNull);
     });

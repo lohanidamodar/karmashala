@@ -114,14 +114,14 @@ void main() {
       ],
       question: () async => written ? fruit() : null,
     );
-    expect(find.text('Send answer'), findsNothing);
+    expect(find.byKey(const ValueKey('question-send')), findsNothing);
 
     written = true;
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
 
     expect(find.text('Banana'), findsOneWidget);
-    expect(find.text('Send answer'), findsOneWidget);
+    expect(find.byKey(const ValueKey('question-send')), findsOneWidget);
   });
 
   final inline = find.byKey(const ValueKey('chat-ask:toolu_1'));
@@ -137,13 +137,16 @@ void main() {
 
     expect(inline, findsOneWidget);
     // One form on screen: the chat's, not the dock's as well.
-    expect(find.text('Send answer'), findsOneWidget);
+    expect(find.byKey(const ValueKey('question-send')), findsOneWidget);
     await tester.tap(
       find.descendant(of: inline, matching: find.text('Banana')),
     );
     await tester.pump();
     await tester.tap(
-      find.descendant(of: inline, matching: find.text('Send answer')),
+      find.descendant(
+        of: inline,
+        matching: find.byKey(const ValueKey('question-send')),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -151,7 +154,7 @@ void main() {
     expect(sent.single.toolUseId, 'toolu_1');
     expect(sent.single.answers.single.options, [1]);
     expect(inline, findsNothing);
-    expect(find.text('Send answer'), findsNothing);
+    expect(find.byKey(const ValueKey('question-send')), findsNothing);
   });
 
   testWidgets('a multi-select question sends every option ticked', (
@@ -168,7 +171,10 @@ void main() {
       await tester.pump();
     }
     await tester.tap(
-      find.descendant(of: inline, matching: find.text('Send answer')),
+      find.descendant(
+        of: inline,
+        matching: find.byKey(const ValueKey('question-send')),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -187,7 +193,7 @@ void main() {
 
     expect(inline, findsOneWidget);
     expect(find.text('Banana'), findsOneWidget);
-    expect(find.text('Send answer'), findsOneWidget);
+    expect(find.byKey(const ValueKey('question-send')), findsOneWidget);
   });
 
   testWidgets('"Chat about this" is its own action, sent as such', (
@@ -255,7 +261,7 @@ void main() {
       find.descendant(of: inline, matching: find.text('Choose any.')),
       findsOneWidget,
     );
-    expect(find.text('Send answer'), findsOneWidget);
+    expect(find.byKey(const ValueKey('question-send')), findsOneWidget);
   });
 
   testWidgets('the card under its call says who is asking once', (
