@@ -1,5 +1,6 @@
 import '../domain/automation.dart';
 import '../domain/automation_run.dart';
+import '../domain/github_trigger.dart';
 import 'automation_records.dart';
 import 'automation_firing.dart';
 import 'automation_session_launcher.dart';
@@ -49,8 +50,19 @@ class AutomationRunner implements AutomationFiring {
     String note = '',
     AutomationRun? queued,
     AutomationRunCause? startedBy,
+    Map<String, String> variables = const {},
   }) async {
     final now = _now();
+    final values = queued?.variables ?? variables;
+    // Someone else's words reach the agent quoted as data, never as its own.
+    if (values.isNotEmpty) {
+      automation = automation.copyWith(
+        prompt: fillAgentText(automation.prompt, values),
+      );
+    }
+    final branch = automation.github?.kind.isPullRequest ?? false
+        ? values['github.pr.branch']
+        : null;
     // The row exists before anything can fail; a drained queue entry *is*
     // this run, updated in place.
     var run = queued == null
@@ -61,9 +73,12 @@ class AutomationRunner implements AutomationFiring {
             firedAt: now,
             state: AutomationRunState.running,
             reason: note,
-            // A webhook's prompt is its call's, filled; keep what was sent.
-            prompt: automation.isWebhook ? automation.prompt : null,
+            // A filled prompt is this run's own; keep what was sent.
+            prompt: automation.isWebhook || values.isNotEmpty
+                ? automation.prompt
+                : null,
             startedBy: startedBy,
+            variables: values,
           )
         : queued.copyWith(
             state: AutomationRunState.running,
@@ -121,6 +136,7 @@ class AutomationRunner implements AutomationFiring {
         automation,
         repository,
         installation,
+        branch: branch == null || branch.isEmpty ? null : branch,
       );
       run = run.copyWith(sessionId: sessionId);
       _dao.updateRun(run);

@@ -503,7 +503,13 @@ void main() {
       final told =
           ScheduledResumeDao(db).lastEndedFor(run.sessionId!) ??
           ScheduledResumeDao(db).liveFor(run.sessionId!);
-      expect(told!.message, startsWith('Fix these:\nthe tests: Fail.'));
+      expect(
+        told!.message,
+        startsWith(
+          '[sent by the Karmashala automation "Nightly sweep" (auto-r1)] '
+          'Fix these:\nthe tests: Fail.',
+        ),
+      );
       expect(told.scheduledBy, 'automation "Nightly sweep"');
       expect(raised.single.detail, 'Nightly sweep in repo-r1: failed');
       expect(raised.single.kind, InboxItemKind.checksFailed);

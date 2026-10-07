@@ -517,6 +517,158 @@ void main() {
     expect(find.text('Bypass (full autonomy)'), findsWidgets);
   });
 
+  testWidgets('a command step refuses a variable in its text; a webhook step '
+      'has its URL, body and the network tick, and both fit every size', (
+    tester,
+  ) async {
+    makeReady();
+    final draft = AutomationDraft(
+      repositoryId: 'r1',
+      name: 'N',
+      prompt: 'p',
+      steps: AutomationSteps(const [
+        AutomationStep(kind: AutomationStepKind.check),
+        AutomationStep(kind: AutomationStepKind.command, text: 'make'),
+        AutomationStep(
+          kind: AutomationStepKind.webhook,
+          url: 'https://hooks.example.com/k',
+          text: '{"s": "{{run.status}}"}',
+          when: AutomationStepWhen.always,
+        ),
+      ]),
+    );
+    for (final (size, scale) in const [
+      (Size(360, 2400), 1.0),
+      (Size(1440, 1400), 1.0),
+      (Size(360, 3200), 1.6),
+    ]) {
+      await pump(tester, draft, size: size, textScale: scale);
+      expect(tester.takeException(), isNull, reason: '$size $scale');
+      expect(find.text('Run a command'), findsWidgets);
+      expect(find.text('Allow addresses on my network'), findsOneWidget);
+    }
+
+    final command = find.byKey(const ValueKey('automation-text-command'));
+    await tester.ensureVisible(command);
+    await tester.enterText(command, 'git push {{github.pr.branch}}');
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('never has variables put into it'),
+      findsWidgets,
+    );
+    expect(save(tester).onPressed, isNull);
+
+    final tick = find.descendant(
+      of: find.byKey(const ValueKey('automation-private-webhook')),
+      matching: find.byType(Switch),
+    );
+    await tester.ensureVisible(tick);
+    expect(tester.widget<Switch>(tick).value, isFalse);
+    await tester.tap(tick);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(tick).value, isTrue);
+  });
+
+  testWidgets('a GitHub trigger reads its repository off the checkout, asks '
+      'for a label when it needs one, and saves', (tester) async {
+    makeReady();
+    server.repositoryRows.update(
+      repository().copyWith(canonicalId: 'github.com/acme/shop'),
+    );
+    await pump(
+      tester,
+      const AutomationDraft(repositoryId: 'r1', name: 'PR comments'),
+    );
+    await tester.tap(find.text(DraftTrigger.github.short));
+    await tester.pumpAndSettle();
+    final repo = tester.widget<TextField>(
+      find.byKey(const ValueKey('automation-github-repo')),
+    );
+    expect(repo.controller!.text, 'acme/shop');
+    expect(find.textContaining('first look only notes'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('automation-github-kind')));
+    await tester.pumpAndSettle();
+    await tester.tap(item(GithubTriggerKind.issueLabeled).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-prompt')),
+      'Triage {{github.issue.title}}',
+    );
+    await pickAgent(tester);
+    expect(save(tester).onPressed, isNull, reason: 'no label chosen yet');
+
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-github-label')),
+      'triage',
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('automation-save')));
+    await tester.tap(find.byKey(const ValueKey('automation-save')));
+    await tester.pumpAndSettle();
+    final stored = server.automationRows.getAll().single;
+    expect(stored.github!.kind, GithubTriggerKind.issueLabeled);
+    expect(stored.github!.repository, 'acme/shop');
+    expect(stored.github!.label, 'triage');
+    expect(stored.github!.authors, GithubAuthors.collaborators);
+    expect(stored.isScheduled, isFalse);
+
+    for (final (size, scale) in const [
+      (Size(360, 2400), 1.0),
+      (Size(1440, 1400), 1.0),
+      (Size(360, 3200), 1.6),
+    ]) {
+      await pump(
+        tester,
+        AutomationDraft.from(stored),
+        size: size,
+        textScale: scale,
+      );
+      expect(tester.takeException(), isNull, reason: '$size $scale');
+    }
+  });
+
+  testWidgets('every kind has runs an hour, and queues or merges a trigger '
+      'while it runs', (tester) async {
+    makeReady();
+    await pump(
+      tester,
+      const AutomationDraft(
+        repositoryId: 'r1',
+        name: 'After each turn',
+        trigger: DraftTrigger.event,
+        prompt: 'run the tests',
+      ),
+      size: const Size(360, 3200),
+      textScale: 1.6,
+    );
+    await pickAgent(tester);
+    final limits = find.byKey(const ValueKey('automation-limits'));
+    await tester.ensureVisible(limits);
+    await tester.tap(limits);
+    await tester.pumpAndSettle();
+    expect(find.text('At most, runs an hour (0 is no limit)'), findsOneWidget);
+    expect(find.text('At most, waiting at once'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'At most, runs an hour (0 is no limit)'),
+      '5',
+    );
+    final merge = find.text(AutomationOverlap.merge.label);
+    await tester.ensureVisible(merge);
+    await tester.pumpAndSettle();
+    await tester.tap(merge);
+    await tester.pumpAndSettle();
+    expect(find.text('At most, waiting at once'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('automation-save')));
+    await tester.tap(find.byKey(const ValueKey('automation-save')));
+    await tester.pumpAndSettle();
+    final stored = server.automationRows.getAll().single;
+    expect(stored.runsPerHour, 5);
+    expect(stored.overlap, AutomationOverlap.merge);
+  });
+
   testWidgets('it fits a phone, a desktop and large text', (tester) async {
     for (final size in const [
       Size(360, 740),

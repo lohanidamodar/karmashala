@@ -1169,3 +1169,75 @@ void _migrateToV85(Database db) {
   if (columns.contains('prompt')) return;
   db.execute('ALTER TABLE automation_runs ADD COLUMN prompt TEXT;');
 }
+
+/// What a trigger knew, kept on the run as its steps' variables: a GitHub
+/// event's pull request, comment or check.
+void _migrateToV86(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automation_runs);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('variables')) return;
+  db.execute('ALTER TABLE automation_runs ADD COLUMN variables TEXT;');
+}
+
+/// GitHub automations: the trigger on the row, and per automation when it
+/// last looked and every item it has answered, so a look never replays one.
+void _migrateToV87(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automations);')
+      .map((row) => row['name'] as String);
+  if (!columns.contains('github')) {
+    db.execute('ALTER TABLE automations ADD COLUMN github TEXT;');
+  }
+  db.execute(
+    'CREATE TABLE IF NOT EXISTS automation_github_state ('
+    'automation_id TEXT PRIMARY KEY REFERENCES automations(id) '
+    'ON DELETE CASCADE, '
+    'primed_at TEXT NOT NULL, '
+    'polled_at TEXT);',
+  );
+  db.execute(
+    'CREATE TABLE IF NOT EXISTS automation_github_seen ('
+    'automation_id TEXT NOT NULL REFERENCES automations(id) '
+    'ON DELETE CASCADE, '
+    'item_key TEXT NOT NULL, '
+    'seen_at TEXT NOT NULL, '
+    'PRIMARY KEY (automation_id, item_key));',
+  );
+}
+
+/// Runs an hour for every kind of automation, and what a trigger does while
+/// a run of the same one is going: queue (up to a limit) or merge.
+void _migrateToV88(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('runs_per_hour')) return;
+  db.execute(
+    'ALTER TABLE automations ADD COLUMN runs_per_hour INTEGER NOT NULL '
+    'DEFAULT 30;',
+  );
+  db.execute(
+    "ALTER TABLE automations ADD COLUMN overlap TEXT NOT NULL DEFAULT 'queue';",
+  );
+  db.execute(
+    'ALTER TABLE automations ADD COLUMN queue_limit INTEGER NOT NULL '
+    'DEFAULT 3;',
+  );
+  // A webhook's own calls an hour were its only limit; it carries over.
+  db.execute(
+    'UPDATE automations SET runs_per_hour = webhook_per_hour '
+    'WHERE webhook_per_hour IS NOT NULL;',
+  );
+}
+
+/// An automation an agent proposed: who proposed it, and from which session,
+/// until a person turns it on.
+void _migrateToV89(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('proposed_by')) return;
+  db.execute('ALTER TABLE automations ADD COLUMN proposed_by TEXT;');
+  db.execute('ALTER TABLE automations ADD COLUMN proposed_session TEXT;');
+}

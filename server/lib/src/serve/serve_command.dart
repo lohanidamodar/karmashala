@@ -70,6 +70,8 @@ import '../agents/server_agent_work.dart';
 import '../artifacts/artifact_tool_set.dart';
 import '../artifacts/server_artifact_markers.dart';
 import '../artifacts/server_artifacts.dart';
+import '../automations/github/daemon_github.dart'
+    show kGithubPollVariable, kGithubSweepEvery;
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/server_usage_limits.dart' show usageLimitQueueHold;
 import '../mcp/tools/continuation_tool_set.dart';
@@ -1049,6 +1051,12 @@ Future<int> _serve(
     // A resume of an ACP session that ended starts it again over ACP.
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
+    // GitHub automations poll as the checkout's own `gh` login.
+    githubSweepEvery:
+        hostEnvironment[kGithubPollVariable] != 'off' &&
+            hostEnvironment[kAgentWorkVariable] != 'off'
+        ? kGithubSweepEvery
+        : null,
     worktrees: worktrees,
   );
   // Webhooks reach this server through the relay it pairs through.
@@ -1636,6 +1644,21 @@ Future<int> _serve(
         },
         now: () => DateTime.now().toUtc(),
         newId: newUuid,
+        // "Claude Code in "Fix the cart"": who proposed it, in the inbox.
+        proposerOf: (sessionId) {
+          final session = sessionId == null
+              ? null
+              : SessionDao(database).getById(sessionId);
+          final installation = session == null
+              ? null
+              : checkoutRows.installation(session.agentInstallationId);
+          final agent = installation == null
+              ? 'An agent'
+              : liveAgents.descriptorOf(installation.agentId)?.displayName ??
+                    installation.agentId;
+          return session == null ? agent : '$agent in "${session.title}"';
+        },
+        proposed: (proposal) => automations?.fileProposal(proposal),
       ),
     )
     // Every session is operated here: every agent runs in this server.

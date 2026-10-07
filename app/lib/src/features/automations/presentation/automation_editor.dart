@@ -58,7 +58,25 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     text:
         _draft.steps.of(AutomationStepKind.notify)?.text ?? kDefaultNotifyText,
   );
-  late final _perHour = TextEditingController(text: '${_draft.callsPerHour}');
+  late final _command = TextEditingController(
+    text: _draft.steps.of(AutomationStepKind.command)?.text ?? '',
+  );
+  late final _hookUrl = TextEditingController(
+    text: _draft.steps.of(AutomationStepKind.webhook)?.url ?? '',
+  );
+  late final _hookBody = TextEditingController(
+    text:
+        _draft.steps.of(AutomationStepKind.webhook)?.text ??
+        kDefaultWebhookBody,
+  );
+  late final _ghRepo = TextEditingController(text: _draft.github.repository);
+  late final _perHour = TextEditingController(text: '$_perHourValue');
+  late final _queueLimit = TextEditingController(text: '${_draft.queueLimit}');
+
+  /// A webhook's limit is its calls an hour; every other kind's, its runs.
+  int get _perHourValue => _draft.trigger == DraftTrigger.webhook
+      ? _draft.callsPerHour
+      : _draft.runsPerHour;
   late final _stopAfter = TextEditingController(
     text: '${_draft.stopAfterFailures}',
   );
@@ -86,7 +104,12 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       _every,
       _tell,
       _notify,
+      _command,
+      _hookUrl,
+      _hookBody,
+      _ghRepo,
       _perHour,
+      _queueLimit,
       _stopAfter,
       _longest,
     ]) {
@@ -101,11 +124,18 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     _dry = null;
   });
 
-  void _putStep(AutomationStepKind kind, {AutomationStepWhen? when}) {
+  void _putStep(
+    AutomationStepKind kind, {
+    AutomationStepWhen? when,
+    bool? allowPrivate,
+    int? timeoutSeconds,
+  }) {
     final existing = _draft.steps.of(kind);
     final text = switch (kind) {
       AutomationStepKind.tell => _tell.text,
       AutomationStepKind.notify => _notify.text,
+      AutomationStepKind.command => _command.text,
+      AutomationStepKind.webhook => _hookBody.text,
       AutomationStepKind.check => '',
     };
     _update(
@@ -115,6 +145,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
             kind: kind,
             when: when ?? existing?.when ?? _defaultWhen(kind),
             text: text,
+            url: kind == AutomationStepKind.webhook ? _hookUrl.text.trim() : '',
+            allowPrivate: allowPrivate ?? existing?.allowPrivate ?? false,
+            timeoutSeconds: timeoutSeconds ?? existing?.timeoutSeconds,
           ),
         ),
       ),
@@ -124,8 +157,10 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   static AutomationStepWhen _defaultWhen(AutomationStepKind kind) =>
       switch (kind) {
         AutomationStepKind.tell => AutomationStepWhen.failure,
-        AutomationStepKind.notify => AutomationStepWhen.always,
-        AutomationStepKind.check => AutomationStepWhen.success,
+        AutomationStepKind.notify ||
+        AutomationStepKind.webhook => AutomationStepWhen.always,
+        AutomationStepKind.check ||
+        AutomationStepKind.command => AutomationStepWhen.success,
       };
 
   Repository? _repository(List<Repository> all) =>
@@ -398,7 +433,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
               for (final r in repositories)
                 DropdownMenuItem(value: r.id, child: Text(r.name)),
             ],
-            onChanged: (id) => _update(_draft.withCheckout(id)),
+            onChanged: (id) =>
+                _update(_withGithubRepository(_draft.withCheckout(id))),
           )
         else
           EditorNote(
@@ -422,16 +458,143 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
           DraftTrigger.schedule => _scheduleFields(context, now),
           DraftTrigger.event => _eventFields(),
           DraftTrigger.webhook => _webhookFields(context),
+          DraftTrigger.github => _githubFields(),
           DraftTrigger.once => _onceFields(context),
         },
       ],
     );
   }
 
+  /// [draft] with its GitHub repository read off its checkout's remote, when
+  /// it names none yet.
+  AutomationDraft _withGithubRepository(AutomationDraft draft) {
+    if (draft.github.repository.isNotEmpty) return draft;
+    final canonical = _repository(
+      ref.read(automationCheckoutsProvider),
+    )?.canonicalId;
+    final match = RegExp(
+      r'^github\.com/([^/]+/[^/]+)$',
+    ).firstMatch(canonical ?? '');
+    if (match == null) return draft;
+    _ghRepo.text = match.group(1)!;
+    return draft.copyWith(
+      github: draft.github.copyWith(repository: match.group(1)),
+    );
+  }
+
+  void _putGithub(AutomationGithubTrigger github) =>
+      _update(_draft.copyWith(github: github));
+
+  List<Widget> _githubFields() {
+    final github = _draft.github;
+    return [
+      DropdownButtonFormField<GithubTriggerKind>(
+        key: const ValueKey('automation-github-kind'),
+        initialValue: github.kind,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'When'),
+        items: [
+          for (final kind in GithubTriggerKind.values)
+            DropdownMenuItem(
+              value: kind,
+              child: Text(kind.label, overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: (kind) =>
+            kind == null ? null : _putGithub(github.copyWith(kind: kind)),
+      ),
+      TextField(
+        key: const ValueKey('automation-github-repo'),
+        controller: _ghRepo,
+        decoration: const InputDecoration(
+          labelText: 'Repository',
+          hintText: 'owner/name',
+        ),
+        onChanged: (value) =>
+            _putGithub(github.copyWith(repository: value.trim())),
+      ),
+      if (github.kind.isPullRequest)
+        TextFormField(
+          key: const ValueKey('automation-github-branch'),
+          initialValue: github.branch,
+          decoration: const InputDecoration(
+            labelText: 'Branch (empty is any)',
+            hintText: 'main, or feature/*',
+          ),
+          onChanged: (value) =>
+              _putGithub(github.copyWith(branch: value.trim())),
+        ),
+      CompactSegmented<GithubAuthors>(
+        key: const ValueKey('automation-github-authors'),
+        segments: [
+          for (final authors in GithubAuthors.values)
+            ButtonSegment(value: authors, label: Text(authors.label)),
+        ],
+        selected: github.authors,
+        onChanged: (authors) => _putGithub(github.copyWith(authors: authors)),
+      ),
+      if (github.authors == GithubAuthors.listed)
+        TextFormField(
+          key: const ValueKey('automation-github-logins'),
+          initialValue: github.logins.join(', '),
+          decoration: const InputDecoration(
+            labelText: 'GitHub logins, separated by commas',
+          ),
+          onChanged: (value) => _putGithub(
+            github.copyWith(
+              logins: [
+                for (final login in value.split(','))
+                  if (login.trim().isNotEmpty) login.trim(),
+              ],
+            ),
+          ),
+        ),
+      TextFormField(
+        key: const ValueKey('automation-github-label'),
+        initialValue: github.label,
+        decoration: InputDecoration(
+          labelText: github.kind == GithubTriggerKind.issueLabeled
+              ? 'Label'
+              : 'Only with this label (optional)',
+        ),
+        onChanged: (value) => _putGithub(github.copyWith(label: value.trim())),
+      ),
+      if (github.kind == GithubTriggerKind.issueAssigned)
+        TextFormField(
+          key: const ValueKey('automation-github-assignee'),
+          initialValue: github.assignee,
+          decoration: const InputDecoration(
+            labelText: 'Assigned to (empty is anyone)',
+          ),
+          onChanged: (value) =>
+              _putGithub(github.copyWith(assignee: value.trim())),
+        ),
+      TextFormField(
+        key: const ValueKey('automation-github-poll'),
+        initialValue: '${github.pollEvery.inMinutes}',
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          labelText: 'Look every, in minutes (at least 1)',
+        ),
+        onChanged: (value) {
+          final minutes = int.tryParse(value.trim());
+          if (minutes == null || minutes < 1) return;
+          _putGithub(github.copyWith(pollSeconds: minutes * 60));
+        },
+      ),
+      const EditorNote(
+        'It looks as your gh login. Its first look only notes what is '
+        'already there, so turning it on replays nothing. Comments and issue '
+        'text reach the agent quoted as someone else\'s words.',
+      ),
+    ];
+  }
+
   /// A new webhook reads and proposes until somebody says otherwise: its
   /// prompt is a stranger's text.
   AutomationDraft _withTrigger(AutomationDraft draft, DraftTrigger trigger) {
     var next = draft.copyWith(trigger: trigger);
+    if (trigger == DraftTrigger.github) next = _withGithubRepository(next);
     if (trigger == DraftTrigger.webhook && draft.isNew) {
       final installation = ref
           .read(agentInstallationsDataProvider)
@@ -652,7 +815,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     Repository? repository,
   ) {
     final draft = _draft;
-    final isEvent = draft.trigger == DraftTrigger.event;
+    final isGithub = draft.trigger == DraftTrigger.github;
+    final isEvent = draft.trigger == DraftTrigger.event || isGithub;
     final selected = installations
         .where((i) => i.id == draft.installationId)
         .firstOrNull;
@@ -662,7 +826,12 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       title: first.label,
       icon: AppIcons.robot,
       hint: switch (first) {
+        EventFirstStep.agent when isGithub && draft.github.kind.isPullRequest =>
+          'A new session in a worktree on the pull request\'s branch.',
         EventFirstStep.agent => 'A new session with your prompt.',
+        EventFirstStep.tell when isGithub =>
+          'The session on the pull request\'s branch, or a new agent there '
+              'when none is.',
         EventFirstStep.tell => 'The session the event came from.',
         EventFirstStep.nothing => 'Only the steps below run.',
       },
@@ -709,19 +878,21 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
               children: [
                 Text('Model', style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(width: Insets.sm),
-                ModelPicker(
-                  options: modelOptionsFor(
-                    descriptor,
-                    current: draft.modelId,
-                    support: ref.watch(
-                      agentModelSupportProvider(descriptor.id),
+                Flexible(
+                  child: ModelPicker(
+                    options: modelOptionsFor(
+                      descriptor,
+                      current: draft.modelId,
+                      support: ref.watch(
+                        agentModelSupportProvider(descriptor.id),
+                      ),
                     ),
-                  ),
-                  selected: draft.modelId,
-                  onChanged: (choice) => _update(
-                    _draft.copyWith(
-                      modelId: choice.modelId,
-                      clearModel: choice.modelId == null,
+                    selected: draft.modelId,
+                    onChanged: (choice) => _update(
+                      _draft.copyWith(
+                        modelId: choice.modelId,
+                        clearModel: choice.modelId == null,
+                      ),
                     ),
                   ),
                 ),
@@ -759,6 +930,12 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
               hintText: 'Run the checks and fix what broke.',
             ),
             onChanged: (value) => _update(_draft.copyWith(prompt: value)),
+          ),
+        if (isGithub && first != EventFirstStep.nothing)
+          VariableChips(
+            names: kGithubVariables.keys.toList(),
+            controller: _prompt,
+            onChanged: () => _update(_draft.copyWith(prompt: _prompt.text)),
           ),
         if (draft.trigger == DraftTrigger.webhook) _webhookFieldsRead(draft),
       ],
@@ -803,6 +980,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       );
       widgets.add(switch (step.kind) {
         AutomationStepKind.check => _checkStep(context, checks, repository),
+        AutomationStepKind.command => _commandStep(step, rail),
+        AutomationStepKind.webhook => _webhookStep(step, rail),
         AutomationStepKind.tell => _messageStep(
           context,
           step,
@@ -909,10 +1088,136 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         onChanged: (_) => _putStep(step.kind),
       ),
       VariableChips(
-        names: kStepVariables.keys.toList(),
+        names: _stepVariableNames,
         controller: controller,
         onChanged: () => _putStep(step.kind),
       ),
+    ],
+  );
+
+  List<String> get _stepVariableNames => [
+    ...kStepVariables.keys,
+    if (_draft.trigger == DraftTrigger.github) ...kGithubVariables.keys,
+  ];
+
+  Widget _whenField(AutomationStep step) =>
+      DropdownButtonFormField<AutomationStepWhen>(
+        key: ValueKey('automation-when-${step.kind.storedName}'),
+        initialValue: step.when,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Runs'),
+        items: [
+          for (final when in AutomationStepWhen.values)
+            DropdownMenuItem(value: when, child: Text(when.label)),
+        ],
+        onChanged: (when) =>
+            when == null ? null : _putStep(step.kind, when: when),
+      );
+
+  Widget _timeoutField(AutomationStep step, {required bool minutes}) =>
+      TextFormField(
+        key: ValueKey('automation-timeout-${step.kind.storedName}'),
+        initialValue: minutes
+            ? '${step.timeout.inMinutes}'
+            : '${step.timeout.inSeconds}',
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: minutes
+              ? 'Time limit, in minutes'
+              : 'Time limit, in seconds',
+        ),
+        onChanged: (value) {
+          final n = int.tryParse(value.trim());
+          if (n == null || n <= 0) return;
+          _putStep(step.kind, timeoutSeconds: minutes ? n * 60 : n);
+        },
+      );
+
+  Widget _commandStep(AutomationStep step, Color? rail) => EditorNode(
+    result: _resultFor(step.kind.storedName),
+    title: 'Run a command',
+    icon: AppIcons.terminal,
+    hint: 'In the run\'s worktree or checkout, only where checks are on.',
+    rail: rail,
+    trailing: [_removeButton(step.kind)],
+    children: [
+      _whenField(step),
+      TextField(
+        key: const ValueKey('automation-text-command'),
+        controller: _command,
+        minLines: 1,
+        maxLines: 4,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontFamily: kMonoFamily,
+          fontFamilyFallback: kMonoFallback,
+        ),
+        decoration: const InputDecoration(labelText: 'Command'),
+        onChanged: (_) => _putStep(step.kind),
+      ),
+      if (step.refusal case final why? when _command.text.isNotEmpty)
+        _Problem(why)
+      else
+        EditorNote(
+          'Values reach it as environment variables, never in the command: '
+          '"\$${stepEnvironmentName('github.pr.branch')}" in sh, '
+          '\$env:${stepEnvironmentName('github.pr.branch')} in PowerShell. '
+          'Its output and exit code are {{steps.command.output}} and '
+          '{{steps.command.exit_code}} for the steps after.',
+        ),
+      _timeoutField(step, minutes: true),
+    ],
+  );
+
+  Widget _webhookStep(AutomationStep step, Color? rail) => EditorNode(
+    result: _resultFor(step.kind.storedName),
+    title: 'Call a webhook',
+    icon: AppIcons.webhooksLogo,
+    hint: 'POSTs JSON, with an Idempotency-Key per run.',
+    rail: rail,
+    trailing: [_removeButton(step.kind)],
+    children: [
+      _whenField(step),
+      TextField(
+        key: const ValueKey('automation-url-webhook'),
+        controller: _hookUrl,
+        keyboardType: TextInputType.url,
+        decoration: const InputDecoration(labelText: 'URL'),
+        onChanged: (_) => _putStep(step.kind),
+      ),
+      TextField(
+        key: const ValueKey('automation-text-webhook'),
+        controller: _hookBody,
+        minLines: 2,
+        maxLines: 6,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontFamily: kMonoFamily,
+          fontFamilyFallback: kMonoFallback,
+        ),
+        decoration: const InputDecoration(labelText: 'Body'),
+        onChanged: (_) => _putStep(step.kind),
+      ),
+      VariableChips(
+        names: _stepVariableNames,
+        controller: _hookBody,
+        onChanged: () => _putStep(step.kind),
+      ),
+      if (step.refusal case final why? when _hookUrl.text.isNotEmpty)
+        _Problem(why)
+      else
+        const EditorNote(
+          'Values are JSON-escaped where they stand, so put each inside a '
+          'string.',
+        ),
+      SettingsSwitchRow(
+        key: const ValueKey('automation-private-webhook'),
+        label: 'Allow addresses on my network',
+        help:
+            'Off, private, loopback and link-local addresses are refused, so '
+            'a run cannot reach into your network.',
+        value: step.allowPrivate,
+        onChanged: (on) => _putStep(step.kind, allowPrivate: on),
+      ),
+      _timeoutField(step, minutes: false),
     ],
   );
 
@@ -962,13 +1267,42 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         children: [
-          if (_draft.trigger == DraftTrigger.webhook)
+          _numberField(
+            _perHour,
+            _draft.trigger == DraftTrigger.webhook
+                ? 'At most, runs an hour'
+                : 'At most, runs an hour (0 is no limit)',
+            (n) => _draft.trigger == DraftTrigger.webhook
+                ? _draft.copyWith(
+                    callsPerHour: (n ?? 1).clamp(1, kMaxWebhookCallsPerHour),
+                  )
+                : _draft.copyWith(runsPerHour: (n ?? 0).clamp(0, 10000)),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.sm),
+            child: Text(
+              'If it is already running there',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: CompactSegmented<AutomationOverlap>(
+              key: const ValueKey('automation-overlap'),
+              segments: [
+                for (final overlap in AutomationOverlap.values)
+                  ButtonSegment(value: overlap, label: Text(overlap.label)),
+              ],
+              selected: _draft.overlap,
+              onChanged: (overlap) =>
+                  _update(_draft.copyWith(overlap: overlap)),
+            ),
+          ),
+          if (_draft.overlap == AutomationOverlap.queue)
             _numberField(
-              _perHour,
-              'At most, runs an hour',
-              (n) => _draft.copyWith(
-                callsPerHour: (n ?? 1).clamp(1, kMaxWebhookCallsPerHour),
-              ),
+              _queueLimit,
+              'At most, waiting at once',
+              (n) => _draft.copyWith(queueLimit: (n ?? 1).clamp(1, 100)),
             ),
           _numberField(
             _stopAfter,
@@ -994,8 +1328,14 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
 
   String _limitsWords() {
     final parts = [
-      if (_draft.trigger == DraftTrigger.webhook)
-        'at most ${_draft.callsPerHour} an hour',
+      switch (_perHourValue) {
+        0 => 'no limit an hour',
+        final n => 'at most $n an hour',
+      },
+      if (_draft.overlap == AutomationOverlap.merge)
+        'later triggers merge'
+      else
+        'up to ${_draft.queueLimit} waiting',
       _draft.stopAfterFailures == 0
           ? 'never pauses itself'
           : 'pauses after ${_draft.stopAfterFailures} failures in a row',
@@ -1030,7 +1370,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     required UnattendedRefusal? refusal,
   }) {
     final draft = _draft;
-    if (draft.notifyOnly && draft.trigger == DraftTrigger.event) {
+    if (draft.notifyOnly &&
+        (draft.trigger == DraftTrigger.event ||
+            draft.trigger == DraftTrigger.github)) {
       return const [
         ReadyRow(true, 'It starts nothing, so nothing can go wrong.'),
       ];
@@ -1269,6 +1611,10 @@ const kDefaultTellText =
 
 /// The notify step's text until someone writes their own.
 const kDefaultNotifyText = '{{automation}} in {{project}}: {{run.status}}';
+
+/// The webhook step's body until someone writes their own.
+const kDefaultWebhookBody =
+    '{"automation": "{{automation}}", "status": "{{run.status}}"}';
 
 const kDayLetters = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 

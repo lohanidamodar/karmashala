@@ -3,15 +3,18 @@ import 'dart:convert';
 import 'package:karmashala_store/database.dart';
 
 import '../domain/automation_copy_rules.dart';
+import '../domain/automation_json.dart' show stringMapFrom;
 import '../service/automation_records.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_core/verdicts.dart';
 import '../domain/automation.dart';
+import '../domain/automation_admission.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/automation_steps.dart';
 import '../domain/automation_trigger.dart';
 import '../domain/automation_webhook.dart';
+import '../domain/github_trigger.dart';
 
 /// Data access for automations and their occurrences. Hand-written SQL.
 class AutomationDao implements AutomationRecords {
@@ -28,9 +31,10 @@ class AutomationDao implements AutomationRecords {
     'late_policy, stop_after_failures, consecutive_failures, '
     'disabled_reason, max_runtime_seconds, trigger_event, event_action, '
     'webhook_id, webhook_signature, webhook_model, webhook_worktree, '
-    'webhook_per_hour, model_id, run_in_worktree, steps) '
+    'webhook_per_hour, model_id, run_in_worktree, steps, github, '
+    'runs_per_hour, overlap, queue_limit, proposed_by, proposed_session) '
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
-    '?, ?, ?, ?, ?, ?, ?, ?);',
+    '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       automation.id,
       automation.repositoryId,
@@ -63,7 +67,8 @@ class AutomationDao implements AutomationRecords {
     'max_runtime_seconds = ?, trigger_event = ?, event_action = ?, '
     'webhook_id = ?, webhook_signature = ?, webhook_model = ?, '
     'webhook_worktree = ?, webhook_per_hour = ?, model_id = ?, '
-    'run_in_worktree = ?, steps = ? '
+    'run_in_worktree = ?, steps = ?, github = ?, runs_per_hour = ?, '
+    'overlap = ?, queue_limit = ?, proposed_by = ?, proposed_session = ? '
     'WHERE id = ?;',
     [
       automation.name,
@@ -103,7 +108,86 @@ class AutomationDao implements AutomationRecords {
     automation.modelId,
     intFromBool(automation.worktree),
     automation.steps.toColumn(),
+    automation.github?.toColumn(),
+    automation.runsPerHour,
+    automation.overlap.name,
+    automation.queueLimit,
+    automation.proposedBy,
+    automation.proposedSessionId,
   ];
+
+  /// Every GitHub automation, paused ones included.
+  List<Automation> githubRules() => _db
+      .query(
+        'SELECT * FROM automations WHERE github IS NOT NULL ORDER BY name, id;',
+      )
+      .map(_automation)
+      .where((automation) => automation.isGithub)
+      .toList();
+
+  // --- what a GitHub automation has already seen ----------------------------
+
+  /// When [automationId] first looked at GitHub, or null: its first look
+  /// records what is there and fires nothing.
+  DateTime? githubPrimedAt(String automationId) {
+    final rows = _db.query(
+      'SELECT primed_at FROM automation_github_state WHERE automation_id = ?;',
+      [automationId],
+    );
+    return rows.isEmpty ? null : dateFromIso(rows.first['primed_at']);
+  }
+
+  DateTime? githubPolledAt(String automationId) {
+    final rows = _db.query(
+      'SELECT polled_at FROM automation_github_state WHERE automation_id = ?;',
+      [automationId],
+    );
+    final value = rows.isEmpty ? null : rows.first['polled_at'];
+    return value == null ? null : dateFromIso(value);
+  }
+
+  void markGithubPolled(String automationId, DateTime at) => _db.execute(
+    'INSERT INTO automation_github_state (automation_id, primed_at, '
+    'polled_at) VALUES (?, ?, ?) ON CONFLICT (automation_id) DO UPDATE SET '
+    'polled_at = excluded.polled_at;',
+    [automationId, isoFromDate(at), isoFromDate(at)],
+  );
+
+  /// Forgets that [automationId] looked, so turning it on again looks first
+  /// and replays nothing.
+  void forgetGithubLook(String automationId) => _db.execute(
+    'DELETE FROM automation_github_state WHERE automation_id = ?;',
+    [automationId],
+  );
+
+  /// Records [key] as seen; false when it already was.
+  bool markGithubSeen(String automationId, String key, DateTime at) {
+    final before = _db.query(
+      'SELECT 1 FROM automation_github_seen WHERE automation_id = ? AND '
+      'item_key = ?;',
+      [automationId, key],
+    );
+    if (before.isNotEmpty) return false;
+    _db.execute(
+      'INSERT INTO automation_github_seen (automation_id, item_key, seen_at) '
+      'VALUES (?, ?, ?);',
+      [automationId, key, isoFromDate(at)],
+    );
+    return true;
+  }
+
+  bool githubSeen(String automationId, String key) => _db.query(
+    'SELECT 1 FROM automation_github_seen WHERE automation_id = ? AND '
+    'item_key = ?;',
+    [automationId, key],
+  ).isNotEmpty;
+
+  /// Drops keys older than [before], so the table stays the size of what
+  /// GitHub still lists.
+  void pruneGithubSeen(DateTime before) => _db.execute(
+    'DELETE FROM automation_github_seen WHERE seen_at < ?;',
+    [isoFromDate(before)],
+  );
 
   /// cron, fires_at, every_seconds — all null for an event rule, so a build
   /// that predates triggers cannot read one as a schedule and fire it.
@@ -151,9 +235,21 @@ class AutomationDao implements AutomationRecords {
   /// alone. A paused automation is still authorised; it is just not due.
   @override
   void setEnabled(String id, {required bool enabled}) => _db.execute(
-    'UPDATE automations SET enabled = ? WHERE id = ?;',
-    [intFromBool(enabled), id],
+    // Turning a proposal on is a person accepting it: it is theirs now.
+    'UPDATE automations SET enabled = ?, proposed_by = CASE WHEN ? = 1 THEN '
+    'NULL ELSE proposed_by END, proposed_session = CASE WHEN ? = 1 THEN NULL '
+    'ELSE proposed_session END WHERE id = ?;',
+    [intFromBool(enabled), intFromBool(enabled), intFromBool(enabled), id],
   );
+
+  /// Every automation an agent proposed that nobody has turned on.
+  List<Automation> proposed() => _db
+      .query(
+        'SELECT * FROM automations WHERE proposed_by IS NOT NULL '
+        'ORDER BY name, id;',
+      )
+      .map(_automation)
+      .toList();
 
   void delete(String id) =>
       _db.execute('DELETE FROM automations WHERE id = ?;', [id]);
@@ -262,8 +358,8 @@ class AutomationDao implements AutomationRecords {
     'INSERT INTO automation_runs '
     '(id, automation_id, scheduled_for, fired_at, state, reason, '
     'base_checkpoint_id, session_id, finished_at, commits_made, origin, '
-    'event_session_id, started_by, step_results, prompt) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'event_session_id, started_by, step_results, prompt, variables) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       run.id,
       run.automationId,
@@ -280,6 +376,7 @@ class AutomationDao implements AutomationRecords {
       run.startedBy?.name,
       _stepResultsColumn(run),
       run.prompt,
+      run.variables.isEmpty ? null : jsonEncode(run.variables),
     ],
   );
 
@@ -588,6 +685,12 @@ class AutomationDao implements AutomationRecords {
       modelId: row['model_id'] as String?,
       worktree: boolFromInt(row['run_in_worktree'] ?? 0),
       steps: AutomationSteps.fromColumn(row['steps'] as String?),
+      github: AutomationGithubTrigger.fromColumn(row['github'] as String?),
+      runsPerHour: row['runs_per_hour'] as int? ?? kDefaultRunsPerHour,
+      overlap: AutomationOverlap.fromName(row['overlap'] as String?),
+      queueLimit: row['queue_limit'] as int? ?? kDefaultQueueLimit,
+      proposedBy: row['proposed_by'] as String?,
+      proposedSessionId: row['proposed_session'] as String?,
     );
   }
 
@@ -614,5 +717,15 @@ class AutomationDao implements AutomationRecords {
       row['step_results'] as String?,
     ),
     prompt: row['prompt'] as String?,
+    variables: _variables(row['variables'] as String?),
   );
+
+  static Map<String, String> _variables(String? raw) {
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      return stringMapFrom(jsonDecode(raw));
+    } on FormatException {
+      return const {};
+    }
+  }
 }

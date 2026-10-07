@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 
 import 'automation.dart';
+import 'automation_attribution.dart';
 import 'automation_trigger.dart';
 
 /// The event [report] is, given the status last witnessed before it — or
@@ -26,7 +27,32 @@ AutomationEventKind? automationEventOf(
   };
 }
 
+/// Whether [report] waits on a person: an open prompt or question, never an
+/// agent idle at its own input.
+bool waitsOnPerson(AgentStatusReport report) =>
+    report.hasOpenPrompt || report.hasOpenQuestion;
+
+/// [automationEventOf], with [AutomationEventKind.needsYou] when [report]
+/// starts a wait [wasWaiting] did not have. A session first seen waiting is
+/// not an event, as a turn first seen finished is not.
+AutomationEventKind? automationEventWithWait(
+  AgentActivityStatus? previous,
+  AgentStatusReport report, {
+  required bool wasWaiting,
+}) {
+  if (report.ending == null &&
+      previous != null &&
+      previous != AgentActivityStatus.unknown &&
+      !wasWaiting &&
+      waitsOnPerson(report)) {
+    return AutomationEventKind.needsYou;
+  }
+  return automationEventOf(previous, report);
+}
+
 /// What an event rule types: its prompt, with who sent it on the same line
 /// so the agent and the person reading the pane both know it was not typed.
-String automationMessage(Automation rule) =>
-    '[from the Karmashala automation "${rule.name}"] ${rule.prompt}';
+String automationMessage(Automation rule) => AutomationAttribution(
+  automationId: rule.id,
+  name: rule.name,
+).render(rule.prompt);

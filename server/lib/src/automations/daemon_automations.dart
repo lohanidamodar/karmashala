@@ -8,10 +8,12 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
 import 'package:karmashala_automations/automations.dart'
-    show Automation, AutomationEventAction;
+    show Automation, AutomationEventAction, proposalInboxId;
 import 'package:karmashala_automations/webhooks.dart'
     show fillWebhookTemplate, webhookSampleBody, webhookTemplateFields;
 import 'package:karmashala_automations/check_runner.dart';
+import 'package:karmashala_automations/github.dart'
+    show GithubApi, kGithubVariables;
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart'
     show ScheduledResume, ScheduledResumeState;
@@ -58,6 +60,8 @@ import 'hosted_check_runner.dart';
 import 'server_event_rules.dart';
 import 'server_resume_runner.dart';
 import 'server_usage_limits.dart';
+import 'github/daemon_github.dart';
+import 'step_runners.dart';
 import 'session_mcp_access.dart';
 import '../domain/host_session.dart';
 import 'package:karmashala_notifications/attention.dart'
@@ -101,10 +105,16 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     WorktreeService? worktrees,
     AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
     acpAuth,
+    StepCommandRunner? stepCommands,
+    StepWebhookPoster? stepWebhooks,
+    GithubApi? Function(Automation automation)? githubApi,
+    Future<String?> Function(EnvironmentPath directory)? branchOf,
+    Duration? githubSweepEvery,
   }) : _db = database,
        _tell = tell,
        _registry = registry,
-       _log = log ?? _ignore {
+       _log = log ?? _ignore,
+       _raise = raise {
     final now = _now = clock ?? _utcNow;
     final ids = _newId = newId ?? newUuid;
     final automations = ToldAutomations(AutomationDao(database), _told);
@@ -291,6 +301,36 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       now: now,
       newId: ids,
       onChanged: _changed,
+      commands:
+          stepCommands ??
+          ServerStepCommands(facts: facts, sessionOf: sessions.getById),
+      webhooks: stepWebhooks ?? ServerStepWebhooks(),
+      checksOn: (repositoryId) =>
+          projectChecks.isVerificationEnabled(repositoryId) &&
+          projectChecks.countFor(repositoryId) > 0,
+    );
+    github = DaemonGithub(
+      dao: AutomationDao(database),
+      automations: automations,
+      scheduler: scheduler,
+      followUps: followUps,
+      resumes: resumes,
+      facts: facts,
+      liveSessions: sessions.getClaimingLive,
+      isRunning: (id) => running(id) != null || liveAcp(id) != null,
+      start: (automation, note, variables) => startWebhookRun(
+        automation,
+        note,
+        startedBy: AutomationRunCause.github,
+        variables: variables,
+      ),
+      now: now,
+      newId: ids,
+      branchOf: branchOf,
+      apiFor: githubApi,
+      local: remote,
+      sweepEvery: githubSweepEvery,
+      log: _log,
     );
     eventRules = ServerEventRules(
       automations: automations,
@@ -403,6 +443,37 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   /// The server's session queue, which resumes then send through.
   set resumeQueue(ResumeQueue? queue) => _resumes.queue = queue;
 
+  /// GitHub automations: polled here, each item answered once.
+  late final DaemonGithub github;
+
+  final void Function(InboxItem item)? _raise;
+
+  /// Files [proposal] in the inbox: an agent proposed it, and it does
+  /// nothing until a person turns it on. Filed again at every start, since
+  /// the inbox is not kept across one.
+  void fileProposal(Automation proposal) {
+    final raise = _raise;
+    if (raise == null || !proposal.isProposed) return;
+    final sessionId = proposal.proposedSessionId;
+    final session = sessionId == null ? null : _sessions.getById(sessionId);
+    raise(
+      InboxItem(
+        session: WatchedSession(
+          key: AgentSessionKey('automation', 'proposal:${proposal.id}'),
+          label: session?.title ?? proposal.name,
+          openId: session?.id ?? '',
+          imported: false,
+        ),
+        kind: InboxItemKind.automationProposed,
+        at: _now(),
+        id: proposalInboxId(proposal.id),
+        detail:
+            '${proposal.proposedBy} proposed an automation: '
+            '"${proposal.name}". It does nothing until you turn it on.',
+      ),
+    );
+  }
+
   /// Event rules answered here (slice 5c): a turn finished or failed.
   late final ServerEventRules eventRules;
 
@@ -443,6 +514,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     Automation automation,
     String note, {
     AutomationRunCause? startedBy,
+    Map<String, String> variables = const {},
   }) {
     final at = DateTime.now().toUtc();
     final checkout = facts.repository(automation.repositoryId)?.path;
@@ -458,11 +530,18 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
             'where this server cannot start agents, so nothing was started.',
         finishedAt: at,
         startedBy: startedBy,
+        variables: variables,
       );
       _automations.insertRun(run);
       return Future.value(run);
     }
-    return _runner.start(automation, at, note: note, startedBy: startedBy);
+    return _runner.start(
+      automation,
+      at,
+      note: note,
+      startedBy: startedBy,
+      variables: variables,
+    );
   }
 
   /// Run now: the run a scheduled one would be, gated the same, queued behind
@@ -493,7 +572,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
           startedBy: AutomationRunCause.runNow,
         );
         _automations.insertRun(run);
-        _followUps.after(run);
+        await _followUps.after(run);
         return _automations.runById(run.id) ?? run;
       case AutomationEventAction.startSession || null:
         break;
@@ -518,8 +597,17 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
         scheduledFor: at,
         firedAt: at,
         state: AutomationRunState.queued,
-        reason: note,
+        reason: automation.isGithub
+            ? 'Started with Run now, with sample values for GitHub\'s fields.'
+            : note,
         startedBy: AutomationRunCause.runNow,
+        // No pull request's branch: a sample has none to check out.
+        variables: automation.isGithub
+            ? {
+                for (final name in kGithubVariables.keys)
+                  if (name != 'github.pr.branch') name: 'example',
+              }
+            : const {},
       ),
     );
     await scheduler.drain(automation.repositoryId);
@@ -596,10 +684,13 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     settler.sweep(owns: _ownsSession);
     _resumes.failInterrupted();
     await scheduler.start();
+    github.startPolling();
+    AutomationDao(_db).proposed().forEach(fileProposal);
   }
 
   Future<void> close() async {
     _stopped = true;
+    github.close();
     firstRunPrompts.close();
     scheduler.stop();
     await _statusChanges?.cancel();

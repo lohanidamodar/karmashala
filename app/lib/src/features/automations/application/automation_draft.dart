@@ -8,6 +8,7 @@ enum DraftTrigger {
   schedule('On a schedule', 'Schedule'),
   event('When something happens', 'Event'),
   webhook('On a webhook', 'Webhook'),
+  github('On GitHub', 'GitHub'),
   once('Once', 'Once');
 
   const DraftTrigger(this.label, this.short);
@@ -64,6 +65,10 @@ class AutomationDraft {
     this.notifyOnly = false,
     this.requireSignature = true,
     this.callsPerHour = kDefaultWebhookCallsPerHour,
+    this.github = kDraftGithub,
+    this.runsPerHour = kDefaultRunsPerHour,
+    this.overlap = AutomationOverlap.queue,
+    this.queueLimit = kDefaultQueueLimit,
     this.once,
     this.installationId,
     this.modelId,
@@ -102,6 +107,12 @@ class AutomationDraft {
   final bool requireSignature;
   final int callsPerHour;
 
+  /// A GitHub trigger's settings; its action is [firstStep]'s.
+  final AutomationGithubTrigger github;
+  final int runsPerHour;
+  final AutomationOverlap overlap;
+  final int queueLimit;
+
   /// Local time.
   final DateTime? once;
   final String? installationId;
@@ -119,7 +130,11 @@ class AutomationDraft {
   bool get isNew => original == null;
 
   /// Whether the run starts an agent of its own (and so names one).
-  bool get namesAgent => trigger != DraftTrigger.event || startsAgent;
+  bool get namesAgent => switch (trigger) {
+    DraftTrigger.event => startsAgent,
+    DraftTrigger.github => !notifyOnly,
+    _ => true,
+  };
 
   /// The first step of an event rule.
   EventFirstStep get firstStep => startsAgent
@@ -146,7 +161,9 @@ class AutomationDraft {
   static AutomationDraft from(Automation a) {
     final schedule = a.schedule;
     final week = schedule.cron == null ? null : timeOfWeekCron(schedule.cron!);
-    final trigger = a.webhook != null
+    final trigger = a.github != null
+        ? DraftTrigger.github
+        : a.webhook != null
         ? DraftTrigger.webhook
         : a.trigger != null
         ? DraftTrigger.event
@@ -171,8 +188,17 @@ class AutomationDraft {
       cron: schedule.cron ?? '0 9 * * 1-5',
       latePolicy: a.latePolicy,
       eventKind: a.trigger?.kind ?? AutomationEventKind.turnFinished,
-      startsAgent: a.startsAgent,
-      notifyOnly: a.trigger?.action == AutomationEventAction.notifyOnly,
+      startsAgent:
+          (a.github?.action ?? a.trigger?.action) == null ||
+          (a.github?.action ?? a.trigger?.action) ==
+              AutomationEventAction.startSession,
+      notifyOnly:
+          (a.github?.action ?? a.trigger?.action) ==
+          AutomationEventAction.notifyOnly,
+      github: a.github ?? kDraftGithub,
+      runsPerHour: a.runsPerHour,
+      overlap: a.overlap,
+      queueLimit: a.queueLimit,
       requireSignature: a.webhook?.requireSignature ?? true,
       callsPerHour: a.webhook?.callsPerHour ?? kDefaultWebhookCallsPerHour,
       once: schedule.firesAt?.toLocal(),
@@ -206,6 +232,10 @@ class AutomationDraft {
     bool? notifyOnly,
     bool? requireSignature,
     int? callsPerHour,
+    AutomationGithubTrigger? github,
+    int? runsPerHour,
+    AutomationOverlap? overlap,
+    int? queueLimit,
     DateTime? once,
     String? installationId,
     String? modelId,
@@ -237,6 +267,10 @@ class AutomationDraft {
     notifyOnly: notifyOnly ?? this.notifyOnly,
     requireSignature: requireSignature ?? this.requireSignature,
     callsPerHour: callsPerHour ?? this.callsPerHour,
+    github: github ?? this.github,
+    runsPerHour: runsPerHour ?? this.runsPerHour,
+    overlap: overlap ?? this.overlap,
+    queueLimit: queueLimit ?? this.queueLimit,
     once: once ?? this.once,
     installationId: installationId ?? this.installationId,
     modelId: clearModel ? null : modelId ?? this.modelId,
@@ -264,7 +298,7 @@ class AutomationDraft {
       DraftScheduleMode.cron => cronRefusal(cron),
     },
     DraftTrigger.once => once == null ? 'Pick when it runs.' : null,
-    DraftTrigger.event || DraftTrigger.webhook => null,
+    DraftTrigger.event || DraftTrigger.webhook || DraftTrigger.github => null,
   };
 
   AutomationSchedule _schedule(DateTime now) => switch (trigger) {
@@ -280,7 +314,8 @@ class AutomationDraft {
     DraftTrigger.once => AutomationSchedule.once((once ?? now).toUtc()),
     // Inert for both: neither fires on a clock.
     DraftTrigger.event ||
-    DraftTrigger.webhook => AutomationSchedule.once(original?.armedAt ?? now),
+    DraftTrigger.webhook ||
+    DraftTrigger.github => AutomationSchedule.once(original?.armedAt ?? now),
   };
 
   /// This draft in [repositoryId]: the agent is that checkout's, so its
@@ -303,6 +338,10 @@ class AutomationDraft {
     notifyOnly: notifyOnly,
     requireSignature: requireSignature,
     callsPerHour: callsPerHour,
+    github: github.copyWith(repository: ''),
+    runsPerHour: runsPerHour,
+    overlap: overlap,
+    queueLimit: queueLimit,
     once: once,
     prefersReadOnly: prefersReadOnly,
     worktree: worktree,
@@ -330,6 +369,10 @@ class AutomationDraft {
     notifyOnly: notifyOnly,
     requireSignature: requireSignature,
     callsPerHour: callsPerHour,
+    github: github,
+    runsPerHour: runsPerHour,
+    overlap: overlap,
+    queueLimit: queueLimit,
     once: once,
     installationId: installationId,
     modelId: modelId,
@@ -348,16 +391,31 @@ class AutomationDraft {
     if (repositoryId == null) return 'Pick where it runs.';
     if (scheduleProblem case final problem?) return problem;
     if (namesAgent && installationId == null) return 'Pick an agent.';
+    if (trigger == DraftTrigger.event &&
+        eventKind == AutomationEventKind.needsYou &&
+        firstStep == EventFirstStep.tell) {
+      return 'A session that needs you has a prompt open, and a message '
+          'would answer it. Start an agent or only notify.';
+    }
     if (!notifyOnly && prompt.trim().isEmpty) {
       return namesAgent
           ? 'Say what the agent is told.'
           : 'Say what the session is told.';
     }
     if (trigger == DraftTrigger.webhook) {
-      return webhookTemplateRefusal(prompt);
+      if (webhookTemplateRefusal(prompt) case final why?) return why;
     }
-    return null;
+    if (trigger == DraftTrigger.github) {
+      if (github.copyWith(action: _action).refusal case final why?) return why;
+    }
+    return steps.refusal;
   }
+
+  AutomationEventAction get _action => switch (firstStep) {
+    EventFirstStep.agent => AutomationEventAction.startSession,
+    EventFirstStep.tell => AutomationEventAction.messageSession,
+    EventFirstStep.nothing => AutomationEventAction.notifyOnly,
+  };
 
   /// The automation this draft would save, dated [now], or null while
   /// [missing] says something is.
@@ -393,14 +451,10 @@ class AutomationDraft {
           ? null
           : Duration(minutes: maxRuntimeMinutes!),
       trigger: trigger == DraftTrigger.event
-          ? AutomationEventTrigger(
-              kind: eventKind,
-              action: switch (firstStep) {
-                EventFirstStep.agent => AutomationEventAction.startSession,
-                EventFirstStep.tell => AutomationEventAction.messageSession,
-                EventFirstStep.nothing => AutomationEventAction.notifyOnly,
-              },
-            )
+          ? AutomationEventTrigger(kind: eventKind, action: _action)
+          : null,
+      github: trigger == DraftTrigger.github
+          ? github.copyWith(action: _action)
           : null,
       webhook: trigger == DraftTrigger.webhook
           ? AutomationWebhook(
@@ -412,6 +466,16 @@ class AutomationDraft {
       modelId: namesAgent ? modelId : null,
       worktree: namesAgent && worktree,
       steps: steps,
+      runsPerHour: trigger == DraftTrigger.webhook ? callsPerHour : runsPerHour,
+      overlap: overlap,
+      queueLimit: queueLimit,
     );
   }
 }
+
+/// A new GitHub trigger: comments on pull requests, from collaborators,
+/// in the repository the editor fills in from the checkout.
+const kDraftGithub = AutomationGithubTrigger(
+  kind: GithubTriggerKind.prComment,
+  repository: '',
+);

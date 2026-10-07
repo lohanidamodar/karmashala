@@ -149,6 +149,7 @@ void main() {
   SessionStatusEntry entry(
     AgentActivityStatus status, {
     String? failureReason,
+    AgentWaitKind waiting = AgentWaitKind.unrecorded,
   }) => SessionStatusEntry(
     session: const WatchedSession(
       key: AgentSessionKey(AgentIds.claudeCode, 'conv-1'),
@@ -163,6 +164,7 @@ void main() {
       source: AgentStatusSource.hook,
       observedAt: now,
       failureReason: failureReason,
+      waiting: waiting,
     ),
   );
 
@@ -196,7 +198,8 @@ void main() {
 
       expect(
         utf8.decode(pty.writes.first),
-        '[from the Karmashala automation "After each turn"] run the tests',
+        '[sent by the Karmashala automation "After each turn" (rule-1)] '
+        'run the tests',
       );
       final written = AutomationDao(db).runsFor('rule-1').single;
       expect(written.state, AutomationRunState.finished);
@@ -246,6 +249,57 @@ void main() {
         expect(raised.single.session.openId, 's1');
       },
     );
+
+    test('a session that starts waiting on a person is a needs-you event, '
+        'once per wait', () async {
+      AutomationDao(db).insert(
+        Automation(
+          id: 'rule-1',
+          repositoryId: 'r1',
+          name: 'Needs me',
+          schedule: AutomationSchedule.once(now),
+          agentInstallationId: '',
+          prompt: '',
+          permissionMode: null,
+          enabled: true,
+          armedAt: now,
+          trigger: const AutomationEventTrigger(
+            kind: AutomationEventKind.needsYou,
+            action: AutomationEventAction.notifyOnly,
+          ),
+          steps: AutomationSteps(const [
+            AutomationStep(
+              kind: AutomationStepKind.notify,
+              when: AutomationStepWhen.always,
+              text: 'An agent in {{project}} needs you.',
+            ),
+          ]),
+        ),
+      );
+      final approval = entry(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+      );
+      automations
+        ..observeStatus(entry(AgentActivityStatus.working))
+        ..observeStatus(approval)
+        ..observeStatus(approval);
+      await pump();
+      expect(AutomationDao(db).runsFor('rule-1'), hasLength(1));
+      expect(raised.single.detail, 'An agent in shop needs you.');
+
+      // At its own input is not a wait on a person.
+      automations
+        ..observeStatus(entry(AgentActivityStatus.working))
+        ..observeStatus(
+          entry(
+            AgentActivityStatus.awaitingApproval,
+            waiting: AgentWaitKind.input,
+          ),
+        );
+      await pump();
+      expect(AutomationDao(db).runsFor('rule-1'), hasLength(1));
+    });
 
     test('a first sighting is no event', () async {
       rule(AutomationEventAction.messageSession);

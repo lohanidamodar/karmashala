@@ -271,16 +271,22 @@ void main() {
     );
   });
 
-  test('an event run queues behind the checkout, or is missed beside its '
-      'own live run', () {
+  test('an event run queues behind the checkout, then behind its own run up '
+      'to the queue limit, and past it is missed', () {
     app.handle(AutomationSave(rule()));
     app.handle(AutomationSave(rule(id: 'auto2', name: 'Other')));
     app.handle(AutomationRunPut(run('busy', automationId: 'auto2')));
     final queued = app.handle(AutomationEventRunQueue(run('ev1'))).value;
     expect(queued.state, AutomationRunState.queued);
     expect(queued.reason, contains('"Other" is running there'));
-    final missed = app.handle(AutomationEventRunQueue(run('ev2'))).value;
+    for (final id in ['ev2', 'ev3']) {
+      final waiting = app.handle(AutomationEventRunQueue(run(id))).value;
+      expect(waiting.state, AutomationRunState.queued, reason: id);
+      expect(waiting.reason, contains('One run at a time'));
+    }
+    final missed = app.handle(AutomationEventRunQueue(run('ev4'))).value;
     expect(missed.state, AutomationRunState.missed);
+    expect(missed.reason, contains('already waiting'));
   });
 
   test('deleting an automation takes its runs and is told once', () {

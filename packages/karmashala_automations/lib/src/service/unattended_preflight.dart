@@ -2,6 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../domain/automation.dart';
+import '../domain/automation_steps.dart';
 import '../domain/unattended_gate.dart';
 
 import 'automation_records.dart';
@@ -25,6 +26,7 @@ class UnattendedPreflight {
     missingCheckout:
         'This automation names a checkout that is no longer in the workspace',
     hasCheckStep: automation.steps.checks,
+    hasCommandStep: automation.steps.of(AutomationStepKind.command) != null,
   );
 
   /// The gate's inputs for resuming [session] with nobody watching.
@@ -54,6 +56,7 @@ class UnattendedPreflight {
     required String missingCheckout,
     bool requiresChecks = true,
     bool hasCheckStep = true,
+    bool hasCommandStep = false,
   }) {
     final repository = _facts.repository(repositoryId);
     final installation = _facts.installation(agentInstallationId);
@@ -89,6 +92,7 @@ class UnattendedPreflight {
       reachReason: reach.reason,
       requiresChecks: requiresChecks,
       hasCheckStep: hasCheckStep,
+      hasCommandStep: hasCommandStep,
     );
   }
 

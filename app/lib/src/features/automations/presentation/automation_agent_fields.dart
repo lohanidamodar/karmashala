@@ -31,12 +31,16 @@ class AutomationAgentField extends StatelessWidget {
     }
     return DropdownButtonFormField<String>(
       initialValue: selectedId,
+      isExpanded: true,
       decoration: const InputDecoration(labelText: 'Agent'),
       items: [
         for (final installation in installations)
           DropdownMenuItem(
             value: installation.id,
-            child: Text(displayNameFor(installation.agentId)),
+            child: Text(
+              displayNameFor(installation.agentId),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: onChanged,
@@ -80,6 +84,7 @@ class AutomationPermissionModeField extends StatelessWidget {
       initialValue: selections.any((s) => s.canonical == resolved)
           ? resolved
           : null,
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Permission mode',
         helperText:
@@ -92,7 +97,10 @@ class AutomationPermissionModeField extends StatelessWidget {
             value: selection.canonical,
             // Whole selections rather than axes, so the familiar name is the
             // composed rung's — the one the unattended gate reads.
-            child: Text(describeSelectionFamiliar(support, selection)),
+            child: Text(
+              describeSelectionFamiliar(support, selection),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: (value) =>

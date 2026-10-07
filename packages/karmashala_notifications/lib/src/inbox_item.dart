@@ -51,7 +51,11 @@ enum InboxItemKind {
 
   /// A turn the session host's stop cut off: continued at its next start, or
   /// left for a person with the reason.
-  turnCutOff;
+  turnCutOff,
+
+  /// An agent proposed an automation; it does nothing until a person turns
+  /// it on.
+  automationProposed;
 
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
@@ -68,7 +72,8 @@ enum InboxItemKind {
     InboxItemKind.turnCutOff => InboxRetirement.viewing,
     // Neither: the watcher would sweep this away on its next poll, and glancing
     // at a crashed session does not deal with what it left.
-    InboxItemKind.followUp => InboxRetirement.source,
+    InboxItemKind.followUp ||
+    InboxItemKind.automationProposed => InboxRetirement.source,
   };
 
   /// Whether this kind is a condition still true right now. Load-bearing: a
@@ -91,7 +96,8 @@ enum InboxItemKind {
     InboxItemKind.readyToMerge => NotificationReason.readyToMerge,
     InboxItemKind.followUp ||
     InboxItemKind.usageLimit ||
-    InboxItemKind.turnCutOff => null,
+    InboxItemKind.turnCutOff ||
+    InboxItemKind.automationProposed => null,
   };
 
   String get label => switch (this) {
@@ -104,13 +110,15 @@ enum InboxItemKind {
     InboxItemKind.followUp => 'Needs a follow-up',
     InboxItemKind.usageLimit => 'Usage limit reached',
     InboxItemKind.turnCutOff => 'Turn cut off',
+    InboxItemKind.automationProposed => 'Proposed automation',
   };
 
   /// The kind written on the wire. A kind added after 1.31 travels as
   /// [followUp] with its own name beside it: a released client throws on a
   /// kind it does not know, and that loses the whole batch it came in.
   String get wireName => switch (this) {
-    InboxItemKind.turnCutOff => InboxItemKind.followUp.name,
+    InboxItemKind.turnCutOff ||
+    InboxItemKind.automationProposed => InboxItemKind.followUp.name,
     _ => name,
   };
 

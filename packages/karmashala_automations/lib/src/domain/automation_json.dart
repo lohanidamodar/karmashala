@@ -2,11 +2,13 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_core/verdicts.dart';
 
 import 'automation.dart';
+import 'automation_admission.dart';
 import 'automation_check_verdict.dart';
 import 'automation_run.dart';
 import 'automation_steps.dart';
 import 'automation_trigger.dart';
 import 'automation_webhook.dart';
+import 'github_trigger.dart';
 import 'project_check.dart';
 import 'scheduled_resume.dart';
 
@@ -61,6 +63,12 @@ Map<String, Object?> automationToJson(Automation a) => {
       'worktree': a.worktree,
       'callsPerHour': w.callsPerHour,
     },
+  if (a.github case final g?) 'github': g.toJson(),
+  'runsPerHour': a.runsPerHour,
+  'overlap': a.overlap.name,
+  'queueLimit': a.queueLimit,
+  'proposedBy': ?a.proposedBy,
+  'proposedSessionId': ?a.proposedSessionId,
 };
 
 AutomationWebhook? _webhook(Object? json) {
@@ -108,11 +116,17 @@ Automation automationFromJson(Map<String, Object?> json) {
       action: json['eventAction'] as String?,
     ),
     webhook: _webhook(json['webhook']),
+    github: AutomationGithubTrigger.fromJson(json['github']),
     modelId: json['modelId'] as String? ?? hook['modelId'] as String?,
     worktree: json['worktree'] as bool? ?? hook['worktree'] as bool? ?? false,
     steps: json.containsKey('steps')
         ? AutomationSteps.fromJson(json['steps'])
         : AutomationSteps.unstated,
+    runsPerHour: json['runsPerHour'] as int? ?? kDefaultRunsPerHour,
+    overlap: AutomationOverlap.fromName(json['overlap'] as String?),
+    queueLimit: json['queueLimit'] as int? ?? kDefaultQueueLimit,
+    proposedBy: json['proposedBy'] as String?,
+    proposedSessionId: json['proposedSessionId'] as String?,
   );
 }
 
@@ -134,7 +148,16 @@ Map<String, Object?> automationRunToJson(AutomationRun r) => {
   'prompt': ?r.prompt,
   if (r.stepResults.isNotEmpty)
     'stepResults': [for (final step in r.stepResults) step.toJson()],
+  if (r.variables.isNotEmpty) 'variables': r.variables,
 };
+
+/// A string map, forgiving: a value that is not a string is left out.
+Map<String, String> stringMapFrom(Object? json) => json is Map
+    ? {
+        for (final MapEntry(:key, :value) in json.entries)
+          if (key is String && value is String) key: value,
+      }
+    : const {};
 
 AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
   id: _as<String>(json['id']),
@@ -153,6 +176,7 @@ AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
   startedBy: AutomationRunCause.fromName(json['startedBy'] as String?),
   stepResults: AutomationStepResult.listFromJson(json['stepResults']),
   prompt: json['prompt'] as String?,
+  variables: stringMapFrom(json['variables']),
 );
 
 Map<String, Object?> checkVerdictToJson(AutomationCheckVerdict v) => {

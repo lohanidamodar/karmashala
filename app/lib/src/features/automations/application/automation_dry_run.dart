@@ -54,6 +54,19 @@ List<DryRunStep> dryRunSteps(
               ? 'Would find no checks to run in $checkout.'
               : 'Would run ${checks.join(', ')} on what the agent did.',
         ),
+        AutomationStepKind.command => DryRunStep(
+          step.kind.storedName,
+          step.kind.label,
+          '${step.when.label}, would run in $checkout, with its values as '
+          'environment variables:\n\n${step.text.trim()}',
+        ),
+        AutomationStepKind.webhook => DryRunStep(
+          step.kind.storedName,
+          step.kind.label,
+          '${step.when.label}, would POST to ${step.url.trim()}'
+          '${step.allowPrivate ? '' : ' (refused if it is on your network)'}:'
+          '\n\n${step.text.trim()}',
+        ),
         _ => DryRunStep(
           step.kind.storedName,
           step.kind.label,

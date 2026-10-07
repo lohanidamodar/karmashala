@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:karmashala_automations/check_runner.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/runner.dart';
@@ -26,7 +28,11 @@ class DaemonRunChecks {
   final AutomationFollowUps? followUps;
 
   void start(AutomationRun run) {
-    void then() => followUps?.after(run);
+    void then() {
+      final steps = followUps;
+      if (steps != null) unawaited(steps.after(run));
+    }
+
     final automation = automations.getById(run.automationId);
     if (automation != null && !automation.steps.checks) {
       then();

@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/events.dart';
 import 'package:test/test.dart';
@@ -190,6 +191,74 @@ void main() {
       ),
       isEmpty,
     );
+  });
+
+  group('needs you', () {
+    AgentStatusReport report(
+      AgentActivityStatus status, [
+      AgentWaitKind waiting = AgentWaitKind.unrecorded,
+    ]) => AgentStatusReport(
+      agentId: 'claude-code',
+      sessionId: 'c1',
+      status: status,
+      source: AgentStatusSource.hook,
+      observedAt: t0,
+      waiting: waiting,
+    );
+
+    AutomationEventKind? of(
+      AgentActivityStatus? previous,
+      AgentStatusReport now, {
+      bool wasWaiting = false,
+    }) => automationEventWithWait(previous, now, wasWaiting: wasWaiting);
+
+    test('an approval or a question starts a wait on you', () {
+      for (final kind in [AgentWaitKind.approval, AgentWaitKind.question]) {
+        expect(
+          of(
+            AgentActivityStatus.working,
+            report(AgentActivityStatus.awaitingApproval, kind),
+          ),
+          AutomationEventKind.needsYou,
+        );
+      }
+    });
+
+    test('an agent at its own input does not need you', () {
+      for (final kind in [AgentWaitKind.input, AgentWaitKind.unrecorded]) {
+        expect(
+          of(
+            AgentActivityStatus.working,
+            report(AgentActivityStatus.awaitingApproval, kind),
+          ),
+          isNull,
+        );
+      }
+    });
+
+    test('one wait is one event, and a first sighting is none', () {
+      final waiting = report(
+        AgentActivityStatus.awaitingApproval,
+        AgentWaitKind.approval,
+      );
+      expect(
+        of(AgentActivityStatus.awaitingApproval, waiting, wasWaiting: true),
+        isNull,
+      );
+      expect(of(null, waiting), isNull);
+      // A wait whose kind is learnt late still counts once.
+      expect(
+        of(AgentActivityStatus.awaitingApproval, waiting),
+        AutomationEventKind.needsYou,
+      );
+    });
+
+    test('the turn events are unchanged', () {
+      expect(
+        of(AgentActivityStatus.working, report(AgentActivityStatus.idle)),
+        AutomationEventKind.turnFinished,
+      );
+    });
   });
 
   test('a stored trigger from a newer build reads as none', () {
