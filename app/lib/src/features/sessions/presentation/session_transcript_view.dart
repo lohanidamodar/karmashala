@@ -230,6 +230,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// own listener on the same provider and `ref` is dead by then.
   bool _leaving = false;
 
+  /// The running or latest turn's start and token count, off its working
+  /// line — see the status listener in [build].
+  DateTime? _turnSince;
+  int? _turnTokens;
+
   @override
   void initState() {
     super.initState();
@@ -563,6 +568,18 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         _filesQueued.value++;
       }
     });
+    // The running turn's last token count, kept for its footer once it ends:
+    // the line a finished turn leaves names no count.
+    ref.listen(agentSessionStatusProvider(widget.sessionId), (_, next) {
+      final report = next.asData?.value;
+      if (report?.turnStatus != AgentActivityStatus.working) return;
+      final working = report!.working;
+      if (working?.since != _turnSince) {
+        _turnSince = working?.since;
+        _turnTokens = null;
+      }
+      _turnTokens = working?.tokens ?? _turnTokens;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _takeQueuedNote();
@@ -802,6 +819,16 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             sessionId: widget.sessionId,
             onStop: _interruptTurn,
           ),
+          // The word the agent left on its screen as the turn ended.
+          lastTurnVerb: ref.watch(
+            agentSessionStatusProvider(widget.sessionId).select((status) {
+              final report = status.asData?.value;
+              return report?.turnStatus == AgentActivityStatus.idle
+                  ? report?.working?.word
+                  : null;
+            }),
+          ),
+          lastTurnTokens: _turnTokens,
           footer: unplaced.isEmpty
               ? footer
               : Column(

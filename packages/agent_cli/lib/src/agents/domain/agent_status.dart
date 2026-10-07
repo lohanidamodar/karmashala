@@ -140,7 +140,8 @@ class AgentStatusReport {
   );
 
   /// **What the agent's working line says** while its turn runs — its word,
-  /// when the turn began and its tokens. Null when no source said any of it.
+  /// when the turn began and its tokens — and once the turn has ended, the
+  /// past-tense word it left ("Crunched"). Null when no source said any of it.
   final AgentWorkingDetail? working;
 
   /// Registry id of the agent (`AgentDescriptor.id`).

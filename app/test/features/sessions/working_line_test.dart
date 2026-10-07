@@ -529,6 +529,72 @@ void main() {
       expect(tester.getRect(line).bottom, lessThanOrEqualTo(composer.top));
     });
 
+    testWidgets('a finished turn\'s line carries its word and tokens', (
+      tester,
+    ) async {
+      final db = TestMachine();
+      final statuses = StreamController<AgentStatusReport>.broadcast();
+      addTearDown(statuses.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...fakeTerminalOverrides(),
+            ...await overridesFor(
+              messages: [
+                TranscriptMessage(role: 'user', text: 'Fix it', at: issued),
+                TranscriptMessage(
+                  role: 'agent',
+                  text: 'Fixed.',
+                  at: issued.add(const Duration(seconds: 6)),
+                ),
+              ],
+              clock: FixedClock(issued.add(const Duration(seconds: 6))),
+              statuses: statuses.stream,
+              db: db,
+            ),
+            availableSystemTerminalsProvider.overrideWith(
+              (ref) async => const <SystemTerminal>[],
+            ),
+            sessionRunningOnHostProvider.overrideWithValue((_) => true),
+            sessionDeliveryProvider.overrideWith(
+              (ref, _) async => SessionDelivery.unknown,
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
+          ),
+        ),
+      );
+      await tester.pump();
+      statuses.add(
+        report(
+          working: AgentWorkingDetail(
+            word: 'Crunching…',
+            since: issued,
+            tokens: 1234,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Crunching…'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-turn-footer')), findsNothing);
+
+      statuses.add(
+        report(
+          status: AgentActivityStatus.idle,
+          working: const AgentWorkingDetail(word: 'Crunched'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Crunching…'), findsNothing);
+      final footer = tester.widget<Text>(
+        find.byKey(const ValueKey('chat-turn-footer')),
+      );
+      expect(footer.data, startsWith('Crunched for 6s · 1.2k tokens · done '));
+    });
+
     testWidgets('survives 360 px at text scale 1.6, and a desktop', (
       tester,
     ) async {

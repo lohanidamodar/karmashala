@@ -124,6 +124,41 @@ void main() {
     });
   });
 
+  group('the line a finished turn leaves', () {
+    test('Claude Code: its past-tense word', () {
+      expect(
+        claude.workingLine!.readDone([
+          '● Done.',
+          '',
+          '✻ Crunched for 6s',
+          '',
+          '──────────',
+          '❯ ',
+        ]),
+        'Crunched',
+      );
+      expect(claude.workingLine!.readDone(['✻ Worked for 1m 3s']), 'Worked');
+    });
+
+    test('Codex: its word before the clock', () {
+      expect(
+        codex.workingLine!.readDone(['  Worked for 12s • 6:38 AM', '› ']),
+        'Worked',
+      );
+    });
+
+    test('lines that are not a finished turn', () {
+      for (final line in [
+        'I waited for 5s before retrying.',
+        '✻ Sautéing… (2s · ↓ 7 tokens)',
+        'Worked for ages',
+        '',
+      ]) {
+        expect(claude.workingLine!.readDone([line]), isNull, reason: line);
+      }
+    });
+  });
+
   group('what the status report carries', () {
     test('the same at the grain a reader sees', () {
       final a = AgentWorkingDetail(word: 'Booping…', since: now, tokens: 1210);

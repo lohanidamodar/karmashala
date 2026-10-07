@@ -122,6 +122,26 @@ void main() {
     expect(idle.report.working, isNull);
   });
 
+  test('a finished turn carries the word its agent left', () {
+    hook('UserPromptSubmit');
+    keeper.screen('row-1', screen('✻ Sautéing… (2s · ↓ 7 tokens)'));
+    clock.now = clock.now.add(const Duration(seconds: 5));
+    keeper.screen('row-1', [
+      '● Done.',
+      '',
+      '✻ Crunched for 6s',
+      '',
+      '──────────────────────────────',
+      '❯ ',
+      '──────────────────────────────',
+      '  ⏸ manual mode on (shift+tab to cycle)',
+    ]);
+    final idle = hook('Stop');
+    expect(idle!.report.status, AgentActivityStatus.idle);
+    expect(idle.report.working?.word, 'Crunched');
+    expect(idle.report.working?.since, isNull);
+  });
+
   test('a screen with no working line on it says only the status', () {
     final moved = keeper.screen('row-1', [
       '──────────────────────────────',

@@ -8,7 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:karmashala_ui/icons.dart';
 import '../../agents/presentation/agent_logo.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ui/rows.dart' show compactAge;
+import 'package:karmashala_ui/charts.dart' show formatCompactCount;
+import 'package:karmashala_ui/rows.dart' show compactAge, formatElapsed;
 import 'package:agent_cli/descriptors.dart' show AgentPlan;
 import 'package:agent_cli/read.dart'
     show kTranscriptNoticeRole, taskNotificationLine;
@@ -27,6 +28,7 @@ export 'tool_run.dart' show TranscriptTurn;
 part 'chat_transcript/agent_switch_rows.dart';
 part 'chat_transcript/message_rows.dart';
 part 'chat_transcript/tool_batch.dart';
+part 'chat_transcript/turn_footer.dart';
 part 'chat_transcript/turn_meta.dart';
 
 /// The row the transcript view writes itself, saying a compaction happened
@@ -174,6 +176,8 @@ class ChatTranscriptView extends StatefulWidget {
     required this.messages,
     this.footer,
     this.workingLine,
+    this.lastTurnVerb,
+    this.lastTurnTokens,
     this.emptyHint = 'No messages yet.',
     this.onSaveNote,
     this.resolveHostPath,
@@ -224,6 +228,11 @@ class ChatTranscriptView extends StatefulWidget {
   /// the scroll, so it and its Stop stay in sight as the terminal's spinner
   /// does. Null draws none.
   final Widget? workingLine;
+
+  /// The latest finished turn's own past-tense word ("Crunched") and tokens,
+  /// for its footer; null where the agent left none.
+  final String? lastTurnVerb;
+  final int? lastTurnTokens;
   final String emptyHint;
 
   /// Turns a path an agent wrote into one this process can open — a WSL
@@ -276,6 +285,27 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   /// [_touch] is kept from the last build for [_onScroll], which has no context.
   bool _touch = false;
   bool _awayFromLatest = false;
+
+  List<ChatMessage>? _footerMessages;
+  TranscriptTurn? _footerTurn;
+  var _footers = const <int, TurnFooter>{};
+
+  /// [turnFooters], walked again only when the list or the turn moved: an
+  /// elapsed tick or a hover rebuild costs nothing here.
+  Map<int, TurnFooter> _footersFor(
+    List<ChatMessage> messages,
+    TranscriptTurn turn,
+  ) {
+    if (identical(messages, _footerMessages) && turn == _footerTurn) {
+      return _footers;
+    }
+    _footerMessages = messages;
+    _footerTurn = turn;
+    return _footers = turnFooters(
+      messages,
+      lastTurnOver: turn == TranscriptTurn.idle,
+    );
+  }
 
   /// Messages kept in sight above the "new since" line before the fold.
   static const _keptBeforeNew = 3;
@@ -453,21 +483,47 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     // what it changed.
     final planBefore = previousPlans(widget.messages);
 
+    // Each finished turn's footer; the agent's word and tokens are known only
+    // for the latest, and only while no turn has opened after it.
+    final footers = _footersFor(widget.messages, widget.turn);
+    final latest = footers.isEmpty ? null : footers.keys.reduce(math.max);
+    final latestIsLast =
+        latest != null && !widget.messages.skip(latest + 1).any(_opensTurn);
+
     // Keyed at the top: the list finds a row by its item's own key.
-    Widget rowAt(int offset) => _TappedTurn(
-      key: ValueKey<int>(base + offset),
-      notifier: _tappedTurn,
-      child: _MessageRow(
+    Widget rowAt(int offset) {
+      final ordinal = start + offset;
+      Widget row = _MessageRow(
         message: visible[offset],
-        previousPlan: planBefore[start + offset],
-        ordinal: start + offset,
+        previousPlan: planBefore[ordinal],
+        ordinal: ordinal,
         onSaveNote: widget.onSaveNote,
         resolveHostPath: widget.resolveHostPath,
         onPathTap: widget.onPathTap,
         onLinkTap: widget.onLinkTap,
         detailBuilder: widget.detailBuilder,
-      ),
-    );
+      );
+      if (footers[ordinal] case final footer?) {
+        final own = latestIsLast && ordinal == latest;
+        row = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            row,
+            _TurnFooterLine(
+              footer: footer,
+              verb: own ? widget.lastTurnVerb : null,
+              tokens: own ? widget.lastTurnTokens : null,
+            ),
+          ],
+        );
+      }
+      return _TappedTurn(
+        key: ValueKey<int>(base + offset),
+        notifier: _tappedTurn,
+        child: row,
+      );
+    }
 
     // The conversation sits on the terminal's tone (board N2), so switching a
     // pane between its two views changes what is drawn, not the room it is in.

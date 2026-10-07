@@ -137,6 +137,26 @@ class WorkingLineRule {
     return null;
   }
 
+  /// The agent's own past-tense word off the line it leaves when a turn ends
+  /// — Claude Code's `✻ Crunched for 6s`, Codex's `Worked for 12s • 6:38 AM`
+  /// — from the lowest such line of [tailLines]; null when none is drawn.
+  String? readDone(List<String> tailLines) {
+    for (var i = tailLines.length - 1; i >= 0; i--) {
+      final match = _doneShape.firstMatch(tailLines[i].trim());
+      if (match == null) continue;
+      final rest = match.group(3)!;
+      if (rest.isNotEmpty && !rest.startsWith(separator)) continue;
+      final word = match.group(1)!;
+      return _capital.hasMatch(word) ? word : null;
+    }
+    return null;
+  }
+
+  static final _doneShape = RegExp(
+    r'^(?:\S\s+)?(\p{L}+) for ((?:\d+h\s*)?(?:\d+m\s*)?\d+s)\s*(.*)$',
+    unicode: true,
+  );
+
   /// The word, its spinner glyph taken off; null unless it opens on a
   /// capital, as both agents' words do — a reply's text rarely ends `…  (3s)`.
   String? _word(String head) {

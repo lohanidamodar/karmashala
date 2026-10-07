@@ -284,12 +284,18 @@ class HostedStatusKeeper {
         report.turnStatus == AgentActivityStatus.working &&
         !report.hasOpenPrompt &&
         !report.hasOpenQuestion;
-    if (!working) {
-      return report.working == null ? report : report.withWorking(null);
-    }
-    if (report.working != null) return report;
     final rule = agents.byId(kept.agentId)?.grid.workingLine;
     final at = kept.tailAt;
+    if (!working) {
+      // A finished turn carries the word its agent left: "Crunched".
+      final done = report.turnStatus == AgentActivityStatus.idle && at != null
+          ? rule?.readDone(kept.tail)
+          : null;
+      return report.withWorking(
+        done == null ? null : AgentWorkingDetail(word: done),
+      );
+    }
+    if (report.working != null) return report;
     if (rule == null || at == null) return report;
     final read = rule.read(kept.tail, at);
     return read == null ? report : report.withWorking(read);
