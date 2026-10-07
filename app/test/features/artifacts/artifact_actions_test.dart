@@ -60,22 +60,38 @@ void main() {
     expect(said, contains('outside Karmashala'));
   });
 
-  test('a page goes to the browser inside the sandbox, network as allowed',
-      () async {
-    server.showArtifact(sampleArtifact(), utf8.encode('<h1>Report</h1>'));
-    final launched = <Uri>[];
-    await actions(launched: launched).openInBrowser(sampleArtifact(), 1);
-    final opened = File.fromUri(launched.single).readAsStringSync();
-    expect(opened, contains('sandbox="allow-scripts"'));
-    expect(opened, contains("connect-src 'none'"));
-    expect(opened, contains('&lt;h1&gt;Report&lt;/h1&gt;'));
+  test(
+    'a page goes to the browser inside the sandbox, network as allowed',
+    () async {
+      server.showArtifact(sampleArtifact(), utf8.encode('<h1>Report</h1>'));
+      final launched = <Uri>[];
+      await actions(launched: launched).openInBrowser(sampleArtifact(), 1);
+      final opened = File.fromUri(launched.single).readAsStringSync();
+      expect(opened, contains('sandbox="allow-scripts"'));
+      expect(opened, contains("connect-src 'none'"));
+      expect(opened, contains('&lt;h1&gt;Report&lt;/h1&gt;'));
 
-    final allowed = sampleArtifact().copyWith(networkAllowed: true);
-    await actions(launched: launched).openInBrowser(allowed, 1);
-    expect(
-      File.fromUri(launched.last).readAsStringSync(),
-      contains('connect-src https:'),
-    );
+      final allowed = sampleArtifact().copyWith(networkAllowed: true);
+      await actions(launched: launched).openInBrowser(allowed, 1);
+      expect(
+        File.fromUri(launched.last).readAsStringSync(),
+        contains('connect-src https:'),
+      );
+    },
+  );
+
+  test('an HTML file from the conversation goes to the browser sandboxed, '
+      'network off', () async {
+    final launched = <Uri>[];
+    final said = await actions(
+      launched: launched,
+    ).openHtmlInBrowser('<script>fetch("https://x.dev")</script>', 'page.html');
+    final written = File.fromUri(launched.single).readAsStringSync();
+    expect(said, startsWith('Opened page.html'));
+    expect(written, contains('<iframe sandbox="allow-scripts"'));
+    expect(written, isNot(contains('allow-same-origin')));
+    expect(written, contains("connect-src 'none'"));
+    expect(p.isWithin(tmp.path, launched.single.toFilePath()), isTrue);
   });
 
   test('an image goes to the browser as it is', () async {
@@ -127,15 +143,16 @@ void main() {
     expect(said, isNull);
   });
 
-  test('with no save dialog, it is kept in the app\'s folder and says where',
-      () async {
-    server.showArtifact(sampleArtifact(), utf8.encode('<p>k</p>'));
-    final said = await actions(
-      saveLocation: (_) async => throw UnimplementedError('no dialog'),
-    ).save(sampleArtifact(), 1);
-    final kept = File(p.join(tmp.path, 'artifacts', 'a1.html'));
-    expect(kept.readAsStringSync(), '<p>k</p>');
-    expect(said, contains(kept.path));
-  });
+  test(
+    'with no save dialog, it is kept in the app\'s folder and says where',
+    () async {
+      server.showArtifact(sampleArtifact(), utf8.encode('<p>k</p>'));
+      final said = await actions(
+        saveLocation: (_) async => throw UnimplementedError('no dialog'),
+      ).save(sampleArtifact(), 1);
+      final kept = File(p.join(tmp.path, 'artifacts', 'a1.html'));
+      expect(kept.readAsStringSync(), '<p>k</p>');
+      expect(said, contains(kept.path));
+    },
+  );
 }
-

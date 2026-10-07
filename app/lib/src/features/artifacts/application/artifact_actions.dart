@@ -47,17 +47,40 @@ class ArtifactActions {
             ),
           )
         : bytes;
+    return _writeAndOpen(
+      '${artifact.id}-r$revision',
+      artifact.fileName,
+      written,
+    );
+  }
+
+  /// An HTML page a conversation named, opened in the browser inside the same
+  /// sandbox shell as an artifact: its scripts run there, the network off.
+  Future<String> openHtmlInBrowser(String html, String fileName) {
+    final shell = artifactSandboxShell(html, allowNetwork: false);
+    return _writeAndOpen(
+      'file-${html.hashCode.toUnsigned(32).toRadixString(16)}',
+      fileName,
+      utf8.encode(shell),
+    );
+  }
+
+  Future<String> _writeAndOpen(
+    String folderName,
+    String fileName,
+    List<int> bytes,
+  ) async {
     final root = await _scratch();
     final folder = Directory(
-      p.join(root.path, 'karmashala-artifacts', '${artifact.id}-r$revision'),
+      p.join(root.path, 'karmashala-artifacts', folderName),
     );
     await folder.create(recursive: true);
-    final file = File(p.join(folder.path, _safeName(artifact.fileName)));
-    await file.writeAsBytes(written, flush: true);
+    final file = File(p.join(folder.path, _safeName(fileName)));
+    await file.writeAsBytes(bytes, flush: true);
     final opened = await _launch(Uri.file(file.path));
     return opened
-        ? 'Opened ${artifact.fileName} outside Karmashala.'
-        : 'Nothing on this device opens ${artifact.fileName}; it was written '
+        ? 'Opened $fileName outside Karmashala.'
+        : 'Nothing on this device opens $fileName; it was written '
               'to ${file.path}.';
   }
 

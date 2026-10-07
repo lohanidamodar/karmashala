@@ -13,7 +13,9 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'package:yaml/yaml.dart';
 
+import '../../artifacts/application/artifact_actions.dart';
 import '../../artifacts/presentation/artifact_pdf_view.dart';
+import '../../artifacts/presentation/html_preview.dart';
 import '../application/file_preview_loader.dart';
 import '../domain/file_preview_kind.dart';
 
@@ -305,6 +307,19 @@ class _TranscriptFilePreviewState extends ConsumerState<TranscriptFilePreview> {
           ),
         );
       case FilePreviewKind.html:
+        final html = text();
+        final name = widget.path.path.split(RegExp(r'[\\/]')).last;
+        return HtmlPreview(
+          html: html,
+          maxHeight: kFilePreviewMaxHeight,
+          onOpenInBrowser: () async {
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            final said = await ref
+                .read(artifactActionsProvider)
+                .openHtmlInBrowser(html, name);
+            messenger?.showSnackBar(SnackBar(content: Text(said)));
+          },
+        );
       case FilePreviewKind.code:
       case FilePreviewKind.other:
         return code();

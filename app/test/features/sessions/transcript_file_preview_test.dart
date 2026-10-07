@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/features/artifacts/presentation/artifact_pdf_view.dart';
+import 'package:karmashala/src/features/artifacts/presentation/html_preview.dart';
 import 'package:karmashala/src/features/sessions/application/file_preview_loader.dart';
 import 'package:karmashala/src/features/sessions/domain/file_preview_kind.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
@@ -143,9 +144,7 @@ void main() {
     expect(
       tester.getTopLeft(find.text('preview of lib/main.dart:12')).dy,
       lessThan(
-        tester
-            .getTopLeft(find.textContaining('Done.', findRichText: true))
-            .dy,
+        tester.getTopLeft(find.textContaining('Done.', findRichText: true)).dy,
       ),
     );
 
@@ -299,6 +298,21 @@ void main() {
       expect(find.byType(JsonTreeView), findsOneWidget);
       expect(
         find.textContaining('2 items', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('HTML, as the sandboxed preview with no script run', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        '/repo/page.html',
+        text(FilePreviewKind.html, '<p>Hello</p><script>x()</script>'),
+      );
+      expect(find.byType(HtmlPreview), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('artifact-html-scripts')),
         findsOneWidget,
       );
     });
