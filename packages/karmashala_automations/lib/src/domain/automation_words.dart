@@ -145,8 +145,9 @@ String triggerWords(Automation automation, {DateTime? now}) {
   final trigger = automation.trigger;
   if (trigger != null) return 'When ${_eventWords(trigger.kind)}';
   final schedule = automation.schedule;
-  if (schedule.isOnce)
+  if (schedule.isOnce) {
     return 'Once, ${momentWords(schedule.firesAt!.toLocal())}';
+  }
   if (schedule.isInterval) return gapWords(schedule.gap!);
   return cronWords(schedule.cron!, now: now);
 }

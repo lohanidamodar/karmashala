@@ -239,6 +239,40 @@ class FakeAutomationRows extends AutomationCopyReads {
     }
   }
 
+  /// Run now and Cancel, as the server answers them minus the agent: a run
+  /// now is recorded running, started by Run now; a cancel fails it.
+  final ranNow = <String>[];
+
+  AutomationRun _work(
+    AutomationWorkRequest<Object?> request,
+    List<DataChange> changes,
+  ) {
+    final at = DateTime.utc(2026, 10, 7, 9);
+    final run = switch (request) {
+      AutomationRunNow(:final id) => () {
+        _rule(id);
+        ranNow.add(id);
+        return AutomationRun(
+          id: 'now-${ranNow.length}',
+          automationId: id,
+          scheduledFor: at,
+          firedAt: at,
+          state: AutomationRunState.running,
+          reason: 'Started with Run now.',
+          startedBy: AutomationRunCause.runNow,
+        );
+      }(),
+      AutomationRunCancel(:final runId) => runs[runId]!.copyWith(
+        state: AutomationRunState.failed,
+        reason: 'Cancelled by you.',
+        finishedAt: at,
+      ),
+    };
+    runs[run.id] = run;
+    changes.add(AutomationRunChanged(run));
+    return run;
+  }
+
   Automation _rule(String id) =>
       rules[id] ?? (throw DataRefused.notFound('no automation with id $id'));
 

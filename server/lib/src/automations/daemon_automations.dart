@@ -7,7 +7,10 @@ import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
-import 'package:karmashala_automations/automations.dart' show Automation;
+import 'package:karmashala_automations/automations.dart'
+    show Automation, AutomationEventAction;
+import 'package:karmashala_automations/webhooks.dart'
+    show fillWebhookTemplate, webhookSampleBody, webhookTemplateFields;
 import 'package:karmashala_automations/check_runner.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart'
@@ -68,7 +71,7 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 /// starts in sessions it owns, their verdicts when those sessions end, the
 /// checks after, scheduled resumes and a client's `checks.run` — every write
 /// told to every client ([tell]). No app is asked for anything (slice 5c).
-class DaemonAutomations implements ChecksWork {
+class DaemonAutomations implements ChecksWork, AutomationWork {
   DaemonAutomations({
     required AppDatabase database,
     required SessionRegistry registry,
@@ -100,9 +103,10 @@ class DaemonAutomations implements ChecksWork {
     acpAuth,
   }) : _db = database,
        _tell = tell,
+       _registry = registry,
        _log = log ?? _ignore {
-    final now = clock ?? _utcNow;
-    final ids = newId ?? newUuid;
+    final now = _now = clock ?? _utcNow;
+    final ids = _newId = newId ?? newUuid;
     final automations = ToldAutomations(AutomationDao(database), _told);
     final resumes = ToldResumes(ScheduledResumeDao(database), (change) {
       _told(change);
@@ -249,7 +253,7 @@ class DaemonAutomations implements ChecksWork {
       return session == null || session.lifecycle.hasEnded ? null : session;
     }
 
-    final followUps = AutomationFollowUps(
+    final followUps = _followUps = AutomationFollowUps(
       automations: automations,
       resumes: resumes,
       repositoryName: (id) => facts.repository(id)?.name ?? 'this checkout',
@@ -351,6 +355,10 @@ class DaemonAutomations implements ChecksWork {
 
   final AppDatabase _db;
   final void Function(List<DataChange> changes) _tell;
+  final SessionRegistry _registry;
+  late final DateTime Function() _now;
+  late final String Function() _newId;
+  late final AutomationFollowUps _followUps;
   final void Function(String message) _log;
   late final SessionDao _sessions;
   late final AutomationRecords _automations;
@@ -431,7 +439,11 @@ class DaemonAutomations implements ChecksWork {
   /// One webhook call's run: [automation], its prompt already filled, started
   /// now through the same gate, base checkpoint and launch a scheduled run
   /// takes — never queued, since its caller is waiting for the answer.
-  Future<AutomationRun> startWebhookRun(Automation automation, String note) {
+  Future<AutomationRun> startWebhookRun(
+    Automation automation,
+    String note, {
+    AutomationRunCause? startedBy,
+  }) {
     final at = DateTime.now().toUtc();
     final checkout = facts.repository(automation.repositoryId)?.path;
     if (checkout != null && !facts.startsAgentsIn(checkout)) {
@@ -445,11 +457,106 @@ class DaemonAutomations implements ChecksWork {
             'This checkout is on ${facts.describeEnvironment(checkout)}, '
             'where this server cannot start agents, so nothing was started.',
         finishedAt: at,
+        startedBy: startedBy,
       );
       _automations.insertRun(run);
       return Future.value(run);
     }
-    return _runner.start(automation, at, note: note);
+    return _runner.start(automation, at, note: note, startedBy: startedBy);
+  }
+
+  /// Run now: the run a scheduled one would be, gated the same, queued behind
+  /// its checkout when that is busy — a person's act, so a paused automation
+  /// runs too. A webhook runs with sample values for its call's fields.
+  @override
+  Future<AutomationRun> runNow(String id) async {
+    final automation =
+        _automations.getById(id) ??
+        (throw DataRefused.notFound('no automation with id $id'));
+    final at = _now();
+    const note = 'Started with Run now.';
+    switch (automation.trigger?.action) {
+      case AutomationEventAction.messageSession:
+        throw const DataRefused.invalid(
+          'This one tells the session an event came from, and Run now has '
+          'no such session. A dry run shows what it would send.',
+        );
+      case AutomationEventAction.notifyOnly:
+        final run = AutomationRun(
+          id: _newId(),
+          automationId: id,
+          scheduledFor: at,
+          firedAt: at,
+          state: AutomationRunState.finished,
+          reason: note,
+          finishedAt: at,
+          startedBy: AutomationRunCause.runNow,
+        );
+        _automations.insertRun(run);
+        _followUps.after(run);
+        return _automations.runById(run.id) ?? run;
+      case AutomationEventAction.startSession || null:
+        break;
+    }
+    if (automation.isWebhook) {
+      final sample = webhookSampleBody(
+        webhookTemplateFields(automation.prompt),
+      );
+      return startWebhookRun(
+        automation.copyWith(
+          prompt: fillWebhookTemplate(automation.prompt, sample).prompt,
+        ),
+        'Started with Run now, with sample values for the call\'s fields.',
+        startedBy: AutomationRunCause.runNow,
+      );
+    }
+    final queued = scheduler.queueEventRun(
+      automation,
+      AutomationRun(
+        id: _newId(),
+        automationId: id,
+        scheduledFor: at,
+        firedAt: at,
+        state: AutomationRunState.queued,
+        reason: note,
+        startedBy: AutomationRunCause.runNow,
+      ),
+    );
+    await scheduler.drain(automation.repositoryId);
+    return _automations.runById(queued.id) ?? queued;
+  }
+
+  /// A waiting run is let go; a running one's session is ended, which
+  /// settles it as stopped by you.
+  @override
+  Future<AutomationRun> cancelRun(String runId) async {
+    final run =
+        _automations.runById(runId) ??
+        (throw DataRefused.notFound('no automation run with id $runId'));
+    switch (run.state) {
+      case AutomationRunState.queued:
+        _automations.updateRun(
+          run.copyWith(
+            state: AutomationRunState.failed,
+            reason: 'Cancelled by you before it started.',
+            finishedAt: _now(),
+          ),
+        );
+        _changed();
+      case AutomationRunState.running:
+        final sessionId = run.sessionId;
+        final hosted = sessionId == null ? null : hostSessionIdOf(sessionId);
+        if (hosted == null || _registry.findProcess(hosted) == null) {
+          throw const DataRefused.invalid(
+            'Its session is not one this server runs, so it cannot be ended '
+            'from here. End it where it runs.',
+          );
+        }
+        await _registry.close(hosted);
+      case _:
+        throw const DataRefused.invalid('That run has already ended.');
+    }
+    return _automations.runById(runId) ?? run;
   }
 
   /// Whether a run holds [automation]'s checkout now.

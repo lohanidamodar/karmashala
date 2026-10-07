@@ -93,6 +93,19 @@ void main() {
     ).value;
   }
 
+  test('Run now and Cancel answer the run as it was left', () {
+    final started = roundTrip(
+      const AutomationRunNow('auto1'),
+      run.copyWith(state: AutomationRunState.running),
+    );
+    expect(started.state, AutomationRunState.running);
+    final cancelled = roundTrip(
+      const AutomationRunCancel('run1'),
+      run.copyWith(state: AutomationRunState.failed, reason: 'Cancelled.'),
+    );
+    expect(cancelled.reason, 'Cancelled.');
+  });
+
   test('every request and its answer', () {
     final snapshot = roundTrip(
       const AutomationsList(),

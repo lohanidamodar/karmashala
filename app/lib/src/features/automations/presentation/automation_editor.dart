@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/unattended.dart';
+import 'package:karmashala_core/verdicts.dart';
 import 'package:karmashala_automations/webhooks.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -22,7 +24,11 @@ import '../application/automation_draft.dart';
 import '../application/automation_editor_state.dart';
 import '../application/automation_providers.dart';
 import '../application/unattended_preflight.dart';
+import '../application/automation_dry_run.dart';
 import 'automation_agent_fields.dart';
+import 'automation_dry_run_dialog.dart';
+import 'automation_run_actions.dart';
+import 'automation_run_status.dart';
 import 'automation_editor_parts.dart';
 import 'project_checks_section.dart' show addProjectCheck;
 import 'webhook_parts.dart';
@@ -62,6 +68,15 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   var _saving = false;
   String? _failure;
 
+  /// Changes not saved yet: Run now runs what is saved, so it waits.
+  var _dirty = false;
+
+  /// The last dry run, by card, while nothing changed since.
+  Map<String, DryRunStep>? _dry;
+
+  /// The run Run now started, followed here as it goes.
+  String? _runId;
+
   @override
   void dispose() {
     for (final c in [
@@ -80,7 +95,11 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     super.dispose();
   }
 
-  void _update(AutomationDraft draft) => setState(() => _draft = draft);
+  void _update(AutomationDraft draft) => setState(() {
+    _draft = draft;
+    _dirty = true;
+    _dry = null;
+  });
 
   void _putStep(AutomationStepKind kind, {AutomationStepWhen? when}) {
     final existing = _draft.steps.of(kind);
@@ -171,7 +190,19 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _header(context, missing: missing, ready: ready),
+              _header(
+                context,
+                missing: missing,
+                ready: ready,
+                probe: probe,
+                checkout: repository?.name ?? 'its checkout',
+                agent: agentName,
+                checks: [for (final c in checks) c.name],
+              ),
+              if (_banner(context) case final banner?) ...[
+                const SizedBox(height: Insets.sm),
+                banner,
+              ],
               if (_failure case final failure?) ...[
                 const SizedBox(height: Insets.sm),
                 DesktopErrorBanner(
@@ -222,9 +253,22 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     BuildContext context, {
     required String? missing,
     required bool ready,
+    required Automation? probe,
+    required String checkout,
+    required String agent,
+    required List<String> checks,
   }) {
     final theme = Theme.of(context);
     final blocked = missing ?? (ready ? null : kNotReadyTooltip);
+    final original = _draft.original;
+    final offered = ref.watch(runNowOfferedProvider);
+    final cannotRun = !offered
+        ? 'This server cannot run an automation on request.'
+        : original == null
+        ? 'Create it first.'
+        : _dirty
+        ? 'Save first: Run now runs what is saved.'
+        : blocked;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -273,6 +317,46 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
           spacing: Insets.sm,
           runSpacing: Insets.xs,
           children: [
+            Tooltip(
+              message: cannotRun ?? '',
+              child: OutlinedButton(
+                key: const ValueKey('automation-run-now'),
+                onPressed: cannotRun != null
+                    ? null
+                    : () async {
+                        final run = await runAutomationNow(
+                          context,
+                          ref,
+                          original!,
+                        );
+                        if (run != null && mounted) {
+                          setState(() {
+                            _runId = run.id;
+                            _dry = null;
+                          });
+                        }
+                      },
+                child: const Text('Run now'),
+              ),
+            ),
+            OutlinedButton(
+              key: const ValueKey('automation-dry-run'),
+              onPressed: probe == null
+                  ? null
+                  : () => setState(() {
+                      _runId = null;
+                      _dry = {
+                        for (final step in dryRunSteps(
+                          probe,
+                          checkout: checkout,
+                          agent: agent,
+                          checks: checks,
+                        ))
+                          step.key: step,
+                      };
+                    }),
+              child: const Text('Dry run'),
+            ),
             Tooltip(
               message: blocked ?? '',
               child: FilledButton(
@@ -574,6 +658,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         .firstOrNull;
     final first = isEvent ? draft.firstStep : EventFirstStep.agent;
     return EditorNode(
+      result: _resultFor('agent'),
       title: first.label,
       icon: AppIcons.robot,
       hint: switch (first) {
@@ -756,6 +841,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     List<ProjectCheck> checks,
     Repository? repository,
   ) => EditorNode(
+    result: _resultFor(AutomationStepKind.check.storedName),
     title: 'Check the result',
     icon: AppIcons.listChecks,
     hint: 'Runs the checkout\'s checks on what the agent did.',
@@ -795,6 +881,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     required String label,
     required Color? rail,
   }) => EditorNode(
+    result: _resultFor(step.kind.storedName),
     title: title,
     icon: icon,
     hint: hint,
@@ -1045,6 +1132,95 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     return rows;
   }
 
+  /// The dry run's line or the live run's outcome for card [key], or null.
+  Widget? _resultFor(String key) {
+    if (_dry?[key] case final step?) {
+      return StepResultBox(outcome: RunOutcome.planned, detail: step.would);
+    }
+    final run = _liveRun();
+    if (run == null) return null;
+    final checks = ref.read(automationsDataProvider).checksFor(run.id);
+    if (key == 'agent') {
+      return StepResultBox(
+        outcome: runOutcome(run, const []),
+        detail: run.reason,
+      );
+    }
+    if (key == AutomationStepKind.check.storedName) {
+      if (checks.isEmpty) return null;
+      return StepResultBox(
+        outcome: checks.any((c) => c.verdict != VerificationVerdict.pass)
+            ? RunOutcome.failed
+            : RunOutcome.succeeded,
+        detail: [
+          for (final c in checks) '${c.verdict.label} · ${c.name}',
+        ].join('\n'),
+      );
+    }
+    for (final step in run.stepResults) {
+      if (step.kind.storedName != key) continue;
+      return StepResultBox(
+        outcome: switch (step.outcome) {
+          AutomationStepOutcome.done => RunOutcome.succeeded,
+          AutomationStepOutcome.failed => RunOutcome.failed,
+          AutomationStepOutcome.skipped => RunOutcome.unknown,
+        },
+        detail: step.detail,
+      );
+    }
+    return null;
+  }
+
+  AutomationRun? _liveRun() {
+    final id = _runId;
+    if (id == null) return null;
+    ref.watch(automationsRevisionProvider);
+    return ref.read(automationsDataProvider).runById(id);
+  }
+
+  Widget? _banner(BuildContext context) {
+    final String text;
+    if (_dry != null) {
+      text = 'Dry run: nothing was started. Each step shows what it would do.';
+    } else if (_liveRun() case final run?) {
+      text = switch (runOutcome(
+        run,
+        ref.read(automationsDataProvider).checksFor(run.id),
+      )) {
+        RunOutcome.running => 'Running now. Each step fills in as it goes.',
+        RunOutcome.queued => 'Waiting for its checkout to come free.',
+        RunOutcome.checking => 'The agent is done; checking the result.',
+        RunOutcome.succeeded => 'Ran now: every step went as it should.',
+        RunOutcome.failed => 'Ran now, and something failed. See each step.',
+        _ => 'Ran now: ${run.reason}',
+      };
+    } else {
+      return null;
+    }
+    return Row(
+      key: const ValueKey('automation-banner'),
+      children: [
+        Expanded(
+          child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+        ),
+        if (_runId != null)
+          TextButton(
+            onPressed: () => showRunsOf(ref, _draft.original?.id),
+            child: const Text('See it in Runs'),
+          ),
+        if (_dry != null && _draft.trigger == DraftTrigger.event)
+          TextButton(
+            key: const ValueKey('automation-dry-run-session'),
+            onPressed: () {
+              final probe = _draft.probe(now: ref.read(clockProvider).nowUtc());
+              if (probe != null) AutomationDryRunDialog.show(context, probe);
+            },
+            child: const Text('Try it on a session…'),
+          ),
+      ],
+    );
+  }
+
   Future<void> _save() async {
     final controller = ref.read(automationControllerProvider);
     final data = ref.read(automationsDataProvider);
@@ -1066,6 +1242,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       if (!mounted) return;
       setState(() {
         _saving = false;
+        _dirty = false;
         _draft = AutomationDraft.from(stored);
       });
       ScaffoldMessenger.maybeOf(

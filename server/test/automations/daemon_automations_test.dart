@@ -616,6 +616,88 @@ void main() {
     });
   });
 
+  group('Run now', () {
+    setUp(() => now = due.subtract(const Duration(hours: 1)).toUtc());
+
+    test('starts a real run through the same gate and launch, recorded as '
+        'started by Run now, and Cancel ends it', () async {
+      nightly();
+      await startDaemon();
+      expect(runs(), isEmpty, reason: 'nothing was due');
+
+      final run = await automations.runNow('auto-r1');
+      expect(run.state, AutomationRunState.running);
+      expect(run.startedBy, AutomationRunCause.runNow);
+      expect(run.baseCheckpointId, 'cp-${run.id}');
+      expect(launcher.started, hasLength(1));
+
+      await automations.cancelRun(run.id);
+      await pump();
+      final settled = automationDao().runById(run.id)!;
+      expect(settled.state, AutomationRunState.failed);
+      expect(settled.reason, contains('stopped by you'));
+    });
+
+    test('never passes the gate by hand', () async {
+      nightly();
+      ProjectCheckDao(
+        db,
+      ).setVerificationEnabled('r1', enabled: false, now: now);
+      await startDaemon();
+      final run = await automations.runNow('auto-r1');
+      expect(run.state, AutomationRunState.failed);
+      expect(run.reason, contains('Verification is off'));
+      expect(launcher.started, isEmpty);
+    });
+
+    test(
+      'a rule that tells an event\'s session has no session to tell',
+      () async {
+        automationDao().insert(
+          Automation(
+            id: 'auto-r1',
+            repositoryId: 'r1',
+            name: 'Keep going',
+            schedule: AutomationSchedule.once(now),
+            agentInstallationId: '',
+            prompt: 'continue',
+            permissionMode: null,
+            enabled: true,
+            armedAt: now,
+            trigger: const AutomationEventTrigger(
+              kind: AutomationEventKind.turnFinished,
+              action: AutomationEventAction.messageSession,
+            ),
+          ),
+        );
+        await startDaemon();
+        expect(
+          () => automations.runNow('auto-r1'),
+          throwsA(isA<DataRefused>()),
+        );
+      },
+    );
+
+    test('a queued run is let go by Cancel', () async {
+      nightly();
+      await startDaemon();
+      final run = automationDao().runsFor('auto-r1');
+      expect(run, isEmpty);
+      final queued = AutomationRun(
+        id: 'q1',
+        automationId: 'auto-r1',
+        scheduledFor: now,
+        firedAt: now,
+        state: AutomationRunState.queued,
+        reason: 'waiting',
+      );
+      automationDao().insertRun(queued);
+      final cancelled = await automations.cancelRun('q1');
+      expect(cancelled.state, AutomationRunState.failed);
+      expect(cancelled.reason, 'Cancelled by you before it started.');
+    });
+  });
+
   group('an agent stopped at its first-run question', () {
     /// Claude Code's folder-trust question as it draws it — the wording of
     /// `claude-code-trust-prompt.raw`, seen live under an unwatched run.

@@ -48,6 +48,7 @@ class AutomationRunner implements AutomationFiring {
     DateTime scheduledFor, {
     String note = '',
     AutomationRun? queued,
+    AutomationRunCause? startedBy,
   }) async {
     final now = _now();
     // The row exists before anything can fail; a drained queue entry *is*
@@ -62,6 +63,7 @@ class AutomationRunner implements AutomationFiring {
             reason: note,
             // A webhook's prompt is its call's, filled; keep what was sent.
             prompt: automation.isWebhook ? automation.prompt : null,
+            startedBy: startedBy,
           )
         : queued.copyWith(
             state: AutomationRunState.running,

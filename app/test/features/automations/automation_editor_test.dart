@@ -40,6 +40,7 @@ void main() {
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(now)),
         webhooksOfferedProvider.overrideWithValue(true),
+        runNowOfferedProvider.overrideWithValue(true),
       ],
     );
   });
@@ -444,6 +445,58 @@ void main() {
     expect(find.text('Triage [webhook field 1]'), findsOneWidget);
     expect(find.textContaining('Nothing is sent'), findsOneWidget);
     expect(server.automationRows.runsFor('hook1'), hasLength(1));
+  });
+
+  testWidgets('Dry run says what each step would do and starts nothing; '
+      'Run now starts a real run of what is saved', (tester) async {
+    makeReady();
+    final existing = Automation(
+      id: 'auto1',
+      repositoryId: 'r1',
+      name: 'Nightly',
+      schedule: const AutomationSchedule.cron('0 2 * * *'),
+      agentInstallationId: 'a1',
+      prompt: 'fix it',
+      permissionMode: const PermissionSelection({'mode': 'auto'}),
+      enabled: true,
+      armedAt: now,
+    );
+    server.automationRows.insert(existing);
+    await pump(tester, AutomationDraft.from(existing));
+
+    await tester.tap(find.byKey(const ValueKey('automation-dry-run')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Dry run: nothing was started'), findsOne);
+    expect(
+      find.textContaining(
+        'Would take a checkpoint of app, then start Claude '
+        'Code',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Would run tests on what the agent did.'), findsOne);
+    expect(server.automationRows.ranNow, isEmpty);
+
+    await tester.tap(find.byKey(const ValueKey('automation-run-now')));
+    await tester.pumpAndSettle();
+    expect(server.automationRows.ranNow, ['auto1']);
+    expect(find.textContaining('Running now'), findsOneWidget);
+    expect(find.text('Started with Run now.'), findsOneWidget);
+
+    // An unsaved change: Run now would run the saved version, so it waits.
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-name')),
+      'Renamed',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(const ValueKey('automation-run-now')),
+          )
+          .onPressed,
+      isNull,
+    );
   });
 
   testWidgets('it fits a phone, a desktop and large text', (tester) async {

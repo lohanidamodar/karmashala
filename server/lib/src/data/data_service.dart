@@ -163,6 +163,11 @@ class DataService {
   /// set by `serve` once automations run; else refused `unavailable`.
   ChecksWork? checksWork;
 
+  /// A run a person starts or stops (`automations.runNow`,
+  /// `automationRuns.cancel`), set by `serve` once automations run; else
+  /// refused `unavailable`.
+  AutomationWork? automationWork;
+
   /// A webhook's secret rotated, or what is seen of it (`webhooks.*`), set
   /// by `serve` once webhooks run; else refused `unavailable`.
   WebhooksWork? webhooksWork;
@@ -584,6 +589,7 @@ class DataService {
         FilesWorkRequest() ||
         TerminalWorkRequest() ||
         ChecksWorkRequest() ||
+        AutomationWorkRequest() ||
         WebhooksWorkRequest() ||
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
@@ -807,6 +813,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is FilesWorkRequest ||
       request is TerminalWorkRequest ||
       request is ChecksWorkRequest ||
+      request is AutomationWorkRequest ||
       request is WebhooksWorkRequest ||
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
@@ -1015,6 +1022,18 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
             'this server runs no project checks',
           ));
       final result = await work.run(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final AutomationWorkRequest<Object?> asked) {
+      final work =
+          _service.automationWork ??
+          (throw const DataRefused.unavailable(
+            'this server runs no automations',
+          ));
+      final Object result = switch (asked) {
+        AutomationRunNow(:final id) => await work.runNow(id),
+        AutomationRunCancel(:final runId) => await work.cancelRun(runId),
+      };
       return DataReply(result as R, _service._revision);
     }
     if (request case final WebhooksWorkRequest<Object?> asked) {

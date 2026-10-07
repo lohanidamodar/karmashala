@@ -37,6 +37,11 @@ final webhooksOfferedProvider = Provider<bool>(
   (ref) => ref.watch(capabilitiesProvider).serverOffers('automations.webhooks'),
 );
 
+/// Whether the server this app talks to runs an automation on request.
+final runNowOfferedProvider = Provider<bool>(
+  (ref) => ref.watch(capabilitiesProvider).serverOffers('automations.runNow'),
+);
+
 /// How a session came to be when an automation started it: "from webhook
 /// triage-issue", "from automation Nightly sweep" — or null for any other.
 final sessionAutomationOriginProvider = Provider.family<String?, String>((

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import 'automation_run_status.dart';
+
 /// One card of the editor: the Starts card, a step, Ready, Limits. [rail]
 /// colours its left edge — the failure steps' amber.
 class EditorNode extends StatelessWidget {
@@ -12,6 +14,7 @@ class EditorNode extends StatelessWidget {
     this.hint,
     this.trailing = const [],
     this.rail,
+    this.result,
     super.key,
   });
 
@@ -21,6 +24,9 @@ class EditorNode extends StatelessWidget {
   final List<Widget> trailing;
   final List<Widget> children;
   final Color? rail;
+
+  /// What a dry run or Run now said about this card, under its fields.
+  final Widget? result;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +81,10 @@ class EditorNode extends StatelessWidget {
                 for (final child in children) ...[
                   const SizedBox(height: Insets.sm),
                   child,
+                ],
+                if (result case final result?) ...[
+                  const SizedBox(height: Insets.sm),
+                  result,
                 ],
               ],
             ),
@@ -169,6 +179,38 @@ class VariableChips extends StatelessWidget {
         ),
     ],
   );
+}
+
+/// What one step did, or would do: its outcome and its words.
+class StepResultBox extends StatelessWidget {
+  const StepResultBox({required this.outcome, required this.detail, super.key});
+
+  final RunOutcome outcome;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(Insets.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RunOutcomeChip(outcome: outcome),
+            if (detail.isNotEmpty) ...[
+              const SizedBox(height: Insets.xs),
+              SelectableText(detail, style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The amber of a step that runs when something failed.

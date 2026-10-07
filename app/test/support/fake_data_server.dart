@@ -760,6 +760,12 @@ class FakeDataServer {
     if (request case final ChecksRun work) {
       return DataReply(attention._checks(work) as R, revision, const []);
     }
+    if (request case final AutomationWorkRequest<Object?> work) {
+      final written = <DataChange>[];
+      final result = automationRows._work(work, written);
+      _tell(null, written);
+      return DataReply(result as R, revision, const []);
+    }
     if (request case final SessionWorkRequest<Object?> work) {
       return DataReply(sessionWork._handle(work) as R, revision, const []);
     }
@@ -922,6 +928,7 @@ class FakeDataServer {
       TerminalWorkRequest() ||
       AttentionRequest() ||
       ChecksWorkRequest() ||
+      AutomationWorkRequest() ||
       WebhooksWorkRequest() ||
       SessionWorkRequest() ||
       ClientActive() ||
