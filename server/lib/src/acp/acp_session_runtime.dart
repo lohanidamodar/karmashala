@@ -381,7 +381,7 @@ class AcpSessionRuntime implements ScreenSession {
         options = created.configOptions;
       }
       await _applyInitialMode(modes, notices);
-      _configOptions = options;
+      _configOptions = options == null ? null : _distinct(options);
       _announceConfigOptions();
       host.promptKindsChanged(promptKinds!);
       _publish(
@@ -552,13 +552,48 @@ class AcpSessionRuntime implements ScreenSession {
     }
     // An agent that answers with no list has still taken the value.
     _configOptions = answered.isNotEmpty
-        ? answered
+        ? _distinct(answered)
         : [
             for (final o in options)
               if (o.id == configId) _moved(o, value) else o,
           ];
     _announceConfigOptions();
+    final held = _configOptions!.where((o) => o.id == configId).firstOrNull;
+    if (held != null && held.currentValue != value) {
+      final still = held.options
+          .where((choice) => choice.value == held.currentValue)
+          .firstOrNull;
+      throw StateError(
+        '$agentName accepted the change but still reports "${option.name}" as '
+        '"${still?.name ?? held.currentValue}", so nothing changed',
+      );
+    }
   }
+
+  /// [options] with each select's repeated choices dropped: an agent that
+  /// lists a model twice (Copilot 1.0.92 lists all of them twice) would
+  /// otherwise draw it twice, ticked twice.
+  static List<ConfigOption> _distinct(List<ConfigOption> options) => [
+    for (final option in options)
+      if (option.options.map((c) => c.value).toSet().length ==
+          option.options.length)
+        option
+      else
+        ConfigOption(
+          id: option.id,
+          name: option.name,
+          type: option.type,
+          description: option.description,
+          category: option.category,
+          currentValue: option.currentValue,
+          options: [
+            for (final (index, choice) in option.options.indexed)
+              if (option.options.indexWhere((c) => c.value == choice.value) ==
+                  index)
+                choice,
+          ],
+        ),
+  ];
 
   static ConfigOption _moved(ConfigOption option, Object value) => ConfigOption(
     id: option.id,
@@ -851,7 +886,7 @@ class AcpSessionRuntime implements ScreenSession {
       return;
     }
     if (update is ConfigOptionUpdate) {
-      _configOptions = update.configOptions;
+      _configOptions = _distinct(update.configOptions);
       _announceConfigOptions();
       return;
     }
