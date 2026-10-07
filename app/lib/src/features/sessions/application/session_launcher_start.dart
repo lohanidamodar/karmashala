@@ -190,7 +190,7 @@ extension SessionStartVerbs on SessionLauncher {
         : slotted ?? terminals.openAgentTab(launch, behind: behind);
     _ref.read(sessionsDataProvider).updatePaneId(session.id, opened.paneId);
     // Behind, the group in front keeps the face it shows.
-    if (behind == null) terminals.showTerminalForPane(opened.paneId);
+    if (behind == null) terminals.revealPane(opened.paneId);
     // After the pane is named on the row: a workbench following the session
     // moves onto it now, not on the next unrelated change.
     _publish(

@@ -65,18 +65,19 @@ extension TerminalPaneRegions on TerminalSessionsController {
   void showTerminalForPane(String paneId) =>
       _showFace(groupOfPane(paneId) ?? _focusedGroupId, terminal: true);
 
-  /// Shows the terminal face of the group whose strip holds [tabId].
-  void showTerminalForTab(String tabId) =>
-      _showFace(groupOfTab(tabId) ?? _focusedGroupId, terminal: true);
+  /// Puts the group holding [paneId] back on the face its tab opens on — see
+  /// [groupOpensOnChatProvider]. What opening or revealing a session means; a
+  /// hand on the toggle is [showTerminalForPane] or [showFaceIn].
+  void revealPane(String paneId) =>
+      _resetFace(groupOfPane(paneId) ?? _focusedGroupId);
+
+  /// [revealPane] for the group whose strip holds [tabId].
+  void revealTab(String tabId) =>
+      _resetFace(groupOfTab(tabId) ?? _focusedGroupId);
 
   /// Shows the terminal face of the focused group — for a command that names
   /// no pane, such as opening a shell or the palette's *Terminal view*.
   void showTerminalHere() => _showFace(_focusedGroupId, terminal: true);
-
-  /// The mirror of [showTerminalForPane]. **A pane is required**: falling back
-  /// to the focused group would flip a group showing B into B's chat.
-  void revealConversationForPane(String paneId) =>
-      _showFace(groupOfPane(paneId) ?? _focusedGroupId, terminal: false);
 
   /// Shows group [groupId]'s terminal or its conversation.
   void showFaceIn(String groupId, {required bool terminal}) =>
@@ -92,6 +93,11 @@ extension TerminalPaneRegions on TerminalSessionsController {
   void _showFace(String? groupId, {required bool terminal}) {
     if (groupId == null) return;
     ref.read(terminalFacesProvider.notifier).show(groupId, terminal: terminal);
+  }
+
+  void _resetFace(String? groupId) {
+    if (groupId == null) return;
+    ref.read(terminalFacesProvider.notifier).reset(groupId);
   }
 
   /// The empty **workspace group** a command with none in hand means: the one

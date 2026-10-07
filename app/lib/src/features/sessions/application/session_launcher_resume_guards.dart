@@ -42,9 +42,7 @@ extension SessionResumeGuards on SessionLauncher {
       ..reattachSession(paneId)
       ..focusPane(paneId);
     // The group that pane is in, not the focused one.
-    _ref
-        .read(terminalSessionsControllerProvider.notifier)
-        .showTerminalForPane(paneId);
+    _ref.read(terminalSessionsControllerProvider.notifier).revealPane(paneId);
     _ref.read(selectedSessionIdProvider.notifier).select(sessionId);
     // Where this session is on screen moved; nothing was created or renamed.
     _publish(SessionChange.moved(sessionId));

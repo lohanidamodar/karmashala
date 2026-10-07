@@ -4,6 +4,8 @@ import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:karmashala_core/paths.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart'
+    show sessionsOpenInChatProvider;
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_layout_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -322,6 +324,7 @@ fakeTerminalOverrides({
   bool restoreLivePanes = true,
   PathProbe? pathProbe,
   bool realHostedPanes = false,
+  bool openSessionsInChat = false,
 }) {
   return [
     // No disk by default here either: a launch reads the agent's executable
@@ -372,6 +375,9 @@ fakeTerminalOverrides({
     // Same seam and same reason as the line above — reading the setting would
     // drag a database into every terminal test.
     restoreLivePanesProvider.overrideWithValue(restoreLivePanes),
+    // The desktop's answer, though flutter_test reports Android and so touch:
+    // a session tab here rests on its terminal unless a test is about chat.
+    sessionsOpenInChatProvider.overrideWithValue(openSessionsInChat),
     // [instanceFactory] replaces the default rather than adding a second
     // override: Riverpod refuses the same provider twice in one container, so a
     // test that needs a pane to fail has to substitute here.
