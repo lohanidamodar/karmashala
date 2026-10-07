@@ -234,7 +234,10 @@ void main() {
         // tab carries the title and state, the pane's status line the rest.
         // What is left is the list over the footer, which the matrix holds.
         expect(find.byType(AgentStatusBadge), findsNothing);
-        expect(find.byType(ListView), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('chat-transcript-list')),
+          findsOneWidget,
+        );
       },
     );
   });
@@ -265,7 +268,9 @@ void main() {
       matrix: const [minimumWindowLargeText, paneAtMinimum],
       check: (tester) async {
         final whole = tester.getSize(find.byType(ChatTranscriptView)).height;
-        final list = tester.getSize(find.byType(ListView)).height;
+        final list = tester
+            .getSize(find.byKey(const ValueKey('chat-transcript-list')))
+            .height;
         expect(list, greaterThanOrEqualTo(whole / 4));
       },
     );

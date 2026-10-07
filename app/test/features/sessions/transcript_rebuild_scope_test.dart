@@ -109,7 +109,7 @@ void main() {
       // index; the rows keyed by ordinal still find their own elements.
       await tester.dragUntilVisible(
         find.textContaining('turn 0', findRichText: true),
-        find.byType(ListView),
+        find.byKey(const ValueKey('chat-transcript-list')),
         const Offset(0, 600),
       );
       await tester.pumpAndSettle();

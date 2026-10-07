@@ -264,7 +264,7 @@ void main() {
         final tiles = tester
             .widgetList<Padding>(
               find.descendant(
-                of: find.byType(ListView),
+                of: find.byKey(const ValueKey('chat-transcript-list')),
                 matching: find.byWidgetPredicate(
                   (w) => w is Padding && w.padding == _expectedTileMargin,
                 ),

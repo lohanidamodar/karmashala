@@ -184,7 +184,9 @@ void main() {
       pointIn(tester, 'First paragraph'),
       pointIn(tester, 'Second paragraph', end: true),
     );
-    final list = tester.getRect(find.byType(ListView));
+    final list = tester.getRect(
+      find.byKey(const ValueKey('chat-transcript-list')),
+    );
     await tester.tapAt(
       Offset(list.right - 4, pointIn(tester, 'Second paragraph').dy),
       kind: PointerDeviceKind.mouse,
@@ -372,7 +374,9 @@ void main() {
         'a drag past the top edge scrolls, and keeps what it crossed',
         (tester) async {
           await pumpLong(tester);
-          final list = tester.getRect(find.byType(ListView));
+          final list = tester.getRect(
+            find.byKey(const ValueKey('chat-transcript-list')),
+          );
           // The topmost turn wholly on screen before the drag: crossing past
           // it is what scrolling means, however tall a turn is drawn.
           final onScreen = [

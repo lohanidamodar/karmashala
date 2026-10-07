@@ -86,12 +86,18 @@ class ArtifactContentView extends ConsumerWidget {
       ArtifactKind.markdown => MarkdownMessage(text()),
       ArtifactKind.pdf => const SizedBox.shrink(),
     };
+    // A page scrolls inside its own preview, under its toolbar.
     if (compact) return KeyedSubtree(key: key, child: drawn);
+    if (artifact.kind == ArtifactKind.html) {
+      return Padding(
+        key: key,
+        padding: const EdgeInsets.all(Insets.sm),
+        child: drawn,
+      );
+    }
     return SingleChildScrollView(
       key: key,
-      padding: artifact.kind == ArtifactKind.html
-          ? EdgeInsets.zero
-          : const EdgeInsets.all(Insets.md),
+      padding: const EdgeInsets.all(Insets.md),
       child: drawn,
     );
   }

@@ -517,14 +517,16 @@ void main() {
       expect(find.text('Booping…'), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(ListView),
+          of: find.byKey(const ValueKey('chat-transcript-list')),
           matching: find.byType(WorkingLine),
         ),
         findsNothing,
         reason: 'outside the scroll, so it never scrolls out of sight',
       );
       final composer = tester.getRect(find.byType(TextField).last);
-      final list = tester.getRect(find.byType(ListView));
+      final list = tester.getRect(
+        find.byKey(const ValueKey('chat-transcript-list')),
+      );
       expect(tester.getRect(line).top, greaterThanOrEqualTo(list.bottom));
       expect(tester.getRect(line).bottom, lessThanOrEqualTo(composer.top));
     });

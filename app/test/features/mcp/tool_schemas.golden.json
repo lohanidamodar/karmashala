@@ -2214,7 +2214,7 @@
     },
     {
       "name": "artifact_show",
-      "description": "Show the person something you made, as a card in your thread that opens inside Karmashala: an HTML page (charts, reports, interactive demos — sandboxed, with no network unless the person allows it), an SVG, a mermaid diagram, markdown, an image or a PDF. Pass the absolute path of a file you wrote on your own host; rewriting that file later makes a new revision and every open view reloads. Or pass short text as content with its kind. Showing the same path again refreshes that artifact rather than adding another.",
+      "description": "Show the person something you made, as a card in your thread that opens inside Karmashala: an HTML page (charts, reports, interactive demos — sandboxed, with no network unless the person allows it), an SVG, a mermaid diagram, markdown, an image or a PDF. Pass the absolute path of a file you wrote on your own host; rewriting that file later makes a new revision and every open view reloads. Or pass short text as content with its kind. Showing the same path again refreshes that artifact rather than adding another. For something small, a fenced mermaid, chart, diff, json or ansi block or TeX math in your reply is drawn inline without one; a page's scripts run only when the person opens it in their browser.",
       "inputSchema": {
         "type": "object",
         "properties": {

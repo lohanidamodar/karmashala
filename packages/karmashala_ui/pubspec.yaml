@@ -49,6 +49,9 @@ dependencies:
   qr: ^4.0.0
   # Opening a link LinkableText found.
   url_launcher: ^6.3.2
+  # TeX math in a message, inline and in blocks: pure Dart, KaTeX-compatible,
+  # every platform (Apache-2.0). Nothing in the tree rendered math before.
+  flutter_math_fork: ^0.7.4
 
 dev_dependencies:
   flutter_test:

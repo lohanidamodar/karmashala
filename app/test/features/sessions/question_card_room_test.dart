@@ -251,7 +251,7 @@ void main() {
     );
     // Read back up the conversation: the card is out of sight.
     await tester.fling(
-      find.byType(ListView).first,
+      find.byKey(const ValueKey('chat-transcript-list')).first,
       const Offset(0, 3000),
       3000,
     );

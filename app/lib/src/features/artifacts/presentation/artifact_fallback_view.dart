@@ -104,7 +104,7 @@ class ArtifactActionButtons extends ConsumerWidget {
           if (browser)
             IconButton(
               key: const ValueKey('artifact-open-browser'),
-              tooltip: 'Open in browser — outside Karmashala\'s sandbox',
+              tooltip: 'Open in browser: scripts run there, still sandboxed',
               icon: const Icon(AppIcons.globe, size: 18),
               onPressed: openInBrowser,
             ),

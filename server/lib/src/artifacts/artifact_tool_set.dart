@@ -153,7 +153,10 @@ const List<Map<String, Object?>> artifactToolSchemas = [
         'absolute path of a file you wrote on your own host; rewriting that '
         'file later makes a new revision and every open view reloads. Or '
         'pass short text as content with its kind. Showing the same path '
-        'again refreshes that artifact rather than adding another.',
+        'again refreshes that artifact rather than adding another. For '
+        'something small, a fenced mermaid, chart, diff, json or ansi block '
+        'or TeX math in your reply is drawn inline without one; a page\'s '
+        'scripts run only when the person opens it in their browser.',
     'inputSchema': {
       'type': 'object',
       'properties': {
