@@ -70,6 +70,11 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   final _newWorkspaceController = TextEditingController();
   late String _targetId;
 
+  /// Whether the name is still the dialog's own guess. It follows the Git URL
+  /// or the folder until the person types a name, and again once they clear
+  /// it; a name they typed is never replaced.
+  var _nameIsSuggested = true;
+
   /// The context the project will be filed under — a guess until the user
   /// touches it, and never applied to anything that already exists.
   String? _workspaceId;
@@ -205,12 +210,23 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     if (directory == null || !mounted) return;
     setState(() {
       _folderController.text = directory;
-      if (_nameController.text.trim().isEmpty) {
-        _nameController.text = _leafOf(directory);
-      }
+      _suggestName();
       _suggestWorkspace();
     });
     _schedulePreview();
+  }
+
+  /// Names the project after its repository, else its folder, while the name
+  /// is still the dialog's guess.
+  void _suggestName() {
+    if (!_nameIsSuggested) return;
+    final url = _gitUrlController.text.trim();
+    final folder = _folderController.text.trim();
+    _nameController.text = url.isNotEmpty
+        ? repoNameFromUrl(url)
+        : folder.isEmpty
+        ? ''
+        : _leafOf(folder);
   }
 
   static String _leafOf(String path) {
@@ -327,8 +343,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final folder = _folderController.text.trim();
     final gitUrl = _gitUrlController.text.trim();
 
-    if (name.isEmpty && gitUrl.isNotEmpty) {
-      name = repoNameFromUrl(gitUrl);
+    if (name.isEmpty && (gitUrl.isNotEmpty || folder.isNotEmpty)) {
+      name = gitUrl.isNotEmpty ? repoNameFromUrl(gitUrl) : _leafOf(folder);
       _nameController.text = name;
     }
 
@@ -524,8 +540,9 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                 controller: _nameController,
                 decoration: const InputDecoration(
                   labelText: 'Project name',
-                  hintText: 'Karmashala',
+                  hintText: 'Named after the folder if left empty',
                 ),
+                onChanged: (name) => _nameIsSuggested = name.trim().isEmpty,
               ),
               const SizedBox(height: Insets.md),
               _ContextField(
@@ -637,14 +654,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
           labelText: 'Git repository URL (optional)',
           hintText: 'https://github.com/owner/repo.git',
         ),
-        onChanged: (url) {
-          if (_nameController.text.trim().isEmpty && url.trim().isNotEmpty) {
-            setState(() {
-              _nameController.text = repoNameFromUrl(url);
-            });
-          } else {
-            setState(() {});
-          }
+        onChanged: (_) {
+          setState(_suggestName);
           _schedulePreview();
         },
       ),
@@ -661,7 +672,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
             ? 'Defaults to ~/karmashala/<repo> on remote host'
             : null,
         onChanged: (_) {
-          setState(_suggestWorkspace);
+          setState(() {
+            _suggestName();
+            _suggestWorkspace();
+          });
           _schedulePreview();
         },
         actions: [

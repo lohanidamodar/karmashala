@@ -50,7 +50,10 @@ void main() {
     bool viaRoute = false,
   }) async {
     final container = ProviderContainer(
-      overrides: [data, offer(createsFolders: createsFolders)],
+      overrides: [
+        data,
+        offer(createsFolders: createsFolders),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -89,7 +92,9 @@ void main() {
 
   /// Every folder the dialog asks about is missing on the server.
   void foldersMissing() => server.filesWork.answer = (request) =>
-      request is FilesStatOf ? const FileStat.absent() : FakeFilesWork.unhandled;
+      request is FilesStatOf
+      ? const FileStat.absent()
+      : FakeFilesWork.unhandled;
 
   Future<void> typeFolder(WidgetTester tester, String path) async {
     await tester.enterText(find.widgetWithText(TextField, 'Folder path'), path);
@@ -146,6 +151,74 @@ void main() {
       expect(filled('Create & scan'), findsOneWidget);
       expect(outlined('Create & scan'), findsNothing);
       expect(filled('Create'), findsNothing);
+    });
+  });
+
+  group('the name is suggested from the path', () {
+    String nameField(WidgetTester tester) => tester
+        .widget<TextField>(find.widgetWithText(TextField, 'Project name'))
+        .controller!
+        .text;
+
+    testWidgets('a typed folder names the project, and follows it', (
+      tester,
+    ) async {
+      await pump(tester);
+      await typeFolder(tester, r'C:\src\shop');
+      expect(nameField(tester), 'shop');
+
+      await typeFolder(tester, r'C:\src\shop-admin\');
+      expect(nameField(tester), 'shop-admin');
+    });
+
+    testWidgets('a name the person typed is never replaced', (tester) async {
+      await pump(tester);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Project name'),
+        'My shop',
+      );
+      await typeFolder(tester, r'C:\src\shop');
+
+      expect(nameField(tester), 'My shop');
+    });
+
+    testWidgets('clearing the name lets the path name it again', (
+      tester,
+    ) async {
+      await pump(tester);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Project name'),
+        'My shop',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Project name'),
+        '',
+      );
+      await typeFolder(tester, '/home/me/src/relay');
+
+      expect(nameField(tester), 'relay');
+    });
+
+    testWidgets('a Git URL names it by the repository, as it is typed', (
+      tester,
+    ) async {
+      await pump(tester);
+      final url = find.widgetWithText(
+        TextField,
+        'Git repository URL (optional)',
+      );
+      await tester.enterText(url, 'h');
+      await tester.pumpAndSettle();
+      await tester.enterText(url, 'https://github.com/o/storefront.git');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Destination folder path'),
+        r'C:\src\checkout',
+      );
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(nameField(tester), 'storefront');
     });
   });
 
