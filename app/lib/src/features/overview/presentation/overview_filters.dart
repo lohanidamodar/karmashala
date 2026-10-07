@@ -148,21 +148,22 @@ class OverviewFilterPanel extends ConsumerWidget {
               ),
             ),
           ),
-          section(
-            'Projects',
-            chips([
-              for (final project in facts.projects)
-                (
-                  'overview-filter-project:${project.id}',
-                  project.label,
-                  filter.projects?.contains(project.id) ?? true,
-                  () => controller.toggleProject(
-                    project.id,
-                    all: [for (final p in facts.projects) p.id],
+          if (facts.projects.isNotEmpty)
+            section(
+              'Projects',
+              chips([
+                for (final project in facts.projects)
+                  (
+                    'overview-filter-project:${project.id}',
+                    project.label,
+                    filter.projects?.contains(project.id) ?? true,
+                    () => controller.toggleProject(
+                      project.id,
+                      all: [for (final p in facts.projects) p.id],
+                    ),
                   ),
-                ),
-            ]),
-          ),
+              ]),
+            ),
           if (agents.length > 1)
             section(
               'Agent',
