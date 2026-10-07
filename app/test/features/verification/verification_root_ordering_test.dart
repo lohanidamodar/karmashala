@@ -111,7 +111,10 @@ void main() {
     );
     await tester.pump();
 
+    // What matters is building without a throw while nothing has resolved.
+    // Nothing checked now draws nothing on the bar (owner, 2026-10-07).
     expect(tester.takeException(), isNull);
-    expect(find.text(SessionVerdictState.notRecorded.label), findsOneWidget);
+    expect(find.byType(SessionVerdictMark), findsOneWidget);
+    expect(find.text(SessionVerdictState.notRecorded.label), findsNothing);
   });
 }

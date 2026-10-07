@@ -112,15 +112,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a session nothing ever checked says exactly that', (
+  testWidgets('a session nothing ever checked says nothing on the bar', (
     tester,
   ) async {
     insertSession();
     await pump(tester);
 
-    // The one that matters: an empty record is a gap in the record, and a
-    // strip that drew nothing here would read as "checked, and fine".
-    expect(find.text('Not checked'), findsOneWidget);
+    // Verification is opt-in: a "Not checked" on every session was noise to
+    // those who never run it (owner, 2026-10-07). Every other state still
+    // draws, in the tests below.
+    expect(find.text('Not checked'), findsNothing);
   });
 
   testWidgets('a run still going is not a verdict', (tester) async {

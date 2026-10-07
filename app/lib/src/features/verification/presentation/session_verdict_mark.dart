@@ -8,9 +8,10 @@ import '../domain/session_verdict.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'verdict_appearance.dart';
 
-/// The one way a surface says whether a session's work was ever checked. It
-/// always draws: a mark that rendered nothing when nothing had been checked
-/// would look, in the row, like one that checked and found nothing wrong.
+/// The one way a surface says whether a session's work was checked. It draws
+/// every state but one: nothing ever checked draws nothing, since verification
+/// is opt-in and a "Not checked" on every session was noise to those who never
+/// run it. A check in flight, abandoned or concluded always draws.
 class SessionVerdictMark extends ConsumerWidget {
   const SessionVerdictMark({required this.sessionId, super.key});
 
@@ -89,6 +90,13 @@ class SessionVerdictMark extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final verdict = ref.watch(sessionVerdictProvider(sessionId));
+    // Nothing ever checked draws nothing on the bar: verification nobody uses
+    // was a "Not checked" on every session (owner, 2026-10-07). Every other
+    // state still draws, a check in flight or abandoned included, and the
+    // Verification pane keeps the whole record.
+    if (verdict.state == SessionVerdictState.notRecorded) {
+      return const SizedBox.shrink();
+    }
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final look = appearanceOf(verdict.state, semantic);
