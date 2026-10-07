@@ -5,6 +5,7 @@ import 'package:karmashala_store/database.dart';
 import '../../agents/agent_registry_holder.dart';
 import '../../data/data_service.dart';
 import '../../domain/uuid.dart';
+import '../../sessions/session_active_models.dart';
 
 /// What the server's own agent tools read and write through: the store for
 /// reads (the DAOs, synchronous), the data service for writes — so every
@@ -47,6 +48,13 @@ class ServerToolContext {
   final DataSession _writes;
 
   DateTime now() => _now().toUtc();
+
+  /// The model each session's agent last said it runs; set by `serve`.
+  SessionActiveModels? activeModels;
+
+  /// [activeModels]' word on [sessionId], or `not recorded`.
+  String modelOf(String sessionId) =>
+      activeModels?.modelWords(sessionId) ?? 'not recorded';
 
   /// Asks the data service [request] as a client would, and answers its
   /// value. A refusal is thrown as it is ([DataRefused]), which is what an

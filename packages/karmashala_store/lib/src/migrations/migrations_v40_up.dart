@@ -1121,3 +1121,13 @@ void _migrateToV82(Database db) {
     "ALTER TABLE acp_agents ADD COLUMN mode_rungs TEXT NOT NULL DEFAULT '{}';",
   );
 }
+
+/// The model the agent said it was running as it wrote each chat row; null
+/// for a row written before, or while it had said none.
+void _migrateToV83(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(session_messages);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('model')) return;
+  db.execute('ALTER TABLE session_messages ADD COLUMN model TEXT;');
+}

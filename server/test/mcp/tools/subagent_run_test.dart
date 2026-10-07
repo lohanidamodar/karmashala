@@ -14,6 +14,7 @@ import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
+import 'package:karmashala_host/src/sessions/session_active_models.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tools.dart';
 import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
 import 'package:karmashala_host/src/sessions/delegation_results.dart'
@@ -252,13 +253,20 @@ void main() {
     status.hook(hook('UserPromptSubmit'));
     await pumpEventQueue();
     answers['new-1'] = 'It is in cart.dart line 40.';
+    // What the child's record says it ran, not the alias it was set to.
+    context.activeModels = SessionActiveModels(
+      announce: (_) {},
+      readRecord: (id) async => id == 'new-1'
+          ? const ActiveModelReading('claude-haiku-4-5-20251001')
+          : null,
+    );
     status.hook(hook('Stop'));
     final result = await answer.timeout(const Duration(seconds: 5));
 
     expect(result['state'], 'done');
     expect(result['childSessionId'], 'new-1');
     expect(result['finalAnswer'], 'It is in cart.dart line 40.');
-    expect(result['model'], 'claude-haiku');
+    expect(result['model'], 'claude-haiku-4-5-20251001');
     expect(result['tokens'], 4200);
     expect(result['depth'], 1);
     final row = SessionDao(database).getById('new-1')!;
@@ -287,37 +295,43 @@ void main() {
     expect(result['note'], contains('session_send'));
   });
 
-  test('a child stopped on its limit stays open, with its resume named', () async {
-    insertCaller('caller');
-    final fireAt = t0.add(const Duration(hours: 3));
-    ScheduledResumeDao(database).replaceFor(
-      ScheduledResume(
-        id: 'r1',
-        sessionId: 'new-1',
-        fireAt: fireAt,
-        state: ScheduledResumeState.pending,
-        scheduledAt: t0,
-        windowLabel: '5-hour',
-        message: 'continue',
-      ),
-      now: t0,
-    );
-    final answer = await run({'prompt': 'Big job'});
-    status.hook(hook('UserPromptSubmit'));
-    await pumpEventQueue();
-    status.hook(hook('StopFailure'));
-    final result = await answer.timeout(const Duration(seconds: 5));
-    expect(result['state'], 'failed');
-    expect(endedChildren, isEmpty);
-    expect(result['childOpen'], isTrue);
-    expect(result['resume'], {
-      'at': fireAt.toIso8601String(),
-      'message': 'continue',
-      'window': '5-hour',
-    });
-    expect(result['note'], contains('resumes it at ${fireAt.toIso8601String()}'));
-    expect(result['note'], contains('only the user can'));
-  });
+  test(
+    'a child stopped on its limit stays open, with its resume named',
+    () async {
+      insertCaller('caller');
+      final fireAt = t0.add(const Duration(hours: 3));
+      ScheduledResumeDao(database).replaceFor(
+        ScheduledResume(
+          id: 'r1',
+          sessionId: 'new-1',
+          fireAt: fireAt,
+          state: ScheduledResumeState.pending,
+          scheduledAt: t0,
+          windowLabel: '5-hour',
+          message: 'continue',
+        ),
+        now: t0,
+      );
+      final answer = await run({'prompt': 'Big job'});
+      status.hook(hook('UserPromptSubmit'));
+      await pumpEventQueue();
+      status.hook(hook('StopFailure'));
+      final result = await answer.timeout(const Duration(seconds: 5));
+      expect(result['state'], 'failed');
+      expect(endedChildren, isEmpty);
+      expect(result['childOpen'], isTrue);
+      expect(result['resume'], {
+        'at': fireAt.toIso8601String(),
+        'message': 'continue',
+        'window': '5-hour',
+      });
+      expect(
+        result['note'],
+        contains('resumes it at ${fireAt.toIso8601String()}'),
+      );
+      expect(result['note'], contains('only the user can'));
+    },
+  );
 
   test('a child ready before it ever worked is not done until it has an '
       'answer', () async {
@@ -350,20 +364,23 @@ void main() {
     expect(result['finalAnswer'], 'Done quietly.');
   });
 
-  test('a settled turn over a status that says ready is read as it says', () async {
-    insertCaller('caller');
-    final answer = await run({'prompt': 'Not started'});
-    status.hook(hook('Stop'));
-    await pumpEventQueue();
-    var finished = false;
-    unawaited(answer.then((_) => finished = true));
-    settledTurns.add('new-1');
-    await pumpEventQueue();
-    // Ready and never seen working, with no answer: not yet its turn's end.
-    expect(finished, isFalse);
-    deadline.complete();
-    expect((await answer)['state'], 'running');
-  });
+  test(
+    'a settled turn over a status that says ready is read as it says',
+    () async {
+      insertCaller('caller');
+      final answer = await run({'prompt': 'Not started'});
+      status.hook(hook('Stop'));
+      await pumpEventQueue();
+      var finished = false;
+      unawaited(answer.then((_) => finished = true));
+      settledTurns.add('new-1');
+      await pumpEventQueue();
+      // Ready and never seen working, with no answer: not yet its turn's end.
+      expect(finished, isFalse);
+      deadline.complete();
+      expect((await answer)['state'], 'running');
+    },
+  );
 
   test('at its bound it answers running, and says how to continue', () async {
     insertCaller('caller');
@@ -498,13 +515,13 @@ void main() {
       insertCaller('caller');
       final result =
           (await tools
-                      .call('subagent_run', {
-                        'projectId': 'p1',
-                        'prompt': 'Audit the cart',
-                        'model': 'claude-haiku',
-                        'mode': 'async',
-                      }, 'caller')!
-                      .timeout(const Duration(seconds: 5)))!
+                  .call('subagent_run', {
+                    'projectId': 'p1',
+                    'prompt': 'Audit the cart',
+                    'model': 'claude-haiku',
+                    'mode': 'async',
+                  }, 'caller')!
+                  .timeout(const Duration(seconds: 5)))!
               as Map<String, Object?>;
       expect(result['state'], 'started');
       expect(result['mode'], 'async');
@@ -535,11 +552,11 @@ void main() {
       insertCaller('caller');
       final result =
           (await tools
-                      .call('open_new_session', {
-                        'projectId': 'p1',
-                        'prompt': 'Write the docs',
-                      }, 'caller')!
-                      .timeout(const Duration(seconds: 5)))!
+                  .call('open_new_session', {
+                    'projectId': 'p1',
+                    'prompt': 'Write the docs',
+                  }, 'caller')!
+                  .timeout(const Duration(seconds: 5)))!
               as Map<String, Object?>;
       expect(result['report'], 'final');
       expect(result['reportsBack'], isTrue);
@@ -776,31 +793,34 @@ void main() {
       expect(unwanted['note'], contains('kept on your session'));
     });
 
-    test('works without "Operate Karmashala", which still gates the rest', () async {
-      insertCaller('caller');
-      insertCaller('child', parent: 'caller');
-      final relay = McpToolRelay(
-        tools: ServerTools([tools]),
-        operatorGranted: (_) => false,
-      );
-      final answer =
-          (await relay.call('report_to_parent', {'text': 'Done.'}, 'child'))!
-              as Map<String, Object?>;
-      expect(answer['reported'], isTrue);
-      expect(reports.single.parentId, 'caller');
-      await expectLater(
-        relay.call('open_new_session', {'projectId': 'p1'}, 'child'),
-        throwsA(isA<McpToolRelayFailure>()),
-      );
-      await expectLater(
-        relay.call('delegation_set_report', {
-          'sessionId': 'x',
-          'report': 'none',
-        }, 'child'),
-        throwsA(isA<McpToolRelayFailure>()),
-      );
-      expect(pty.started, isEmpty);
-    });
+    test(
+      'works without "Operate Karmashala", which still gates the rest',
+      () async {
+        insertCaller('caller');
+        insertCaller('child', parent: 'caller');
+        final relay = McpToolRelay(
+          tools: ServerTools([tools]),
+          operatorGranted: (_) => false,
+        );
+        final answer =
+            (await relay.call('report_to_parent', {'text': 'Done.'}, 'child'))!
+                as Map<String, Object?>;
+        expect(answer['reported'], isTrue);
+        expect(reports.single.parentId, 'caller');
+        await expectLater(
+          relay.call('open_new_session', {'projectId': 'p1'}, 'child'),
+          throwsA(isA<McpToolRelayFailure>()),
+        );
+        await expectLater(
+          relay.call('delegation_set_report', {
+            'sessionId': 'x',
+            'report': 'none',
+          }, 'child'),
+          throwsA(isA<McpToolRelayFailure>()),
+        );
+        expect(pty.started, isEmpty);
+      },
+    );
 
     test('a session nobody started is refused in words', () async {
       insertCaller('caller');

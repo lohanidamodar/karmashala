@@ -44,6 +44,9 @@ abstract class AcpRuntimeHost {
   /// The agent reported its context use and cost (`usage_update`).
   void usageChanged(SessionUsageChanged change);
 
+  /// The agent says [sessionId] is running [modelId] now.
+  void activeModelChanged(String sessionId, String modelId) {}
+
   /// The agent announced or changed the slash commands it accepts.
   void commandsChanged(SessionCommandsChanged change) {}
 

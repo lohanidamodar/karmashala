@@ -6,6 +6,7 @@ import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/src/mcp/tools/inventory_tool_set.dart';
+import 'package:karmashala_host/src/sessions/session_active_models.dart';
 import 'package:test/test.dart';
 
 import 'tool_harness.dart';
@@ -118,6 +119,18 @@ void main() {
       expect(s1, isNot(contains('scheduledResume')));
       expect(rows.last['title'], 'Imported i1');
       expect(rows.last['externalId'], 'conv-i1');
+    });
+
+    test('each native session names the model its agent last said it runs, '
+        'or says it is not recorded — never a default', () async {
+      h.context.activeModels = SessionActiveModels(announce: (_) {})
+        ..report('s1', 'claude-opus-5-5', source: ActiveModelSource.record);
+      final rows = await list('list_sessions');
+      expect(
+        rows.firstWhere((r) => r['id'] == 's1')['model'],
+        'claude-opus-5-5',
+      );
+      expect(rows.firstWhere((r) => r['id'] == 's2')['model'], 'not recorded');
     });
 
     test('filters by a substring and by the agent', () async {

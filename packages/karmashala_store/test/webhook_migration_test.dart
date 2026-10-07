@@ -20,10 +20,10 @@ void main() {
     return raw;
   }
 
-  test('the head is 82', () {
+  test('the head is 83', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    expect(db.schemaVersion, 82);
+    expect(db.schemaVersion, 83);
   });
 
   test('v81 adds the webhook columns and a call log with no body', () {

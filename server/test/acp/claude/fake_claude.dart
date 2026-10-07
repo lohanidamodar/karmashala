@@ -301,11 +301,13 @@ class FakeClaude {
       'cache_read_input_tokens': 1000,
       'output_tokens': 5,
     },
+    String? model,
   }) => emit({
     'type': 'assistant',
     'message': {
       'id': id,
       'role': 'assistant',
+      'model': ?model,
       'content': content,
       'usage': usage,
     },
