@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/explorer/application/explorer_actions.da
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -210,5 +211,24 @@ void main() {
 
     expect(again.outcome, ExplorerOutcome.reattached);
     expect(server.sessionWork.asked.length, asked);
+  });
+
+  test('stopped, then resumed before anything looked: it is held by the '
+      'server again, so the peek offers Stop rather than Resume', () async {
+    // Seen in the probe, 2026-10-07: Stop, then Resume from the dashboard,
+    // and the running session still read as stopped.
+    endedChat();
+    final container = await connect();
+    final actions = container.read(explorerActionsProvider);
+    final launcher = container.read(sessionLauncherProvider);
+    await actions.resumeInBackground('acp-1');
+    expect(launcher.heldByHostOnly('acp-1'), isTrue);
+
+    expect(await launcher.endRunning('acp-1'), isNotNull);
+    expect(server.sessionWork.running, isNot(contains('acp-1')));
+    await actions.resumeInBackground('acp-1');
+
+    expect(server.sessionWork.running, contains('acp-1'));
+    expect(launcher.heldByHostOnly('acp-1'), isTrue);
   });
 }
