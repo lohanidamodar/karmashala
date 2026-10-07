@@ -20,6 +20,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
@@ -170,6 +171,78 @@ void main() {
     );
     expect(shown.sessionId, 'achiver');
     expect(header(tester), 'achiver');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the switcher folds tabs whose session stopped, and closing '
+      'them leaves the sessions alone', (tester) async {
+    seedInAPane('live', 'Live work');
+    seedInAPane('done', 'Finished work');
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final donePane = db.server.sessionRows.getById('done')!.paneId!;
+    // A failed exit keeps its tab; a clean one closes it by itself.
+    (terminals.instanceFor(donePane)! as FakeTerminalInstance).exitWith(1);
+    // The tab in front stays on top whatever it runs, so it is the live one.
+    terminals.activateTab(
+      terminals.tabIdOfPane(db.server.sessionRows.getById('live')!.paneId!)!,
+    );
+    final before = db.server.sessionRows.getById('done')!;
+
+    tester.view.physicalSize = const Size(360, 780);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(1.6)),
+            child: UiDensityScope(density: UiDensity.touch, child: child!),
+          ),
+          home: const Scaffold(
+            body: CompactWorkbenchScope(
+              child: Column(
+                children: [
+                  ShellTabSwitcher(),
+                  // The switcher alone: the workbench below is not under test.
+                  Expanded(child: SizedBox.shrink()),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(ShellTabSwitcher));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Not running · 1'), findsOneWidget);
+    // No keyboard: nothing is focused until the box is tapped.
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isFalse,
+    );
+
+    await tester.tap(find.text('Close all'));
+    await tester.pumpAndSettle();
+
+    final panes = [
+      for (final tab in container.read(terminalSessionsControllerProvider).tabs)
+        ...tab.layout.panes,
+    ];
+    expect(panes, isNot(contains(donePane)));
+    expect(panes, contains(db.server.sessionRows.getById('live')!.paneId));
+    final after = db.server.sessionRows.getById('done')!;
+    expect(after.isArchived, isFalse);
+    expect(after.status, before.status);
     expect(tester.takeException(), isNull);
   });
 }

@@ -43,7 +43,8 @@ import '../terminal/fake_instance.dart';
 /// Both halves of that disagreement were protecting something real: a pane that
 /// ran and died must never be reattached and presented as a running session,
 /// and a restored pane is the session's own scrollback. These tests pin the
-/// resolution — a **dormant** pane is resumed *into*, an **exited** one is not.
+/// resolution — a **dormant** or **exited** pane is resumed *into*, never
+/// reattached as if it were running.
 
 const _sharing = AgentDescriptor(
   id: 'sharing',
@@ -223,12 +224,10 @@ void main() {
     expect(started.restored, contains('what happened yesterday'));
   });
 
-  test('a session whose pane ran and died is resumed in a pane of its '
-      'own', () async {
-    // The distinction `livePaneFor` was right to make, kept: an exited pane
-    // belongs to *this* run of the app, its buffer has moved on since anything
-    // was restored into it, and it is a record of a process that failed or was
-    // ended rather than history waiting to be continued.
+  test('a session whose pane ran and died is resumed in that pane, not a '
+      'second tab', () async {
+    // Never *reattached* as if running (`livePaneFor` refuses it); a new
+    // process starts in it, so reopening a session never stacks a tab.
     final db = await seededDatabase();
     final container = containerOver(db);
     addTearDown(container.dispose);
@@ -250,10 +249,12 @@ void main() {
 
     expect(result.outcome, ExplorerOutcome.resumed);
     final state = container.read(terminalSessionsControllerProvider);
-    expect(state.tabs, hasLength(2));
+    expect(state.tabs, hasLength(1));
+    expect(state.tabs.single.layout.panes, [paneId]);
+    expect(state.livenessOf(paneId), PaneLiveness.live);
     expect(
       container.read(sessionsDataProvider).getById(sessionId)!.paneId,
-      isNot(paneId),
+      paneId,
     );
   });
 

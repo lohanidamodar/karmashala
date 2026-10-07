@@ -225,6 +225,7 @@ class QuickOpenSearchField extends StatelessWidget {
     this.shortcut,
     this.breadcrumb = const [],
     this.onBreadcrumbTap,
+    this.autofocus = true,
     super.key,
   });
 
@@ -242,6 +243,10 @@ class QuickOpenSearchField extends StatelessWidget {
 
   /// Goes back one step: the touch way to what Backspace on an empty box does.
   final VoidCallback? onBreadcrumbTap;
+
+  /// Whether the box takes focus on open. False under touch, where focus
+  /// raises a keyboard over the list being picked from.
+  final bool autofocus;
 
   /// The most of the field the breadcrumb may take before it ellipsises: the
   /// query is what is being typed, and it keeps the room.
@@ -266,7 +271,7 @@ class QuickOpenSearchField extends StatelessWidget {
         builder: (context, constraints) => SearchField(
           controller: controller,
           clearOnEscape: false,
-          autofocus: true,
+          autofocus: autofocus,
           style: theme.textTheme.bodyLarge?.copyWith(fontSize: TypeSizes.input),
           decoration: InputDecoration(
             filled: false,
