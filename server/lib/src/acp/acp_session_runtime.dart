@@ -184,10 +184,17 @@ class AcpSessionRuntime implements ScreenSession {
   /// mode stays within. The agent's own mode changes never move it.
   PermissionRisk? _workingRung;
 
+  /// The rung the person last put the session on — [risk] at launch, the
+  /// picked mode's since, plan mode included — which decides what a
+  /// permission request is answered with unasked. Null for a mode the spec
+  /// cannot place: nothing is then allowed unasked but reads.
+  late PermissionRisk? _chosenRung = risk;
+
   /// Notes [modeId] as chosen for the session. Plan mode is not where it
   /// works: approving a plan returns to the mode it was in before.
   void _modeChosen(String modeId) {
     final rung = spec.rungOfMode(modeId);
+    _chosenRung = rung;
     if (rung != null && !rung.isAtMost(PermissionRisk.readOnly)) {
       _workingRung = rung;
     }
@@ -1215,20 +1222,25 @@ class AcpSessionRuntime implements ScreenSession {
   ) async {
     final title = _titleOf(call);
     final question = _questionIn(call);
-    final rung = risk;
+    final rung = _chosenRung;
     // A question is the person's to answer at any rung.
-    if (question == null &&
-        rung != null &&
-        !rung.isAtMost(PermissionRisk.acceptEdits)) {
+    if (question == null) {
       final switching = _modeSwitchingAllow(options);
-      final once = switching != null
-          ? switching.option
-          : options
-                .where((o) => o.kind == PermissionOptionKind.allowOnce)
-                .firstOrNull;
-      if (once != null) {
+      final allowOnce = options
+          .where((o) => o.kind == PermissionOptionKind.allowOnce)
+          .firstOrNull;
+      final PermissionOption? unasked;
+      if (rung != null && !rung.isAtMost(PermissionRisk.acceptEdits)) {
+        unasked = switching != null ? switching.option : allowOnce;
+      } else if (switching == null && _readsOnly(call)) {
+        // A read is within every rung, read-only included.
+        unasked = allowOnce;
+      } else {
+        unasked = null;
+      }
+      if (unasked != null) {
         await _holdForEdit(call);
-        return PermissionOutcome.selected(once.optionId);
+        return PermissionOutcome.selected(unasked.optionId);
       }
     }
     final pending = _PendingPermission(call, options, title, question);
@@ -1265,6 +1277,13 @@ class AcpSessionRuntime implements ScreenSession {
     } finally {
       if (identical(_pending, pending)) _pending = null;
     }
+  }
+
+  /// Whether [call] only reads, by the ACP kind the agent gave it here or
+  /// earlier. A shell command cannot be judged, so `execute` is never one.
+  bool _readsOnly(ToolCallUpdate call) {
+    final kind = call.kind ?? _writer.kindOf(call.toolCallId);
+    return kind == ToolKind.read || kind == ToolKind.search;
   }
 
   /// The tool [call] is, by the agent's own name for it: a `toolName` an

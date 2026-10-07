@@ -174,6 +174,9 @@ class AcpConversationWriter {
     _timer ??= Timer(coalesce, flush);
   }
 
+  /// The kind the agent gave call [toolCallId] so far, or null.
+  ToolKind? kindOf(String toolCallId) => _tools[toolCallId]?.state.kind;
+
   void _tool(ToolCallUpdate update) {
     final known = _tools[update.toolCallId];
     if (known == null) {
