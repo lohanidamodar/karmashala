@@ -60,6 +60,20 @@ void main() {
     expect(overview.canStop, isTrue);
   });
 
+  test('the app\'s build number is not a difference: the server reports its '
+      'release, the app its release+build', () async {
+    Future<bool> differs(String app) async => (await localServerOverview(
+      reading: reading(HostDeploymentStatus.ready),
+      supervision: null,
+      listSessions: () async => const [],
+      version: app,
+    )).versionsDiffer;
+
+    expect(await differs('1.31.0+58'), isFalse);
+    expect(await differs('1.31.0'), isFalse);
+    expect(await differs('1.31.1+59'), isTrue);
+  });
+
   test('a host that would not list leaves both counts unknown', () async {
     final overview = await localServerOverview(
       reading: reading(HostDeploymentStatus.ready),

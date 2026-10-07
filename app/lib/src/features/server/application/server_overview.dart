@@ -62,10 +62,15 @@ class ServerOverview {
   /// Whether this window is a client of a server on another machine.
   final bool usesAnotherMachine;
 
+  /// Whether the server runs another release than this app. Releases only:
+  /// the server reports `1.33.1`, the app `1.33.1+64`, and a build number is
+  /// not a difference (the server carries none).
   bool get versionsDiffer =>
       serverVersion != null &&
       appVersion.isNotEmpty &&
-      serverVersion != appVersion;
+      _release(serverVersion!) != _release(appVersion);
+
+  static String _release(String version) => version.split('+').first.trim();
 }
 
 /// How long a server has been up, to the two largest units.
