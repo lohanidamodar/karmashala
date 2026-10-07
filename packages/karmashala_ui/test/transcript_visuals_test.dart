@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/charts.dart';
-import 'package:karmashala_ui/diagrams.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/transcript.dart';
 
