@@ -2,6 +2,7 @@ import '../util/bounded_text.dart';
 import '../agents/claude_code/claude_file_edits.dart';
 import '../agents/domain/agent_plan.dart';
 import '../agents/domain/file_edit.dart';
+import 'session_event_types.dart' show isSubagentToolName;
 import 'tool_edits.dart';
 
 export '../agents/domain/file_edit.dart';
@@ -32,6 +33,7 @@ class ToolActivity {
     this.editsTruncated = false,
     this.proposedPlan,
     this.questions = const [],
+    this.description,
   });
 
   /// The tool's own name: `Bash`, `Read`, `Edit`, `mcp__…`.
@@ -90,6 +92,10 @@ class ToolActivity {
   /// one is known (Claude's `AskUserQuestion`). Empty for every other call.
   final List<AskedQuestion> questions;
 
+  /// The call's own words for what it does, when its input carried them
+  /// (Claude's `description`); null otherwise. Never the command itself.
+  final String? description;
+
   /// The one-line form: what Copy puts on the clipboard, and what the remote
   /// and companion payloads carry. Deliberately the same shape the CLIs print.
   String get summary {
@@ -130,6 +136,7 @@ class ToolActivity {
     'proposedPlan': ?proposedPlan,
     if (questions.isNotEmpty)
       'questions': [for (final q in questions) q.toJson()],
+    'description': ?description,
   };
 
   /// Throws [FormatException] when `name` is not a string; any other field
@@ -165,6 +172,7 @@ class ToolActivity {
         ],
         _ => const [],
       },
+      description: _stringOrNull(json['description']),
     );
   }
 
@@ -184,6 +192,7 @@ class ToolActivity {
     editsTruncated: editsTruncated,
     proposedPlan: proposedPlan,
     questions: questions,
+    description: description,
   );
 
   /// This call with the answer it eventually got. [edits] replaces the call's
@@ -222,6 +231,7 @@ class ToolActivity {
                   answer: answers[q.question] ?? q.answer,
                 ),
             ],
+      description: description,
     );
   }
 }
@@ -386,7 +396,57 @@ ToolActivity toolActivityFor(String name, Object? input) {
     editsTruncated: cut,
     proposedPlan: proposedPlanIn(input),
     questions: askedQuestionsIn(input),
+    description: descriptionIn(input, subject: subject),
   );
+}
+
+/// The `description` a call's [input] gives, unless it is only [subject]
+/// again (a subagent is named by it).
+String? descriptionIn(Object? input, {String? subject}) => switch (input) {
+  {'description': final String text}
+      when text.trim().isNotEmpty && text.trim() != subject =>
+    text.trim(),
+  _ => null,
+};
+
+/// The tools a running call of which reads as a verb on its subject.
+const Map<String, String> _doingVerbs = {
+  'Read': 'Reading',
+  'Write': 'Writing',
+  'Edit': 'Editing',
+  'MultiEdit': 'Editing',
+  'NotebookEdit': 'Editing',
+  'Grep': 'Searching for',
+  'Glob': 'Looking for',
+  'WebFetch': 'Fetching',
+  'WebSearch': 'Searching the web for',
+};
+
+/// The kinds of an ACP call that read as a verb on its subject.
+const Map<String, String> _doingKinds = {
+  'read': 'Reading',
+  'edit': 'Editing',
+  'delete': 'Deleting',
+  'move': 'Moving',
+  'search': 'Searching for',
+  'fetch': 'Fetching',
+};
+
+/// **What a running [tool] call is doing, in words**: its own
+/// [ToolActivity.description] first, else a verb on its file or pattern.
+/// Null when only its command could say, which is never words for a person.
+String? toolDoingPhrase(ToolActivity tool) {
+  final described = tool.description?.trim();
+  if (described != null && described.isNotEmpty) return described;
+  if (tool.plan case final plan?) return plan.headline;
+  final subject = tool.subject?.trim() ?? '';
+  if (isSubagentToolName(tool.name)) {
+    return subject.isEmpty ? 'Running a subagent' : 'Subagent: $subject';
+  }
+  final verb = _doingVerbs[tool.name] ?? _doingKinds[tool.kind];
+  if (verb == null || subject.isEmpty) return null;
+  final segments = subject.split(RegExp(r'[\\/]')).where((s) => s.isNotEmpty);
+  return '$verb ${segments.isEmpty ? subject : segments.last}';
 }
 
 /// The plan a call's [input] puts to the person for approval: its `plan`.
