@@ -140,6 +140,7 @@ class _ShownSection extends ConsumerWidget {
 /// standalone sections they grew out of.
 Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.startup => const StartupSection(),
+  SettingsAnchor.sessionView => const SessionViewSection(),
   SettingsAnchor.launcherHotkey => const LauncherHotkeySection(),
   SettingsAnchor.keyboard => const KeyboardSection(),
   SettingsAnchor.notifications => const NotificationsSection(),

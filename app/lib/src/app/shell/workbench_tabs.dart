@@ -25,7 +25,7 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
   final terminals = ref.read(terminalSessionsControllerProvider.notifier);
   terminals.activateTab(tabId);
   // The group that holds it, which activating the tab has just focused.
-  terminals.showTerminalForTab(tabId);
+  terminals.revealTab(tabId);
   releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
 }
 

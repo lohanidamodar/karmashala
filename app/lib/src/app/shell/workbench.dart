@@ -56,6 +56,8 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
+import '../../features/settings/application/settings_controller.dart'
+    show sessionsOpenInChatProvider;
 import '../../features/terminal/presentation/close_tabs_dialog.dart';
 import '../../features/terminal/presentation/empty_pane_region.dart';
 import '../../features/terminal/presentation/pane_layout_view.dart';
@@ -151,14 +153,10 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         );
   }
 
-  /// Reveals the pane [sessionId] is already running in; starts and stops
-  /// nothing. [sessionId] names the change so it wakes only that row's watchers.
-  void _showTerminalFor(String? paneId, String? sessionId) =>
-      showTerminalFor(ref, paneId, sessionId);
-
-  /// Opens [sessionId] on the surface a session *is*: its terminal. No branch on
-  /// whether it has a pane — one that has none gets [_NoPaneForSession] — except
-  /// a session with no terminal to have: its conversation becomes the tab.
+  /// Opens [sessionId] in its pane, on the face it opens on ([revealSessionFor]).
+  /// No branch on whether it has a pane — one that has none gets
+  /// [_NoPaneForSession] — except a session with no terminal to have: its
+  /// conversation becomes the tab.
   void _openSession(String sessionId) {
     var paneId = sessionTerminalPane(ref, sessionId);
     if (paneId == null && ref.read(isAcpSessionProvider(sessionId))) {
@@ -192,8 +190,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // Gaining a pane moves the workbench onto it, or the session would be off
     // screen.
     if (paneId != null) {
-      _showTerminalFor(paneId, sessionId);
-      _showChatOnCompact(paneId);
+      revealSessionFor(ref, paneId, sessionId);
     } else if (ended) {
       _releaseEndedPane();
     }
@@ -208,20 +205,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 
   void _showSurfaceFor(String? paneId, String? sessionId) {
     _shownPane = paneId;
-    _showTerminalFor(paneId, sessionId);
-    _showChatOnCompact(paneId);
-  }
-
-  /// On a phone a session opens on its chat (Stage 2 answer 3). The pane is
-  /// still reattached above, so the terminal is one tap away.
-  void _showChatOnCompact(String? paneId) {
-    if (!CompactWorkbenchScope.of(context)) return;
-    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-    if (paneId != null) {
-      terminals.revealConversationForPane(paneId);
-    } else if (ref.read(focusedWorkspaceGroupProvider) case final group?) {
-      terminals.showFaceIn(group, terminal: false);
-    }
+    revealSessionFor(ref, paneId, sessionId);
   }
 
   @override
@@ -339,22 +323,40 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 /// Reveals the pane [sessionId] is already running in; starts and stops nothing.
 /// [sessionId] names the change, so only that row's watchers wake.
 void showTerminalFor(WidgetRef ref, String? paneId, String? sessionId) {
-  if (paneId != null) {
-    final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-    terminals
-      ..reattachSession(paneId)
-      ..focusPane(paneId);
-    // Which pane this session shows in moved, and nothing about any other row.
-    ref.publishSessionChange(
-      sessionId == null
-          ? const SessionChange(kinds: {SessionChangeKind.placement})
-          : SessionChange.moved(sessionId),
-    );
-  }
+  _bringPaneForward(ref, paneId, sessionId);
   // The group that pane is in — not the focused one. A launch or a reveal means
   // "show me it *there*", and with two groups those are different answers.
   final terminals = ref.read(terminalSessionsControllerProvider.notifier);
   paneId == null
       ? terminals.showTerminalHere()
       : terminals.showTerminalForPane(paneId);
+}
+
+/// [showTerminalFor] for *opening* a session rather than a hand on the toggle:
+/// its group goes to the face it opens on, the chat when
+/// [sessionsOpenInChatProvider] says so. The pane is reattached either way.
+void revealSessionFor(WidgetRef ref, String? paneId, String? sessionId) {
+  _bringPaneForward(ref, paneId, sessionId);
+  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+  if (paneId != null) return terminals.revealPane(paneId);
+  // A selection with no pane of ours is drawn over the focused group's tab,
+  // which cannot say whether there is a chat to open on; the selection can.
+  final group = ref.read(focusedWorkspaceGroupProvider);
+  if (!ref.read(sessionsOpenInChatProvider) || group == null) {
+    return terminals.showTerminalHere();
+  }
+  terminals.showFaceIn(group, terminal: false);
+}
+
+void _bringPaneForward(WidgetRef ref, String? paneId, String? sessionId) {
+  if (paneId == null) return;
+  ref.read(terminalSessionsControllerProvider.notifier)
+    ..reattachSession(paneId)
+    ..focusPane(paneId);
+  // Which pane this session shows in moved, and nothing about any other row.
+  ref.publishSessionChange(
+    sessionId == null
+        ? const SessionChange(kinds: {SessionChangeKind.placement})
+        : SessionChange.moved(sessionId),
+  );
 }
