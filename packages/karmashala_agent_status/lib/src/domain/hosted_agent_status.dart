@@ -114,7 +114,11 @@ Map<String, Object?> questionToJson(AgentQuestionSet set) => {
         'multiSelect': q.multiSelect,
         'options': [
           for (final o in q.options)
-            {'label': o.label, 'description': o.description},
+            {
+              'label': o.label,
+              'description': o.description,
+              if (o.preview.isNotEmpty) 'preview': o.preview,
+            },
         ],
       },
   ],

@@ -4,6 +4,7 @@ import 'package:karmashala/src/app/shell/logs_tab_view.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/core/logging/server_log_tail.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
@@ -49,6 +50,18 @@ void main() {
       ),
     );
     await tester.pump();
+  }
+
+  /// Opens the funnel, picks [chip], and closes the filters again.
+  Future<void> pickFilter(WidgetTester tester, String chip) async {
+    await tester.tap(find.byKey(const ValueKey('logs-filters')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, chip));
+    await tester.pumpAndSettle();
+    Navigator.of(
+      tester.element(find.byKey(const ValueKey('logs-filter-panel'))),
+    ).pop();
+    await tester.pumpAndSettle();
   }
 
   testWidgets('shows the tail that was recorded before it was opened', (
@@ -107,17 +120,17 @@ void main() {
     AppLogger.named('sessions').info('created session s-1');
     await pumpPanel(tester);
 
-    await tester.tap(find.text('All levels'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Warnings and up').last);
-    await tester.pumpAndSettle();
+    await pickFilter(tester, 'Warnings and up');
     expect(find.textContaining('pairing timed out'), findsOneWidget);
     expect(find.textContaining('created session s-1'), findsNothing);
+    expect(find.byTooltip('Filters (1 set)'), findsOneWidget);
 
-    await tester.tap(find.text('Warnings and up').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('All levels').last);
-    await tester.pumpAndSettle();
+    await pickFilter(tester, 'All levels');
+    await pickFilter(tester, 'sessions');
+    expect(find.textContaining('created session s-1'), findsOneWidget);
+    expect(find.textContaining('pairing timed out'), findsNothing);
+    await pickFilter(tester, 'All channels');
+    expect(find.byTooltip('Filters'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'session');
     await tester.pump();
@@ -192,25 +205,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
   });
 
-  testWidgets('the filter pickers are sized like the panel around them', (
+  testWidgets('wears the shared tab header, its filters behind the funnel', (
     tester,
   ) async {
-    // `DropdownButton` is Material 2 and ignores the app's
-    // `dropdownMenuTheme`, which only reaches Material 3's `DropdownMenu`. The
-    // text style was already the panel's; the chevron was not, and drew at
-    // Material's 24 beside a toolbar of `Chrome.icon` glyphs one row above.
-    await pumpPanel(tester);
-    final level = tester.widget<DropdownButton<Level>>(
-      find.byType(DropdownButton<Level>),
-    );
-    final channel = tester.widget<DropdownButton<String?>>(
-      find.byType(DropdownButton<String?>),
-    );
-    final theme = Theme.of(tester.element(find.byType(DropdownButton<Level>)));
-    expect(level.iconSize, Chrome.icon);
-    expect(channel.iconSize, Chrome.icon);
-    expect(level.style, theme.textTheme.labelSmall);
-    expect(channel.style, theme.textTheme.labelSmall);
+    await pumpPanel(tester, size: const Size(1440, 900));
+    expect(find.byType(WorkbenchTabScaffold), findsOneWidget);
+    expect(find.text('Logs'), findsOneWidget);
+    expect(find.byType(DropdownButton<Level>), findsNothing);
+    expect(find.byTooltip('Filters'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 200));
   });
 
@@ -280,12 +282,22 @@ void main() {
     ]);
   });
 
-  testWidgets('a wide tab puts its controls on one row', (tester) async {
-    await pumpPanel(tester, size: const Size(1440, 900));
+  testWidgets('a wide tab puts the source picker in its header', (
+    tester,
+  ) async {
+    await pumpPanel(
+      tester,
+      size: const Size(1440, 900),
+      server: _FakeServerLogTail(const []),
+    );
 
-    final search = tester.getCenter(find.byType(TextField));
-    final level = tester.getCenter(find.byType(DropdownButton<Level>));
-    expect((search.dy - level.dy).abs(), lessThan(4));
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const ValueKey('logs-source')),
+      ),
+      findsOneWidget,
+    );
     await tester.pump(const Duration(milliseconds: 200));
   });
 
@@ -328,10 +340,7 @@ void main() {
       expect(find.textContaining('relay retrying'), findsOneWidget);
       expect(find.textContaining('an app line'), findsNothing);
 
-      await tester.tap(find.text('All levels'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Warnings and up').last);
-      await tester.pumpAndSettle();
+      await pickFilter(tester, 'Warnings and up');
       expect(find.textContaining('listening on 7420'), findsNothing);
       expect(find.textContaining('relay retrying'), findsOneWidget);
 
@@ -345,10 +354,7 @@ void main() {
       await tester.pump();
       expect(find.textContaining('an app line'), findsNothing);
       expect(find.textContaining('relay retrying'), findsNothing);
-      await tester.tap(find.text('Warnings and up').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('All levels').last);
-      await tester.pumpAndSettle();
+      await pickFilter(tester, 'All levels');
       expect(find.textContaining('an app line'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 200));
     });

@@ -244,6 +244,9 @@ class Insets {
   /// A hairline of ground around a badge's word — under the scale on purpose,
   /// so the badge does not grow the line it sits in.
   static const hair = 1.0;
+
+  /// Between two lines of one item — a title and the line under it.
+  static const xxs = 2.0;
   static const xs = 4.0;
   static const sm = 8.0;
   static const md = 12.0;
@@ -874,6 +877,21 @@ class Chrome {
   /// than [titleBar] because it carries the session switcher and two 34px
   /// buttons — the controls a window that narrow is driven by.
   static const compactTopBar = 44.0;
+
+  /// A workbench page tab's title bar — Stores, Usage, Logs: a glyph, the
+  /// page's name in the app bar's title style, its controls and actions.
+  static const tabAppBar = 44.0;
+
+  /// [tabAppBar] grown with the text scale; under a thumb, never under
+  /// [Touch.appBarOf], so its actions keep their 48dp targets.
+  static double tabAppBarOf(BuildContext context) {
+    final scaled = MediaQuery.textScalerOf(
+      context,
+    ).scale(tabAppBar).clamp(tabAppBar, 64.0);
+    if (!UiDensity.of(context).isTouch) return scaled;
+    final touch = Touch.appBarOf(context);
+    return scaled > touch ? scaled : touch;
+  }
 
   /// [compactTopBar], grown with the text scale as [titleBarOf] is.
   static double compactTopBarOf(BuildContext context) =>

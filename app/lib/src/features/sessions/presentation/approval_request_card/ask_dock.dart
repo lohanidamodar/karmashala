@@ -28,6 +28,7 @@ class _AskDock extends ConsumerWidget {
     required this.menus,
     required this.canAnswer,
     required this.cannot,
+    this.inline = false,
   });
 
   final String sessionId;
@@ -39,6 +40,9 @@ class _AskDock extends ConsumerWidget {
 
   /// Said in place of the answers when not [canAnswer].
   final String cannot;
+
+  /// Under its call in the chat, whose own card already insets it.
+  final bool inline;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -118,19 +122,14 @@ class _AskDock extends ConsumerWidget {
           ],
         ),
       ),
-      AgentWaitKind.question when canAnswer => _QuestionOr(
-        sessionId: sessionId,
-        agentName: agentName,
-        orElse: _DockColumn(
-          children: [
-            quoted,
-            _DockNote(
-              note:
-                  'Pick an answer in the terminal, or from the companion app.',
-              sessionId: sessionId,
-            ),
-          ],
-        ),
+      AgentWaitKind.question when canAnswer => _DockColumn(
+        children: [
+          quoted,
+          _DockNote(
+            note: 'Pick an answer in the terminal, or from the companion app.',
+            sessionId: sessionId,
+          ),
+        ],
       ),
       _ => _DockColumn(
         children: [
@@ -140,9 +139,71 @@ class _AskDock extends ConsumerWidget {
       ),
     };
 
+    final header = Row(
+      children: [
+        Icon(
+          waiting == AgentWaitKind.question
+              ? AppIcons.question
+              : AppIcons.shield,
+          size: Chrome.icon,
+          color: attention,
+        ),
+        const SizedBox(width: Insets.sm),
+        Expanded(
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  summary != null
+                      ? '$agentName wants to ${summary.action}'
+                      : waiting == AgentWaitKind.question
+                      ? '$agentName is asking you a question'
+                      : '$agentName is asking permission',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: density.rowTitle(theme, strong: true),
+                ),
+              ),
+              if (muted.isNotEmpty) ...[
+                const SizedBox(width: Insets.sm),
+                Flexible(
+                  child: Text(
+                    muted,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: density.muted(theme),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: Insets.sm),
+        _WaitingFor(since: report.waitingSince),
+      ],
+    );
+    // Held to a height, the header stays and the body scrolls under it.
+    final plain = _FlexColumn(
+      flexible: 2,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header,
+        const SizedBox(height: _dockGap),
+        SingleChildScrollView(primary: false, child: body),
+      ],
+    );
+    final question = waiting == AgentWaitKind.question && canAnswer;
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, _dockGap),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: Insets.md),
+      margin: question && inline
+          ? const EdgeInsets.only(bottom: _dockGap)
+          : const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, _dockGap),
+      padding: question
+          ? const EdgeInsets.symmetric(
+              horizontal: Insets.md,
+              vertical: Insets.sm,
+            )
+          : const EdgeInsets.symmetric(horizontal: 14, vertical: Insets.md),
       // Amber, the one colour that means "needs you" (spec §5): the ask is
       // the thing on screen that is blocking the session. The edge is drawn
       // inside, as the board's inset ring, so the panel keeps its size.
@@ -154,62 +215,16 @@ class _AskDock extends ConsumerWidget {
           strokeAlign: BorderSide.strokeAlignInside,
         ),
       ),
-      // Held to a height, the header stays and the body takes the rest: a
-      // question scrolls its own options above its pinned answers, anything
-      // else scrolls whole.
-      child: _FlexColumn(
-        flexible: 2,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(
-                waiting == AgentWaitKind.question
-                    ? AppIcons.question
-                    : AppIcons.shield,
-                size: Chrome.icon,
-                color: attention,
-              ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        summary != null
-                            ? '$agentName wants to ${summary.action}'
-                            : waiting == AgentWaitKind.question
-                            ? '$agentName is asking you a question'
-                            : '$agentName is asking permission',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: density.rowTitle(theme, strong: true),
-                      ),
-                    ),
-                    if (muted.isNotEmpty) ...[
-                      const SizedBox(width: Insets.sm),
-                      Flexible(
-                        child: Text(
-                          muted,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: density.muted(theme),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: Insets.sm),
-              _WaitingFor(since: report.waitingSince),
-            ],
-          ),
-          const SizedBox(height: _dockGap),
-          waiting == AgentWaitKind.question && canAnswer
-              ? body
-              : SingleChildScrollView(primary: false, child: body),
-        ],
-      ),
+      // A readable question draws its own slim header in place of this one.
+      child: question
+          ? _QuestionOr(
+              sessionId: sessionId,
+              agentName: agentName,
+              where: project == null ? null : 'in $project',
+              trailing: _WaitingFor(since: report.waitingSince),
+              orElse: plain,
+            )
+          : plain,
     );
   }
 }

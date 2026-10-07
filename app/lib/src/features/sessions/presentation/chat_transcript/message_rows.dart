@@ -600,9 +600,28 @@ class _ErrorMessageCard extends StatelessWidget {
   }
 }
 
+/// Handed to what hangs under a tool row: set while it stands in for the
+/// whole row — an open question card says all the row would.
+class ToolRowStandIn extends InheritedWidget {
+  const ToolRowStandIn({
+    required this.standsIn,
+    required super.child,
+    super.key,
+  });
+
+  final ValueNotifier<bool> standsIn;
+
+  static ValueNotifier<bool>? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<ToolRowStandIn>()?.standsIn;
+
+  @override
+  bool updateShouldNotify(ToolRowStandIn oldWidget) =>
+      standsIn != oldWidget.standsIn;
+}
+
 /// A tool call, and every role this view does not name — a compaction notice,
 /// or a role an importer invented, drawn as the agent's.
-class _ToolMessageCard extends StatelessWidget {
+class _ToolMessageCard extends StatefulWidget {
   const _ToolMessageCard({
     required this.message,
     required this.onSaveNote,
@@ -618,7 +637,38 @@ class _ToolMessageCard extends StatelessWidget {
   final Widget? detail;
 
   @override
+  State<_ToolMessageCard> createState() => _ToolMessageCardState();
+}
+
+class _ToolMessageCardState extends State<_ToolMessageCard> {
+  final _standsIn = ValueNotifier(false);
+
+  /// Keeps the detail's state as the row's frame comes and goes around it.
+  final _detailKey = GlobalKey();
+
+  @override
+  void dispose() {
+    _standsIn.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final detail = widget.detail;
+    if (detail == null) return _framed(context, null);
+    final kept = KeyedSubtree(key: _detailKey, child: detail);
+    return ToolRowStandIn(
+      standsIn: _standsIn,
+      child: ValueListenableBuilder(
+        valueListenable: _standsIn,
+        builder: (context, standsIn, _) =>
+            standsIn ? kept : _framed(context, kept),
+      ),
+    );
+  }
+
+  Widget _framed(BuildContext context, Widget? detail) {
+    final message = widget.message;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final failure = SemanticColors.of(context).failure;
@@ -660,7 +710,7 @@ class _ToolMessageCard extends StatelessWidget {
             color: accent,
             badge: isToolError ? _FailedBadge(color: failure) : null,
             actions: _messageActions(
-              onSaveNote,
+              widget.onSaveNote,
               activity?.output ?? message.text,
             ),
           ),
@@ -672,8 +722,8 @@ class _ToolMessageCard extends StatelessWidget {
           if (activity != null)
             ToolActivityBody(
               activity: activity,
-              resolveHostPath: resolveHostPath,
-              onPathTap: onPathTap,
+              resolveHostPath: widget.resolveHostPath,
+              onPathTap: widget.onPathTap,
             )
           else
             Text(message.text, style: MonoStyles.label.copyWith(height: 1.35)),

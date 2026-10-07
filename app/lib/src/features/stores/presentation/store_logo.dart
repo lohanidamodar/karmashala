@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
 /// A store's logo where its name used to be written, the name in the tooltip
@@ -43,7 +44,7 @@ class StoreLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ExcludeSemantics(child: _glyph(context)),
-        const SizedBox(width: 6),
+        SizedBox(width: UiDensity.of(context).glyphGap),
         Flexible(
           child: Text(
             store.label,

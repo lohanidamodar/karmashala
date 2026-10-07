@@ -13,10 +13,18 @@ import 'dart:convert';
 
 /// One option, in the agent's own words.
 class AgentQuestionOption {
-  const AgentQuestionOption({required this.label, this.description = ''});
+  const AgentQuestionOption({
+    required this.label,
+    this.description = '',
+    this.preview = '',
+  });
 
   final String label;
   final String description;
+
+  /// A mockup or snippet the agent drew for this option, as markdown; empty
+  /// when it drew none.
+  final String preview;
 }
 
 /// One question.
@@ -78,10 +86,12 @@ class AgentQuestionSet {
         final label = option is Map ? option['label'] : option;
         if (label is! String || label.isEmpty) return null;
         final description = option is Map ? option['description'] : null;
+        final preview = option is Map ? option['preview'] : null;
         read.add(
           AgentQuestionOption(
             label: label,
             description: description is String ? description : '',
+            preview: preview is String ? preview : '',
           ),
         );
       }

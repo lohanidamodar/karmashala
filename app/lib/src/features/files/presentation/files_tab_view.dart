@@ -137,8 +137,7 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
                 if (constraints.maxWidth < 720) {
                   return Column(
                     children: [
-                      SegmentedButton<bool>(
-                        showSelectedIcon: false,
+                      CompactSegmented<bool>(
                         segments: [
                           ButtonSegment(
                             value: true,
@@ -149,9 +148,9 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
                             label: Text(_right.label ?? 'Right'),
                           ),
                         ],
-                        selected: {_leftFocused},
-                        onSelectionChanged: (choice) =>
-                            setState(() => _leftFocused = choice.first),
+                        selected: _leftFocused,
+                        onChanged: (left) =>
+                            setState(() => _leftFocused = left),
                       ),
                       const SizedBox(height: Insets.xs),
                       Expanded(child: _leftFocused ? panels[0] : panels[1]),

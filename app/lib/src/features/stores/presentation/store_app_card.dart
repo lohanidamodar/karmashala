@@ -167,7 +167,7 @@ class _Heading extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: Insets.xxs),
               Row(
                 children: [
                   if (group.combinedManually) ...[
@@ -423,8 +423,8 @@ class _LiveVersion extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 6,
-          height: 6,
+          width: Chrome.dot,
+          height: Chrome.dot,
           decoration: BoxDecoration(
             color: SemanticColors.of(context).idle,
             shape: BoxShape.circle,

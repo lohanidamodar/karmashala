@@ -39,31 +39,14 @@ class UsageTabView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    // Under a page that already names it (the phone's More), no second title.
-    final untitled = PaneTitleOverride.maybeOf(context) != null;
-    return Scaffold(
-      appBar: untitled
-          ? null
-          : AppBar(
-              // A page header, as Settings has: `Chrome.titleBar` is 30px.
-              toolbarHeight: 44,
-              // A workbench tab: an implied back button would pop the app's
-              // route.
-              automaticallyImplyLeading: false,
-              title: Row(
-                children: [
-                  Icon(AppIcons.chartBar, color: theme.colorScheme.tertiary),
-                  const SizedBox(width: Insets.sm),
-                  const Flexible(
-                    child: Text(
-                      'Usage',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    final mayView = ref.watch(
+      capabilitiesProvider.select((c) => c.mayViewUsage),
+    );
+    final hasAccounts = mayView && ref.watch(usageAccountsProvider).isNotEmpty;
+    return WorkbenchTabScaffold(
+      icon: AppIcons.chartBar,
+      title: 'Usage',
+      controls: [if (hasAccounts) const _RangePicker()],
       body: LayoutBuilder(
         builder: (context, constraints) {
           final gutter = constraints.maxWidth < 560 ? Insets.lg : Insets.xl;
@@ -75,10 +58,7 @@ class UsageTabView extends ConsumerWidget {
                 constraints: const BoxConstraints(
                   maxWidth: kUsageTabContentMaxWidth,
                 ),
-                child:
-                    ref.watch(
-                      capabilitiesProvider.select((c) => c.mayViewUsage),
-                    )
+                child: mayView
                     ? const _UsagePage()
                     : Text(
                         kUsageNotGranted,
@@ -129,7 +109,7 @@ class _UsagePage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Pickers(accounts: accounts, account: account, range: range),
+        _AccountPicker(accounts: accounts, account: account),
         const SizedBox(height: Insets.lg),
         _AccountBody(account: account, range: range, now: now),
       ],
@@ -137,18 +117,29 @@ class _UsagePage extends ConsumerWidget {
   }
 }
 
-/// The account and range pickers, as pills: every choice in view, and they
-/// wrap onto a second line in a narrow pane instead of hiding in a menu.
-class _Pickers extends ConsumerWidget {
-  const _Pickers({
-    required this.accounts,
-    required this.account,
-    required this.range,
-  });
+/// [24h] [7d] [30d], in the tab's header.
+class _RangePicker extends ConsumerWidget {
+  const _RangePicker();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => CompactSegmented(
+    key: const ValueKey('usage-range'),
+    segments: [
+      for (final r in UsageRange.values)
+        ButtonSegment(value: r, label: Text(r.label)),
+    ],
+    selected: ref.watch(usageTabSelectionProvider.select((s) => s.range)),
+    onChanged: ref.read(usageTabSelectionProvider.notifier).selectRange,
+  );
+}
+
+/// The accounts, as pills: every choice in view, and they wrap onto a second
+/// line in a narrow pane instead of hiding in a menu.
+class _AccountPicker extends ConsumerWidget {
+  const _AccountPicker({required this.accounts, required this.account});
 
   final List<UsageAccount> accounts;
   final UsageAccount account;
-  final UsageRange range;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -156,54 +147,19 @@ class _Pickers extends ConsumerWidget {
     final selection = ref.read(usageTabSelectionProvider.notifier);
     final chosen = usageAccountId(account);
     return Wrap(
-      spacing: Insets.xl,
-      runSpacing: Insets.md,
+      spacing: Insets.xs,
+      runSpacing: Insets.xs,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const EyebrowLabel('Account'),
-            const SizedBox(height: Insets.xs),
-            Wrap(
-              spacing: Insets.xs,
-              runSpacing: Insets.xs,
-              children: [
-                for (final a in accounts)
-                  ChoiceChip(
-                    avatar: AgentLogo(
-                      agentId: a.agentId,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    label: _AccountLabel(account: a),
-                    selected: usageAccountId(a) == chosen,
-                    onSelected: (_) =>
-                        selection.selectAccount(usageAccountId(a)),
-                  ),
-              ],
+        for (final a in accounts)
+          ChoiceChip(
+            avatar: AgentLogo(
+              agentId: a.agentId,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ],
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const EyebrowLabel('Range'),
-            const SizedBox(height: Insets.xs),
-            Wrap(
-              spacing: Insets.xs,
-              runSpacing: Insets.xs,
-              children: [
-                for (final r in UsageRange.values)
-                  ChoiceChip(
-                    label: Text(r.label),
-                    selected: r == range,
-                    onSelected: (_) => selection.selectRange(r),
-                  ),
-              ],
-            ),
-          ],
-        ),
+            label: _AccountLabel(account: a),
+            selected: usageAccountId(a) == chosen,
+            onSelected: (_) => selection.selectAccount(usageAccountId(a)),
+          ),
       ],
     );
   }

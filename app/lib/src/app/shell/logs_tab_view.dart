@@ -8,9 +8,11 @@ import 'package:logging/logging.dart';
 
 import '../../core/logging/diagnostics_providers.dart';
 import '../../core/logging/server_log_tail.dart';
+import '../widgets/adaptive_modal.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 /// The Logs tab: the app's live log tail, and this machine's `server.log`
@@ -56,9 +58,6 @@ class LogsTabSource extends Notifier<LogSource> {
 final logsTabSourceProvider = NotifierProvider<LogsTabSource, LogSource>(
   LogsTabSource.new,
 );
-
-/// From this width the controls fit one row above the lines.
-const double _oneRowWidth = 720;
 
 class _LogsTabViewState extends ConsumerState<LogsTabView> {
   Timer? _ticker;
@@ -196,9 +195,7 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
     LogsTabView.debugBuildCount++;
     final buffer = ref.watch(diagnosticsProvider).buffer;
     final hasServer = ref.watch(serverLogTailProvider) != null;
-    final source = hasServer
-        ? ref.watch(logsTabSourceProvider)
-        : LogSource.app;
+    final source = hasServer ? ref.watch(logsTabSourceProvider) : LogSource.app;
     final all = !_follow
         ? _frozen
         : source == LogSource.app
@@ -208,31 +205,95 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
     final channels = {for (final entry in all) entry.channel}.toList()..sort();
     final theme = Theme.of(context);
 
+    final channel = channels.contains(_channel) ? _channel : null;
+    final filtersSet =
+        (_minLevel == Level.ALL ? 0 : 1) + (channel == null ? 0 : 1);
+    return WorkbenchTabScaffold(
+      icon: AppIcons.article,
+      title: 'Logs',
+      controls: [
+        if (hasServer)
+          CompactSegmented<LogSource>(
+            key: const ValueKey('logs-source'),
+            segments: const [
+              ButtonSegment(value: LogSource.app, label: Text('App')),
+              ButtonSegment(value: LogSource.server, label: Text('Server')),
+            ],
+            selected: source,
+            onChanged: _setSource,
+          ),
+      ],
+      actions: [
+        FilterFunnelButton(
+          key: const ValueKey('logs-filters'),
+          count: filtersSet,
+          onPressed: () => _showFilters(channels),
+        ),
+        IconButton(
+          tooltip: _follow
+              ? 'Following  ·  click to pause'
+              : 'Paused  ·  click to follow the newest lines',
+          icon: Icon(_follow ? AppIcons.pauseCircle : AppIcons.playCircle),
+          onPressed: () => _setFollow(!_follow),
+        ),
+        IconButton(
+          tooltip: 'Copy the lines shown',
+          icon: const Icon(AppIcons.copy),
+          onPressed: visible.isEmpty ? null : () => _copy(visible),
+        ),
+        IconButton(
+          tooltip: 'Clear the buffer',
+          icon: const Icon(AppIcons.trash),
+          // A file is the server's, not ours to empty.
+          onPressed: source == LogSource.server
+              ? null
+              : () {
+                  ref.read(diagnosticsProvider).clear();
+                  _setFollow(true);
+                },
+        ),
+      ],
+      body: _body(source, all, visible, buffer, theme),
+    );
+  }
+
+  Future<void> _showFilters(List<String> channels) => showAdaptiveModal<void>(
+    context: context,
+    title: 'Filters',
+    builder: (_) => StatefulBuilder(
+      // The modal is its own route: it keeps a copy to redraw its chips.
+      builder: (context, setModal) => _LogFilters(
+        minLevel: _minLevel,
+        channel: channels.contains(_channel) ? _channel : null,
+        channels: channels,
+        onLevel: (value) {
+          setState(() => _minLevel = value);
+          setModal(() {});
+        },
+        onChannel: (value) {
+          setState(() => _channel = value);
+          setModal(() {});
+        },
+      ),
+    ),
+  );
+
+  Widget _body(
+    LogSource source,
+    List<LogEntry> all,
+    List<LogEntry> visible,
+    LogRingBuffer buffer,
+    ThemeData theme,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) => _Controls(
-            oneRow: constraints.maxWidth >= _oneRowWidth,
-            search: _search,
-            source: hasServer ? source : null,
-            following: _follow,
-            minLevel: _minLevel,
-            channel: channels.contains(_channel) ? _channel : null,
-            channels: channels,
-            onSource: _setSource,
-            onQuery: (value) => setState(() => _query = value),
-            onLevel: (value) => setState(() => _minLevel = value),
-            onChannel: (value) => setState(() => _channel = value),
-            onFollow: _setFollow,
-            onCopy: visible.isEmpty ? null : () => _copy(visible),
-            // A file is the server's, not ours to empty.
-            onClear: source == LogSource.server
-                ? null
-                : () {
-                    ref.read(diagnosticsProvider).clear();
-                    _setFollow(true);
-                  },
+        Padding(
+          padding: const EdgeInsets.all(Insets.sm),
+          child: SearchField(
+            controller: _search,
+            onChanged: (value) => setState(() => _query = value),
+            decoration: compactSearchDecoration(hintText: 'Filter lines'),
           ),
         ),
         const Divider(height: 1),
@@ -278,180 +339,63 @@ class _LogsTabViewState extends ConsumerState<LogsTabView> {
   }
 }
 
-/// Search, source, filters and the tail's verbs: one row in a wide tab, and
-/// stacked in a narrow group.
-class _Controls extends StatelessWidget {
-  const _Controls({
-    required this.oneRow,
-    required this.search,
-    required this.source,
-    required this.following,
+/// The level floor and the channel, as chips, behind the tab's funnel.
+class _LogFilters extends StatelessWidget {
+  const _LogFilters({
     required this.minLevel,
     required this.channel,
     required this.channels,
-    required this.onSource,
-    required this.onQuery,
     required this.onLevel,
     required this.onChannel,
-    required this.onFollow,
-    required this.onCopy,
-    required this.onClear,
   });
 
-  final bool oneRow;
-  final TextEditingController search;
-
-  /// Null where there is no server log to offer.
-  final LogSource? source;
-  final bool following;
   final Level minLevel;
   final String? channel;
   final List<String> channels;
-  final ValueChanged<LogSource> onSource;
-  final ValueChanged<String> onQuery;
   final ValueChanged<Level> onLevel;
   final ValueChanged<String?> onChannel;
-  final ValueChanged<bool> onFollow;
-  final VoidCallback? onCopy;
-  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelSmall;
-    final searchField = SearchField(
-      controller: search,
-      onChanged: onQuery,
-      decoration: const InputDecoration(
-        isDense: true,
-        hintText: 'Filter lines',
-        prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-        prefixIconConstraints: BoxConstraints(minWidth: 30),
-      ),
-    );
-    final sourcePicker = switch (source) {
-      final source? => SegmentedButton<LogSource>(
-        showSelectedIcon: false,
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        segments: const [
-          ButtonSegment(value: LogSource.app, label: Text('App')),
-          ButtonSegment(value: LogSource.server, label: Text('Server')),
-        ],
-        selected: {source},
-        onSelectionChanged: (choice) => onSource(choice.first),
-      ),
-      null => null,
-    };
-    final level = DropdownButton<Level>(
-      value: minLevel,
-      isExpanded: true,
-      isDense: true,
-      underline: const SizedBox.shrink(),
-      style: style,
-      // `DropdownButton` is Material 2 and `dropdownMenuTheme` reaches only
-      // Material 3's `DropdownMenu`, so its chevron ignores it.
-      iconSize: Chrome.icon,
-      items: [
-        for (final (label, level) in _levelFilters)
-          DropdownMenuItem(value: level, child: Text(label)),
-      ],
-      onChanged: (value) => value == null ? null : onLevel(value),
-    );
-    final channelPicker = DropdownButton<String?>(
-      value: channel,
-      isExpanded: true,
-      isDense: true,
-      underline: const SizedBox.shrink(),
-      style: style,
-      iconSize: Chrome.icon,
-      items: [
-        const DropdownMenuItem(value: null, child: Text('All channels')),
-        for (final name in channels)
-          DropdownMenuItem(value: name, child: Text(name)),
-      ],
-      onChanged: onChannel,
-    );
-    final verbs = [
-      IconButton(
-        tooltip: following
-            ? 'Following  ·  click to pause'
-            : 'Paused  ·  click to follow the newest lines',
-        icon: Icon(
-          following ? AppIcons.pauseCircle : AppIcons.playCircle,
-          size: Chrome.icon,
-        ),
-        onPressed: () => onFollow(!following),
-      ),
-      IconButton(
-        tooltip: 'Copy the lines shown',
-        icon: const Icon(AppIcons.copy, size: Chrome.icon),
-        onPressed: onCopy,
-      ),
-      IconButton(
-        tooltip: 'Clear the buffer',
-        icon: const Icon(AppIcons.trash, size: Chrome.icon),
-        onPressed: onClear,
-      ),
-    ];
-
-    if (oneRow) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(
-          Insets.md,
-          Insets.sm,
-          Insets.xs,
-          Insets.sm,
-        ),
-        child: Row(
-          children: [
-            Expanded(child: searchField),
-            if (sourcePicker != null) ...[
-              const SizedBox(width: Insets.md),
-              sourcePicker,
-            ],
-            const SizedBox(width: Insets.md),
-            SizedBox(width: 160, child: level),
-            const SizedBox(width: Insets.sm),
-            SizedBox(width: 200, child: channelPicker),
-            const SizedBox(width: Insets.sm),
-            ...verbs,
-          ],
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.sm,
-        Insets.sm,
-        Insets.xs / 2,
-        Insets.xs,
-      ),
+    Widget section(String label, List<Widget> chips) => Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(child: searchField),
-              ...verbs,
-            ],
-          ),
-          if (sourcePicker != null)
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.xs),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: sourcePicker,
+          EyebrowLabel(label),
+          const SizedBox(height: Insets.sm),
+          Wrap(spacing: Insets.sm, runSpacing: Insets.sm, children: chips),
+        ],
+      ),
+    );
+    return SingleChildScrollView(
+      key: const ValueKey('logs-filter-panel'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          section('Level', [
+            for (final (label, level) in _levelFilters)
+              ChoiceChip(
+                label: Text(label),
+                selected: level == minLevel,
+                onSelected: (_) => onLevel(level),
               ),
+          ]),
+          section('Channel', [
+            ChoiceChip(
+              label: const Text('All channels'),
+              selected: channel == null,
+              onSelected: (_) => onChannel(null),
             ),
-          Padding(
-            padding: const EdgeInsets.only(right: Insets.sm, top: Insets.xs),
-            child: Row(
-              children: [
-                Expanded(child: level),
-                const SizedBox(width: Insets.sm),
-                Expanded(child: channelPicker),
-              ],
-            ),
-          ),
+            for (final name in channels)
+              ChoiceChip(
+                label: Text(name),
+                selected: name == channel,
+                onSelected: (_) => onChannel(name),
+              ),
+          ]),
+          const SizedBox(height: Insets.md),
         ],
       ),
     );
@@ -475,7 +419,10 @@ class _LogRow extends StatelessWidget {
     };
     final dim = MonoStyles.small.copyWith(color: scheme.onSurfaceVariant);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.md, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.md,
+        vertical: Insets.hair,
+      ),
       child: LayoutBuilder(
         builder: (context, constraints) =>
             _cells(constraints.maxWidth, dim, color, semantic),

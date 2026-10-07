@@ -68,32 +68,10 @@ class _StoresTabViewState extends ConsumerState<StoresTabView> {
         }
       },
     );
-    final theme = Theme.of(context);
-    // Under a page that already names it (the phone's More), no second title.
-    final untitled = PaneTitleOverride.maybeOf(context) != null;
-    return Scaffold(
-      appBar: untitled
-          ? null
-          : AppBar(
-              toolbarHeight: 44,
-              // A workbench tab: an implied back button would pop the app's
-              // route.
-              automaticallyImplyLeading: false,
-              title: Row(
-                children: [
-                  Icon(AppIcons.package, color: theme.colorScheme.tertiary),
-                  const SizedBox(width: Insets.sm),
-                  const Flexible(
-                    child: Text(
-                      'Stores',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-      body: const _StoresBody(),
+    return const WorkbenchTabScaffold(
+      icon: AppIcons.package,
+      title: 'Stores',
+      body: _StoresBody(),
     );
   }
 }
