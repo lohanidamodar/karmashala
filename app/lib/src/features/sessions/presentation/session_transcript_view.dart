@@ -56,7 +56,7 @@ import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 import '../application/session_turn_interrupt.dart';
 import 'package:agent_cli/descriptors.dart'
-    show AgentActivityStatus, AgentStatusReport;
+    show AgentActivityStatus, AgentStatusReport, AgentWorkingDetail;
 import '../application/session_ui_providers.dart';
 import '../../media/application/session_media_providers.dart'
     show sessionImageFetchProvider;
@@ -574,10 +574,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       final report = next.asData?.value;
       if (report?.turnStatus != AgentActivityStatus.working) return;
       final working = report!.working;
-      if (working?.since != _turnSince) {
-        _turnSince = working?.since;
+      final since = working?.since;
+      final kept = _turnSince;
+      // A new turn, not the same start read a second apart.
+      if (since != null &&
+          (kept == null ||
+              since.difference(kept).abs() > AgentWorkingDetail.sinceSlack)) {
         _turnTokens = null;
       }
+      _turnSince = since ?? kept;
       _turnTokens = working?.tokens ?? _turnTokens;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {

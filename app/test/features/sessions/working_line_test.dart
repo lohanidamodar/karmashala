@@ -579,6 +579,18 @@ void main() {
       await tester.pump();
       expect(find.text('Crunching…'), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-turn-footer')), findsNothing);
+      // The same start read a second later, while the line shows no count:
+      // the count it showed stays the turn's.
+      statuses.add(
+        report(
+          working: AgentWorkingDetail(
+            word: 'Crunching…',
+            since: issued.add(const Duration(seconds: 1)),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
       statuses.add(
         report(
