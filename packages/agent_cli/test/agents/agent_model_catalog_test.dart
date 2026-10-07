@@ -70,6 +70,45 @@ void main() {
     });
   });
 
+  group('the catalogue a session is labelled from', () {
+    const registry = AgentRegistry.builtIn;
+    final listed = parseClaudeModelList(
+      '{"type":"control_response","response":{"subtype":"success",'
+      '"request_id":"karmashala-models","response":{"models":['
+      '{"value":"opus","displayName":"Opus 5.5",'
+      '"resolvedModel":"claude-opus-5-5"}]}}}',
+    )!;
+
+    AgentModelSupport catalogueOf(String agentId) => registry
+        .byId(registry.modelCatalogueIdOf(agentId))!
+        .launch
+        .model
+        .withModels(listed);
+
+    for (final agentId in [AgentIds.claudeCode, AgentIds.claudeAcp]) {
+      test('$agentId finds the model its agent reports by its resolved id', () {
+        expect(
+          catalogueOf(agentId).modelFor('claude-opus-5-5')?.label,
+          'Opus 5.5',
+        );
+        expect(catalogueOf(agentId).modelFor('opus')?.label, 'Opus 5.5');
+      });
+    }
+
+    test("a chat form that lists no models of its own reads its terminal "
+        "form's, which runs the same program", () {
+      expect(
+        registry.modelCatalogueIdOf(AgentIds.claudeAcp),
+        AgentIds.claudeCode,
+      );
+      expect(
+        registry.modelCatalogueIdOf(AgentIds.claudeCode),
+        AgentIds.claudeCode,
+      );
+      expect(registry.modelCatalogueIdOf('nobody-knows'), 'nobody-knows');
+    });
+  });
+
   group('Codex models_cache.json', () {
     const cache = '''
 {"fetched_at":"2026-09-23","models":[

@@ -114,6 +114,19 @@ class AgentRegistry {
     ];
   }
 
+  /// The agent whose model list names [id]'s models: [id] itself, or for a
+  /// chat form that declares none, the terminal form running the same
+  /// program — Claude Code chat reports `claude-opus-5-5`, which only the
+  /// terminal form's list resolves.
+  String modelCatalogueIdOf(String id) {
+    final own = byId(id);
+    if (own == null || own.launch.model.isKnown) return id;
+    final terminal = own.chatFormOf;
+    return terminal != null && sameProgramFormsOf(id).contains(terminal)
+        ? terminal
+        : id;
+  }
+
   /// [installation]'s agent installed as [form] on the same machine, among
   /// [installations]; null when that form is not installed there.
   AgentInstallation? inForm(
