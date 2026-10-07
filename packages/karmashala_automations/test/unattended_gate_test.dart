@@ -45,15 +45,15 @@ void main() {
       () {
         final refusal = unattendedRefusal(input(verificationEnabled: false));
         expect(refusal?.kind, UnattendedRefusalKind.verificationDisabled);
-        expect(refusal!.reason, contains('Verification is off for app'));
-        expect(refusal.reason, contains('project check'));
+        expect(refusal!.reason, contains('Checks are off for app'));
+        expect(refusal.reason, contains('at least one'));
       },
     );
 
     test('verification on with no check at all is refused', () {
       final refusal = unattendedRefusal(input(projectCheckCount: 0));
       expect(refusal?.kind, UnattendedRefusalKind.noProjectChecks);
-      expect(refusal!.reason, contains('no project check'));
+      expect(refusal!.reason, contains('no check yet'));
     });
 
     test('one check is enough', () {
@@ -133,9 +133,9 @@ void main() {
       );
       expect(refusal?.kind, UnattendedRefusalKind.permissionModeCanPrompt);
       expect(refusal!.reason, contains('"Ask every time"'));
-      expect(refusal.reason, contains('nobody there to answer'));
+      expect(refusal.reason, contains('nobody is there to answer'));
       // Refused with its stated reason, not silently widened to something else.
-      expect(refusal.reason, contains('rather than quietly widened'));
+      expect(refusal.reason, contains('not quietly widened'));
       expect(refusal.reason, contains('default (ask each time)'));
     });
 
@@ -170,7 +170,7 @@ void main() {
         final refusal = unattendedRefusal(input(agentInstalled: false));
         expect(refusal?.kind, UnattendedRefusalKind.agentUnavailable);
         expect(refusal!.reason, contains('no longer installed'));
-        expect(refusal.reason, contains('Nothing is substituted'));
+        expect(refusal.reason, contains('Nothing is put in its place'));
       },
     );
 
@@ -179,7 +179,7 @@ void main() {
       () {
         final refusal = unattendedRefusal(input(permits: null));
         expect(refusal?.kind, UnattendedRefusalKind.permissionModeUnknown);
-        expect(refusal!.reason, contains('has not established'));
+        expect(refusal!.reason, contains('does not know which permission'));
         expect(refusal.reason, contains('Claude Code'));
       },
     );
@@ -218,7 +218,7 @@ void main() {
           refusal.reason,
           contains('No SSH connection pool is configured'),
         );
-        expect(refusal.reason, contains('cannot be armed'));
+        expect(refusal.reason, contains('cannot run a command in'));
       },
     );
   });

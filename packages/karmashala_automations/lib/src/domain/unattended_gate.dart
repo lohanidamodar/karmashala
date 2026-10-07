@@ -143,18 +143,17 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
   if (judged && !input.verificationEnabled) {
     return UnattendedRefusal(
       UnattendedRefusalKind.verificationDisabled,
-      'Verification is off for $repository. Nobody is watching an automation '
-      'run, so what it did has to be checkable without you — turn verification '
-      'on for this checkout and give it at least one project check before '
-      'arming.',
+      'Checks are off for $repository. Nobody watches an unattended run, so '
+      'what it did has to be checked without you — turn checks on for this '
+      'checkout and give it at least one.',
     );
   }
   if (judged && input.projectCheckCount <= 0) {
     return UnattendedRefusal(
       UnattendedRefusalKind.noProjectChecks,
-      '$repository has no project check. An unattended run needs at least one '
-      'command that says whether the work still stands, because there is '
-      'nobody there to look — add one before arming.',
+      '$repository has no check yet. An unattended run needs at least one '
+      'command that says whether the work still stands, because nobody is '
+      'there to look — add one first.',
     );
   }
   if (judged && !input.hasCheckStep) {
@@ -168,9 +167,9 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
   if (!input.agentInstalled) {
     return UnattendedRefusal(
       UnattendedRefusalKind.agentUnavailable,
-      '$agent is no longer installed where this automation was armed, so there '
-      'is nothing here to start. Nothing is substituted for it — reinstall it, '
-      'or arm this on an agent that is here.',
+      '$agent is no longer installed where this automation runs, so there is '
+      'nothing here to start. Nothing is put in its place — reinstall it, or '
+      'pick an agent that is here.',
     );
   }
 
@@ -178,9 +177,9 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
   if (permits == null) {
     return UnattendedRefusal(
       UnattendedRefusalKind.permissionModeUnknown,
-      'Karmashala has not established which permission modes $agent has, so it '
-      'starts under its own default and nothing here can govern it. An '
-      'automation cannot be armed on a mode nobody has established.',
+      'Karmashala does not know which permission modes $agent has, so it '
+      'would start under its own default and nothing here could keep it from '
+      'stopping to ask. Pick an agent whose modes are known.',
     );
   }
   if (permissionModeCanPrompt(permits)) {
@@ -190,9 +189,9 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
     final evidence = input.permissionEvidence.trim();
     return UnattendedRefusal(
       UnattendedRefusalKind.permissionModeCanPrompt,
-      '"$mode" stops and asks $agent\'s user before it acts, and an automation '
-      'fires with nobody there to answer. The mode is refused rather than '
-      'quietly widened — pick one of $agent\'s own modes that does not prompt.'
+      '"$mode" stops and asks $agent\'s user before it acts, and nobody is '
+      'there to answer an unattended run. It is not quietly widened — pick '
+      'one of $agent\'s own modes that does not ask.'
       '${evidence.isEmpty ? '' : ' ($evidence)'}',
     );
   }
@@ -211,8 +210,8 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
       return UnattendedRefusal(
         UnattendedRefusalKind.environmentUnreachable,
         'Karmashala cannot reach where $repository\'s agent would run'
-        '${_because(input.reachReason)}. An automation is armed here and fires '
-        'here, so a checkout this app cannot run a command in cannot be armed.',
+        '${_because(input.reachReason)}. An automation starts its agent from '
+        'here, so it cannot run in a checkout this app cannot run a command in.',
       );
   }
 }

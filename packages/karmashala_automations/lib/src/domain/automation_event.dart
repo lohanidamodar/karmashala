@@ -124,7 +124,7 @@ List<EventRuleVerdict> planAutomationEvent({
       );
     } else if (rule.repositoryId != event.repositoryId) {
       verdicts.add(
-        verdict(EventRuleOutcome.otherCheckout, 'Armed in another checkout.'),
+        verdict(EventRuleOutcome.otherCheckout, 'Set up in another checkout.'),
       );
     } else if (!rule.enabled) {
       verdicts.add(verdict(EventRuleOutcome.paused, 'Paused.'));
@@ -147,7 +147,7 @@ List<EventRuleVerdict> planAutomationEvent({
       );
     } else {
       if (!dryRun) limiter.record(rule.id, event.at);
-      verdicts.add(verdict(EventRuleOutcome.fires, 'Fires.'));
+      verdicts.add(verdict(EventRuleOutcome.fires, 'Runs.'));
     }
   }
   return verdicts;

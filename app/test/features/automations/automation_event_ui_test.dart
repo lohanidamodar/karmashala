@@ -169,12 +169,12 @@ void main() {
     );
     await pump(tester, AutomationDryRunDialog(automation: eventRule()));
 
-    expect(find.text('Would fire · Keep going'), findsOneWidget);
+    expect(find.text('Would run · Keep going'), findsOneWidget);
     expect(
       find.text('Would send "run the tests" to "that session".'),
       findsOneWidget,
     );
-    expect(find.text('Would not fire · Asleep'), findsOneWidget);
+    expect(find.text('Would not run · Asleep'), findsOneWidget);
     expect(find.text('Paused.'), findsOneWidget);
 
     // Against a real session, by its title.

@@ -646,7 +646,7 @@ void main() {
       await startDaemon();
       final run = await automations.runNow('auto-r1');
       expect(run.state, AutomationRunState.failed);
-      expect(run.reason, contains('Verification is off'));
+      expect(run.reason, contains('Checks are off'));
       expect(launcher.started, isEmpty);
     });
 

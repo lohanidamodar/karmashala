@@ -78,7 +78,7 @@ class UnattendedPreflight {
       agentName:
           descriptor?.displayName ??
           installation?.agentId ??
-          'the agent this automation was armed on',
+          'the agent this automation was set up with',
       agentInstalled: installation != null,
       permits: support?.riskOf(selection),
       permissionLabel: support == null

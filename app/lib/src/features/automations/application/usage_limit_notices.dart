@@ -82,7 +82,7 @@ class UsageLimitNotices extends Notifier<int> {
       case UsageLimitOutcome.refused:
         _offer(
           notice,
-          refusal: notice.refusal ?? 'the unattended gate said no',
+          refusal: notice.refusal ?? 'it could not run unattended',
         );
       case UsageLimitOutcome.scheduled || UsageLimitOutcome.renewed:
         final fireAt = notice.resumeFireAt;

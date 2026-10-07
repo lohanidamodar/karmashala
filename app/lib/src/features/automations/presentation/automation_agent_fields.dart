@@ -83,7 +83,7 @@ class AutomationPermissionModeField extends StatelessWidget {
       decoration: const InputDecoration(
         labelText: 'Permission mode',
         helperText:
-            'A mode that stops to ask is refused: nobody would be '
+            'A mode that stops to ask cannot run unattended: nobody would be '
             'there to answer.',
       ),
       items: [

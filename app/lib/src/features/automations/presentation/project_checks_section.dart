@@ -21,12 +21,13 @@ class ProjectChecksSection extends ConsumerWidget {
     final repositories = ref.watch(workspaceDataProvider).repositories;
 
     return SettingsSection(
-      title: 'VERIFICATION AND PROJECT CHECKS',
+      title: 'CHECKS FOR UNATTENDED RUNS',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SettingsNote(
-            'Automations need verification on and at least one check.',
+            'An agent that may change files runs unattended only where checks '
+            'are on and there is at least one.',
           ),
           if (repositories.isEmpty)
             const SettingsNote('No checkouts have been scanned yet.')
@@ -72,7 +73,7 @@ class _CheckoutChecks extends ConsumerWidget {
                 ),
               ),
               Semantics(
-                label: 'Verify ${repository.name}',
+                label: 'Checks on for ${repository.name}',
                 child: Switch(
                   value: enabled,
                   onChanged: (value) => ref
@@ -84,8 +85,8 @@ class _CheckoutChecks extends ConsumerWidget {
           ),
           if (checks.isEmpty)
             Text(
-              'No check yet. An automation cannot be armed here until there '
-              'is one.',
+              'No check yet. An agent that may change files cannot run '
+              'unattended here until there is one.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),

@@ -93,7 +93,7 @@ class AutomationRunner implements AutomationFiring {
     if (repository == null || installation == null) {
       settle(
         AutomationRunState.failed,
-        'The checkout or the agent went away between the gate and the launch.',
+        'The checkout or the agent went away just before the run started.',
       );
       return run;
     }

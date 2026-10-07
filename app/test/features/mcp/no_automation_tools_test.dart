@@ -28,7 +28,7 @@ void main() {
       reason:
           'arming, running, pausing or deleting an automation from a tool lets '
           'an agent schedule an agent. It is a human action in the UI '
-          '(Settings → Automations) and nowhere else.',
+          '(the Automations tab) and nowhere else.',
     );
   });
 
