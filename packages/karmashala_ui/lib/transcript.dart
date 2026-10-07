@@ -6,6 +6,7 @@ export 'src/transcript/markdown_message.dart';
 export 'src/transcript/ansi_text.dart';
 export 'src/transcript/code_block.dart';
 export 'src/transcript/delimited_table.dart';
+export 'src/transcript/fence_visuals.dart';
 export 'src/transcript/json_tree.dart';
 export 'src/transcript/message_boundary.dart';
 export 'src/transcript/numbered_code.dart';

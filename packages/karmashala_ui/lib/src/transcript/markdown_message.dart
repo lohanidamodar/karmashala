@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../code/code_spans.dart';
@@ -9,6 +10,7 @@ import '../diagram/mermaid_fences.dart';
 import '../diagram/mermaid_view.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'code_block.dart';
+import 'fence_visuals.dart';
 import 'transcript_selection.dart';
 
 /// What tells a link this app made out of a bare path from one the author
@@ -112,8 +114,11 @@ class MarkdownMessage extends StatelessWidget {
           highlight: highlight,
           wrap: UiDensity.of(context).isTouch,
         ),
+        'math': _MathBuilder(),
       },
-      inlineSyntaxes: onPathTap == null ? null : kPathLinkSyntaxes,
+      inlineSyntaxes: onPathTap == null
+          ? _mathSyntaxes
+          : [..._mathSyntaxes, ...kPathLinkSyntaxes],
       onTapLink: (text, href, title) {
         if (href == null) return;
         if (title == kPathLinkTitle) {
@@ -269,15 +274,70 @@ class _CodeBlockBuilder extends MarkdownElementBuilder {
         .where((name) => name.startsWith('language-'))
         .firstOrNull
         ?.substring('language-'.length);
+    final visual = fenceVisualFor(language, source);
     return SizedBox(
       width: double.infinity,
-      child: CodeBlock(
-        source: source,
-        language: language,
-        wrap: wrap,
-        highlight: highlight,
-      ),
+      child: visual == null
+          ? CodeBlock(
+              source: source,
+              language: language,
+              wrap: wrap,
+              highlight: highlight,
+            )
+          : VisualFenceBlock(
+              visual: visual,
+              source: source,
+              language: language,
+            ),
     );
+  }
+}
+
+/// `$…$` inline and `$$…$$` display math. A `$` must hug its text on both
+/// sides and the closing one must not run into a digit, so "$5 and $10" stays
+/// prose.
+class _MathSyntax extends md.InlineSyntax {
+  _MathSyntax()
+    : super(r'\$\$([^$]+?)\$\$|\$(?=[^\s$])([^$\n]+?)(?<=[^\s$])\$(?!\d)');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final display = match[1] != null;
+    parser.addNode(
+      md.Element.text('math', (match[1] ?? match[2])!.trim())
+        ..attributes['display'] = '$display',
+    );
+    return true;
+  }
+}
+
+final List<md.InlineSyntax> _mathSyntaxes = <md.InlineSyntax>[_MathSyntax()];
+
+/// A `math` element as TeX: a block of its own when display, inline otherwise.
+/// What will not parse stays as the text the author wrote.
+class _MathBuilder extends MarkdownElementBuilder {
+  @override
+  Widget? visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final tex = element.textContent;
+    final display = element.attributes['display'] == 'true';
+    final style = (parentStyle ?? preferredStyle ?? const TextStyle()).copyWith(
+      color: Theme.of(context).colorScheme.onSurface,
+    );
+    final math = Math.tex(
+      tex,
+      mathStyle: display ? MathStyle.display : MathStyle.text,
+      textStyle: style,
+      onErrorFallback: (_) =>
+          Text(display ? '\$\$$tex\$\$' : '\$$tex\$', style: style),
+    );
+    return display
+        ? SingleChildScrollView(scrollDirection: Axis.horizontal, child: math)
+        : math;
   }
 }
 

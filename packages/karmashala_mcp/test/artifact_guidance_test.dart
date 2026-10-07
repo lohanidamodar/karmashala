@@ -9,6 +9,12 @@ void main() {
     expect(kKarmashalaMcpInstructions, contains('artifact_show'));
   });
 
+  test('the server instructions say what the chat draws inline', () {
+    for (final fence in ['mermaid', 'chart', 'diff', 'json', 'ansi', r'$$']) {
+      expect(kKarmashalaMcpInstructions, contains(fence));
+    }
+  });
+
   test('showing and updating an artifact need no grant', () {
     expect(mcpToolNeedsOperatorGrant('artifact_show'), isFalse);
     expect(mcpToolNeedsOperatorGrant('artifact_update'), isFalse);

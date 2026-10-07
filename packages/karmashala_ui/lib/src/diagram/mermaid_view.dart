@@ -73,8 +73,50 @@ class _MermaidBlockState extends State<MermaidBlock> {
     if (old.source != widget.source) _parse = parseMermaid(widget.source);
   }
 
-  bool get _drawable =>
-      _parse is MermaidFlowchart || _parse is MermaidSequence;
+  bool get _drawable => _parse is MermaidFlowchart || _parse is MermaidSequence;
+
+  /// The diagram on the whole screen, to pinch, wheel and drag around.
+  Future<void> _openZoom() => showDialog<void>(
+    context: context,
+    builder: (context) => Dialog.fullscreen(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Close',
+                  icon: const Icon(AppIcons.x),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                const SizedBox(width: Insets.xs),
+                Expanded(
+                  child: Text(
+                    'Mermaid diagram',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: InteractiveViewer(
+                key: const ValueKey('mermaid-zoom-view'),
+                constrained: false,
+                boundaryMargin: const EdgeInsets.all(Insets.xxl * 4),
+                minScale: 0.25,
+                maxScale: 4,
+                child: Padding(
+                  padding: const EdgeInsets.all(Insets.xl),
+                  child: MermaidDiagramView(_parse),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +138,9 @@ class _MermaidBlockState extends State<MermaidBlock> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: dark ? scheme.surfaceContainerLowest : scheme.surfaceContainerLow,
+        color: dark
+            ? scheme.surfaceContainerLowest
+            : scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(color: scheme.outlineVariant),
       ),
@@ -117,6 +161,14 @@ class _MermaidBlockState extends State<MermaidBlock> {
                     ),
                   ),
                 ),
+                if (_drawable && !_showSource)
+                  IconButton(
+                    key: const ValueKey('mermaid-zoom'),
+                    tooltip: 'Zoom and pan',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(AppIcons.magnifyingGlassPlus),
+                    onPressed: _openZoom,
+                  ),
                 if (_drawable)
                   IconButton(
                     key: const ValueKey('mermaid-toggle'),
@@ -272,7 +324,8 @@ class _FlowchartPicture extends _Picture {
               : _text(e.label!, style, scaler, maxWidth: 160),
       ] {
     final sizes = {
-      for (final n in chart.nodes) n.id: _nodeSize(n.shape, _labels[n.id]!.size),
+      for (final n in chart.nodes)
+        n.id: _nodeSize(n.shape, _labels[n.id]!.size),
     };
     _layout = layoutFlowchart(chart, sizes);
   }
@@ -286,10 +339,8 @@ class _FlowchartPicture extends _Picture {
   static const _pad = 4.0;
 
   @override
-  Size get size => Size(
-    _layout.size.width + _pad * 2,
-    _layout.size.height + _pad * 2,
-  );
+  Size get size =>
+      Size(_layout.size.width + _pad * 2, _layout.size.height + _pad * 2);
 
   static Size _nodeSize(MermaidShape shape, Size text) {
     final w = text.width + 24;
@@ -312,21 +363,24 @@ class _FlowchartPicture extends _Picture {
         ..color = colors.line
         ..style = PaintingStyle.stroke
         ..strokeWidth = edge.line == MermaidLine.thick ? 2.5 : 1.2;
-      _paintLine(
-        canvas,
-        route,
-        paint,
-        dashed: edge.line == MermaidLine.dotted,
-      );
+      _paintLine(canvas, route, paint, dashed: edge.line == MermaidLine.dotted);
       if (edge.arrow && route.length >= 2) {
-        _paintArrowHead(canvas, route.last, route[route.length - 2], colors.line);
+        _paintArrowHead(
+          canvas,
+          route.last,
+          route[route.length - 2],
+          colors.line,
+        );
       }
     }
     for (final node in chart.nodes) {
       final box = _layout.nodes[node.id]!;
       _paintShape(canvas, node.shape, box);
       final label = _labels[node.id]!;
-      label.paint(canvas, box.center - Offset(label.width / 2, label.height / 2));
+      label.paint(
+        canvas,
+        box.center - Offset(label.width / 2, label.height / 2),
+      );
     }
     for (final (i, label) in _edgeLabels.indexed) {
       if (label == null) continue;
@@ -358,24 +412,49 @@ class _FlowchartPicture extends _Picture {
 
     switch (shape) {
       case MermaidShape.rect:
-        both(Path()..addRRect(RRect.fromRectAndRadius(r, const Radius.circular(3))));
+        both(
+          Path()
+            ..addRRect(RRect.fromRectAndRadius(r, const Radius.circular(3))),
+        );
       case MermaidShape.round:
-        both(Path()..addRRect(RRect.fromRectAndRadius(r, const Radius.circular(10))));
+        both(
+          Path()
+            ..addRRect(RRect.fromRectAndRadius(r, const Radius.circular(10))),
+        );
       case MermaidShape.stadium:
-        both(Path()..addRRect(RRect.fromRectAndRadius(r, Radius.circular(r.height / 2))));
+        both(
+          Path()..addRRect(
+            RRect.fromRectAndRadius(r, Radius.circular(r.height / 2)),
+          ),
+        );
       case MermaidShape.subroutine:
         both(Path()..addRect(r));
         canvas
-          ..drawLine(r.topLeft.translate(7, 0), r.bottomLeft.translate(7, 0), stroke)
-          ..drawLine(r.topRight.translate(-7, 0), r.bottomRight.translate(-7, 0), stroke);
+          ..drawLine(
+            r.topLeft.translate(7, 0),
+            r.bottomLeft.translate(7, 0),
+            stroke,
+          )
+          ..drawLine(
+            r.topRight.translate(-7, 0),
+            r.bottomRight.translate(-7, 0),
+            stroke,
+          );
       case MermaidShape.cylinder:
         const lip = 6.0;
         both(
           Path()
-            ..addRect(Rect.fromLTRB(r.left, r.top + lip, r.right, r.bottom - lip))
-            ..addOval(Rect.fromLTRB(r.left, r.bottom - lip * 2, r.right, r.bottom)),
+            ..addRect(
+              Rect.fromLTRB(r.left, r.top + lip, r.right, r.bottom - lip),
+            )
+            ..addOval(
+              Rect.fromLTRB(r.left, r.bottom - lip * 2, r.right, r.bottom),
+            ),
         );
-        both(Path()..addOval(Rect.fromLTRB(r.left, r.top, r.right, r.top + lip * 2)));
+        both(
+          Path()
+            ..addOval(Rect.fromLTRB(r.left, r.top, r.right, r.top + lip * 2)),
+        );
       case MermaidShape.circle:
         both(Path()..addOval(r));
       case MermaidShape.diamond:
@@ -462,9 +541,7 @@ class _SequencePicture extends _Picture {
     _heads = [for (final p in seq.participants) _text(p.label, style, scaler)];
     _headHeight = _heads.map((h) => h.height).fold(0.0, math.max) + 16;
     final widths = [for (final h in _heads) math.max(80.0, h.width + 24)];
-    final order = {
-      for (final (i, p) in seq.participants.indexed) p.id: i,
-    };
+    final order = {for (final (i, p) in seq.participants.indexed) p.id: i};
     final gaps = List.filled(math.max(0, widths.length - 1), 0.0);
     for (var i = 0; i < gaps.length; i++) {
       gaps[i] = (widths[i] + widths[i + 1]) / 2 + 32;
@@ -637,10 +714,7 @@ class _SequencePicture extends _Picture {
         case MermaidBlockEnd():
           if (frames.isNotEmpty) {
             final start = frames.removeLast();
-            canvas.drawRect(
-              Rect.fromLTRB(left, start, right, y + 4),
-              stroke,
-            );
+            canvas.drawRect(Rect.fromLTRB(left, start, right, y + 4), stroke);
           }
       }
       y += height;
