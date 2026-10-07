@@ -39,7 +39,8 @@ class OverviewCounters extends ConsumerWidget {
           _CounterChip(
             counter: counter,
             count: count(counter),
-            caption: counter == OverviewCounter.needsYou &&
+            caption:
+                counter == OverviewCounter.needsYou &&
                     wait != null &&
                     strip.needsYou > 0
                 ? 'oldest ${compactAge(wait)}'
@@ -95,7 +96,9 @@ class _CounterChip extends StatelessWidget {
         '${counter.label[0].toUpperCase()}${counter.label.substring(1)}, '
             '$count',
         ?caption,
-        selected ? 'showing only these; tap to show all' : 'tap to show only these',
+        selected
+            ? 'showing only these; tap to show all'
+            : 'tap to show only these',
       ].join(', '),
       excludeSemantics: true,
       child: Material(

@@ -52,7 +52,9 @@ class OverviewCardFrame extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: BorderSide(
-          color: selected ? scheme.primary : overviewCardEdge(context, card.state),
+          color: selected
+              ? scheme.primary
+              : overviewCardEdge(context, card.state),
           width: selected ? StateLayers.focusRingWidth * 2 : 1,
         ),
       ),
@@ -60,10 +62,7 @@ class OverviewCardFrame extends ConsumerWidget {
       child: InkWell(
         borderRadius: radius,
         onTap: onOpen == null ? null : () => onOpen!(card),
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.md),
-          child: child,
-        ),
+        child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
       ),
     );
   }
@@ -116,9 +115,7 @@ class OverviewCardHeader extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  parent != null
-                      ? '↳ from $parent'
-                      : place,
+                  parent != null ? '↳ from $parent' : place,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -168,7 +165,6 @@ class OverviewWorkCard extends ConsumerWidget {
     ),
   );
 }
-
 
 /// One session that ended today, as a line.
 class OverviewDoneRow extends ConsumerWidget {

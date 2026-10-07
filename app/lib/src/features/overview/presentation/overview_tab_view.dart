@@ -21,6 +21,7 @@ import 'overview_hybrid.dart';
 import 'overview_peek.dart';
 import 'overview_queue_card.dart';
 import 'overview_triage.dart';
+import '../../sessions/presentation/new_session_dialog.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
@@ -51,12 +52,61 @@ class OverviewTabView extends ConsumerWidget {
           onChanged: ref.read(overviewPrefsProvider.notifier).setView,
         ),
       ],
-      actions: [if (view == OverviewView.board) const OverviewFilterButton()],
+      actions: [
+        const _NewSessionButton(),
+        if (view == OverviewView.board) const OverviewFilterButton(),
+      ],
       body: switch (view) {
         OverviewView.board => const _BoardBody(),
         OverviewView.timeline => const _TimelineBody(),
       },
     );
+  }
+}
+
+/// **New session**, from here: the app's own dialog, in chat form where the
+/// agent has one, kept here — started at the server, no tab, its card picked
+/// and peeked — unless the person unticks it, which this device remembers.
+class _NewSessionButton extends ConsumerWidget {
+  const _NewSessionButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void start() {
+      final prefs = ref.read(overviewPrefsProvider.notifier);
+      final focus = ref.read(overviewFocusProvider.notifier);
+      unawaited(
+        NewSessionDialog.show(
+          context,
+          keepHere: ref.read(overviewPrefsProvider).newSessionKeepsHere,
+          preferChat: true,
+          onStarted: (session, {required keptHere}) {
+            prefs.setNewSessionKeepsHere(keptHere);
+            if (keptHere) {
+              ref
+                  .read(overviewPrefsProvider.notifier)
+                  .setView(OverviewView.board);
+              focus.peek(session.id);
+            }
+          },
+        ),
+      );
+    }
+
+    final narrow = MediaQuery.sizeOf(context).width < WidthClass.mediumMin;
+    return narrow
+        ? IconButton(
+            key: const ValueKey('overview-new-session'),
+            tooltip: 'New session',
+            onPressed: start,
+            icon: const Icon(AppIcons.plus),
+          )
+        : TextButton.icon(
+            key: const ValueKey('overview-new-session'),
+            onPressed: start,
+            icon: const Icon(AppIcons.plus),
+            label: const Text('New session'),
+          );
   }
 }
 
@@ -193,15 +243,27 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     bool editing = false,
     OverviewPeekTab tab = OverviewPeekTab.chat,
   }) {
-    final focus = ref.read(overviewFocusProvider.notifier);
-    final wasOpen = ref.read(overviewFocusProvider).peeked != null;
-    focus.peek(card.id, editing: editing, tab: tab);
+    ref
+        .read(overviewFocusProvider.notifier)
+        .peek(card.id, editing: editing, tab: tab);
     if (!_inSheet) {
       _focus.requestFocus();
       return;
     }
-    // One sheet at a time: a sub-session opened from the sheet replaces it.
-    if (wasOpen) return;
+    _showSheet(card);
+  }
+
+  var _sheetOpen = false;
+
+  /// A peek asked for from outside the board — New session's — before its
+  /// card was on the board, for the phone's sheet to open on once it is.
+  String? _pendingSheet;
+
+  /// The phone's peek: one sheet at a time, following the peeked session, so
+  /// a sub-session opened from it replaces what it shows.
+  void _showSheet(OverviewCard card) {
+    if (_sheetOpen) return;
+    _sheetOpen = true;
     unawaited(
       showModalBottomSheet<void>(
         context: context,
@@ -222,9 +284,24 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           },
         ),
       ).whenComplete(() {
+        _sheetOpen = false;
         if (mounted) ref.read(overviewFocusProvider.notifier).closePeek();
       }),
     );
+  }
+
+  /// Opens the phone's sheet for a peek asked for from outside the board.
+  void _followPeek(String? id) {
+    if (id == null || !_inSheet || _sheetOpen) return;
+    final card = overviewCardOf(ref.read(overviewBoardProvider), id);
+    if (card == null) {
+      _pendingSheet = id;
+      return;
+    }
+    _pendingSheet = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showSheet(card);
+    });
   }
 
   /// Shows [id]: in the peek when one is open, else as the selection.
@@ -392,7 +469,19 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   };
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
+  Widget build(BuildContext context) {
+    ref.listen(
+      overviewFocusProvider.select((f) => f.peeked),
+      (_, next) => _followPeek(next),
+    );
+    if (_pendingSheet case final id?) {
+      ref.watch(overviewBoardProvider);
+      _followPeek(id);
+    }
+    return _laidOut();
+  }
+
+  Widget _laidOut() => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.maxWidth;
       _mode = overviewPeekModeAt(width);

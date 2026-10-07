@@ -31,8 +31,7 @@ List<(OverviewLane, List<OverviewCard>)> overviewWorkGroupsOf(
   OverviewBoard board,
 ) => [
   for (final lane in board.lanes)
-    if (lane.cards(BoardColumn.working) case final cards
-        when cards.isNotEmpty)
+    if (lane.cards(BoardColumn.working) case final cards when cards.isNotEmpty)
       (lane, byUrgency(cards)),
 ];
 
@@ -60,9 +59,8 @@ OverviewSections overviewSectionsOf(
   return (
     queue: queue,
     work: [for (final (_, cards) in overviewWorkGroupsOf(board)) ...cards],
-    ready: [
-      for (final lane in board.lanes) ...lane.cards(BoardColumn.ready),
-    ]..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt)),
+    ready: [for (final lane in board.lanes) ...lane.cards(BoardColumn.ready)]
+      ..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt)),
     done: done,
   );
 }

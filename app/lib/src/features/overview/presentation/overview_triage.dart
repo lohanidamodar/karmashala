@@ -84,8 +84,9 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
   ),
   const SingleActivator(LogicalKeyboardKey.keyT):
       const OverviewTerminalIntent(),
-  const SingleActivator(LogicalKeyboardKey.arrowDown):
-      const OverviewMoveIntent(down: true),
+  const SingleActivator(LogicalKeyboardKey.arrowDown): const OverviewMoveIntent(
+    down: true,
+  ),
   const SingleActivator(LogicalKeyboardKey.keyJ): const OverviewMoveIntent(
     down: true,
   ),

@@ -149,10 +149,7 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
           if (editing && card.column == BoardColumn.needsYou)
             Padding(
               padding: const EdgeInsets.all(Insets.md),
-              child: BoardEditCommand(
-                sessionId: id,
-                onDone: focus.stopEditing,
-              ),
+              child: BoardEditCommand(sessionId: id, onDone: focus.stopEditing),
             ),
           Expanded(
             child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
@@ -202,22 +199,22 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
               child: SizedBox(
                 width: double.infinity,
                 child: CompactSegmented<OverviewPeekTab>(
-                    key: const ValueKey('overview-peek-tabs'),
-                    segments: [
-                      for (final t in tabs)
-                        ButtonSegment(
-                          value: t,
-                          label: Text(
-                            label(t),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            key: ValueKey('overview-peek-tab:${t.name}'),
-                          ),
+                  key: const ValueKey('overview-peek-tabs'),
+                  segments: [
+                    for (final t in tabs)
+                      ButtonSegment(
+                        value: t,
+                        label: Text(
+                          label(t),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          key: ValueKey('overview-peek-tab:${t.name}'),
                         ),
-                    ],
-                    selected: tab,
-                    onChanged: focus.showTab,
-                  ),
+                      ),
+                  ],
+                  selected: tab,
+                  onChanged: focus.showTab,
+                ),
               ),
             ),
             const Divider(height: 1),
@@ -271,7 +268,12 @@ class _PeekHeader extends ConsumerWidget {
         ? null
         : overviewCardOf(ref.watch(overviewBoardProvider), parentId);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.xs, Insets.sm),
+      padding: const EdgeInsets.fromLTRB(
+        Insets.md,
+        Insets.sm,
+        Insets.xs,
+        Insets.sm,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -588,10 +590,7 @@ class _PeekSubSession extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        OverviewSubSessionRow(
-          card: card,
-          onOpen: (c) => onTap?.call(c),
-        ),
+        OverviewSubSessionRow(card: card, onOpen: (c) => onTap?.call(c)),
         Padding(
           padding: const EdgeInsets.only(
             left: Insets.lg + Insets.xs,

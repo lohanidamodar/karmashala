@@ -139,8 +139,16 @@ class OverviewAgentRing extends ConsumerWidget {
         ),
         alignment: Alignment.center,
         child: agentId == null
-            ? Icon(AppIcons.robot, size: size / 2, color: scheme.onSurfaceVariant)
-            : AgentLogo(agentId: agentId, size: size / 2, color: scheme.onSurface),
+            ? Icon(
+                AppIcons.robot,
+                size: size / 2,
+                color: scheme.onSurfaceVariant,
+              )
+            : AgentLogo(
+                agentId: agentId,
+                size: size / 2,
+                color: scheme.onSurface,
+              ),
       ),
     );
   }
@@ -274,7 +282,9 @@ class _OverviewActivityLineState extends ConsumerState<OverviewActivityLine> {
                 maxLines: widget.maxLines,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: urgent ? overviewStateColor(context, card.state) : null,
+                  color: urgent
+                      ? overviewStateColor(context, card.state)
+                      : null,
                 ),
               ),
             ),
@@ -289,9 +299,7 @@ class _OverviewActivityLineState extends ConsumerState<OverviewActivityLine> {
                   borderRadius: BorderRadius.circular(Radii.sm),
                   onTap: () => setState(() => _open = !_open),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Insets.xs,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -356,7 +364,9 @@ class OverviewPlanLine extends StatelessWidget {
     final muted = theme.colorScheme.onSurfaceVariant;
     final done = plan.isFinished;
     final step = plan.current?.text;
-    final words = done ? 'Plan done' : step ?? 'Plan ${plan.doneCount}/${plan.total} done';
+    final words = done
+        ? 'Plan done'
+        : step ?? 'Plan ${plan.doneCount}/${plan.total} done';
     return Semantics(
       label: 'Plan: ${plan.doneCount} of ${plan.total} done. $words',
       excludeSemantics: true,
@@ -402,4 +412,3 @@ class OverviewPlanLine extends StatelessWidget {
     );
   }
 }
-

@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/overview/application/overview_reads.dart
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_done_card.dart';
+import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:karmashala_session/delivery.dart'
     show DeliveryAction, OfferedAction;
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
@@ -567,6 +568,41 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
       expect(again.read(overviewSeenProvider)['s1'], at);
+    });
+  });
+
+  group('New session', () {
+    testWidgets('opens the app\'s dialog, kept here and in chat form', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      await tester.tap(find.byKey(const ValueKey('overview-new-session')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final dialog = tester.widget<NewSessionDialog>(
+        find.byType(NewSessionDialog),
+      );
+      expect(dialog.keepHere, isTrue);
+      expect(dialog.preferChat, isTrue);
+
+      // Kept here: its card is picked and peeked, and nothing else opens.
+      final started = MissionFixture().entry(
+        MissionFixture.realisticSessions().firstWhere((s) => s.id == 'ks-r30'),
+      );
+      dialog.onStarted!(started.native!, keptHere: true);
+      await tester.pump();
+      expect(c.read(overviewFocusProvider).peeked, 'ks-r30');
+      expect(c.read(overviewFocusProvider).selected, 'ks-r30');
+      expect(c.read(overviewPrefsProvider).newSessionKeepsHere, isTrue);
+
+      // Unticked: today's behaviour, and the choice is remembered.
+      c.read(overviewFocusProvider.notifier).closePeek();
+      dialog.onStarted!(started.native!, keptHere: false);
+      await tester.pump();
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(c.read(overviewPrefsProvider).newSessionKeepsHere, isFalse);
+      await unmountMission(tester);
     });
   });
 

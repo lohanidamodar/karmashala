@@ -61,7 +61,12 @@ class LastAnswer {
 /// One call or background run a session has open, as the Overview words it.
 @immutable
 class OverviewOpenCall {
-  const OverviewOpenCall({this.phrase, this.raw, this.since, this.background = false});
+  const OverviewOpenCall({
+    this.phrase,
+    this.raw,
+    this.since,
+    this.background = false,
+  });
 
   /// What it is doing in words; null when only its command says.
   final String? phrase;
@@ -282,7 +287,9 @@ class OverviewReader {
           .read(serverTranscriptsProvider)
           .glance(sessionId)
           .timeout(kOverviewReadTimeout);
-      return page.absence == null ? overviewGlanceOf(page) : OverviewGlance.empty;
+      return page.absence == null
+          ? overviewGlanceOf(page)
+          : OverviewGlance.empty;
     } on Object {
       return null;
     }

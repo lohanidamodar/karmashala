@@ -48,7 +48,9 @@ OverviewAskKind overviewAskKind(OverviewCard card, AgentStatusReport? report) {
 String overviewMachineAndBranch(WidgetRef ref, OverviewCard card) {
   final directory = card.entry.directory;
   if (directory == null) return '';
-  final machine = ref.watch(environmentLabelForIdProvider(directory.environmentId));
+  final machine = ref.watch(
+    environmentLabelForIdProvider(directory.environmentId),
+  );
   final branch = ref.watch(overviewKnownBranchProvider(directory));
   return [machine, if (branch != null) 'branch $branch'].join(' · ');
 }
@@ -178,7 +180,8 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
             children: [
               OutlinedButton(
                 key: ValueKey('overview-answer-terminal:${card.id}'),
-                onPressed: () => (widget.onTerminal ??
+                onPressed: () =>
+                    (widget.onTerminal ??
                     (c) => openSessionTerminal(ref, c.id))(card),
                 child: const Text('Answer in terminal'),
               ),
@@ -205,9 +208,7 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
             sessionId: card.id,
             board: true,
             where: overviewMachineAndBranch(ref, card),
-            onEdit: widget.onEdit == null
-                ? null
-                : () => widget.onEdit!(card),
+            onEdit: widget.onEdit == null ? null : () => widget.onEdit!(card),
             onReplyInWords: () => setState(() => _replying = !_replying),
             questionController: widget.questionController,
             onAnswered: widget.onAnswered == null

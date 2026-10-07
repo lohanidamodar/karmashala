@@ -104,7 +104,11 @@ class OverviewMetaLine extends ConsumerWidget {
     final step = plan == null || plan.total == 0
         ? null
         : '${plan.doneCount}/${plan.total}'
-              '${plan.isFinished ? ' · done' : plan.current == null ? '' : ' · ${plan.current!.text}'}';
+              '${plan.isFinished
+                  ? ' · done'
+                  : plan.current == null
+                  ? ''
+                  : ' · ${plan.current!.text}'}';
     final diff = <InlineSpan>[
       if (added != null)
         TextSpan(
@@ -136,8 +140,7 @@ class OverviewMetaLine extends ConsumerWidget {
               style: muted,
             ),
           ),
-        if (step != null && diff.isNotEmpty)
-          const SizedBox(width: Insets.md),
+        if (step != null && diff.isNotEmpty) const SizedBox(width: Insets.md),
         if (diff.isNotEmpty)
           Text.rich(
             TextSpan(children: diff),
