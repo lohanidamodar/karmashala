@@ -208,6 +208,9 @@ class AcpSessionRuntime implements ScreenSession {
   List<AvailableCommand>? _commands;
   UsageUpdate? _latestUsage;
   UsageUpdate? _turnUsage;
+
+  /// When the turn running now began: its prompt, or the agent starting one.
+  DateTime? _turnSince;
   String? _agentSessionId;
   Future<StopReason>? _turn;
   Completer<StopReason?>? _turnSettled;
@@ -433,6 +436,7 @@ class AcpSessionRuntime implements ScreenSession {
     final (prompt, notice) = _promptOf(text);
     _writer.user(text);
     host.checkpointPrompt(sessionId, text);
+    _turnSince = _now();
     _publish(AgentActivityStatus.working, detail: AcpMethods.sessionPrompt);
     final settled = _turnSettled = Completer<StopReason?>();
     final turn = _turn = client.prompt(agent, prompt);
@@ -791,6 +795,7 @@ class AcpSessionRuntime implements ScreenSession {
     _writer.turnEnded();
     _usageTurnEnded();
     if (identical(_turn, turn)) _turn = null;
+    _turnSince = _agentWorking ? _now() : null;
     _resolvePending(const PermissionOutcome.cancelled());
     if (failure != null && _stopping) {
       // The peer closed under the turn because this server stopped it.
@@ -842,6 +847,7 @@ class AcpSessionRuntime implements ScreenSession {
     _agentWorking = started;
     _agentInFlight = work;
     if (_turn != null) return;
+    _turnSince = started ? (was ? _turnSince : _now()) : null;
     if (!started && was) _writer.turnEnded();
     _publish(
       started ? AgentActivityStatus.working : AgentActivityStatus.idle,
@@ -1534,6 +1540,9 @@ class AcpSessionRuntime implements ScreenSession {
         toolAsk: toolAsk,
         waitingSince: waitingSince,
         inFlight: inFlight,
+        working: status == AgentActivityStatus.working && _turnSince != null
+            ? AgentWorkingDetail(since: _turnSince)
+            : null,
       ),
       question: question,
     );

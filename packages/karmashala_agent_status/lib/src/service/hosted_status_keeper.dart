@@ -261,10 +261,9 @@ class HostedStatusKeeper {
     if (!hookQuestion) kept.question = null;
     final before = kept.status;
     // The call an open prompt asks about, and when the wait began.
-    final decorated = _asks.decorate(
-      before: before.report,
-      next: next,
-      now: now,
+    final decorated = _withWorkingLine(
+      kept,
+      _asks.decorate(before: before.report, next: next, now: now),
     );
     final moved =
         !sameStatusEvidence(before.report, decorated) ||
@@ -275,6 +274,25 @@ class HostedStatusKeeper {
       question: kept.question,
     );
     return moved ? kept.status : null;
+  }
+
+  /// [report] with what the agent's working line on the screen says, while
+  /// its turn runs — whichever source gave the status. A report that brought
+  /// its own (an agent's protocol) keeps it; any other status carries none.
+  AgentStatusReport _withWorkingLine(_Kept kept, AgentStatusReport report) {
+    final working =
+        report.turnStatus == AgentActivityStatus.working &&
+        !report.hasOpenPrompt &&
+        !report.hasOpenQuestion;
+    if (!working) {
+      return report.working == null ? report : report.withWorking(null);
+    }
+    if (report.working != null) return report;
+    final rule = agents.byId(kept.agentId)?.grid.workingLine;
+    final at = kept.tailAt;
+    if (rule == null || at == null) return report;
+    final read = rule.read(kept.tail, at);
+    return read == null ? report : report.withWorking(read);
   }
 
   /// The question [agentId]'s question hook carried in [body], or null.
