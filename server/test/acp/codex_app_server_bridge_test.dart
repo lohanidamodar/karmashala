@@ -746,6 +746,42 @@ void main() {
     expect(jsonDecode(lines[1]), isA<Map<String, Object?>>());
   });
 
+  // Measured 2026-10-07: Codex out of credits prints its upgrade page on
+  // stderr, and that link was opened as a login and the chat told the owner
+  // to sign in.
+  test('a usage limit that carries a link is not a login', () async {
+    final out = StreamController<List<int>>();
+    final errors = StreamController<String>();
+    final opened = <Uri>[];
+    final wrapped = openingLoginLinks(
+      AcpTransport.streams(
+        output: out.stream,
+        input: StreamController<List<int>>(),
+        exitCode: Completer<int>().future,
+        errorLines: errors.stream,
+      ),
+      open: opened.add,
+      agentName: 'Agent',
+    );
+    final text = StringBuffer();
+    wrapped.output.listen((bytes) => text.write(utf8.decode(bytes)));
+    wrapped.errorLines.listen((_) {});
+    errors.add(
+      'You’ve hit your usage limit. Upgrade to Pro '
+      '(https://chatgpt.com/explore/pro), visit '
+      'https://chatgpt.com/codex/settings/usage to purchase more credits or '
+      'try again at 3:20 PM.',
+    );
+    await pump();
+    expect(opened, isEmpty);
+    expect(text.toString(), isNot(contains('log in')));
+
+    // A real login after it is still opened.
+    errors.add('Open https://login.example.com/x to log in');
+    await pump();
+    expect(opened, [Uri.parse('https://login.example.com/x')]);
+  });
+
   JsonMap question(String id, String text, [List<String>? choices]) => {
     'id': id,
     'header': 'Choose',

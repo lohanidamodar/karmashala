@@ -31,6 +31,10 @@ const Duration kProtocolLimitMinimumWait = Duration(minutes: 5);
 bool hasUsageLimitWording(Iterable<String> words) =>
     _usageWords.hasMatch(words.join('\n'));
 
+/// Whether [line] speaks of a usage or rate limit. Such a line can carry a
+/// link (an upgrade or billing page), and that link is never a login.
+bool speaksOfALimit(String line) => _limitWords.hasMatch(line);
+
 /// Whether [error] is an agent refusing a turn on a usage or rate limit, by
 /// its message or data — never by which agent said it.
 bool isUsageLimitError(AcpRpcError error) =>

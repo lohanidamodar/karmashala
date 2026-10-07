@@ -14,6 +14,7 @@ import 'acp_arguments.dart';
 import 'acp_login_link.dart';
 import 'acp_native_bridge.dart';
 import 'acp_transport.dart';
+import 'acp_usage_limit.dart' show speaksOfALimit;
 import 'acp_version_probe.dart';
 
 /// How a short-lived connection's process is started.
@@ -413,8 +414,10 @@ String _spoken(Duration span) {
 }
 
 /// The first https link in [line], without the punctuation that ends a
-/// sentence around it; null when there is none.
+/// sentence around it; null when there is none, and when the line speaks of a
+/// usage limit: its link is an upgrade page, not a login.
 Uri? loginLinkIn(String line) {
+  if (speaksOfALimit(line)) return null;
   final match = RegExp(r'https://[^\s"<>]+').firstMatch(line);
   if (match == null) return null;
   final text = match[0]!.replaceFirst(RegExp(r'''[.,;:)\]'"]+$'''), '');
