@@ -17,6 +17,64 @@ installs claim the same version name.
 
 ---
 
+## 1.34.0 — 2026-10-07 (build 67)
+
+- **The Agent dashboard (was Overview) is somewhere to work from.**
+  - Calm cards, most urgent first: what each session is doing, its latest
+    message as it arrives, the plan step, the diff, and its sub-sessions.
+  - A slim top row with needs you, failed, working, ready and done today.
+  - Questions, commands and failed turns are answered right on the board,
+    from the keyboard too: N, 1–9, Enter, Y/A/D.
+  - The peek is the session's own live chat, with Terminal, Files and
+    Sub-sessions tabs and a "new since you last looked" line.
+  - A Done lane: Merge, Hand back, Archive.
+  - New session and Resume… keep you on the dashboard, with no tab: a
+    stopped session comes back idle or with your message.
+  - On a phone it is a two-line list with the queue first.
+- **Automations have their own tab**, with Automations, Runs and Resumes.
+  - One editor for schedules, events, webhooks and one-offs, starting from
+    templates.
+  - A plain-words summary of each automation.
+  - Steps: start an agent, check the result, tell the agent, notify me.
+  - "Ready to run unattended" says what is missing.
+  - Run now, Dry run, and webhook Deliveries.
+  - A full run history.
+  - Settings keeps only checkpoints.
+  - Fixed: the choice for a late run is no longer lost on create.
+- **The chat shows the agent working**: its own word, the time and the
+  tokens, with Stop. Every finished turn says how long it took, for example
+  "Cooked for 16s · done 7:19 PM".
+- **The model a session is running is shown**, never "default": on the
+  session bar, in the chat where it changes, and in lists.
+- **Running sees inside WSL and SSH.** Ports are listed first, and a click
+  opens one in the browser. Stop sits in the ⋯ menu.
+- **One header across the workbench tabs**, with compact pickers and search.
+- **A compact question card**, readable on a phone.
+- **New project**
+  - It creates a missing folder, and can initialise Git.
+  - "Create" comes first; "Create & scan" is the second choice.
+  - The name is suggested from the folder or the repository.
+- **Open agent sessions in chat view**: a new setting, on by default on
+  phones.
+- **Chat agents follow the permission and model you pick.**
+  - Changing the mode mid-session counts when the agent next asks.
+  - Reads never ask.
+  - Antigravity's modes, and your own agents' modes, map to permission
+    levels.
+  - Copilot's duplicate models are gone.
+- **The tab switcher**
+  - Live tabs come first; dead ones fold under "Not running", with Close
+    all.
+  - On a phone the keyboard stays down.
+  - Archived or deleted sessions' tabs close on every device.
+  - A reopened session no longer gets a second tab.
+- **Fixes:**
+  - A usage-limit message is no longer mistaken for a login, and no longer
+    opens an upgrade page.
+  - Answered "blocked" reports are no longer delivered.
+  - A session that finishes its turn without reporting now says so.
+  - The peek shows a terminal session's chat.
+
 ## 1.33.3 — 2026-10-07 (build 66)
 
 - **Permission and model are chips on the session bar again**, one click
