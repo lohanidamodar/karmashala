@@ -32,9 +32,11 @@ class HostedSessionWait {
   /// prompt or a question on its screen. An agent at its own input is
   /// waiting for a message, which is what a send is — not blocked.
   SessionBlock? blockedOn(String sessionId) {
-    final report = status.statusOf(sessionId)?.report;
+    final held = status.statusOf(sessionId);
+    final report = held?.report;
     if (report == null) return null;
     if (report.hasOpenQuestion) {
+      if (!_questionShown(held!)) return null;
       return SessionBlock(
         kind: 'question',
         text: evidenceLine(report.evidence),
@@ -50,13 +52,32 @@ class HostedSessionWait {
     return null;
   }
 
+  /// Whether an open question has the evidence AskUserQuestion leaves: the
+  /// questions its call carried, or the agent's question footer drawn beside
+  /// more than itself. A stray screen fragment ("x") is neither.
+  bool _questionShown(HostedAgentStatus held) {
+    if (held.question != null) return true;
+    final footer =
+        status.keeper.agents.byId(held.report.agentId)?.grid.question ??
+        const <GridMatcher>[];
+    bool isFooter(String row) => footer.any((m) => m.matches(row));
+    final rows = [
+      for (final row in held.report.evidence)
+        if (row.trim().isNotEmpty) row.trim(),
+    ];
+    return rows.any(isFooter) &&
+        rows.any((row) => !isFooter(row) && row.runes.length > 1);
+  }
+
   /// **Which prompt or question [sessionId] has open now**, as a key that
   /// differs for the next one asked; null when none is open.
   String? openAskOf(String sessionId) {
-    final report = status.statusOf(sessionId)?.report;
+    final held = status.statusOf(sessionId);
+    final report = held?.report;
     if (report == null || !(report.hasOpenPrompt || report.hasOpenQuestion)) {
       return null;
     }
+    if (report.hasOpenQuestion && !_questionShown(held!)) return null;
     final ask = report.toolAsk;
     final which =
         ask?.toolUseId ??
