@@ -10,7 +10,8 @@ import 'package:karmashala/src/features/sessions/application/delivery_providers.
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
-import 'package:karmashala/src/features/sessions/presentation/activity_strip.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/presentation/working_line.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -96,6 +97,17 @@ void main() {
           ),
         ),
         sessionRunningOnHostProvider.overrideWithValue((_) => true),
+        agentSessionStatusProvider.overrideWith(
+          (ref, id) => Stream.value(
+            AgentStatusReport(
+              agentId: AgentIds.claudeAcp,
+              sessionId: id,
+              status: AgentActivityStatus.working,
+              observedAt: testTime,
+              source: AgentStatusSource.protocol,
+            ),
+          ),
+        ),
         sessionChatTranscriptProvider.overrideWith(
           (ref, id) => Stream.value([
             for (var i = 0; i < 40; i++)
@@ -160,7 +172,7 @@ void main() {
       expect(tester.takeException(), isNull);
       final composer = find.byType(TextField).last;
       expectInSight(tester, composer, size.height - 300);
-      expectInSight(tester, find.byType(ActivityStrip), size.height - 300);
+      expectInSight(tester, find.byType(WorkingLine), size.height - 300);
 
       await tester.enterText(composer, 'what I am typing');
       await tester.pump();
@@ -176,7 +188,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expectInSight(tester, find.byType(TextField).last, size.height);
-      expectInSight(tester, find.byType(ActivityStrip), size.height);
+      expectInSight(tester, find.byType(WorkingLine), size.height);
     });
   }
 }

@@ -8,6 +8,7 @@ import '../domain/agent_screen_menu.dart';
 import '../domain/agent_permission_support.dart';
 import '../domain/agent_skill_support.dart';
 import '../domain/agent_status.dart';
+import '../domain/agent_working_line.dart';
 
 /// What Claude Code is, as data: how to find, launch and observe it.
 /// One part of its adapter.
@@ -798,6 +799,10 @@ const claudeCodeDescriptor = AgentDescriptor(
       GridMatcher('Would you like to proceed?'),
     ],
     working: [GridMatcher('esc to interrupt')],
+    // `✻ Sautéing… (2s · ↓ 7 tokens)` and `· Skedaddling… (3s · ↓ 50 tokens ·
+    // thinking)`, rendered from `claude-code-approval-prompt.raw` and
+    // `claude-code-permission-modal.raw`.
+    workingLine: WorkingLineRule(separator: '·', wordSuffix: '…'),
     // Two footers, because the hint segment is mode-dependent: a session in
     // bypass mode drops `(shift+tab to cycle)` entirely and reads
     // `bypass permissions on · 1 shell · ← for agents · ↓ to manage`. That screen

@@ -47,6 +47,9 @@ class PaneSessions {
       if (chatPaneSessionId(paneId) == null) paneId,
   ];
 
+  /// Every session a pane of this window shows.
+  Iterable<String> get sessionIds => _panesBySession.keys;
+
   /// Every pane of this window showing [sessionId], its chat pane included.
   List<String> panesOf(String sessionId) =>
       _panesBySession[sessionId] ?? const [];

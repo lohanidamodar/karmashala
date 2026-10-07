@@ -1,6 +1,7 @@
 import 'package:karmashala/src/app/shell/quick_open/quick_open_item.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -277,5 +278,187 @@ void main() {
     expect(find.text('1 tab'), findsOneWidget);
     await press(tester, LogicalKeyboardKey.enter);
     expect(switchedTo, ['tab-77']);
+  });
+
+  group('not running tabs', () {
+    /// Two live shells, two dead ones, a document, and the tab you are in —
+    /// dead itself, which still stays on top: it is where you are.
+    final running = <String, bool?>{
+      'live-1': true,
+      'dead-1': false,
+      'notes': null,
+      'dead-2': false,
+      'here': false,
+      'live-2': true,
+    };
+
+    List<TabEntry> mixed(WidgetRef ref) => [
+      for (final id in tabs)
+        TabEntry(
+          item: QuickOpenItem(
+            id: id,
+            group: QuickOpenGroup.tabs,
+            title: id,
+            subtitle: '/src/$id',
+            detail: running[id] == false ? 'not running' : null,
+            icon: AppIcons.terminal,
+            onSelect: () => switchedTo.add(id),
+          ),
+          active: id == active,
+          running: running[id],
+          onClose: () {
+            closed.add(id);
+            tabs.remove(id);
+          },
+        ),
+    ];
+
+    Future<void> openMixed(
+      WidgetTester tester, {
+      UiDensity density = UiDensity.pointer,
+      Size? size,
+      double textScale = 1,
+    }) async {
+      tabs = running.keys.toList();
+      active = 'here';
+      if (size != null) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+      }
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: UiDensityScope(density: density, child: child!),
+            ),
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => TabPicker.show(context, mixed),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    bool searchFocused(WidgetTester tester) => tester
+        .widget<EditableText>(find.byType(EditableText))
+        .focusNode
+        .hasFocus;
+
+    testWidgets('live tabs and documents come first; the dead fold under one '
+        'row with their count', (tester) async {
+      await openMixed(tester);
+
+      expect(find.text('Not running · 2'), findsOneWidget);
+      for (final id in ['live-1', 'notes', 'live-2', 'here']) {
+        expect(find.text('/src/$id'), findsOneWidget, reason: id);
+      }
+      expect(find.text('/src/dead-1'), findsNothing);
+      expect(find.text('/src/dead-2'), findsNothing);
+      // The count is of every tab, folded or not.
+      expect(find.text('6 tabs'), findsOneWidget);
+      // Drawn in strip order, the fold after them.
+      final ys = [
+        for (final id in ['live-1', 'notes', 'here', 'live-2'])
+          tester.getTopLeft(find.text('/src/$id')).dy,
+      ];
+      expect(ys, orderedEquals([...ys]..sort()));
+      expect(
+        tester.getTopLeft(find.text('Not running · 2')).dy,
+        greaterThan(ys.last),
+      );
+
+      await tester.tap(find.text('Not running · 2'));
+      await tester.pumpAndSettle();
+      expect(find.text('/src/dead-1'), findsOneWidget);
+      expect(find.text('/src/dead-2'), findsOneWidget);
+    });
+
+    testWidgets('the arrows skip the fold row and stay in the open rows', (
+      tester,
+    ) async {
+      await openMixed(tester);
+
+      await press(tester, LogicalKeyboardKey.end);
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(switchedTo, ['live-2']);
+    });
+
+    testWidgets('a filter reaches folded rows', (tester) async {
+      await openMixed(tester);
+
+      await type(tester, 'dead-2');
+
+      expect(find.text('/src/dead-2'), findsOneWidget);
+      expect(find.text('Not running · 1'), findsOneWidget);
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(switchedTo, ['dead-2']);
+    });
+
+    testWidgets('Close all not running closes only those tabs, and switches '
+        'to none', (tester) async {
+      await openMixed(tester);
+
+      expect(find.byTooltip(TabPicker.closeIdleTooltip), findsOneWidget);
+      await tester.tap(find.text('Close all not running'));
+      await tester.pumpAndSettle();
+
+      expect(closed, ['dead-1', 'dead-2']);
+      expect(tabs, ['live-1', 'notes', 'here', 'live-2']);
+      expect(find.text('Not running · 2'), findsNothing);
+      expect(switchedTo, isEmpty);
+      expect(find.byType(TabPicker), findsOneWidget);
+    });
+
+    testWidgets('the search box takes focus with a pointer', (tester) async {
+      await openMixed(tester);
+
+      expect(searchFocused(tester), isTrue);
+    });
+
+    testWidgets('under touch the search box waits to be tapped, so no keyboard '
+        'covers the list', (tester) async {
+      await openMixed(tester, density: UiDensity.touch);
+
+      expect(searchFocused(tester), isFalse);
+      await tester.tap(find.byType(EditableText));
+      await tester.pump();
+      expect(searchFocused(tester), isTrue);
+    });
+
+    testWidgets('a 360 px phone at text scale 1.6 gets a bottom sheet that '
+        'fits', (tester) async {
+      await openMixed(
+        tester,
+        density: UiDensity.touch,
+        size: const Size(360, 780),
+        textScale: 1.6,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.text('Not running · 2'), findsOneWidget);
+      // The row says "Not running"; the button's whole name is its tooltip.
+      expect(find.text('Close all'), findsOneWidget);
+      expect(find.byTooltip(TabPicker.closeIdleTooltip), findsOneWidget);
+      expect(searchFocused(tester), isFalse);
+
+      await tester.tap(find.text('/src/live-2'));
+      await tester.pumpAndSettle();
+      expect(switchedTo, ['live-2']);
+      expect(find.byType(TabPicker), findsNothing);
+    });
   });
 }

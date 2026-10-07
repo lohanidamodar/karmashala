@@ -195,13 +195,25 @@ void main() {
           ChatTranscriptView(messages: conversation, onSaveNote: (_, _) {}),
         );
 
+        // A finished turn's footer belongs to its last message: the gap is
+        // measured from under it.
+        final footerFinder = find.byKey(const ValueKey('chat-turn-footer'));
+        final footers = [
+          for (var i = 0; i < footerFinder.evaluate().length; i++)
+            tester.getRect(footerFinder.at(i)),
+        ];
         final gaps = <double>[];
         Rect? previous;
         for (final body in bodies) {
           final rect = tester.getRect(
             find.textContaining(body, findRichText: true).first,
           );
-          if (previous != null) gaps.add(rect.top - previous.bottom);
+          if (previous != null) {
+            final footer = footers
+                .where((f) => f.top >= previous!.bottom && f.bottom <= rect.top)
+                .fold(0.0, (sum, f) => sum + f.height + Insets.xs);
+            gaps.add(rect.top - previous.bottom - footer);
+          }
           previous = rect;
         }
 

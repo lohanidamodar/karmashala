@@ -152,4 +152,82 @@ void main() {
 
     expect(container.exists(terminalSessionsControllerProvider), isFalse);
   });
+
+  testWidgets('a session deleted by another client closes its tab here', (
+    tester,
+  ) async {
+    chatSession('gone');
+    chatSession('keep');
+    await tester.pump();
+
+    db.server.sessionRows.delete('gone');
+    await tester.pump();
+
+    expect(panes(), [chatPaneId('keep')]);
+  });
+
+  testWidgets('an archived session opened on purpose keeps its tab', (
+    tester,
+  ) async {
+    db.server.sessionRows
+      ..insert(
+        session(
+          id: 'old',
+          agentInstallationId: 'acp',
+          status: SessionStatus.completed,
+        ),
+      )
+      ..markArchived('old', testTime);
+    await tester.pump();
+
+    terminals().openChatTab('old');
+    await tester.pump();
+
+    expect(panes(), [chatPaneId('old')]);
+  });
+
+  testWidgets('a restored layout drops the tabs of archived and deleted '
+      'sessions, and keeps stopped sessions, shells and documents', (
+    tester,
+  ) async {
+    chatSession('archived');
+    chatSession('stopped');
+    // A session deleted while this client was away: no row at all.
+    terminals().openChatTab('deleted');
+    terminals().openTab(TerminalProfile.powerShell);
+    terminals().openSettingsTab();
+    await tester.pump();
+    // Archived while the layout was on disk: the closer above never sees it.
+    terminals().persistLayout();
+    container.dispose();
+    db.server.sessionRows.markArchived('archived', testTime);
+
+    final restarted = ProviderContainer(
+      overrides: [
+        await server.override(),
+        ...fakeTerminalOverrides(machine: db),
+      ],
+    );
+    addTearDown(restarted.dispose);
+    List<String> restoredPanes() => [
+      for (final tab in restarted.read(terminalSessionsControllerProvider).tabs)
+        ...tab.layout.panes,
+    ];
+    final before = restoredPanes();
+    expect(
+      before,
+      containsAll([chatPaneId('archived'), chatPaneId('deleted')]),
+    );
+
+    restarted.listen(archivedSessionTabsCloserProvider, (_, _) {});
+    await tester.pump();
+
+    expect(restoredPanes(), [
+      for (final pane in before)
+        if (pane != chatPaneId('archived') && pane != chatPaneId('deleted'))
+          pane,
+    ]);
+    expect(restoredPanes(), contains(chatPaneId('stopped')));
+    expect(restoredPanes().length, before.length - 2);
+  });
 }

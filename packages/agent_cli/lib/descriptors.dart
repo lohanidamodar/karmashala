@@ -78,6 +78,7 @@ export 'src/agents/domain/agent_registry.dart';
 export 'src/agents/domain/agent_skill_support.dart';
 export 'src/agents/domain/agent_status.dart';
 export 'src/agents/domain/agent_tool_ask.dart';
+export 'src/agents/domain/agent_working_line.dart';
 export 'src/agents/domain/karmashala_skill.dart';
 export 'src/agents/domain/parent_session_environment.dart';
 export 'src/agents/domain/permission_carry.dart';

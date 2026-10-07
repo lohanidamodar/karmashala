@@ -32,19 +32,20 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
   };
   final onPanes = _showingPanes(ref);
   final active = terminals.activeTabId;
+  // A document is not a process, so it has no liveness to report — "not
+  // running" would be true of a page and say nothing about it.
+  bool? runningIn(TerminalTab tab) =>
+      _isDocumentTab(tab) ? null : sessions.livenessForTab(tab.id).isLive;
   return [
     for (final tab in terminals.tabs)
       TabEntry(
+        running: runningIn(tab),
         item: QuickOpenItem(
           id: 'tab/${tab.id}',
           group: QuickOpenGroup.tabs,
           title: sessions.titleForTab(tab.id),
           subtitle: _whereabouts(tab, titles, sessions),
-          // A document is not a process, so it has no liveness to report —
-          // "not running" would be true of a page and say nothing about it.
-          detail: _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
-              ? null
-              : 'not running',
+          detail: runningIn(tab) == false ? 'not running' : null,
           icon:
               documentIconFor(tab) ??
               (_isChatTab(tab) ? AppIcons.chatCircle : AppIcons.terminal),

@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/sessions/application/delivery_providers.
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/queued_messages_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
@@ -118,6 +119,19 @@ void main() {
           ),
         ),
         sessionRunningOnHostProvider.overrideWithValue((_) => true),
+        // A call in flight is a running turn, which is what draws its Stop.
+        if (activity?.calls.isNotEmpty ?? false)
+          agentSessionStatusProvider.overrideWith(
+            (ref, id) => Stream.value(
+              AgentStatusReport(
+                agentId: AgentIds.claudeAcp,
+                sessionId: id,
+                status: AgentActivityStatus.working,
+                observedAt: testTime,
+                source: AgentStatusSource.protocol,
+              ),
+            ),
+          ),
         sessionChatTranscriptProvider.overrideWith(
           (ref, id) => Stream.value(const <TranscriptMessage>[]),
         ),

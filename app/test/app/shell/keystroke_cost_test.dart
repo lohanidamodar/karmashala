@@ -22,7 +22,7 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
-import 'package:karmashala/src/features/sessions/presentation/activity_strip.dart';
+import 'package:karmashala/src/features/sessions/presentation/working_line.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -628,12 +628,12 @@ void main() {
     ]);
     await settle(tester);
     expect(
-      find.byType(ActivityStrip),
+      find.byType(WorkingLine),
       findsOneWidget,
       reason: 'the guard against a false green: the strip really is drawn',
     );
     expect(
-      tester.getSize(find.byType(ActivityStrip)).height,
+      tester.getSize(find.byType(WorkingLine)).height,
       greaterThan(0),
       reason: 'a call is outstanding, so the strip has something to count',
     );

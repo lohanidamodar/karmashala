@@ -4,6 +4,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_providers.dart';
+import '../../agents/application/agent_model_catalog_providers.dart';
 import '../../agents/application/session_model_providers.dart';
 import 'session_config_options_providers.dart';
 
@@ -74,3 +75,19 @@ String modelLabelIn(
   }
   return support?.modelFor(modelId)?.label ?? modelId;
 }
+
+/// **How [sessionId]'s transcript names a model**: [modelLabelIn] over its
+/// agent's options and its catalogue, watched, so turns read "Opus 5.5" once
+/// the catalogue arrives rather than keeping the id they were first drawn
+/// with. The catalogue is the session's own, else its agent's in its
+/// environment — a session no model state covers still has one.
+final sessionModelLabelerProvider = Provider.autoDispose
+    .family<String Function(String modelId), String>((ref, sessionId) {
+      final options = ref.watch(sessionConfigOptionsProvider(sessionId));
+      final key = agentModelsKeyOfSession(ref, sessionId);
+      final support =
+          ref.watch(sessionModelProvider(sessionId))?.support ??
+          (key == null ? null : ref.watch(agentModelSupportInProvider(key)));
+      return (modelId) =>
+          modelLabelIn(modelId, options: options, support: support);
+    });

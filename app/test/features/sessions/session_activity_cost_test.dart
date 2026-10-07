@@ -7,6 +7,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -14,7 +15,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:agent_cli/stream.dart';
-import 'package:karmashala/src/features/sessions/presentation/activity_strip.dart';
+import 'package:karmashala/src/features/sessions/presentation/working_line.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -101,6 +102,7 @@ void main() {
   overrides({
     required List<TranscriptMessage> messages,
     required Clock clock,
+    AgentActivityStatus status = AgentActivityStatus.working,
   }) => [
     dataClientProvider.overrideWithValue(data),
     clockProvider.overrideWithValue(clock),
@@ -109,7 +111,7 @@ void main() {
         AgentStatusReport(
           agentId: AgentIds.claudeCode,
           sessionId: id,
-          status: AgentActivityStatus.working,
+          status: status,
           observedAt: testTime,
           source: AgentStatusSource.stateFile,
         ),
@@ -140,6 +142,7 @@ void main() {
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => const <SystemTerminal>[],
           ),
+          sessionRunningOnHostProvider.overrideWithValue((_) => true),
           sessionDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
           ),
@@ -162,7 +165,7 @@ void main() {
       clock: _MovingClock(issued.add(const Duration(seconds: 4))),
     );
 
-    expect(find.byType(ActivityStrip), findsOneWidget);
+    expect(find.byType(WorkingLine), findsOneWidget);
     expect(find.text('Bash(git status)'), findsWidgets);
     expect(
       subscriptions,
@@ -189,7 +192,7 @@ void main() {
     final before = tester.widget<ChatTranscriptView>(
       find.byType(ChatTranscriptView),
     );
-    expect(find.text('4s'), findsOneWidget);
+    expect(find.text(' · 4s'), findsOneWidget);
 
     var rebuilds = 0;
     for (var i = 1; i <= ticks; i++) {
@@ -209,7 +212,7 @@ void main() {
     expect(subscriptions, 1, reason: 'nor re-read it');
     // ...and the strip itself did move, so the zero above is isolation rather
     // than a clock that never ran.
-    expect(find.text('${4 + ticks}s'), findsOneWidget);
+    expect(find.text(' · ${4 + ticks}s'), findsOneWidget);
   });
 
   testWidgets('a title change never wakes the strip', (tester) async {
@@ -224,7 +227,7 @@ void main() {
     );
 
     final container = ProviderScope.containerOf(
-      tester.element(find.byType(ActivityStrip)),
+      tester.element(find.byType(WorkingLine)),
     );
     container
         .read(sessionsRevisionProvider.notifier)
@@ -232,7 +235,7 @@ void main() {
     await tester.pump();
 
     expect(subscriptions, 1);
-    expect(find.text('4s'), findsOneWidget);
+    expect(find.text(' · 4s'), findsOneWidget);
   });
 
   group('the tick exists only while there is something to count', () {
@@ -241,6 +244,7 @@ void main() {
       WidgetTester tester,
       List<TranscriptMessage> messages, {
       int pumps = 0,
+      AgentActivityStatus status = AgentActivityStatus.working,
     }) async {
       // Reduced motion keeps the working spinner's shared clock out of the
       // count; its own cost is pinned in karmashala_ui's status_glyph_test.
@@ -257,9 +261,10 @@ void main() {
               overrides: overrides(
                 messages: messages,
                 clock: _MovingClock(issued.add(const Duration(seconds: 4))),
+                status: status,
               ),
               child: const MaterialApp(
-                home: Scaffold(body: ActivityStrip(sessionId: 's1')),
+                home: Scaffold(body: WorkingLine(sessionId: 's1')),
               ),
             ),
           );
@@ -278,19 +283,20 @@ void main() {
       return timers;
     }
 
-    testWidgets('nothing outstanding starts no timer', (tester) async {
+    testWidgets('a session between turns starts no timer', (tester) async {
       final timers = await periodicTimersFor(tester, [
         call(id: 't1', answered: true),
-      ]);
+      ], status: AgentActivityStatus.idle);
 
       expect(timers, 0, reason: 'a quiet session must cost nothing');
     });
 
-    testWidgets('one outstanding call arms exactly one, and keeps it', (
+    testWidgets('a running turn arms exactly one, and keeps it', (
       tester,
     ) async {
       final timers = await periodicTimersFor(tester, [
         call(id: 't1'),
+        call(id: 't2', subject: 'git log'),
       ], pumps: ticks);
 
       expect(

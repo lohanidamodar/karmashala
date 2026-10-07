@@ -215,6 +215,20 @@ class SessionActions {
   /// Closes this window's tabs and panes showing [ids], as one layout change.
   void closeViewsOf(Iterable<String> ids) => _closeViews(_viewsOf(ids));
 
+  /// Closes this window's views of every session that is archived or no
+  /// longer exists — what a restored layout or a reconnecting client still
+  /// holds. A plain shell or a document names no session, so it stays.
+  void closeViewsOfHiddenSessions() {
+    if (!_ref.exists(terminalSessionsControllerProvider)) return;
+    final rows = _ref.read(sessionsDataProvider);
+    if (!rows.isPrimed) return;
+    final hidden = [
+      for (final id in _ref.read(paneSessionsProvider).sessionIds)
+        if (rows.getById(id)?.isArchived ?? true) id,
+    ];
+    if (hidden.isNotEmpty) closeViewsOf(hidden);
+  }
+
   /// Closes this window's views of the server terminal [terminalSessionId]:
   /// a shell's pane, or every view of the agent session it ran.
   void closeTerminalViews(String terminalSessionId) {
@@ -1328,23 +1342,45 @@ final sessionActionsProvider = Provider<SessionActions>(
 );
 
 /// Closes this window's tabs and panes of every session that becomes archived
-/// — here, on the server or on another client — as one layout change. A row
-/// first seen archived is left: only the move from shown to archived closes.
+/// or is deleted — here, on the server or on another client — as one layout
+/// change. When the rows are first known, views of sessions already archived
+/// or gone close too: a restored layout, or a client that was away. After
+/// that only a move closes, so an archived session opened on purpose stays.
 /// Watched by the shell.
 final archivedSessionTabsCloserProvider = Provider<void>((ref) {
   final sessions = ref.watch(sessionsDataProvider);
   final actions = ref.watch(sessionActionsProvider);
-  var archived = {for (final row in sessions.getAll()) row.id: row.isArchived};
+  Map<String, bool> archivedNow() => {
+    for (final row in sessions.getAll()) row.id: row.isArchived,
+  };
+  var disposed = false;
+  Map<String, bool>? known;
+  if (sessions.isPrimed) {
+    known = archivedNow();
+    // After the build that restores the workbench, so its tabs are there.
+    scheduleMicrotask(() {
+      if (!disposed) actions.closeViewsOfHiddenSessions();
+    });
+  }
   final changes = sessions.changes.listen((_) {
-    final now = {for (final row in sessions.getAll()) row.id: row.isArchived};
+    if (!sessions.isPrimed) return;
+    final now = archivedNow();
+    final before = known;
+    known = now;
+    if (before == null) {
+      actions.closeViewsOfHiddenSessions();
+      return;
+    }
     final moved = [
-      for (final MapEntry(key: id, value: isArchived) in now.entries)
-        if (isArchived && archived[id] == false) id,
+      for (final MapEntry(key: id, value: wasArchived) in before.entries)
+        if (!wasArchived && (now[id] ?? true)) id,
     ];
-    archived = now;
     if (moved.isNotEmpty) actions.closeViewsOf(moved);
   });
-  ref.onDispose(() => unawaited(changes.cancel()));
+  ref.onDispose(() {
+    disposed = true;
+    unawaited(changes.cancel());
+  });
 });
 
 /// Closes this window's views of every terminal the server closes on request

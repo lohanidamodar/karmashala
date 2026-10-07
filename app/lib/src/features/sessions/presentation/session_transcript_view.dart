@@ -1,6 +1,4 @@
-import '../../agents/application/session_model_providers.dart';
 import '../application/session_active_model_providers.dart';
-import '../application/session_config_options_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -58,7 +56,7 @@ import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 import '../application/session_turn_interrupt.dart';
 import 'package:agent_cli/descriptors.dart'
-    show AgentActivityStatus, AgentStatusReport;
+    show AgentActivityStatus, AgentStatusReport, AgentWorkingDetail;
 import '../application/session_ui_providers.dart';
 import '../../media/application/session_media_providers.dart'
     show sessionImageFetchProvider;
@@ -69,7 +67,7 @@ import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/launch.dart';
-import 'activity_strip.dart';
+import 'working_line.dart';
 import 'chat_cards/chat_tool_ask.dart';
 import 'chat_cards/pinned_plan_strip.dart';
 import 'chat_transcript.dart';
@@ -231,6 +229,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Set before the draft is parked, because parking it notifies this widget's
   /// own listener on the same provider and `ref` is dead by then.
   bool _leaving = false;
+
+  /// The running or latest turn's start and token count, off its working
+  /// line — see the status listener in [build].
+  DateTime? _turnSince;
+  int? _turnTokens;
 
   @override
   void initState() {
@@ -565,6 +568,23 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         _filesQueued.value++;
       }
     });
+    // The running turn's last token count, kept for its footer once it ends:
+    // the line a finished turn leaves names no count.
+    ref.listen(agentSessionStatusProvider(widget.sessionId), (_, next) {
+      final report = next.asData?.value;
+      if (report?.turnStatus != AgentActivityStatus.working) return;
+      final working = report!.working;
+      final since = working?.since;
+      final kept = _turnSince;
+      // A new turn, not the same start read a second apart.
+      if (since != null &&
+          (kept == null ||
+              since.difference(kept).abs() > AgentWorkingDetail.sinceSlack)) {
+        _turnTokens = null;
+      }
+      _turnSince = since ?? kept;
+      _turnTokens = working?.tokens ?? _turnTokens;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _takeQueuedNote();
@@ -636,6 +656,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                                 (messages) => _fromTranscript(
                                   messages,
                                   earlier: window?.from ?? 0,
+                                  // Watched: a catalogue that arrives later
+                                  // relabels turns already drawn.
+                                  modelLabelOf: ref.watch(
+                                    sessionModelLabelerProvider(
+                                      widget.sessionId,
+                                    ),
+                                  ),
                                 ),
                               )
                             : ref
@@ -793,6 +820,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Null when Notes is off: the transcript never learns the
           // feature exists, so there is nothing left behind to hide.
           onSaveNote: notesEnabled ? _saveNote : null,
+          workingLine: WorkingLine(
+            sessionId: widget.sessionId,
+            onStop: _interruptTurn,
+          ),
+          // The word the agent left on its screen as the turn ended.
+          lastTurnVerb: ref.watch(
+            agentSessionStatusProvider(widget.sessionId).select((status) {
+              final report = status.asData?.value;
+              return report?.turnStatus == AgentActivityStatus.idle
+                  ? report?.working?.word
+                  : null;
+            }),
+          ),
+          lastTurnTokens: _turnTokens,
           footer: unplaced.isEmpty
               ? footer
               : Column(
@@ -911,8 +952,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       ),
   ];
 
-  /// The activity line over the composer. The delivery strip sits on the
-  /// composer's channel: its prompt actions send through `continueSession`.
+  /// The strips over the composer. The delivery strip sits on the composer's
+  /// channel: its prompt actions send through `continueSession`.
   Widget _footerBody(bool active) {
     // A phone's grants are watched here: the footer is built once.
     Widget composer({required bool prompted}) => Consumer(
@@ -984,7 +1025,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           // Flexible like the queue: with the keyboard up it gives way, and
           // the box stays in sight.
           Flexible(child: BackgroundRunsStrip(sessionId: widget.sessionId)),
-          ActivityStrip(sessionId: widget.sessionId, onStop: _interruptTurn),
           ConstrainedBox(
             // A long draft may not crowd an approval out of sight.
             constraints: BoxConstraints(
@@ -1080,6 +1120,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   List<ChatMessage> _fromTranscript(
     List<TranscriptMessage> messages, {
     int earlier = 0,
+    String Function(String modelId)? modelLabelOf,
   }) {
     final subagents = <int, SubagentRef>{};
     final out = chatMessagesFromTranscript(
@@ -1087,11 +1128,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       subagents: subagents,
       earlier: earlier,
       agentOf: _agentsIn(messages),
-      modelLabelOf: (id) => modelLabelIn(
-        id,
-        options: ref.read(sessionConfigOptionsProvider(widget.sessionId)),
-        support: ref.read(sessionModelProvider(widget.sessionId))?.support,
-      ),
+      modelLabelOf: modelLabelOf,
     );
     final delegations = delegationGroups(out);
     if (!mapEquals(subagents, _subagents) ||
