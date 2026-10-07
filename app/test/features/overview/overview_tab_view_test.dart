@@ -345,6 +345,32 @@ void main() {
     expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
   });
 
+  testBoard("a terminal session's chat in the peek is read, with no chat tab "
+      'open anywhere', (tester) async {
+    // The probe, 2026-10-07: only the dashboard was open, so no workbench
+    // group showed a chat, the server feed was never watched, and the peek's
+    // chat spun for ever.
+    final c = await pump(tester, const Size(1440, 900));
+    expect(c.read(chatTranscriptPollingProvider), isFalse);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('overview-done-fold')),
+      200,
+      scrollable: hybridList,
+    );
+    await openDone(tester);
+    await tester.tap(find.byKey(const ValueKey('overview-done:done')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('overview-peek:done')), findsOneWidget);
+
+    expect(c.read(chatTranscriptPollingProvider), isTrue);
+
+    // Closed, or on another of its tabs, it is read no longer.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+    expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
+    expect(c.read(chatTranscriptPollingProvider), isFalse);
+  });
+
   testBoard("the peek's Resume and Archive reach the lists' own paths", (
     tester,
   ) async {
