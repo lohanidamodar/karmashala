@@ -7,7 +7,12 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show AttentionNews, RunningPort, RunningProcess, RunningReading, RunningRole;
+    show
+        AttentionNews,
+        RunningPort,
+        RunningProcess,
+        RunningReading,
+        RunningRole;
 import 'package:karmashala/src/features/running/application/running_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart'
     show kPermissionCycleSettle;
@@ -872,21 +877,25 @@ void main() {
       );
     });
 
-    testWidgets('the model and the permission mode are one chip, model first', (
+    testWidgets('the permission and the model are two chips on the bar', (
       tester,
     ) async {
       seedTheFullestBar();
       await pump(tester, size: desktopWindow.size);
 
-      // Round 29: one chip names both, and its menu holds both pickers.
-      await tester.tap(find.byType(SessionAgentChip));
-      await tester.pumpAndSettle();
+      // Both on the bar, side by side: the permission, then the model.
       final model = find.byType(SessionModelChip);
-      expect(model, findsOneWidget);
+      final mode = find.byType(PermissionModeChip);
+      expect(model.hitTestable(), findsOneWidget);
+      expect(mode.hitTestable(), findsOneWidget);
       expect(
-        tester.getRect(model).top,
-        lessThan(tester.getRect(find.byType(PermissionModeChip)).top),
-        reason: 'the model, then the mode',
+        tester.getRect(mode).left,
+        lessThan(tester.getRect(model).left),
+        reason: 'the permission, then the model',
+      );
+      expect(
+        tester.getCenter(mode).dy,
+        moreOrLessEquals(tester.getCenter(model).dy, epsilon: 1),
       );
     });
 
@@ -954,9 +963,7 @@ void main() {
           .reduce((a, b) => a > b ? a : b);
       expect(
         lowestFact,
-        lessThanOrEqualTo(
-          tester.getTopLeft(find.byType(SessionAgentChip)).dy,
-        ),
+        lessThanOrEqualTo(tester.getTopLeft(find.byType(SessionAgentChip)).dy),
         reason: 'the state line is a line, not the first item in the row',
       );
       // The controls hold one line between them.
@@ -1126,9 +1133,7 @@ void main() {
       expect(find.text('resumes 14:05'), findsOneWidget);
     });
 
-    testWidgets('the ports badge opens Running on its session', (
-      tester,
-    ) async {
+    testWidgets('the ports badge opens Running on its session', (tester) async {
       container = ProviderContainer(
         overrides: [
           ...overrides,
@@ -1145,28 +1150,27 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(runningFilterProvider).sessionId, 's1');
       expect(
-        container.read(terminalSessionsControllerProvider).activeTab!.layout
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
+            .layout
             .panes
             .single,
         kRunningPaneId,
       );
     });
 
-    testWidgets('one Agent chip names the model and the mode, and its menu '
-        'sets both', (tester) async {
+    testWidgets('the permission and the model are chips on the bar, and each '
+        'sets its own', (tester) async {
       seedSessionInAPane();
       container.read(selectedSessionIdProvider.notifier).select('s1');
       await pump(tester, size: desktopWindow.size);
 
+      // On the bar itself, one click each: not folded into a menu (owner,
+      // 2026-10-07).
       expect(find.byKey(agentChip), findsOneWidget);
-      // Neither picker sits on the bar itself any more.
-      expect(find.byType(PermissionModeChip), findsNothing);
-      expect(find.byType(SessionModelChip), findsNothing);
-
-      await tester.tap(find.byKey(agentChip));
-      await tester.pumpAndSettle();
-      expect(find.byType(PermissionModeChip), findsOneWidget);
-      expect(find.byType(SessionModelChip), findsOneWidget);
+      expect(find.byType(PermissionModeChip).hitTestable(), findsOneWidget);
+      expect(find.byType(SessionModelChip).hitTestable(), findsOneWidget);
 
       await tester.tap(find.byType(PermissionModeChip));
       await tester.pumpAndSettle();
@@ -1179,7 +1183,6 @@ void main() {
         'mode=acceptEdits',
       );
 
-      // The menu stays open over its pickers, so the model is the next pick.
       await tester.tap(find.byType(ModelChip).last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Opus').last);
@@ -1187,7 +1190,18 @@ void main() {
       expect(server.sessionRows.getById('s1')!.modelId, 'opus');
     });
 
-    testWidgets('at 900, 1200 and 1440 the bar is one line', (tester) async {
+    testWidgets('at 900 the bar takes two rows and keeps the permission and '
+        'the model in sight', (tester) async {
+      agentStatus = AgentActivityStatus.working;
+      seedEveryBadge();
+      continuation = possible;
+      await pump(tester, size: const Size(900, 800));
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PermissionModeChip).hitTestable(), findsOneWidget);
+      expect(find.byType(SessionModelChip).hitTestable(), findsOneWidget);
+    });
+
+    testWidgets('at 1024, 1200 and 1440 the bar is one line', (tester) async {
       agentStatus = AgentActivityStatus.working;
       seedEveryBadge();
       delivery = const SessionDelivery(
@@ -1200,7 +1214,7 @@ void main() {
         hasWorktree: true,
       );
       continuation = possible;
-      for (final width in <double>[900, 1200, 1440]) {
+      for (final width in <double>[1024, 1200, 1440]) {
         await pump(tester, size: Size(width, 800));
         expect(tester.takeException(), isNull, reason: 'overflow at $width');
         final line = tester.getCenter(find.byKey(agentChip)).dy;
@@ -1271,9 +1285,7 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: const MaterialApp(
-            home: Scaffold(
-              body: CompactWorkbenchScope(child: WorkbenchView()),
-            ),
+            home: Scaffold(body: CompactWorkbenchScope(child: WorkbenchView())),
           ),
         ),
       );

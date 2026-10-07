@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../agents/application/session_model_providers.dart';
-import '../../agents/presentation/picker_face.dart';
 import '../application/acp_session_providers.dart';
 import '../application/session_launcher.dart';
-import '../application/session_modes_providers.dart';
 import '../application/session_signals.dart';
 import 'model_chip.dart';
 import 'permission_mode_chip.dart';
 import 'session_mode_picker.dart';
 
-/// **Agent ▾ on the session bar**: the model and the permission mode on one
-/// face (`Opus · Accept edits`), and one menu holding both pickers — the same
-/// [SessionModelChip], [PermissionModeChip] and [SessionModePicker] that
-/// stood on the bar, so each sets what it always set. Nothing for a session
-/// with no agent.
+/// **The agent's controls on the session bar**: the permission mode, the
+/// agent's own mode picker where it has one, and the model, each its own chip
+/// on the bar. They were folded into one Agent ▾ menu for a while; the owner
+/// wanted them back on the bar, one click each (2026-10-07). The same
+/// [PermissionModeChip], [SessionModePicker] and [SessionModelChip] as ever,
+/// so each sets what it always set. Nothing for a session with no agent.
 class SessionAgentChip extends ConsumerWidget {
   const SessionAgentChip({
     required this.sessionId,
@@ -29,101 +25,39 @@ class SessionAgentChip extends ConsumerWidget {
   static const barKey = ValueKey('session-agent-chip');
 
   final String sessionId;
+
+  /// Kept for the bar's layout, which hands every host the same width; the
+  /// chips size themselves.
   final double maxLabelWidth;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watchSession(sessionId);
     final acp = ref.watch(isAcpSessionProvider(sessionId));
-    final model = ref.watch(sessionModelProvider(sessionId));
-    final modelLabel = SessionModelMark.namesAModel(model)
-        ? modelChipViewFor(model!).label
-        : null;
-
-    String? modeLabel;
-    var alarming = false;
-    if (acp) {
-      final modes = ref.watch(sessionModesProvider(sessionId));
-      modeLabel = modes?.current?.name ?? modes?.currentModeId;
-    } else {
-      final effective = ref
-          .read(sessionLauncherProvider)
-          .effectivePermissionFor(sessionId);
-      if (effective == null) return const SizedBox.shrink();
-      final support = effective.descriptor?.launch.permission;
-      final known = support != null && support.isKnown;
-      modeLabel = known
-          ? describeSelectionFamiliarShort(support, effective.selection)
-          : 'Not established';
-      alarming = !known || support.isDangerous(effective.selection);
+    // A PTY session with no launch to read has no permission to show, and
+    // so no agent controls at all — as before.
+    if (!acp &&
+        ref.read(sessionLauncherProvider).effectivePermissionFor(sessionId) ==
+            null) {
+      return const SizedBox.shrink();
     }
-    final parts = [?modelLabel, ?modeLabel];
-    return PopupMenuButton<void>(
-      tooltip: '',
-      position: PopupMenuPosition.under,
-      itemBuilder: (context) => [_AgentPickers(sessionId: sessionId)],
-      child: Tooltip(
-        message: 'Agent: the model and what it may do without asking',
-        child: PickerFace(
-          icon: alarming ? AppIcons.warning : AppIcons.robot,
-          label: parts.isEmpty ? 'Agent' : parts.join(' · '),
-          alarming: alarming,
-          maxLabelWidth: maxLabelWidth,
+    // Compact on the bar, as the one chip they replaced was: their labels end
+    // in an ellipsis rather than pushing the pair off a narrow bar, and each
+    // tooltip still names the whole mode and model.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PermissionModeChip(
+          sessionId: sessionId,
+          maxLabelWidth: maxLabelWidth * 0.6,
         ),
-      ),
-    );
-  }
-}
-
-/// The menu's one entry: both pickers, each opening its own list over it, so
-/// the menu stays while a model and then a mode are picked.
-class _AgentPickers extends PopupMenuEntry<void> {
-  const _AgentPickers({required this.sessionId});
-
-  final String sessionId;
-
-  @override
-  double get height => kMinInteractiveDimension * 2;
-
-  @override
-  bool represents(void value) => false;
-
-  @override
-  State<_AgentPickers> createState() => _AgentPickersState();
-}
-
-class _AgentPickersState extends State<_AgentPickers> {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final label = theme.textTheme.labelSmall
-        ?.merge(Chrome.groupLabel)
-        .copyWith(color: theme.colorScheme.onSurfaceVariant);
-    final sessionId = widget.sessionId;
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Insets.md,
-        vertical: Insets.sm,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('MODEL', style: label),
-          const SizedBox(height: Insets.xs),
-          SessionModelChip(sessionId: sessionId),
-          const SizedBox(height: Insets.sm),
-          Text('PERMISSIONS', style: label),
-          const SizedBox(height: Insets.xs),
-          Wrap(
-            spacing: Insets.sm,
-            children: [
-              PermissionModeChip(sessionId: sessionId),
-              SessionModePicker(sessionId: sessionId, leadingGap: false),
-            ],
-          ),
-        ],
-      ),
+        SessionModePicker(sessionId: sessionId),
+        const SizedBox(width: Insets.xs),
+        SessionModelChip(
+          sessionId: sessionId,
+          maxLabelWidth: maxLabelWidth * 0.5,
+        ),
+      ],
     );
   }
 }
