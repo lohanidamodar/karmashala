@@ -59,6 +59,7 @@ class ServerEventRules {
   final AutomationRateLimiter limiter;
 
   final Map<AgentSessionKey, AgentActivityStatus> _last = {};
+  final Map<AgentSessionKey, bool> _waiting = {};
 
   /// Events acted on, for tests and diagnostics.
   int fired = 0;
@@ -67,8 +68,14 @@ class ServerEventRules {
   void observe(SessionStatusEntry entry) {
     if (entry.session.imported) return;
     final previous = _last[entry.key];
+    final wasWaiting = _waiting[entry.key] ?? false;
     _last[entry.key] = entry.report.status;
-    final kind = automationEventOf(previous, entry.report);
+    _waiting[entry.key] = waitsOnPerson(entry.report);
+    final kind = automationEventWithWait(
+      previous,
+      entry.report,
+      wasWaiting: wasWaiting,
+    );
     if (kind == null) return;
     final sessionId = entry.openId;
     scheduleMicrotask(() async {

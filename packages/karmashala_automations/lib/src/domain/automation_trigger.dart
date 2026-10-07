@@ -7,7 +7,10 @@ enum AutomationEventKind {
   turnFinished('turn_finished'),
 
   /// An agent's turn ended in an error the agent itself reported.
-  turnFailed('turn_failed');
+  turnFailed('turn_failed'),
+
+  /// A session started waiting on a person: an open prompt or a question.
+  needsYou('needs_you');
 
   const AutomationEventKind(this.storedName);
 
@@ -28,11 +31,13 @@ enum AutomationEventKind {
   String get phrase => switch (this) {
     AutomationEventKind.turnFinished => 'finishes a turn',
     AutomationEventKind.turnFailed => 'ends a turn in an error',
+    AutomationEventKind.needsYou => 'starts waiting on you',
   };
 
   String get label => switch (this) {
     AutomationEventKind.turnFinished => 'A session finishes a turn',
     AutomationEventKind.turnFailed => 'A session\'s turn fails',
+    AutomationEventKind.needsYou => 'A session needs you',
   };
 }
 

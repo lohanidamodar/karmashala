@@ -155,6 +155,7 @@ String triggerWords(Automation automation, {DateTime? now}) {
 String _eventWords(AutomationEventKind kind) => switch (kind) {
   AutomationEventKind.turnFinished => 'a session finishes a turn',
   AutomationEventKind.turnFailed => 'a session\'s turn fails',
+  AutomationEventKind.needsYou => 'a session needs you',
 };
 
 /// The whole automation in one line: "Weekdays at 09:00, in app → start

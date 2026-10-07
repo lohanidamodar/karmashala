@@ -348,6 +348,12 @@ class AutomationDraft {
     if (repositoryId == null) return 'Pick where it runs.';
     if (scheduleProblem case final problem?) return problem;
     if (namesAgent && installationId == null) return 'Pick an agent.';
+    if (trigger == DraftTrigger.event &&
+        eventKind == AutomationEventKind.needsYou &&
+        firstStep == EventFirstStep.tell) {
+      return 'A session that needs you has a prompt open, and a message '
+          'would answer it. Start an agent or only notify.';
+    }
     if (!notifyOnly && prompt.trim().isEmpty) {
       return namesAgent
           ? 'Say what the agent is told.'

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/automations/application/automation_draft.dart';
 import 'package:karmashala/src/features/automations/application/automation_editor_state.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/automation_runs_page.dart';
@@ -120,6 +121,19 @@ void main() {
     expect(
       draft.steps.of(AutomationStepKind.tell)!.when,
       AutomationStepWhen.failure,
+    );
+  });
+
+  test('the sixth template notifies when an agent needs you, and such a rule '
+      'cannot tell the waiting session', () {
+    final template = kAutomationTemplates.last;
+    expect(template.title, 'Notify me when an agent needs me');
+    final draft = template.build('r1');
+    expect(draft.eventKind, AutomationEventKind.needsYou);
+    expect(draft.firstStep, EventFirstStep.nothing);
+    expect(
+      draft.withFirstStep(EventFirstStep.tell).copyWith(prompt: 'hi').missing,
+      contains('would answer it'),
     );
   });
 

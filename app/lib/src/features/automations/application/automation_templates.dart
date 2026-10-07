@@ -114,22 +114,22 @@ final List<AutomationTemplate> kAutomationTemplates = [
     ),
   ),
   AutomationTemplate(
-    title: 'Tell me when a turn fails',
-    description: 'A notification on this device and the phone.',
+    title: 'Notify me when an agent needs me',
+    description: 'A question or an approval, on this device and the phone.',
     trigger: DraftTrigger.event,
     build: (repositoryId) => AutomationDraft(
-      name: 'Tell me when a turn fails',
+      name: 'Notify me when an agent needs me',
       repositoryId: repositoryId,
       trigger: DraftTrigger.event,
-      eventKind: AutomationEventKind.turnFailed,
+      eventKind: AutomationEventKind.needsYou,
       startsAgent: false,
       notifyOnly: true,
-      prompt: 'A turn failed.',
+      prompt: 'An agent needs you.',
       steps: AutomationSteps(const [
         AutomationStep(
           kind: AutomationStepKind.notify,
           when: AutomationStepWhen.always,
-          text: 'A turn failed in {{project}}.',
+          text: 'An agent in {{project}} needs you.',
         ),
       ]),
     ),
