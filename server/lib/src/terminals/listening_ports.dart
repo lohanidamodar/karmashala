@@ -105,16 +105,21 @@ List<ListeningSocket> parseLsof(String output) {
 }
 
 /// `ss -ltnpH`: `LISTEN 0 511 127.0.0.1:5173 0.0.0.0:* users:(("node",pid=12,fd=20))`.
-List<ListeningSocket> parseSs(String output) {
+List<ListeningSocket> parseSs(String output, {bool keepUnowned = false}) {
   final sockets = <ListeningSocket>[];
   for (final line in output.split('\n')) {
     final parts = line.trim().split(RegExp(r'\s+'));
-    if (parts.length < 6) continue;
+    if (parts.length < 5) continue;
     final local = parts[3];
     final cut = local.lastIndexOf(':');
     final port = cut < 0 ? null : int.tryParse(local.substring(cut + 1));
     if (port == null) continue;
-    for (final m in RegExp(r'pid=(\d+)').allMatches(line)) {
+    final owners = RegExp(r'pid=(\d+)').allMatches(line).toList();
+    // A socket whose process this user cannot see, as pid 0.
+    if (owners.isEmpty && keepUnowned && parts.first == 'LISTEN') {
+      sockets.add((port: port, pid: 0, address: local.substring(0, cut)));
+    }
+    for (final m in owners) {
       sockets.add((
         port: port,
         pid: int.parse(m.group(1)!),
@@ -281,13 +286,15 @@ class ListeningPortProbe {
 
   /// Everything under [roots], the server ([serverPid], its ports named by
   /// [serverPorts]) and device mirroring, read now. [unlisted] are panes on
-  /// machines this one cannot list, kept with [notes] saying so.
+  /// machines this one cannot list, kept with [notes] saying so. A pane in
+  /// [readInside] has had its WSL side read already.
   Future<RunningReading> running(
     List<RunningPaneRoot> roots, {
     required int serverPid,
     Map<int, String> serverPorts = const {},
     List<RunningProcess> unlisted = const [],
     List<RunningNote> notes = const [],
+    Set<String> readInside = const {},
   }) async {
     final said = [...notes];
     List<ProcessRow> processes = const [];
@@ -358,7 +365,8 @@ class ListeningPortProbe {
           ),
         );
       }
-      if (tree.any((pid) => rows[pid]?.name.toLowerCase() == 'wsl.exe')) {
+      if (!readInside.contains(root.paneId) &&
+          tree.any((pid) => rows[pid]?.name.toLowerCase() == 'wsl.exe')) {
         said.add(
           RunningNote(
             '"${root.title}" runs in WSL; what listens inside it is not '

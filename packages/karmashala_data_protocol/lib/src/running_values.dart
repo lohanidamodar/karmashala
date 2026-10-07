@@ -15,32 +15,48 @@ enum RunningRole {
 
   /// adb or scrcpy: what mirrors and forwards devices.
   device,
+
+  /// A process listening on a WSL distribution or SSH box that no session
+  /// here started. Never stopped from a reading.
+  listener,
 }
 
 /// One listening TCP socket. [label] is what the server knows it to be — its
 /// own MCP endpoint, its relay — and null for anything else.
 final class RunningPort {
-  const RunningPort({required this.port, required this.address, this.label});
+  const RunningPort({
+    required this.port,
+    required this.address,
+    this.label,
+    this.host,
+  });
 
   final int port;
   final String address;
   final String? label;
 
+  /// The machine to reach it on when that is not the server's localhost: an
+  /// SSH box's address.
+  final String? host;
+
   Map<String, Object?> toJson() => {
     'port': port,
     'address': address,
     'label': ?label,
+    'host': ?host,
   };
 
   factory RunningPort.fromJson(Map<String, Object?> json) => RunningPort(
     port: (json['port']! as num).toInt(),
     address: json['address'] as String? ?? '',
     label: json['label'] as String?,
+    host: json['host'] as String?,
   );
 }
 
 /// One process, what owns it, and what it listens on. A pane on a machine the
-/// server cannot list (WSL, SSH) is here with pid 0 and no ports.
+/// server cannot list (an SSH box with no connection open) is here with pid 0
+/// and no ports.
 final class RunningProcess {
   const RunningProcess({
     required this.pid,
@@ -53,6 +69,8 @@ final class RunningProcess {
     this.agentSessionId,
     this.environmentId,
     this.command,
+    this.pidMachine,
+    this.commandLine,
     this.stoppable = false,
     this.ports = const [],
   });
@@ -78,6 +96,13 @@ final class RunningProcess {
   /// The owning pane's last command line, when its shell said.
   final String? command;
 
+  /// The machine whose process table [pid] is from, when not the server's own:
+  /// a WSL distribution's or an SSH box's environment id. Stop names it.
+  final String? pidMachine;
+
+  /// The process's own command line, when its machine said.
+  final String? commandLine;
+
   /// Whether the server would stop it: a process under a pane, never a
   /// pane's root nor the server. The server checks again when asked.
   final bool stoppable;
@@ -94,7 +119,11 @@ final class RunningProcess {
     'agentSessionId': ?agentSessionId,
     'environmentId': ?environmentId,
     'command': ?command,
-    'stoppable': stoppable,
+    'pidMachine': ?pidMachine,
+    'commandLine': ?commandLine,
+    // An older app stops by pid alone, on the server's own machine.
+    'stoppable': stoppable && pidMachine == null,
+    if (pidMachine != null) 'stoppableThere': stoppable,
     'ports': [for (final port in ports) port.toJson()],
   };
 
@@ -102,6 +131,7 @@ final class RunningProcess {
     final role = RunningRole.values
         .where((role) => role.name == json['role'])
         .firstOrNull;
+    final pidMachine = json['pidMachine'] as String?;
     return RunningProcess(
       pid: (json['pid'] as num?)?.toInt() ?? 0,
       parent: (json['parent'] as num?)?.toInt() ?? 0,
@@ -114,7 +144,11 @@ final class RunningProcess {
       agentSessionId: json['agentSessionId'] as String?,
       environmentId: json['environmentId'] as String?,
       command: json['command'] as String?,
-      stoppable: role != null && json['stoppable'] == true,
+      pidMachine: pidMachine,
+      commandLine: json['commandLine'] as String?,
+      stoppable:
+          role != null &&
+          json[pidMachine == null ? 'stoppable' : 'stoppableThere'] == true,
       ports: [
         for (final port in (json['ports'] as List?) ?? const [])
           if (port is Map) RunningPort.fromJson(port.cast()),

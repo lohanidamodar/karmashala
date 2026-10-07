@@ -1,4 +1,6 @@
+import 'package:agent_cli/descriptors.dart' show AgentRegistry;
 import 'package:agent_cli/process.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/phone_routes.dart';
 import 'package:karmashala/src/app/shell/running_tab_view.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
 import 'package:karmashala/src/features/environments/application/environment_providers.dart';
 import 'package:karmashala/src/features/environments/application/environments_controller.dart';
@@ -13,8 +16,11 @@ import 'package:karmashala/src/features/git/application/remote_links.dart';
 import 'package:karmashala/src/features/running/application/running_providers.dart';
 import 'package:karmashala/src/features/running/domain/port_label.dart';
 import 'package:karmashala/src/features/sessions/application/background_runs_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_agent_providers.dart';
 import 'package:karmashala/src/features/terminal/data/terminals_client.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+
+import 'running_fixture.dart';
 
 /// The server's terminals, answering the Running tab's two requests only.
 class _Terminals implements TerminalsClient {
@@ -22,7 +28,7 @@ class _Terminals implements TerminalsClient {
 
   RunningReading reading;
   int reads = 0;
-  final stopped = <int>[];
+  final stopped = <(int, String?)>[];
 
   @override
   Future<RunningReading> running() async {
@@ -31,7 +37,8 @@ class _Terminals implements TerminalsClient {
   }
 
   @override
-  Future<void> stopProcess(int pid) async => stopped.add(pid);
+  Future<void> stopProcess(int pid, {String? machine}) async =>
+      stopped.add((pid, machine));
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -39,7 +46,7 @@ class _Terminals implements TerminalsClient {
 
 /// An older server: `terminals.running` is a request it has never heard of.
 class _OldTerminals extends _Terminals {
-  _OldTerminals() : super(_reading);
+  _OldTerminals() : super(runningFixture);
 
   @override
   Future<RunningReading> running() async {
@@ -78,7 +85,7 @@ class _Browser extends BrowserPaneController {
 
 class _Environments extends EnvironmentsController {
   @override
-  List<ExecutionEnvironment> build() => [_local, _wsl];
+  List<ExecutionEnvironment> build() => [fixtureLocal, fixtureWsl, fixtureBox];
 }
 
 class _Routes implements PhoneShellRoutes {
@@ -92,78 +99,6 @@ class _Routes implements PhoneShellRoutes {
   void showWorkbench() {}
 }
 
-final _local = ExecutionEnvironment(
-  id: 'windows',
-  createdAt: DateTime.utc(2026),
-  name: 'Windows',
-  kind: EnvironmentKind.windowsNative,
-);
-final _wsl = ExecutionEnvironment(
-  id: 'wsl:Ubuntu',
-  createdAt: DateTime.utc(2026),
-  name: 'Ubuntu',
-  kind: EnvironmentKind.wsl,
-  wslDistribution: 'Ubuntu',
-);
-
-final _reading = RunningReading(
-  serverPid: 1,
-  checkedAt: DateTime.utc(2026, 10, 6),
-  processes: const [
-    RunningProcess(
-      pid: 1,
-      parent: 0,
-      name: 'karmashala_host.exe',
-      role: RunningRole.server,
-      ports: [
-        RunningPort(port: 47821, address: '127.0.0.1', label: 'MCP endpoint'),
-      ],
-    ),
-    RunningProcess(
-      pid: 10,
-      parent: 1,
-      name: 'pwsh.exe',
-      role: RunningRole.pane,
-      paneId: 'p1',
-      title: 'Fix the build',
-      agentSessionId: 's1',
-      command: 'npx vite',
-    ),
-    RunningProcess(
-      pid: 11,
-      parent: 10,
-      name: 'node.exe',
-      role: RunningRole.child,
-      paneId: 'p1',
-      title: 'Fix the build',
-      agentSessionId: 's1',
-      command: 'npx vite',
-      stoppable: true,
-      ports: [RunningPort(port: 5173, address: '::1')],
-    ),
-    RunningProcess(
-      pid: 12,
-      parent: 10,
-      name: 'postgres.exe',
-      role: RunningRole.child,
-      paneId: 'p1',
-      title: 'Fix the build',
-      agentSessionId: 's1',
-      stoppable: true,
-      ports: [RunningPort(port: 5432, address: '127.0.0.1')],
-    ),
-    RunningProcess(
-      pid: 30,
-      parent: 1,
-      name: 'wsl.exe',
-      role: RunningRole.pane,
-      paneId: 'p2',
-      title: 'ubuntu',
-      environmentId: 'wsl:Ubuntu',
-    ),
-  ],
-);
-
 void main() {
   late _Terminals terminals;
   late _Browser browser;
@@ -172,7 +107,7 @@ void main() {
   String? copied;
 
   setUp(() {
-    terminals = _Terminals(_reading);
+    terminals = _Terminals(runningFixture);
     browser = _Browser();
     opened = [];
     phone = PhoneShellRouter();
@@ -182,11 +117,14 @@ void main() {
   Future<ProviderContainer> pump(
     WidgetTester tester, {
     Size size = const Size(1440, 900),
+    double textScale = 1,
     _Terminals? using,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async {
@@ -201,9 +139,11 @@ void main() {
         terminalsClientProvider.overrideWithValue(using ?? terminals),
         browserPaneControllerProvider.overrideWith(() => browser),
         environmentsControllerProvider.overrideWith(_Environments.new),
-        localEnvironmentProvider.overrideWithValue(_local),
+        localEnvironmentProvider.overrideWithValue(fixtureLocal),
         portFactsProvider.overrideWithValue(const PortFacts()),
         sessionBackgroundRunsProvider.overrideWith((ref, _) => const []),
+        sessionAgentIdProvider.overrideWith((ref, _) => 'claudeCode'),
+        agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
         openExternalUrlProvider.overrideWithValue((url) async {
           opened.add(url);
           return true;
@@ -222,82 +162,244 @@ void main() {
     return container;
   }
 
-  testWidgets('each machine has its own section, this one first', (
+  Finder inCard(String key, Finder matching) => find.descendant(
+    of: find.byKey(ValueKey('running-card-$key')),
+    matching: matching,
+  );
+
+  testWidgets('ports come first, left of the sessions on a desktop; a WSL '
+      'session\'s port 3000 is a link under that session', (tester) async {
+    await pump(tester);
+    expect(tester.takeException(), isNull);
+    final listening = tester.getTopLeft(
+      find.byKey(const ValueKey('running-heading-listening')),
+    );
+    final sessions = tester.getTopLeft(
+      find.byKey(const ValueKey('running-heading-sessions')),
+    );
+    expect(listening.dx, lessThan(sessions.dx));
+    expect((listening.dy - sessions.dy).abs(), lessThan(1));
+
+    expect(find.byKey(const ValueKey('running-link-3000')), findsOneWidget);
+    expect(find.text('localhost:3000'), findsOneWidget);
+    expect(find.textContaining('Vite dev server'), findsOneWidget);
+    expect(
+      inCard('pa', find.textContaining(':3000')),
+      findsOneWidget,
+      reason: 'the analytics card names its port',
+    );
+    expect(
+      inCard('pa', find.textContaining('WSL · archlinux')),
+      findsOneWidget,
+    );
+    // A database is not a link: its address is text to copy.
+    expect(find.byKey(const ValueKey('running-link-5432')), findsNothing);
+    expect(find.byKey(const ValueKey('running-address-5432')), findsOneWidget);
+  });
+
+  testWidgets('one click on a link opens the system browser at once and not '
+      'the pane; the small globe and Ctrl-click open the pane; Copy copies', (
     tester,
   ) async {
-    await pump(tester);
-    final here = find.byKey(const ValueKey('running-machine-windows'));
-    final wsl = find.byKey(const ValueKey('running-machine-wsl:Ubuntu'));
-    expect(here, findsOneWidget);
-    expect(wsl, findsOneWidget);
-    expect(tester.getTopLeft(here).dy, lessThan(tester.getTopLeft(wsl).dy));
-    expect(
-      find.descendant(of: wsl, matching: find.textContaining('wsl.exe')),
-      findsOneWidget,
-    );
-    // A port is named by what holds it, never by asking it.
-    expect(find.text(':5173 — Vite dev server'), findsOneWidget);
-    expect(find.text(':5432 — PostgreSQL'), findsOneWidget);
-    expect(find.text(':47821 — MCP endpoint'), findsOneWidget);
-  });
-
-  testWidgets('one machine can be picked', (tester) async {
     final container = await pump(tester);
-    container.read(runningFilterProvider.notifier).machine('wsl:Ubuntu');
+    final link = find.byKey(const ValueKey('running-link-3000'));
+    expect(tester.getSize(link).height, greaterThanOrEqualTo(32));
+    await tester.tap(link);
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('running-machine-windows')), findsNothing);
-    expect(
-      find.byKey(const ValueKey('running-machine-wsl:Ubuntu')),
-      findsOneWidget,
-    );
-  });
+    expect(opened, ['http://localhost:3000']);
+    expect(browser.navigated, isEmpty);
+    expect(container.read(sidePanelProvider), isNull);
+    expect(find.byType(PopupMenuItem<Object?>), findsNothing);
 
-  testWidgets('an http port opens in the Browser pane, in the system browser, '
-      'or is copied; a database is only copied', (tester) async {
-    final container = await pump(tester);
-    await tester.tap(find.byKey(const ValueKey('running-open-5173')));
+    await tester.tap(find.byKey(const ValueKey('running-open-pane-3000')));
     await tester.pumpAndSettle();
-    expect(browser.navigated, ['http://localhost:5173']);
+    expect(browser.navigated, ['http://localhost:3000']);
     expect(container.read(sidePanelProvider), SidePanelSurface.browser);
 
-    await tester.tap(find.byKey(const ValueKey('running-system-browser-5173')));
-    expect(opened, ['http://localhost:5173']);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(link);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(browser.navigated, hasLength(2));
+    expect(opened, hasLength(1));
 
-    await tester.tap(find.byKey(const ValueKey('running-copy-5173')));
-    expect(copied, 'http://localhost:5173');
-
-    expect(find.byKey(const ValueKey('running-open-5432')), findsNothing);
-    expect(
-      find.byKey(const ValueKey('running-system-browser-5432')),
-      findsNothing,
-    );
+    await tester.tap(find.byKey(const ValueKey('running-copy-3000')));
+    expect(copied, 'http://localhost:3000');
     await tester.tap(find.byKey(const ValueKey('running-copy-5432')));
     expect(copied, 'localhost:5432');
   });
 
-  testWidgets('Stop asks first, naming the process and its owner; the server '
-      'and a pane\'s root offer no Stop', (tester) async {
+  testWidgets('a port on an SSH box is host:port, copied, and never opened '
+      'as this machine\'s localhost', (tester) async {
     await pump(tester);
-    expect(find.byKey(const ValueKey('running-stop-1')), findsNothing);
-    expect(find.byKey(const ValueKey('running-stop-10')), findsNothing);
+    expect(find.byKey(const ValueKey('running-link-8080')), findsNothing);
+    expect(find.byKey(const ValueKey('running-open-pane-8080')), findsNothing);
+    expect(find.text('box.example:8080'), findsOneWidget);
+    expect(find.textContaining('not forwarded here'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('running-copy-8080')));
+    expect(copied, 'box.example:8080');
+  });
+
+  testWidgets('wrappers hide behind a count and duplicates are one group', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(
+      inCard('pn', find.textContaining('flutter_tester.exe')),
+      findsOneWidget,
+    );
+    expect(inCard('pn', find.textContaining('×6')), findsOneWidget);
+    expect(inCard('pn', find.textContaining('conhost.exe')), findsNothing);
+    final helpers = find.byKey(const ValueKey('running-helpers-pn'));
+    expect(
+      find.descendant(of: helpers, matching: find.text('7 helper processes')),
+      findsOneWidget,
+    );
+    await tester.tap(helpers);
+    await tester.pumpAndSettle();
+    expect(inCard('pn', find.textContaining('conhost.exe')), findsNWidgets(6));
+
+    await tester.tap(find.byKey(const ValueKey('running-all-pn')));
+    await tester.pumpAndSettle();
+    expect(inCard('pn', find.textContaining('pid 31184')), findsOneWidget);
+  });
+
+  testWidgets('the server\'s ports are one quiet card that opens to them', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('Karmashala server · 4 ports'), findsOneWidget);
+    expect(find.textContaining('MCP endpoint'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('running-server-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('MCP endpoint'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('running-server-settings')),
       findsOneWidget,
     );
+  });
 
-    await tester.tap(find.byKey(const ValueKey('running-stop-11')));
+  testWidgets('Stop is behind ⋯, asks first, and names the machine a WSL '
+      'process is on; the server and a pane\'s root offer none', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.byKey(const ValueKey('running-more-38080')), findsNothing);
+    expect(find.byKey(const ValueKey('running-more-42376')), findsNothing);
+    expect(find.text('Stop'), findsNothing, reason: 'not on every row');
+
+    // The vite port's card: its ⋯ shows when the pointer is over it.
+    final card = find.byKey(
+      const ValueKey('running-port-wsl:archlinux-421-3000'),
+    );
+    final more = find.descendant(
+      of: card,
+      matching: find.byKey(const ValueKey('running-more-421')),
+    );
+    expect(
+      find.descendant(of: more, matching: find.byType(PopupMenuButton<String>)),
+      findsNothing,
+      reason: 'hidden until hovered',
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(card));
     await tester.pumpAndSettle();
-    expect(find.text('Stop node.exe?'), findsOneWidget);
-    expect(find.textContaining('"Fix the build"'), findsOneWidget);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('running-stop-421')));
+    await tester.pumpAndSettle();
+    expect(find.text('Stop node?'), findsOneWidget);
+    expect(find.textContaining('"analytics"'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(terminals.stopped, isEmpty);
 
-    await tester.tap(find.byKey(const ValueKey('running-stop-11')));
+    // A right-click on the row is the same menu.
+    await tester.tap(card, buttons: kSecondaryMouseButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('running-stop-421')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('running-stop-confirm')));
     await tester.pumpAndSettle();
-    expect(terminals.stopped, [11]);
+    expect(terminals.stopped, [(421, 'wsl:archlinux')]);
+  });
+
+  testWidgets('a note about a session sits on its card and can be put away', (
+    tester,
+  ) async {
+    terminals.reading = RunningReading(
+      serverPid: runningFixture.serverPid,
+      checkedAt: runningFixture.checkedAt,
+      processes: runningFixture.processes,
+      notes: const [
+        RunningNote(
+          '"deploy api" runs on an SSH machine with no connection open; its '
+          'processes are not read.',
+          environmentId: 'ssh:box',
+        ),
+      ],
+    );
+    await pump(tester);
+    final note = inCard('pd', find.textContaining('no connection open'));
+    expect(note, findsOneWidget);
+    await tester.tap(inCard('pd', find.byTooltip('Dismiss')));
+    await tester.pumpAndSettle();
+    expect(note, findsNothing);
+  });
+
+  testWidgets('the filter box keeps the ports and processes that match', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('running-search')),
+        matching: find.byType(EditableText),
+      ),
+      'vite',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('running-link-3000')), findsOneWidget);
+    expect(find.byKey(const ValueKey('running-address-5432')), findsNothing);
+    expect(find.byKey(const ValueKey('running-card-pn')), findsNothing);
+  });
+
+  testWidgets('the header is the Stores page\'s: a title bar, Refresh and a '
+      'funnel that picks a machine from choice chips', (tester) async {
+    await pump(tester);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Running')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const ValueKey('running-refresh')),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('running-machine-filter')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChoiceChip), findsNWidgets(4));
+    await tester.tap(
+      find.byKey(const ValueKey('running-machine-wsl:archlinux')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('running-card-pn')), findsNothing);
+    expect(find.byKey(const ValueKey('running-card-pa')), findsOneWidget);
+  });
+
+  testWidgets('one machine can be picked', (tester) async {
+    final container = await pump(tester);
+    container.read(runningFilterProvider.notifier).machine('wsl:archlinux');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('running-card-pn')), findsNothing);
+    expect(find.byKey(const ValueKey('running-card-pa')), findsOneWidget);
+    expect(find.text('Karmashala server · 4 ports'), findsNothing);
   });
 
   testWidgets('it reads while open, on Refresh, and never once closed', (
@@ -326,28 +428,68 @@ void main() {
       'Stop', (tester) async {
     final old = _OldTerminals();
     await pump(tester, using: old);
-    expect(find.text(':5173 — Node server'), findsOneWidget);
-    expect(find.byKey(const ValueKey('running-stop-11')), findsNothing);
+    expect(find.textContaining('Node server'), findsOneWidget);
+    expect(find.byKey(const ValueKey('running-more-11')), findsNothing);
     expect(find.textContaining('older than this app'), findsOneWidget);
   });
 
-  testWidgets('on a phone, Open asks the server to show it on the desktop', (
-    tester,
-  ) async {
+  testWidgets('on a phone: one column, sessions folded, and Open asks the '
+      'server to show it on the desktop', (tester) async {
     phone.attach(_Routes());
     final container = await pump(tester, size: const Size(390, 844));
     expect(tester.takeException(), isNull);
     expect(
-      find.byKey(const ValueKey('running-system-browser-5173')),
+      tester.getSize(find.byKey(const ValueKey('running-link-3000'))).height,
+      greaterThanOrEqualTo(44),
+    );
+    expect(
+      find.byKey(const ValueKey('running-open-pane-3000')),
       findsNothing,
       reason: 'the phone\'s own browser would reach the phone',
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('running-open-5173')));
+    await tester.tap(find.byKey(const ValueKey('running-link-3000')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('running-open-5173')));
-    await tester.pumpAndSettle();
-    expect(browser.navigated, ['http://localhost:5173']);
+    expect(browser.navigated, ['http://localhost:3000']);
+    expect(opened, isEmpty);
     expect(container.read(sidePanelProvider), isNull);
     expect(find.textContaining('desktop\'s Browser'), findsOneWidget);
+
+    final listening = tester.getTopLeft(
+      find.byKey(const ValueKey('running-heading-listening')),
+    );
+    await scrollTo(tester, const ValueKey('running-heading-sessions'));
+    final sessions = tester.getTopLeft(
+      find.byKey(const ValueKey('running-heading-sessions')),
+    );
+    expect(sessions.dx, listening.dx, reason: 'one column');
+    await scrollTo(tester, const ValueKey('running-session-pn'));
+    expect(find.byKey(const ValueKey('running-all-pn')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('running-session-pn')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('running-all-pn')), findsOneWidget);
   });
+
+  for (final (name, size) in [
+    ('phone', const Size(390, 844)),
+    ('desktop', const Size(1440, 900)),
+  ]) {
+    testWidgets('at 1.6× text on a $name nothing overflows', (tester) async {
+      // An overflow fails the test by itself, naming the row.
+      await pump(tester, size: size, textScale: 1.6);
+      await scrollTo(tester, const ValueKey('running-session-pn'));
+      await tester.tap(find.byKey(const ValueKey('running-session-pn')));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, const ValueKey('running-card-pd'));
+    });
+  }
+}
+
+/// Scrolls the tab until [key] is built and on screen.
+Future<void> scrollTo(WidgetTester tester, Key key) async {
+  await tester.scrollUntilVisible(
+    find.byKey(key),
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
 }

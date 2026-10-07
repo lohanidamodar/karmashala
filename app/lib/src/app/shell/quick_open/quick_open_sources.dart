@@ -782,10 +782,11 @@ class QuickOpenSources {
       if (reading != null)
         for (final (:process, :port) in allPorts(reading))
           if (process.role != RunningRole.server &&
+              port.host == null &&
               labelPort(
                 process: process.name,
                 port: port.port,
-                command: process.command,
+                command: process.commandLine ?? process.command,
                 facts: facts,
               ).isHttp)
             _command(

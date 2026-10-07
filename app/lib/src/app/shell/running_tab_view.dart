@@ -1,11 +1,8 @@
 import 'dart:async';
 
-import 'package:agent_cli/read.dart' show BackgroundRunState;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
-import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -13,25 +10,22 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/browser/application/browser_pane_controller.dart';
 import '../../features/environments/application/environment_providers.dart';
-import '../../features/environments/application/environments_controller.dart';
-import '../../features/git/application/remote_links.dart'
-    show openExternalUrlProvider;
 import '../../features/running/application/running_providers.dart';
-import '../../features/running/domain/port_label.dart';
+import '../../features/running/domain/running_board.dart';
 import '../../features/running/domain/running_groups.dart';
-import '../../features/sessions/application/background_runs_providers.dart';
-import '../../features/settings/presentation/settings_catalog.dart';
+import '../widgets/adaptive_modal.dart';
 import 'phone_routes.dart';
+import 'running_cards.dart';
 import 'side_panel_state.dart';
-import 'workbench_tabs.dart' show openSettingsTab;
 
-/// **The Running tab**: everything Karmashala runs — its server, each pane's
-/// processes with the ports they listen on, background runs and device
-/// mirroring — by machine. Read only while it is on screen.
+/// **The Running tab**: what listens first — each port a link where a browser
+/// can open it — then one card per session, on every machine Karmashala runs
+/// panes on. Read only while it is on screen.
 class RunningTabView extends ConsumerStatefulWidget {
   const RunningTabView({super.key});
 
-  /// How often it reads again while open. Each read is two OS listings.
+  /// How often it reads again while open. Each read is two OS listings, and
+  /// one inside each WSL distribution or SSH box with a live pane.
   static const Duration refreshInterval = Duration(seconds: 10);
 
   @override
@@ -68,39 +62,170 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
     final filter = ref.watch(runningFilterProvider);
     final localId = ref.watch(localEnvironmentProvider)?.id ?? 'local';
     final reading = snapshot.reading;
-    return PaneScaffold(
-      title: 'Running',
-      icon: AppIcons.listMagnifyingGlass,
-      actions: [
-        if (snapshot.loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: Insets.sm),
-            child: InlineSpinner(semanticsLabel: 'Reading what runs'),
-          ),
+    final label = ref.watch(runningMachinesProvider).label;
+    final machines = reading == null
+        ? const <String>[]
+        : groupByMachine(
+            reading,
+            localEnvironmentId: localId,
+          ).map((m) => m.environmentId).toList();
+    final actions = <Widget>[
+      _MachineFilterButton(
+        machines: machines,
+        picked: machines.contains(filter.environmentId)
+            ? filter.environmentId
+            : null,
+        label: label,
+      ),
+      if (snapshot.loading)
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: Insets.sm),
+          child: InlineSpinner(semanticsLabel: 'Reading what runs'),
+        )
+      else
         IconButton(
           key: const ValueKey('running-refresh'),
           tooltip: 'Refresh',
           icon: const Icon(AppIcons.arrowClockwise),
           onPressed: _refresh,
         ),
-      ],
-      body: reading == null
-          ? Center(
-              child: snapshot.error != null
-                  ? _Muted('Could not read what runs: ${snapshot.error}')
-                  : const InlineSpinner(semanticsLabel: 'Reading what runs'),
-            )
-          : _RunningBody(
-              reading: reading,
-              filter: filter,
-              localEnvironmentId: localId,
-              error: snapshot.error,
-            ),
+    ];
+    return WorkbenchTabScaffold(
+      icon: AppIcons.listMagnifyingGlass,
+      title: 'Running',
+      actions: actions,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _StatusLine(reading: reading, loading: snapshot.loading),
+          Expanded(child: _bodyOf(snapshot, filter, localId)),
+        ],
+      ),
+    );
+  }
+
+  Widget _bodyOf(
+    RunningSnapshot snapshot,
+    RunningFilter filter,
+    String localId,
+  ) {
+    final reading = snapshot.reading;
+    return reading == null
+        ? Center(
+            child: snapshot.error != null
+                ? Padding(
+                    padding: const EdgeInsets.all(Insets.lg),
+                    child: RunningMuted(
+                      'Could not read what runs: ${snapshot.error}',
+                    ),
+                  )
+                : const InlineSpinner(semanticsLabel: 'Reading what runs'),
+          )
+        : _RunningBody(
+            reading: reading,
+            filter: filter,
+            localEnvironmentId: localId,
+            error: snapshot.error,
+          );
+  }
+}
+
+/// The machine filter, behind a funnel as Overview's filters are: choice
+/// chips in a sheet on a phone, a dialog elsewhere.
+class _MachineFilterButton extends ConsumerWidget {
+  const _MachineFilterButton({
+    required this.machines,
+    required this.picked,
+    required this.label,
+  });
+
+  final List<String> machines;
+  final String? picked;
+  final MachineLabel label;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FilterFunnelButton(
+      key: const ValueKey('running-machine-filter'),
+      count: picked == null ? 0 : 1,
+      onPressed: () => showAdaptiveModal<void>(
+        context: context,
+        title: 'Machines',
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final now = ref.watch(runningFilterProvider).environmentId;
+            return Padding(
+              padding: const EdgeInsets.all(Insets.lg),
+              child: Wrap(
+                spacing: Insets.sm,
+                runSpacing: Insets.sm,
+                children: [
+                  for (final id in <String?>[null, ...machines])
+                    ChoiceChip(
+                      key: ValueKey('running-machine-${id ?? 'all'}'),
+                      label: Text(id == null ? 'All machines' : label(id)),
+                      selected: id == now,
+                      onSelected: (_) =>
+                          ref.read(runningFilterProvider.notifier).machine(id),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
 
-class _RunningBody extends ConsumerWidget {
+/// When it was read and how much it found.
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.reading, required this.loading});
+
+  final RunningReading? reading;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final at = reading?.checkedAt.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final age = at == null
+        ? (loading ? 'Reading what runs…' : 'Not read yet')
+        : 'Read ${two(at.hour)}:${two(at.minute)}:${two(at.second)}';
+    final ports = reading?.processes.fold<int>(
+      0,
+      (sum, p) => p.role == RunningRole.server ? sum : sum + p.ports.length,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Insets.lg,
+        Insets.xs,
+        Insets.sm,
+        Insets.xs,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              ports == null
+                  ? age
+                  : '$age · $ports ${ports == 1 ? 'port' : 'ports'}',
+              key: const ValueKey('running-read-at'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RunningBody extends ConsumerStatefulWidget {
   const _RunningBody({
     required this.reading,
     required this.filter,
@@ -114,360 +239,245 @@ class _RunningBody extends ConsumerWidget {
   final String? error;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final environments = ref.watch(environmentsControllerProvider);
-    String label(String id) => id == localEnvironmentId
-        ? 'This machine'
-        : environments.where((e) => e.id == id).firstOrNull?.name ?? id;
-    final everyMachine = groupByMachine(
+  ConsumerState<_RunningBody> createState() => _RunningBodyState();
+}
+
+class _RunningBodyState extends ConsumerState<_RunningBody> {
+  var _query = '';
+
+  /// Notes put away, by their words: a read that says them again keeps them
+  /// put away.
+  final _dismissed = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final reading = widget.reading;
+    final filter = widget.filter;
+    final localId = widget.localEnvironmentId;
+    final machines = ref.watch(runningMachinesProvider);
+    final label = machines.label;
+    final isWsl = machines.isWsl;
+    final board = buildRunningBoard(
       reading,
-      localEnvironmentId: localEnvironmentId,
-    ).map((m) => m.environmentId).toList();
-    final machines = groupByMachine(
-      reading,
-      localEnvironmentId: localEnvironmentId,
+      localEnvironmentId: localId,
       environmentId: filter.environmentId,
       sessionId: filter.sessionId,
+      query: _query,
+      facts: ref.watch(portFactsProvider),
     );
-    final facts = ref.watch(portFactsProvider);
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 960),
-        child: ListView(
-          padding: const EdgeInsets.all(Insets.md),
-          children: [
-            Wrap(
-              spacing: Insets.sm,
-              runSpacing: Insets.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                DropdownButton<String?>(
-                  key: const ValueKey('running-machine-filter'),
-                  value: everyMachine.contains(filter.environmentId)
-                      ? filter.environmentId
-                      : null,
-                  onChanged: (id) =>
-                      ref.read(runningFilterProvider.notifier).machine(id),
-                  items: [
-                    const DropdownMenuItem(child: Text('All machines')),
-                    for (final id in everyMachine)
-                      DropdownMenuItem(value: id, child: Text(label(id))),
-                  ],
-                ),
-                if (filter.sessionId case final sessionId?)
-                  InputChip(
-                    key: const ValueKey('running-session-filter'),
-                    label: Text(
-                      'One session: ${_sessionTitle(reading, sessionId)}',
-                    ),
-                    onDeleted: () =>
-                        ref.read(runningFilterProvider.notifier).session(null),
-                  ),
-                _Muted('Read ${_clock(reading.checkedAt.toLocal())}'),
-              ],
-            ),
-            if (error != null) _Muted('The last read failed: $error'),
-            if (machines.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: Insets.lg),
-                child: _Muted('Nothing Karmashala started is running here.'),
-              ),
-            for (final machine in machines)
-              _MachineSection(
-                key: ValueKey('running-machine-${machine.environmentId}'),
-                label: label(machine.environmentId),
-                machine: machine,
-                facts: facts,
-              ),
+    final notes = [
+      for (final note in board.notes)
+        if (!_dismissed.contains(note.text)) note,
+    ];
+    void dismiss(RunningNote note) => setState(() => _dismissed.add(note.text));
+    final sessions = [
+      for (final session in board.sessions)
+        BoardSession(
+          key: session.key,
+          paneId: session.paneId,
+          title: session.title,
+          agentSessionId: session.agentSessionId,
+          machine: session.machine,
+          processes: session.processes,
+          headline: session.headline,
+          others: session.others,
+          helpers: session.helpers,
+          notes: [
+            for (final note in session.notes)
+              if (!_dismissed.contains(note.text)) note,
           ],
         ),
-      ),
+    ];
+    final searching = _query.trim().isNotEmpty;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = WidthClass.of(
+          constraints.maxWidth,
+          textScaler: MediaQuery.textScalerOf(context),
+        );
+        final compact = width.isCompact;
+        final header = _Header(
+          filter: filter,
+          reading: reading,
+          onQuery: (text) => setState(() => _query = text),
+        );
+        final listening = <Widget>[
+          RunningSectionHeading(
+            'Listening',
+            count: board.ports.length,
+            key: const ValueKey('running-heading-listening'),
+          ),
+          if (board.ports.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Insets.sm),
+              child: RunningMuted(
+                searching
+                    ? 'No port matches "$_query".'
+                    : 'Nothing Karmashala started is listening.',
+              ),
+            ),
+          for (final port in board.ports)
+            RunningPortCard(
+              key: ValueKey(
+                'running-port-${port.machine}-${port.process.pid}-'
+                '${port.port.port}',
+              ),
+              port: port,
+              machineLabel: label,
+              isWsl: isWsl(port.machine),
+            ),
+          if (board.server case final server? when server.pid > 0)
+            RunningServerCard(server: server),
+          if (board.unseen.isNotEmpty)
+            Padding(
+              key: const ValueKey('running-unseen'),
+              padding: const EdgeInsets.only(top: Insets.xs),
+              child: RunningMuted(
+                'Also listening, by processes this user cannot see: '
+                '${board.unseen.map((p) => '${p.port.port} (${label(p.machine)})').join(', ')}.',
+              ),
+            ),
+        ];
+        final running = <Widget>[
+          RunningSectionHeading(
+            'Sessions',
+            count: sessions.length,
+            key: const ValueKey('running-heading-sessions'),
+          ),
+          for (final note in notes)
+            RunningInfoRow(text: note.text, onDismiss: () => dismiss(note)),
+          if (sessions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+              child: RunningMuted(
+                searching
+                    ? 'No process matches "$_query".'
+                    : 'No session has a process running.',
+              ),
+            ),
+          for (final session in sessions)
+            RunningSessionCard(
+              key: ValueKey('running-card-${session.key}'),
+              session: session,
+              machineLabel: label,
+              initiallyOpen: !compact,
+              onDismissNote: dismiss,
+            ),
+          if (board.devices.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.xs),
+              child: RunningMuted(
+                'Device mirroring: '
+                '${board.devices.map((d) => d.name ?? 'process').join(', ')}',
+              ),
+            ),
+        ];
+        final padding = EdgeInsets.symmetric(
+          horizontal: compact ? Insets.lg : Insets.xl,
+          vertical: Insets.md,
+        );
+        final failed = widget.error == null
+            ? null
+            : RunningMuted('The last read failed: ${widget.error}');
+        if (!width.isExpanded) {
+          return ListView(
+            padding: padding,
+            children: [header, ?failed, ...listening, ...running],
+          );
+        }
+        return SingleChildScrollView(
+          padding: padding,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              // Two readable columns side by side, and no wider.
+              constraints: const BoxConstraints(
+                maxWidth: Chrome.readableWidth * 2,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  header,
+                  ?failed,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: listening,
+                        ),
+                      ),
+                      const SizedBox(width: Insets.xl),
+                      Expanded(
+                        flex: 6,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: running,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
-
-  static String _sessionTitle(RunningReading reading, String sessionId) =>
-      reading.processes
-          .where((p) => p.agentSessionId == sessionId)
-          .firstOrNull
-          ?.title ??
-      sessionId;
-
-  static String _clock(DateTime at) =>
-      '${at.hour.toString().padLeft(2, '0')}:'
-      '${at.minute.toString().padLeft(2, '0')}:'
-      '${at.second.toString().padLeft(2, '0')}';
 }
 
-class _MachineSection extends StatelessWidget {
-  const _MachineSection({
-    required this.label,
-    required this.machine,
-    required this.facts,
-    super.key,
+/// The filter box for ports and processes, and the session a badge opened the
+/// tab on.
+class _Header extends ConsumerWidget {
+  const _Header({
+    required this.filter,
+    required this.reading,
+    required this.onQuery,
   });
 
-  final String label;
-  final RunningMachine machine;
-  final PortFacts facts;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final server = machine.server;
-    return Padding(
-      padding: const EdgeInsets.only(top: Insets.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(label, style: theme.textTheme.titleSmall),
-          const Divider(),
-          if (server != null && server.pid > 0) _ServerCard(server: server),
-          for (final pane in machine.panes) _PaneCard(pane: pane, facts: facts),
-          if (machine.devices.isNotEmpty) ...[
-            _Heading('Device mirroring'),
-            for (final process in machine.devices)
-              _ProcessRow(process: process, facts: facts, owner: 'adb'),
-          ],
-          for (final note in machine.notes) _Muted(note.text),
-        ],
-      ),
-    );
-  }
-}
-
-class _Heading extends StatelessWidget {
-  const _Heading(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: Insets.md, bottom: Insets.xs),
-      child: Text(
-        text,
-        style: theme.textTheme.labelMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
-
-/// The server: its pid and what it listens on, and where it is managed —
-/// never stopped from here.
-class _ServerCard extends ConsumerWidget {
-  const _ServerCard({required this.server});
-
-  final RunningProcess server;
+  final RunningFilter filter;
+  final RunningReading reading;
+  final ValueChanged<String> onQuery;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      _Heading('Karmashala server'),
-      // A Wrap: at phone width the way to Settings goes under the pid.
-      Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: Insets.sm,
-        children: [
-          Text('${server.name ?? 'Server'} · pid ${server.pid}'),
-          TextButton(
-            key: const ValueKey('running-server-settings'),
-            onPressed: () =>
-                openSettingsTab(ref, section: SettingsSectionId.server),
-            child: const Text('Manage in Settings → Server'),
-          ),
-        ],
+      SearchField(
+        key: const ValueKey('running-search'),
+        onChanged: onQuery,
+        decoration: compactSearchDecoration(
+          hintText: 'Filter ports and processes',
+        ),
       ),
-      for (final port in server.ports)
-        _PortRow(
-          port: port,
-          label: PortLabel(port.label ?? 'Server', PortKind.karmashala),
+      if (filter.sessionId case final sessionId?)
+        Padding(
+          padding: const EdgeInsets.only(top: Insets.sm),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              key: const ValueKey('running-session-filter'),
+              label: Text('One session: ${_sessionTitle(reading, sessionId)}'),
+              selected: true,
+              onSelected: (_) =>
+                  ref.read(runningFilterProvider.notifier).session(null),
+            ),
+          ),
         ),
     ],
   );
-}
 
-class _PaneCard extends ConsumerWidget {
-  const _PaneCard({required this.pane, required this.facts});
-
-  final RunningPane pane;
-  final PortFacts facts;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = pane.agentSessionId;
-    final runs = sessionId == null
-        ? const <SessionBackgroundRun>[]
-        : ref
-              .watch(sessionBackgroundRunsProvider(sessionId))
-              .where((r) => r.run.state == BackgroundRunState.running)
-              .toList();
-    final owner = pane.title ?? 'a pane';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _Heading(sessionId == null ? 'Terminal: $owner' : 'Session: $owner'),
-        for (final process in pane.processes)
-          _ProcessRow(process: process, facts: facts, owner: owner),
-        for (final run in runs)
-          Padding(
-            padding: const EdgeInsets.only(left: Insets.lg),
-            child: _Muted(
-              'Background ${run.run.kind.name}: '
-              '${run.run.description ?? run.run.id}',
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// One process, its ports, and Stop where the server allows it.
-class _ProcessRow extends ConsumerWidget {
-  const _ProcessRow({
-    required this.process,
-    required this.facts,
-    required this.owner,
-  });
-
-  final RunningProcess process;
-  final PortFacts facts;
-  final String owner;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final name = process.name ?? 'process';
-    final indent = process.role == RunningRole.child ? Insets.lg : 0.0;
-    return Padding(
-      padding: EdgeInsets.only(left: indent),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  process.pid > 0 ? '$name · pid ${process.pid}' : name,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (process.stoppable)
-                TextButton.icon(
-                  key: ValueKey('running-stop-${process.pid}'),
-                  icon: const Icon(AppIcons.stop),
-                  label: const Text('Stop'),
-                  onPressed: () => _stop(context, ref, name),
-                ),
-            ],
-          ),
-          for (final port in process.ports)
-            _PortRow(
-              port: port,
-              label: labelPort(
-                process: process.name,
-                port: port.port,
-                command: process.command,
-                facts: facts,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _stop(BuildContext context, WidgetRef ref, String name) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    final controller = ref.read(runningProvider.notifier);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Stop $name?'),
-        content: Text(
-          'Process ${process.pid}, started in "$owner". What it started '
-          'stops with it, and nothing it was doing is saved.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          DestructiveButton(
-            key: const ValueKey('running-stop-confirm'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Stop $name'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final refusal = await controller.stop(process.pid);
-    if (refusal != null) {
-      messenger?.showSnackBar(SnackBar(content: Text(refusal)));
-    }
-  }
-}
-
-/// One port: what it is, and the ways to it.
-class _PortRow extends ConsumerWidget {
-  const _PortRow({required this.port, required this.label});
-
-  final RunningPort port;
-  final PortLabel label;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final url = 'http://localhost:${port.port}';
-    final phone = ref.watch(phoneShellRouterProvider).current != null;
-    final number = port.port;
-    return Padding(
-      padding: const EdgeInsets.only(left: Insets.lg),
-      child: Row(
-        children: [
-          const Icon(AppIcons.globe, size: Chrome.iconSmall),
-          const SizedBox(width: Insets.xs),
-          Expanded(
-            child: Text(
-              ':$number — ${label.name}',
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (label.isHttp)
-            IconButton(
-              key: ValueKey('running-open-$number'),
-              tooltip: phone
-                  ? 'Show in the desktop\'s Browser'
-                  : 'Open in the Browser pane',
-              icon: const Icon(AppIcons.globe),
-              onPressed: () => openPortInBrowserPane(
-                ref,
-                url,
-                messenger: ScaffoldMessenger.maybeOf(context),
-              ),
-            ),
-          // The phone's own browser would reach the phone's localhost.
-          if (label.isHttp && !phone)
-            IconButton(
-              key: ValueKey('running-system-browser-$number'),
-              tooltip: 'Open in the system browser',
-              icon: const Icon(AppIcons.arrowSquareOut),
-              onPressed: () => ref.read(openExternalUrlProvider)(url),
-            ),
-          IconButton(
-            key: ValueKey('running-copy-$number'),
-            tooltip: 'Copy URL',
-            icon: const Icon(AppIcons.copy),
-            onPressed: () => Clipboard.setData(
-              ClipboardData(text: label.isHttp ? url : 'localhost:$number'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  static String _sessionTitle(RunningReading reading, String sessionId) =>
+      reading.processes
+          .where((p) => p.agentSessionId == sessionId)
+          .map((p) => p.title)
+          .nonNulls
+          .firstOrNull ??
+      sessionId;
 }
 
 /// Shows [url] in the Browser pane. The page is the server machine's
@@ -487,21 +497,4 @@ Future<void> openPortInBrowserPane(
       SnackBar(content: Text('Showing $url in the desktop\'s Browser.')),
     );
   }
-}
-
-class _Muted extends StatelessWidget {
-  const _Muted(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-    child: Text(
-      text,
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    ),
-  );
 }

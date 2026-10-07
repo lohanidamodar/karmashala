@@ -37,11 +37,13 @@ class DevServerMenuButton extends ConsumerWidget {
           final facts = ref.watch(portFactsProvider);
           final ports = [
             for (final owned in allPorts(reading))
+              // A box's port is not this machine's localhost.
               if (owned.process.role != RunningRole.server &&
+                  owned.port.host == null &&
                   labelPort(
                     process: owned.process.name,
                     port: owned.port.port,
-                    command: owned.process.command,
+                    command: owned.process.commandLine ?? owned.process.command,
                     facts: facts,
                   ).isHttp)
                 owned,
