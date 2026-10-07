@@ -39,6 +39,8 @@ class AutomationsHandler {
     final resumes = ToldResumes(_resumes, changes.add);
     final result = switch (request) {
       AutomationsList() => snapshot(),
+      AutomationRunsPage(:final before, :final limit, :final automationId) =>
+        _page(before, limit, automationId),
       AutomationSave(:final automation) => _save(automation, changes),
       AutomationSetEnabled(:final id, :final enabled) => _then(
         id,
@@ -101,6 +103,25 @@ class AutomationsHandler {
       projectChecks: _checks.all(),
       verified: _checks.verifiedRepositories(),
       resumes: _resumes.copied(),
+    );
+  }
+
+  AutomationRunsPageResult _page(
+    DateTime? before,
+    int limit,
+    String? automationId,
+  ) {
+    final size = limit.clamp(1, 200);
+    final runs = _automations.runsPage(
+      before: before,
+      limit: size + 1,
+      automationId: automationId,
+    );
+    final page = runs.take(size).toList();
+    return AutomationRunsPageResult(
+      runs: page,
+      checks: _automations.checksOf([for (final r in page) r.id]),
+      more: runs.length > size,
     );
   }
 

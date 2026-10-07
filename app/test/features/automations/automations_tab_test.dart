@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/phone_more_page.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/automations/presentation/automation_runs_view.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_settings_link.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_tab_view.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
@@ -84,6 +85,9 @@ void main() {
     expect(find.text('Nightly'), findsWidgets);
 
     await tester.tap(_segment('Runs'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RunTile), findsOneWidget);
+    await tester.tap(find.byType(RunTile));
     await tester.pumpAndSettle();
     expect(find.text('The agent this run started failed.'), findsOneWidget);
 

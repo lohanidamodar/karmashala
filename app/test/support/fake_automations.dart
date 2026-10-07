@@ -147,6 +147,21 @@ class FakeAutomationRows extends AutomationCopyReads {
     final told = _Recording(this, changes);
     final result = switch (request) {
       AutomationsList() => _snapshot(),
+      AutomationRunsPage(:final before, :final limit, :final automationId) =>
+        () {
+          final older = [
+            for (final run in runs.values)
+              if ((before == null || run.firedAt.isBefore(before)) &&
+                  (automationId == null || run.automationId == automationId))
+                run,
+          ]..sort(compareRunsNewestFirst);
+          final page = older.take(limit).toList();
+          return AutomationRunsPageResult(
+            runs: page,
+            checks: {for (final run in page) run.id: ?checks[run.id]},
+            more: older.length > limit,
+          );
+        }(),
       AutomationSave(:final automation) => _save(automation, changes),
       AutomationSetEnabled(:final id, :final enabled) => told.run(
         () => setEnabled(id, enabled: enabled),

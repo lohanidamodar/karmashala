@@ -61,6 +61,11 @@ DataRequest<Object?>? _automationsRequestFromJson(
     to: _resumeState(args, 'to'),
   ),
   ResumeDelete.name => ResumeDelete(args.string('id')),
+  AutomationRunsPage.name => AutomationRunsPage(
+    before: args.optionalString('before') == null ? null : args.date('before'),
+    limit: args.optionalInt('limit') ?? kRunsPageSize,
+    automationId: args.optionalString('automationId'),
+  ),
   AutomationRunNow.name => AutomationRunNow(args.string('id')),
   AutomationRunCancel.name => AutomationRunCancel(args.string('runId')),
   _ => null,
@@ -77,6 +82,87 @@ ScheduledResumeState _resumeState(_Arguments args, String key) {
 /// A request of the automations domain.
 sealed class AutomationsRequest<R> extends DataRequest<R> {
   const AutomationsRequest();
+}
+
+/// How many runs a page holds unless asked otherwise.
+const int kRunsPageSize = 50;
+
+/// One page of runs, newest first, and each one's checks.
+class AutomationRunsPageResult {
+  const AutomationRunsPageResult({
+    required this.runs,
+    required this.checks,
+    required this.more,
+  });
+
+  final List<AutomationRun> runs;
+  final Map<String, List<AutomationCheckVerdict>> checks;
+
+  /// Whether older runs than these are kept.
+  final bool more;
+
+  Map<String, Object?> toJson() => {
+    'runs': [for (final run in runs) automationRunToJson(run)],
+    'checks': {
+      for (final entry in checks.entries)
+        entry.key: [for (final v in entry.value) checkVerdictToJson(v)],
+    },
+    'more': more,
+  };
+
+  static AutomationRunsPageResult fromJson(Map<String, Object?> json) =>
+      AutomationRunsPageResult(
+        runs: [
+          for (final run in json['runs']! as List<Object?>)
+            automationRunFromJson(run! as Map<String, Object?>),
+        ],
+        checks: {
+          for (final entry
+              in (json['checks'] as Map<String, Object?>? ?? const {}).entries)
+            entry.key: [
+              for (final v in entry.value! as List<Object?>)
+                checkVerdictFromJson(v! as Map<String, Object?>),
+            ],
+        },
+        more: json['more'] as bool? ?? false,
+      );
+}
+
+/// Runs fired before [before] (all, when null), newest first, at most
+/// [limit] — of [automationId] only when one is named. What the Runs tab
+/// pages through past the copy a client keeps.
+final class AutomationRunsPage
+    extends AutomationsRequest<AutomationRunsPageResult> {
+  const AutomationRunsPage({
+    this.before,
+    this.limit = kRunsPageSize,
+    this.automationId,
+  });
+
+  static const String name = 'automationRuns.page';
+
+  final DateTime? before;
+  final int limit;
+  final String? automationId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    if (before case final before?) 'before': before.toUtc().toIso8601String(),
+    'limit': limit,
+    'automationId': ?automationId,
+  };
+
+  @override
+  Object? resultToJson(AutomationRunsPageResult result) => result.toJson();
+
+  @override
+  AutomationRunsPageResult resultFromJson(Object? json) => _decode(
+    kind,
+    () => AutomationRunsPageResult.fromJson(_object(json, kind)),
+  );
 }
 
 /// Automation work that starts or stops an agent; answered when done.

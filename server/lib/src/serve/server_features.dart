@@ -103,6 +103,8 @@ const Set<String> kServerFeatures = <String>{
   // `automations.runNow` and `automationRuns.cancel`: a run a person starts
   // or stops, gated like any other and recorded as started by Run now.
   'automations.runNow',
+  // `automationRuns.page`: runs older than a client's copy, a page at a time.
+  'automations.runsPage',
   // `projects.createFromFolder` takes `createFolder`, `initGit` and
   // `scan: false`: a missing folder made, and the root recorded alone.
   'projects.createFolder',

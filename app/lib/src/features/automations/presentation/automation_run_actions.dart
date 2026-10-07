@@ -8,6 +8,7 @@ import 'package:karmashala_ui/dialogs.dart';
 
 import 'automations_tab_state.dart';
 import '../application/automation_providers.dart';
+import '../application/automation_runs_page.dart';
 
 /// Starts [automation] now through the server — gated like any run — and
 /// says how it went, with a way to follow it in Runs.
@@ -48,6 +49,7 @@ Future<AutomationRun?> runAutomationNow(
 
 /// The Runs list, showing only [automationId]'s.
 void showRunsOf(WidgetRef ref, String? automationId) {
+  ref.read(runsFilterProvider.notifier).only(automationId);
   ref.read(automationsSectionProvider.notifier).show(AutomationsSection.runs);
 }
 

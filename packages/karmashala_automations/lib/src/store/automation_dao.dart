@@ -409,6 +409,25 @@ class AutomationDao implements AutomationRecords {
       .map(_run)
       .toList();
 
+  /// Runs fired before [before] (all, when null), newest first, at most
+  /// [limit] — of [automationId] only, when one is named.
+  List<AutomationRun> runsPage({
+    DateTime? before,
+    int limit = 50,
+    String? automationId,
+  }) {
+    final at = before == null ? null : isoFromDate(before);
+    return _db
+        .query(
+          'SELECT * FROM automation_runs WHERE (? IS NULL OR fired_at < ?) '
+          'AND (? IS NULL OR automation_id = ?) '
+          'ORDER BY fired_at DESC, id DESC LIMIT ?;',
+          [at, at, automationId, automationId, limit],
+        )
+        .map(_run)
+        .toList();
+  }
+
   /// Every run still expecting something to happen, oldest due first — which
   /// is the order the queue drains in.
   @override

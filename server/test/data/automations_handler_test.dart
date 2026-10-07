@@ -105,6 +105,54 @@ void main() {
 
   List<DataChange> lastTold() => told.last.changes;
 
+  test('runs page newest first past a cursor, by automation, with their '
+      'checks, and say when there are more', () {
+    app.handle(AutomationSave(rule()));
+    app.handle(AutomationSave(rule(id: 'auto2', name: 'Other')));
+    for (var i = 0; i < 5; i++) {
+      final at = now.subtract(Duration(hours: i));
+      app.handle(
+        AutomationRunPut(
+          AutomationRun(
+            id: 'run$i',
+            automationId: i.isEven ? 'auto1' : 'auto2',
+            scheduledFor: at,
+            firedAt: at,
+            state: AutomationRunState.finished,
+            reason: '',
+          ),
+        ),
+      );
+    }
+    app.handle(
+      AutomationRunCheckAdd(
+        AutomationCheckVerdict(
+          runId: 'run2',
+          ordinal: 1,
+          name: 'tests',
+          command: const ['dart', 'test'],
+          verdict: VerificationVerdict.pass,
+          reason: 'ok',
+          checkedAt: now,
+        ),
+      ),
+    );
+
+    final first = app.handle(const AutomationRunsPage(limit: 2)).value;
+    expect(first.runs.map((r) => r.id), ['run0', 'run1']);
+    expect(first.more, isTrue);
+    final next = app
+        .handle(AutomationRunsPage(before: first.runs.last.firedAt, limit: 2))
+        .value;
+    expect(next.runs.map((r) => r.id), ['run2', 'run3']);
+    expect(next.checks['run2']!.single.name, 'tests');
+    final mine = app
+        .handle(const AutomationRunsPage(automationId: 'auto1'))
+        .value;
+    expect(mine.runs.map((r) => r.id), ['run0', 'run2', 'run4']);
+    expect(mine.more, isFalse);
+  });
+
   test('a client that predates steps keeps what a newer one set', () {
     final steps = AutomationSteps(const [
       AutomationStep(
