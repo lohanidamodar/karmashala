@@ -49,10 +49,19 @@ class ApprovalRequestCard extends ConsumerWidget {
     this.docked = false,
     this.touch = false,
     this.inline = false,
+    this.dense = false,
+    this.where,
     super.key,
   });
 
   final String sessionId;
+
+  /// A question drawn as the compact card ([QuestionPromptCard.dense]), under
+  /// a header the caller already draws: the Overview's queue.
+  final bool dense;
+
+  /// See [QuestionPromptCard.where].
+  final String? where;
 
   /// Docked above the terminal pane's status line (spec §5, the ask dock):
   /// the same card, without the way to a terminal it is already under.
@@ -222,6 +231,11 @@ class ApprovalRequestCard extends ConsumerWidget {
                 sessionId: sessionId,
                 agentName: agentName,
                 orElse: standard,
+                dense: dense,
+                where: where,
+                trailing: dense
+                    ? _WaitingFor(since: report.waitingSince)
+                    : null,
               ),
               _ => standard,
             },
@@ -381,11 +395,15 @@ class _QuestionOr extends ConsumerWidget {
     required this.orElse,
     this.where,
     this.trailing,
+    this.dense = false,
   });
 
   final String sessionId;
   final String agentName;
   final Widget orElse;
+
+  /// See [QuestionPromptCard.dense]; the caller draws the header.
+  final bool dense;
 
   /// See [QuestionPromptCard.where] and [QuestionPromptCard.trailing].
   final String? where;
@@ -412,6 +430,8 @@ class _QuestionOr extends ConsumerWidget {
       chatLabel: chatRow,
       where: where,
       trailing: trailing,
+      dense: dense,
+      showHeader: !dense,
       onAnswerInTerminal: _hasTerminal(ref, sessionId)
           ? () => _openTerminal(ref, sessionId)
           : null,

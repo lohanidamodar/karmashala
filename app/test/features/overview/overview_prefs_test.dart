@@ -74,6 +74,29 @@ void main() {
     expect(kept.filter.columns, {BoardColumn.needsYou});
   });
 
+  test('grouping by context is kept across a reload', () async {
+    final first = open();
+    first
+        .read(overviewPrefsProvider.notifier)
+        .setGroupBy(OverviewGroupBy.context);
+    final file = File(
+      '${dir.path}${Platform.pathSeparator}overview_device.json',
+    );
+    await until(
+      () =>
+          file.existsSync() &&
+          file.readAsStringSync().contains('context'),
+    );
+
+    final second = open();
+    second.read(overviewPrefsProvider);
+    await until(
+      () =>
+          second.read(overviewPrefsProvider).groupBy != OverviewGroupBy.project,
+    );
+    expect(second.read(overviewPrefsProvider).groupBy, OverviewGroupBy.context);
+  });
+
   test('picking every project again is "all", so new projects show', () {
     final c = open();
     final prefs = c.read(overviewPrefsProvider.notifier);

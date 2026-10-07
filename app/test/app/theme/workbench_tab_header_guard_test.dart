@@ -23,12 +23,6 @@ void main() {
         'the shared header itself',
   };
 
-  /// Rounds 33 and 34 are rewriting these; the parent moves them onto the
-  /// shared header at merge, and then this list empties.
-  const pendingMigration = {
-    'lib/src/features/overview/presentation/overview_tab_view.dart',
-  };
-
   Map<String, String> sources() {
     final roots = [
       Directory('lib'),
@@ -62,7 +56,7 @@ void main() {
   test('no workbench tab builds its own AppBar', () {
     final found = <String>[];
     sources().forEach((path, source) {
-      if (routes.containsKey(path) || pendingMigration.contains(path)) return;
+      if (routes.containsKey(path)) return;
       for (final match in appBar.allMatches(source)) {
         final line = '\n'.allMatches(source.substring(0, match.start)).length;
         found.add('$path:${line + 1}');

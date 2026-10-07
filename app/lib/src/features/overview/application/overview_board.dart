@@ -27,12 +27,24 @@ BoardColumn columnOf(AgentState state) => switch (state) {
 /// What the Board's rows are.
 enum OverviewGroupBy {
   project('Project'),
-  machine('Machine');
+  machine('Machine'),
+
+  /// The context (workspace) the session's project is filed under.
+  context('Context');
 
   const OverviewGroupBy(this.label);
 
   final String label;
 }
+
+/// [chosen], or Project when it is Context and no context exists any more.
+OverviewGroupBy effectiveGroupBy(OverviewGroupBy chosen, OverviewFacts facts) =>
+    chosen == OverviewGroupBy.context && facts.contexts.isEmpty
+    ? OverviewGroupBy.project
+    : chosen;
+
+/// The last lane under Context: the sessions whose project is in none.
+const String kOverviewNoContextLabel = 'No context';
 
 /// One lane's identity: a project id or an environment id, and its name.
 @immutable
@@ -51,7 +63,8 @@ class OverviewLaneKey {
 }
 
 /// The facts the Board files a session by, read from the replicas.
-/// [projects] and [machines] are the lanes in the order they are drawn.
+/// [projects], [machines] and [contexts] are the lanes in the order they are
+/// drawn.
 class OverviewFacts {
   const OverviewFacts({
     required this.projectOf,
@@ -59,13 +72,21 @@ class OverviewFacts {
     required this.agentOf,
     required this.projects,
     required this.machines,
+    this.contextOf = _noContext,
+    this.contexts = const [],
   });
 
   final String? Function(WorkspaceSessionEntry entry) projectOf;
   final String? Function(WorkspaceSessionEntry entry) machineOf;
   final String? Function(WorkspaceSessionEntry entry) agentOf;
+
+  /// The context the session's project is filed under; null for none.
+  final String? Function(WorkspaceSessionEntry entry) contextOf;
   final List<OverviewLaneKey> projects;
   final List<OverviewLaneKey> machines;
+  final List<OverviewLaneKey> contexts;
+
+  static String? _noContext(WorkspaceSessionEntry _) => null;
 }
 
 /// The lane of a session whose project or machine is not known.
@@ -182,11 +203,15 @@ class OverviewBoard {
     required this.lanes,
     required this.states,
     this.activeAt = const {},
+    this.children = const {},
   });
 
   static final empty = OverviewBoard(lanes: const [], states: const {});
 
   final List<OverviewLane> lanes;
+
+  /// Each parent's direct sub-sessions in view, by the parent's id.
+  final Map<String, List<OverviewCard>> children;
 
   /// Every session the filters left in, by id: cards and stacked children.
   final Map<String, AgentState> states;
@@ -313,11 +338,16 @@ OverviewBoard buildOverviewBoard(
   final laneOrder = switch (groupBy) {
     OverviewGroupBy.project => facts.projects,
     OverviewGroupBy.machine => facts.machines,
+    OverviewGroupBy.context => facts.contexts,
   };
   String laneOf(WorkspaceSessionEntry entry) =>
       switch (groupBy) {
         OverviewGroupBy.project => facts.projectOf(entry),
         OverviewGroupBy.machine => facts.machineOf(entry),
+        OverviewGroupBy.context => switch (facts.contextOf(entry)) {
+          final id? when facts.contexts.any((c) => c.id == id) => id,
+          _ => null,
+        },
       } ??
       kOverviewUnfiledLane;
 
@@ -371,6 +401,15 @@ OverviewBoard buildOverviewBoard(
     );
   }
 
+  final children = <String, List<OverviewCard>>{};
+  for (final entry in byId.values) {
+    if (parentIn(entry) case final parent?) {
+      (children[parent] ??= []).add(
+        OverviewCard(entry: entry, state: stateOf[entry.id]!),
+      );
+    }
+  }
+
   final known = {for (final lane in laneOrder) lane.id};
   return OverviewBoard(
     lanes: [
@@ -378,7 +417,14 @@ OverviewBoard buildOverviewBoard(
         if (byLane.containsKey(key.id)) lane(key.id, key.label),
       for (final key in byLane.keys)
         if (!known.contains(key))
-          lane(key, key == kOverviewUnfiledLane ? 'Elsewhere' : key),
+          lane(
+            key,
+            key != kOverviewUnfiledLane
+                ? key
+                : groupBy == OverviewGroupBy.context
+                ? kOverviewNoContextLabel
+                : 'Elsewhere',
+          ),
     ],
     states: Map.unmodifiable({
       for (final MapEntry(key: id, value: state) in stateOf.entries)
@@ -387,6 +433,7 @@ OverviewBoard buildOverviewBoard(
     activeAt: Map.unmodifiable({
       for (final entry in byId.values) entry.id: entry.activityAt,
     }),
+    children: Map.unmodifiable(children),
   );
 }
 

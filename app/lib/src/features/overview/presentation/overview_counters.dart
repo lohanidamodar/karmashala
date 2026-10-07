@@ -12,13 +12,9 @@ import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
 
 /// **The live counters**: Needs you, Working, Ready and Done today, each a
-/// big number that filters the tiles to its state, and taps again to clear.
-/// Four in a row, or two by two where four would crowd.
+/// chip that filters the cards to its state, and taps again to clear.
 class OverviewCounters extends ConsumerWidget {
   const OverviewCounters({super.key});
-
-  /// The least width a counter needs at 1x text.
-  static const _minCounter = 150.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -50,33 +46,11 @@ class OverviewCounters extends ConsumerWidget {
       onTap: () =>
           controller.setColumns(counterTapped(columns, counter.column)),
     );
-    return LayoutBuilder(
+    return Wrap(
       key: const ValueKey('overview-counters'),
-      builder: (context, box) {
-        final scaler = MediaQuery.textScalerOf(context);
-        final fourWide =
-            box.maxWidth >=
-            WidthClass.scaleBreakpoint(_minCounter * 4 + Insets.sm * 3, scaler);
-        Widget row(List<_Counter> some) => IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (i, counter) in some.indexed) ...[
-                if (i > 0) const SizedBox(width: Insets.sm),
-                Expanded(child: tile(counter)),
-              ],
-            ],
-          ),
-        );
-        if (fourWide) return row(counters);
-        return Column(
-          children: [
-            row(counters.sublist(0, 2)),
-            const SizedBox(height: Insets.sm),
-            row(counters.sublist(2)),
-          ],
-        );
-      },
+      spacing: Insets.sm,
+      runSpacing: Insets.sm,
+      children: [for (final counter in counters) tile(counter)],
     );
   }
 }
@@ -180,63 +154,53 @@ class _CounterTile extends ConsumerWidget {
         borderRadius: radius,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.lg,
-            Insets.md,
-            Insets.md,
-            Insets.md,
+          padding: const EdgeInsets.symmetric(
+            horizontal: Insets.md,
+            vertical: Insets.sm,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Wrap(
+            spacing: Insets.sm,
+            runSpacing: Insets.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Semantics(
                 button: true,
                 selected: selected,
                 label: spoken,
                 excludeSemantics: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        glyph,
-                        const SizedBox(width: Insets.sm),
-                        Expanded(
-                          child: Text(
-                            counter.label,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: ink,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        if (selected)
-                          Icon(
-                            AppIcons.funnelFill,
-                            size: density.iconSmall,
-                            color: scheme.primary,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: Insets.xs),
+                    glyph,
+                    const SizedBox(width: Insets.sm),
                     Text(
                       '$count',
                       maxLines: 1,
-                      style: theme.textTheme.headlineLarge?.copyWith(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         color: live ? ink : scheme.onSurfaceVariant,
-                        fontWeight: live ? FontWeight.w600 : FontWeight.w400,
-                        height: 1.1,
+                        fontWeight: live ? FontWeight.w700 : FontWeight.w400,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    if (caption != null && caption.isNotEmpty)
-                      Text(
+                    const SizedBox(width: Insets.xs),
+                    Flexible(
+                      child: Text(
+                        counter.label.toLowerCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: live
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    if (caption != null && caption.isNotEmpty) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: Text(
                         caption,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: density
                             .muted(theme)
@@ -248,7 +212,17 @@ class _CounterTile extends ConsumerWidget {
                                 FontFeature.tabularFigures(),
                               ],
                             ),
+                        ),
                       ),
+                    ],
+                    if (selected) ...[
+                      const SizedBox(width: Insets.xs),
+                      Icon(
+                        AppIcons.funnelFill,
+                        size: density.iconSmall,
+                        color: scheme.primary,
+                      ),
+                    ],
                   ],
                 ),
               ),

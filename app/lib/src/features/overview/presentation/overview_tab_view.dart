@@ -3,17 +3,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../explorer/application/explorer_actions.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
 import 'overview_filters.dart';
-import 'overview_mission_control.dart';
+import 'overview_hybrid.dart';
 import 'overview_peek.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
 
@@ -25,95 +26,33 @@ class OverviewTabView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final view = ref.watch(overviewPrefsProvider.select((p) => p.view));
-    // Under a page that already names it (the phone's More), no second title.
-    final untitled = PaneTitleOverride.maybeOf(context) != null;
-    final switcher = _ViewSwitcher(
-      view: view,
-      onChanged: ref.read(overviewPrefsProvider.notifier).setView,
-    );
-    final body = switch (view) {
-      OverviewView.board => const _BoardBody(),
-      OverviewView.timeline => const _TimelineBody(),
-    };
-    return Scaffold(
-      appBar: untitled
-          ? null
-          : AppBar(
-              toolbarHeight: 44,
-              // A workbench tab: an implied back button would pop the app's
-              // route.
-              automaticallyImplyLeading: false,
-              title: Row(
-                children: [
-                  Icon(AppIcons.squaresFour, color: theme.colorScheme.tertiary),
-                  const SizedBox(width: Insets.sm),
-                  const Flexible(
-                    child: Text(
-                      'Overview',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: Insets.lg),
-                  switcher,
-                ],
-              ),
-              actions: [
-                if (view == OverviewView.board) const OverviewFilterButton(),
-                const SizedBox(width: Insets.sm),
-              ],
+    return WorkbenchTabScaffold(
+      icon: AppIcons.squaresFour,
+      title: 'Overview',
+      controls: [
+        CompactSegmented<OverviewView>(
+          key: const ValueKey('overview-view'),
+          segments: const [
+            ButtonSegment(value: OverviewView.board, label: Text('Board')),
+            ButtonSegment(
+              value: OverviewView.timeline,
+              label: Text('Timeline'),
             ),
-      body: untitled
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    Insets.lg,
-                    Insets.sm,
-                    Insets.sm,
-                    0,
-                  ),
-                  // Large text can push the filter under the switcher.
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      switcher,
-                      if (view == OverviewView.board)
-                        const OverviewFilterButton(),
-                    ],
-                  ),
-                ),
-                Expanded(child: body),
-              ],
-            )
-          : body,
+          ],
+          selected: view,
+          onChanged: ref.read(overviewPrefsProvider.notifier).setView,
+        ),
+      ],
+      actions: [
+        if (view == OverviewView.board) const OverviewFilterButton(),
+      ],
+      body: switch (view) {
+        OverviewView.board => const _BoardBody(),
+        OverviewView.timeline => const _TimelineBody(),
+      },
     );
   }
-}
-
-/// [Board] [Timeline].
-class _ViewSwitcher extends StatelessWidget {
-  const _ViewSwitcher({required this.view, required this.onChanged});
-
-  final OverviewView view;
-  final ValueChanged<OverviewView> onChanged;
-
-  @override
-  Widget build(BuildContext context) => SegmentedButton<OverviewView>(
-    key: const ValueKey('overview-view'),
-    showSelectedIcon: false,
-    style: const ButtonStyle(visualDensity: VisualDensity.compact),
-    segments: const [
-      ButtonSegment(value: OverviewView.board, label: Text('Board')),
-      ButtonSegment(value: OverviewView.timeline, label: Text('Timeline')),
-    ],
-    selected: {view},
-    onSelectionChanged: (picked) => onChanged(picked.single),
-  );
 }
 
 /// The least width mission control keeps beside a docked peek.
@@ -199,7 +138,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheet) => FractionallySizedBox(
-        heightFactor: 0.7,
+        heightFactor: 0.85,
         child: Consumer(
           builder: (context, ref, _) {
             final live = overviewCardOf(
@@ -209,6 +148,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
             return OverviewPeek(
               card: live ?? card,
               onClose: () => Navigator.of(sheet).pop(),
+              onPeek: (child) {
+                Navigator.of(sheet).pop();
+                _open(child);
+              },
             );
           },
         ),
@@ -230,7 +173,13 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       _ => null,
     };
     if (move != null) {
-      final marks = drawnMarks(ref.read(overviewBoardProvider));
+      final marks = overviewDrawnCards(
+        overviewSectionsOf(
+          ref.read(overviewBoardProvider),
+          waitingSince: (id) =>
+              ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
+        ),
+      );
       controller.select(moveOnTiles(marks, focus.selected, move));
       return KeyEventResult.handled;
     }
@@ -268,7 +217,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
             )
           : null;
-      final main = OverviewMissionControl(onOpen: _open);
+      final main = OverviewHybrid(onOpen: _open);
       return Focus(
         focusNode: _focus,
         onKeyEvent: _key,
@@ -284,6 +233,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
                     child: OverviewPeek(
                       key: ValueKey('overview-peek:${peeked.id}'),
                       card: peeked,
+                      onPeek: _open,
                       onClose: ref
                           .read(overviewFocusProvider.notifier)
                           .closePeek,

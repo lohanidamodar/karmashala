@@ -54,7 +54,7 @@ void main() {
     final key = GlobalKey();
     final container = await pumpMission(
       tester,
-      fixture: fixture ?? MissionFixture(),
+      fixture: fixture ?? MissionFixture.full(),
       prefsDir: Directory.systemTemp.createTempSync('ks-overview-shot'),
       size: size,
       phone: phone,
@@ -102,7 +102,7 @@ void main() {
       t,
       'desktop-1440-peek',
       before: (tester, _) async {
-        await tester.tap(find.byKey(const ValueKey('overview-mark:ks-r21')));
+        await tester.tap(find.byKey(const ValueKey('overview-card:ks-r32')));
       },
     ),
   );
@@ -127,6 +127,33 @@ void main() {
         container
             .read(overviewPrefsProvider.notifier)
             .setGroupBy(OverviewGroupBy.machine);
+      },
+    ),
+  );
+  testWidgets(
+    'desktop, by context',
+    (t) => shoot(
+      t,
+      'desktop-1440-contexts',
+      fixture: MissionFixture(
+        answers: MissionFixture.realisticAnswers(),
+        glances: MissionFixture.realisticGlances(),
+        files: MissionFixture.realisticFiles(),
+        activity: MissionFixture.realisticActivity(),
+        contexts: const [
+          OverviewLaneKey('c-apps', 'Apps'),
+          OverviewLaneKey('c-web', 'Web'),
+        ],
+        contextOfProject: const {
+          'p-ks': 'c-apps',
+          'p-beej': 'c-apps',
+          'p-web': 'c-web',
+        },
+      ),
+      before: (tester, container) async {
+        container
+            .read(overviewPrefsProvider.notifier)
+            .setGroupBy(OverviewGroupBy.context);
       },
     ),
   );
@@ -170,6 +197,29 @@ void main() {
       size: const Size(390, 844),
       phone: true,
       textScale: 1.6,
+    ),
+  );
+  testWidgets(
+    'phone 390, peek sheet',
+    (t) => shoot(
+      t,
+      'phone-390-peek',
+      size: const Size(390, 844),
+      phone: true,
+      before: (tester, _) async {
+        await tester.tap(find.text('Round 21 · ACP sessions').first);
+      },
+    ),
+  );
+  testWidgets(
+    'desktop light, peek docked',
+    (t) => shoot(
+      t,
+      'desktop-1440-light-peek',
+      brightness: Brightness.light,
+      before: (tester, _) async {
+        await tester.tap(find.byKey(const ValueKey('overview-card:ks-r32')));
+      },
     ),
   );
   testWidgets(

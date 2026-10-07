@@ -201,6 +201,75 @@ void main() {
       expect(ids(board.lanes.last, BoardColumn.working), ['a']);
     });
 
+    group('by context', () {
+      // p1 and p2 in two contexts, p3 in none, p4 in one since deleted.
+      const contextOfProject = {'p1': 'c-apps', 'p2': 'c-web', 'p4': 'c-gone'};
+      final byContext = OverviewFacts(
+        projectOf: (e) => {'a': 'p1', 'b': 'p2', 'c': 'p3', 'd': 'p4'}[e.id],
+        contextOf: (e) => contextOfProject[{
+          'a': 'p1',
+          'b': 'p2',
+          'c': 'p3',
+          'd': 'p4',
+        }[e.id]],
+        machineOf: (e) => e.directory?.environmentId,
+        agentOf: (_) => 'claude-code',
+        projects: const [],
+        machines: const [],
+        contexts: const [
+          OverviewLaneKey('c-apps', 'Apps'),
+          OverviewLaneKey('c-web', 'Web'),
+        ],
+      );
+
+      test('a lane per context in order, then "No context" last', () {
+        final board = build(
+          groups({
+            AgentState.working: [entry('b'), entry('c'), entry('a')],
+            AgentState.ready: [entry('d')],
+          }),
+          with_: byContext,
+          groupBy: OverviewGroupBy.context,
+        );
+        expect(board.lanes.map((l) => l.label), [
+          'Apps',
+          'Web',
+          kOverviewNoContextLabel,
+        ]);
+        expect(ids(board.lanes[0], BoardColumn.working), ['a']);
+        expect(ids(board.lanes[1], BoardColumn.working), ['b']);
+        // No context, and a context that no longer exists, go last.
+        expect(ids(board.lanes[2], BoardColumn.working), ['c']);
+        expect(ids(board.lanes[2], BoardColumn.ready), ['d']);
+      });
+
+      test('"No context" is not drawn when every session has one', () {
+        final board = build(
+          groups({
+            AgentState.working: [entry('a'), entry('b')],
+          }),
+          with_: byContext,
+          groupBy: OverviewGroupBy.context,
+        );
+        expect(board.lanes.map((l) => l.label), ['Apps', 'Web']);
+      });
+
+      test('Context falls back to Project when no context is left', () {
+        expect(
+          effectiveGroupBy(OverviewGroupBy.context, byContext),
+          OverviewGroupBy.context,
+        );
+        expect(
+          effectiveGroupBy(OverviewGroupBy.context, facts()),
+          OverviewGroupBy.project,
+        );
+        expect(
+          effectiveGroupBy(OverviewGroupBy.machine, facts()),
+          OverviewGroupBy.machine,
+        );
+      });
+    });
+
     test('several projects sit side by side; the rest are filtered out', () {
       final all = groups({
         AgentState.working: [entry('a'), entry('b')],

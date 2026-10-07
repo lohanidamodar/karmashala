@@ -6,7 +6,7 @@ library;
 
 export 'src/charts/bar_chart.dart';
 export 'src/charts/chart_support.dart'
-    show ChartInk, chartMotion, kChartCompactWidth;
+    show ChartAlphas, ChartInk, chartMotion, drawDashedLine, kChartCompactWidth;
 export 'src/charts/meters.dart';
 export 'src/charts/number_format.dart';
 export 'src/charts/segmented_bar.dart';

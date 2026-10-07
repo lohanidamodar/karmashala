@@ -15,6 +15,29 @@ Duration chartMotion(BuildContext context) =>
 /// Under this width a chart drops its axis labels and keeps only the marks.
 const double kChartCompactWidth = 320;
 
+/// The opacities a chart's marks are drawn at, so a painter never invents
+/// one: a mark, a resting stretch, a pattern or guide over it, and what is
+/// inferred rather than recorded.
+abstract final class ChartAlphas {
+  /// A solid mark: a span, a bar.
+  static const double mark = 0.9;
+
+  /// A stretch at rest beside the marks that matter (idle, ready).
+  static const double rest = 0.28;
+
+  /// A pattern or guide drawn over or between marks: hatching, the now line.
+  static const double pattern = 0.4;
+
+  /// Ticks, arrows and markers: present, never louder than the marks.
+  static const double guide = 0.6;
+
+  /// The outline that says a mark was inferred.
+  static const double outline = 0.8;
+
+  /// What an inferred mark keeps of its colour.
+  static const double inferred = 0.45;
+}
+
 /// The ink every chart shares for its chrome, resolved once per build so a
 /// painter never reaches for a colour on its own.
 @immutable

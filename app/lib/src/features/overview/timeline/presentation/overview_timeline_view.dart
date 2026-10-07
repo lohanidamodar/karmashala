@@ -116,7 +116,7 @@ class _OverviewTimelineViewState extends ConsumerState<OverviewTimelineView> {
           children: [
             _Toolbar(range: range, phone: phone, zoom: _zoom),
             if (!phone) const _Legend(),
-            const Divider(height: 1),
+            const Divider(height: Insets.hair),
             Expanded(
               child: switch (entries) {
                 AsyncData(:final value) => _body(
@@ -343,8 +343,8 @@ class _Legend extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 28,
-            height: 14,
+            width: Insets.xl + Insets.xs,
+            height: Chrome.iconAction,
             child: ExcludeSemantics(
               child: CustomPaint(
                 painter: TimelineLanePainter(

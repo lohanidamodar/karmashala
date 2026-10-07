@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
@@ -63,24 +63,11 @@ class OverviewFilterButton extends ConsumerWidget {
   const OverviewFilterButton({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(overviewActiveFiltersProvider).length;
-    final icon = Icon(count > 0 ? AppIcons.funnelFill : AppIcons.funnel);
-    return IconButton(
-      key: const ValueKey('overview-filter-button'),
-      tooltip: count == 0 ? 'Filters' : 'Filters ($count set)',
-      icon: count == 0
-          ? icon
-          : Badge.count(
-              count: count,
-              // A setting, not an alarm: the accent, never the error red.
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              textColor: Theme.of(context).colorScheme.onPrimary,
-              child: icon,
-            ),
-      onPressed: () => _showFilters(context),
-    );
-  }
+  Widget build(BuildContext context, WidgetRef ref) => FilterFunnelButton(
+    key: const ValueKey('overview-filter-button'),
+    count: ref.watch(overviewActiveFiltersProvider).length,
+    onPressed: () => _showFilters(context),
+  );
 }
 
 /// Group by, projects, agent, machine and archived sessions. Every change
@@ -119,6 +106,7 @@ class OverviewFilterPanel extends ConsumerWidget {
             key: ValueKey(key),
             label: Text(label),
             selected: on,
+            visualDensity: VisualDensity.compact,
             onSelected: (_) => tap(),
           ),
       ],
@@ -135,16 +123,22 @@ class OverviewFilterPanel extends ConsumerWidget {
             'Group by',
             Align(
               alignment: Alignment.centerLeft,
-              child: SegmentedButton<OverviewGroupBy>(
+              child: CompactSegmented<OverviewGroupBy>(
                 key: const ValueKey('overview-filter-group'),
-                showSelectedIcon: false,
                 segments: [
                   for (final by in OverviewGroupBy.values)
-                    ButtonSegment(value: by, label: Text(by.label)),
+                    if (by != OverviewGroupBy.context ||
+                        facts.contexts.isNotEmpty)
+                      ButtonSegment(
+                        value: by,
+                        label: Text(
+                          by.label,
+                          key: ValueKey('group-by:${by.name}'),
+                        ),
+                      ),
                 ],
-                selected: {prefs.groupBy},
-                onSelectionChanged: (picked) =>
-                    controller.setGroupBy(picked.single),
+                selected: ref.watch(overviewGroupByProvider),
+                onChanged: controller.setGroupBy,
               ),
             ),
           ),
@@ -243,10 +237,13 @@ class OverviewActiveFilterChips extends ConsumerWidget {
       runSpacing: Insets.xs,
       children: [
         for (final chip in active)
-          InputChip(
+          FilterChip(
             key: ValueKey('overview-active-filter:${chip.kind.name}'),
             label: Text(chip.label),
-            onPressed: () => _showFilters(context),
+            selected: true,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => _showFilters(context),
             onDeleted: () => clearOverviewFilter(ref, chip.kind),
             deleteButtonTooltipMessage: 'Clear ${chip.label}',
           ),

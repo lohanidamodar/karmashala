@@ -3,11 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ActivityKind;
+import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../domain/timeline_model.dart';
 
-/// The app's semantic colours, as the timeline's states read them.
+/// The app's semantic colours and type, as the timeline's states read them.
 @immutable
 class TimelinePalette {
   const TimelinePalette({
@@ -18,11 +19,16 @@ class TimelinePalette {
     required this.ink,
     required this.faint,
     required this.now,
+    this.spanLabel = const TextStyle(),
+    this.axisLabel = const TextStyle(),
+    this.axisDay = const TextStyle(),
   });
 
   factory TimelinePalette.of(BuildContext context) {
     final semantic = SemanticColors.of(context);
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final axis = ChartInk.of(context).axisLabel;
     return TimelinePalette(
       working: semantic.working,
       waiting: semantic.attention,
@@ -31,6 +37,15 @@ class TimelinePalette {
       ink: scheme.onSurface,
       faint: scheme.outlineVariant,
       now: scheme.primary,
+      spanLabel: (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+        color: scheme.onSurface,
+        letterSpacing: 0,
+      ),
+      axisLabel: axis,
+      axisDay: axis.copyWith(
+        color: scheme.onSurface,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 
@@ -41,6 +56,13 @@ class TimelinePalette {
   final Color ink;
   final Color faint;
   final Color now;
+
+  /// A span's words, inside its bar.
+  final TextStyle spanLabel;
+
+  /// An hour on the axis, and a day's first.
+  final TextStyle axisLabel;
+  final TextStyle axisDay;
 
   Color of(TimelineState state) => switch (state) {
     TimelineState.working => working,
@@ -58,11 +80,24 @@ class TimelinePalette {
       other.paused == paused &&
       other.ink == ink &&
       other.faint == faint &&
-      other.now == now;
+      other.now == now &&
+      other.spanLabel == spanLabel &&
+      other.axisLabel == axisLabel &&
+      other.axisDay == axisDay;
 
   @override
-  int get hashCode =>
-      Object.hash(working, waiting, ready, paused, ink, faint, now);
+  int get hashCode => Object.hash(
+    working,
+    waiting,
+    ready,
+    paused,
+    ink,
+    faint,
+    now,
+    spanLabel,
+    axisLabel,
+    axisDay,
+  );
 }
 
 /// The stretch of time on screen, mapped to a width.
@@ -92,6 +127,28 @@ class TimelineViewport {
   int get hashCode => Object.hash(start, end);
 }
 
+/// The marks' sizes, in the app's spacing.
+abstract final class _Marks {
+  /// A lane's margin above and below its bar; a compact one's.
+  static const pad = Insets.xs + Insets.hair;
+  static const padCompact = Insets.hair;
+
+  /// A start-only session's ring, a marker's diamond, the live arrow.
+  static const ring = Insets.xs;
+  static const ringCompact = Insets.hair * 3;
+  static const stroke = Insets.hair;
+  static const strokeBold = Insets.hair * 1.5;
+
+  /// The gap between a hatch's lines and a paused span's dots.
+  static const patternGap = Insets.sm - Insets.xxs;
+
+  /// The least width a span gets its words in.
+  static const labelMinWidth = Insets.xxl * 2 + Insets.sm;
+
+  /// A turn's tick down from the top of its lane.
+  static const tick = Insets.xs - Insets.hair;
+}
+
 /// One session's bar: its spans in state colours, waits hatched and pauses
 /// dotted so colour is never the only cue, turn ticks along the top, and
 /// what was inferred drawn lighter.
@@ -114,12 +171,10 @@ class TimelineLanePainter extends CustomPainter {
   final bool labels;
   final TextScaler textScaler;
 
-  static const double _inferredAlpha = 0.45;
-
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
-    final pad = compact ? 1.0 : 6.0;
+    final pad = compact ? _Marks.padCompact : _Marks.pad;
     final top = pad;
     final bottom = size.height - pad;
     canvas.save();
@@ -127,15 +182,14 @@ class TimelineLanePainter extends CustomPainter {
 
     final startX = viewport.xOf(session.start, w);
     if (session.startOnly) {
-      if (startX >= -4 && startX <= w + 4) {
-        final center = Offset(startX, size.height / 2);
+      if (startX >= -_Marks.ring && startX <= w + _Marks.ring) {
         canvas.drawCircle(
-          center,
-          compact ? 3 : 4.5,
+          Offset(startX, size.height / 2),
+          compact ? _Marks.ringCompact : _Marks.ring,
           Paint()
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..color = palette.ready.withValues(alpha: _inferredAlpha + 0.2),
+            ..strokeWidth = _Marks.strokeBold
+            ..color = palette.ready.withValues(alpha: ChartAlphas.guide),
         );
       }
       canvas.restore();
@@ -146,7 +200,12 @@ class TimelineLanePainter extends CustomPainter {
       final left = math.max(0.0, startX);
       final right = math.min(w, viewport.xOf(session.end, w));
       canvas.drawRect(
-        Rect.fromLTRB(left, size.height / 2 - 1, right, size.height / 2 + 1),
+        Rect.fromLTRB(
+          left,
+          size.height / 2 - _Marks.stroke,
+          right,
+          size.height / 2 + _Marks.stroke,
+        ),
         Paint()..color = palette.faint,
       );
     }
@@ -155,47 +214,56 @@ class TimelineLanePainter extends CustomPainter {
       if (!viewport.shows(span.from, span.to)) continue;
       final left = math.max(0.0, viewport.xOf(span.from, w));
       final right = math.min(w, viewport.xOf(span.to, w));
-      if (right - left < 0.5) continue;
+      if (right - left < _Marks.stroke / 2) continue;
       final inferred = span.approximate || span.backfilled;
-      final rect = Rect.fromLTRB(left, top, math.max(left + 1, right), bottom);
+      final rect = Rect.fromLTRB(
+        left,
+        top,
+        math.max(left + _Marks.stroke, right),
+        bottom,
+      );
       final base = palette.of(span.state);
-      final alpha = switch (span.state) {
-        TimelineState.ready => 0.28,
-        _ => 0.9,
-      };
+      final alpha = span.state == TimelineState.ready
+          ? ChartAlphas.rest
+          : ChartAlphas.mark;
       canvas.drawRect(
         rect,
         Paint()
           ..color = base.withValues(
-            alpha: inferred ? alpha * _inferredAlpha : alpha,
+            alpha: inferred ? alpha * ChartAlphas.inferred : alpha,
           ),
       );
       switch (span.state) {
         case TimelineState.waiting:
-          _hatch(canvas, rect, palette.ink.withValues(alpha: 0.35));
+          _hatch(canvas, rect, palette.ink.withValues(alpha: ChartAlphas.pattern));
         case TimelineState.paused:
-          _dots(canvas, rect, palette.ink.withValues(alpha: 0.4));
+          _dots(canvas, rect, palette.ink.withValues(alpha: ChartAlphas.pattern));
         case TimelineState.working || TimelineState.ready:
           break;
       }
       if (inferred) {
-        _dashedOutline(canvas, rect, base.withValues(alpha: 0.8));
+        final paint = Paint()
+          ..color = base.withValues(alpha: ChartAlphas.outline)
+          ..strokeWidth = _Marks.stroke;
+        for (final y in [rect.top, rect.bottom]) {
+          drawDashedLine(canvas, Offset(rect.left, y), Offset(rect.right, y), paint);
+        }
       }
-      if (labels && !compact && rect.width >= 72) {
+      if (labels && !compact && rect.width >= _Marks.labelMinWidth) {
         _label(canvas, rect, describeSpan(span).split(' (').first);
       }
     }
 
-    final tickPaint = Paint()
-      ..color = palette.ink.withValues(alpha: 0.55)
-      ..strokeWidth = 1;
+    final guide = Paint()
+      ..color = palette.ink.withValues(alpha: ChartAlphas.guide)
+      ..strokeWidth = _Marks.stroke;
     for (final tick in session.ticks) {
       final x = viewport.xOf(tick, w);
       if (x < 0 || x > w) continue;
       canvas.drawLine(
         Offset(x, 0),
-        Offset(x, compact ? size.height : top + 3),
-        tickPaint,
+        Offset(x, compact ? size.height : top + _Marks.tick),
+        guide,
       );
     }
 
@@ -205,10 +273,8 @@ class TimelineLanePainter extends CustomPainter {
       _diamond(
         canvas,
         Offset(x, size.height / 2),
-        compact ? 2.5 : 3.5,
-        marker.kind == ActivityKind.waitEnded
-            ? palette.waiting
-            : palette.ink.withValues(alpha: 0.6),
+        compact ? _Marks.ringCompact : _Marks.ring,
+        marker.kind == ActivityKind.waitEnded ? palette.waiting : guide.color,
       );
     }
 
@@ -217,7 +283,7 @@ class TimelineLanePainter extends CustomPainter {
       if (x >= 0 && x <= w) {
         final path = Path()
           ..moveTo(x, top)
-          ..lineTo(x + 5, size.height / 2)
+          ..lineTo(x + _Marks.ring, size.height / 2)
           ..lineTo(x, bottom)
           ..close();
         canvas.drawPath(path, Paint()..color = palette.now);
@@ -230,8 +296,8 @@ class TimelineLanePainter extends CustomPainter {
         Offset(nowX, 0),
         Offset(nowX, size.height),
         Paint()
-          ..color = palette.now.withValues(alpha: 0.35)
-          ..strokeWidth = 1,
+          ..color = palette.now.withValues(alpha: ChartAlphas.pattern)
+          ..strokeWidth = _Marks.stroke,
       );
     }
     canvas.restore();
@@ -242,9 +308,9 @@ class TimelineLanePainter extends CustomPainter {
     canvas.clipRect(rect);
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 1.2;
+      ..strokeWidth = _Marks.strokeBold;
     final h = rect.height;
-    for (var x = rect.left - h; x < rect.right; x += 6) {
+    for (var x = rect.left - h; x < rect.right; x += _Marks.patternGap) {
       canvas.drawLine(Offset(x, rect.bottom), Offset(x + h, rect.top), paint);
     }
     canvas.restore();
@@ -252,23 +318,12 @@ class TimelineLanePainter extends CustomPainter {
 
   void _dots(Canvas canvas, Rect rect, Color color) {
     final paint = Paint()..color = color;
-    for (var x = rect.left + 3; x < rect.right; x += 6) {
-      canvas.drawCircle(Offset(x, rect.center.dy), 1, paint);
-    }
-  }
-
-  void _dashedOutline(Canvas canvas, Rect rect, Color color) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-    for (final y in [rect.top, rect.bottom]) {
-      for (var x = rect.left; x < rect.right; x += 6) {
-        canvas.drawLine(
-          Offset(x, y),
-          Offset(math.min(x + 3, rect.right), y),
-          paint,
-        );
-      }
+    for (
+      var x = rect.left + _Marks.patternGap / 2;
+      x < rect.right;
+      x += _Marks.patternGap
+    ) {
+      canvas.drawCircle(Offset(x, rect.center.dy), _Marks.stroke, paint);
     }
   }
 
@@ -286,19 +341,16 @@ class TimelineLanePainter extends CustomPainter {
 
   void _label(Canvas canvas, Rect rect, String text) {
     final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(fontSize: TypeSizes.micro, color: palette.ink),
-      ),
+      text: TextSpan(text: text, style: palette.spanLabel),
       textDirection: TextDirection.ltr,
       textScaler: textScaler,
       maxLines: 1,
       ellipsis: '…',
-    )..layout(maxWidth: rect.width - 8);
+    )..layout(maxWidth: rect.width - Insets.sm);
     if (painter.height > rect.height) return;
     painter.paint(
       canvas,
-      Offset(rect.left + 4, rect.center.dy - painter.height / 2),
+      Offset(rect.left + Insets.xs, rect.center.dy - painter.height / 2),
     );
   }
 
@@ -339,32 +391,40 @@ class TimelineAxisPainter extends CustomPainter {
     Duration(days: 7),
   ];
 
-  /// How tall the axis band must be for its labels at [textScaler]: the label
-  /// from 2 px down, then room for the tick and the "now" dot under it. Never
-  /// less than [minimum], so a small scale keeps the band it always had.
-  /// Measured, not assumed: the app's own font is taller than a test's.
-  static double heightFor(TextScaler textScaler, {double minimum = 24}) {
+  /// A label's inset from its tick and from the top of the band.
+  static const double _labelInset = Insets.xxs;
+
+  /// The tick under a label, and the now dot's radius.
+  static const double _tick = Insets.xs + Insets.xxs;
+  static const double _nowDot = Insets.hair * 3;
+
+  /// About one label per this much width.
+  static const double _labelEvery = Insets.xxl * 2 + Insets.lg;
+
+  /// How tall the axis band must be for its labels in [style] at
+  /// [textScaler]: the label, then room for the tick and the now dot under
+  /// it. Never less than [minimum]. Measured, not assumed: the app's own font
+  /// is taller than a test's.
+  static double heightFor(
+    TextScaler textScaler, {
+    required TextStyle style,
+    double minimum = Chrome.paneStrip,
+  }) {
     final label = TextPainter(
-      text: const TextSpan(
-        text: 'Mon 30',
-        style: TextStyle(
-          fontSize: TypeSizes.caption,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      text: TextSpan(text: 'Mon 30', style: style),
       textDirection: TextDirection.ltr,
       textScaler: textScaler,
     )..layout();
-    final height = (2 + label.height + 4 + 6).ceilToDouble();
+    final height = (_labelInset + label.height + Insets.xs + _tick)
+        .ceilToDouble();
     label.dispose();
     return math.max(minimum, height);
   }
 
-  /// The step between labels for [viewport] across [width]: about one per
-  /// 80 pixels.
+  /// The step between labels for [viewport] across [width].
   static Duration stepFor(TimelineViewport viewport, double width) {
     final span = viewport.end.difference(viewport.start);
-    final wanted = span * (80 / math.max(1, width));
+    final wanted = span * (_labelEvery / math.max(1, width));
     return _steps.firstWhere((s) => s >= wanted, orElse: () => _steps.last);
   }
 
@@ -379,13 +439,13 @@ class TimelineAxisPainter extends CustomPainter {
     }
     final line = Paint()
       ..color = palette.faint
-      ..strokeWidth = 1;
+      ..strokeWidth = _Marks.stroke;
     var guard = 0;
     while (at.isBefore(viewport.end.toLocal()) && guard++ < 500) {
       final x = viewport.xOf(at.toUtc(), w);
       if (x >= 0) {
         canvas.drawLine(
-          Offset(x, size.height - 6),
+          Offset(x, size.height - _tick),
           Offset(x, size.height),
           line,
         );
@@ -397,16 +457,12 @@ class TimelineAxisPainter extends CustomPainter {
         final painter = TextPainter(
           text: TextSpan(
             text: text,
-            style: TextStyle(
-              fontSize: TypeSizes.caption,
-              color: palette.ink.withValues(alpha: midnight ? 0.9 : 0.65),
-              fontWeight: midnight ? FontWeight.w600 : FontWeight.w400,
-            ),
+            style: midnight ? palette.axisDay : palette.axisLabel,
           ),
           textDirection: TextDirection.ltr,
           textScaler: textScaler,
         )..layout();
-        painter.paint(canvas, Offset(x + 3, 2));
+        painter.paint(canvas, Offset(x + _labelInset, _labelInset));
       }
       at = step >= const Duration(days: 1)
           ? DateTime(at.year, at.month, at.day + step.inDays)
@@ -415,8 +471,8 @@ class TimelineAxisPainter extends CustomPainter {
     final nowX = viewport.xOf(now, w);
     if (nowX >= 0 && nowX <= w) {
       canvas.drawCircle(
-        Offset(nowX, size.height - 3),
-        3,
+        Offset(nowX, size.height - _nowDot),
+        _nowDot,
         Paint()..color = palette.now,
       );
     }
@@ -470,6 +526,10 @@ class TimelineArrowPainter extends CustomPainter {
   /// Where the lanes begin, below the axis.
   final double top;
 
+  /// The arrowhead's half-width and length.
+  static const double _head = Insets.xs;
+  static const double _headLength = Insets.sm - Insets.xxs;
+
   @override
   void paint(Canvas canvas, Size size) {
     final offset = scroll.hasClients ? scroll.offset : 0.0;
@@ -478,8 +538,8 @@ class TimelineArrowPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Rect.fromLTRB(left, top, size.width, size.height));
     final paint = Paint()
-      ..color = palette.ink.withValues(alpha: 0.55)
-      ..strokeWidth = 1.2
+      ..color = palette.ink.withValues(alpha: ChartAlphas.guide)
+      ..strokeWidth = _Marks.strokeBold
       ..style = PaintingStyle.stroke;
     for (final arrow in arrows) {
       final x = left + viewport.xOf(arrow.at, width);
@@ -491,9 +551,9 @@ class TimelineArrowPainter extends CustomPainter {
       final dir = y2 >= y1 ? 1.0 : -1.0;
       canvas.drawPath(
         Path()
-          ..moveTo(x - 3.5, y2 - 6 * dir)
-          ..lineTo(x, y2 - 1 * dir)
-          ..lineTo(x + 3.5, y2 - 6 * dir),
+          ..moveTo(x - _head, y2 - _headLength * dir)
+          ..lineTo(x, y2 - _Marks.stroke * dir)
+          ..lineTo(x + _head, y2 - _headLength * dir),
         paint,
       );
     }
