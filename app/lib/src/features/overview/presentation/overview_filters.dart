@@ -119,6 +119,7 @@ class OverviewFilterPanel extends ConsumerWidget {
             key: ValueKey(key),
             label: Text(label),
             selected: on,
+            visualDensity: VisualDensity.compact,
             onSelected: (_) => tap(),
           ),
       ],
@@ -138,11 +139,17 @@ class OverviewFilterPanel extends ConsumerWidget {
               child: SegmentedButton<OverviewGroupBy>(
                 key: const ValueKey('overview-filter-group'),
                 showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
                 segments: [
                   for (final by in OverviewGroupBy.values)
-                    ButtonSegment(value: by, label: Text(by.label)),
+                    if (by != OverviewGroupBy.context ||
+                        facts.contexts.isNotEmpty)
+                      ButtonSegment(
+                        value: by,
+                        label: Text(by.label, key: ValueKey('group-by:${by.name}')),
+                      ),
                 ],
-                selected: {prefs.groupBy},
+                selected: {ref.watch(overviewGroupByProvider)},
                 onSelectionChanged: (picked) =>
                     controller.setGroupBy(picked.single),
               ),
@@ -243,10 +250,13 @@ class OverviewActiveFilterChips extends ConsumerWidget {
       runSpacing: Insets.xs,
       children: [
         for (final chip in active)
-          InputChip(
+          FilterChip(
             key: ValueKey('overview-active-filter:${chip.kind.name}'),
             label: Text(chip.label),
-            onPressed: () => _showFilters(context),
+            selected: true,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => _showFilters(context),
             onDeleted: () => clearOverviewFilter(ref, chip.kind),
             deleteButtonTooltipMessage: 'Clear ${chip.label}',
           ),

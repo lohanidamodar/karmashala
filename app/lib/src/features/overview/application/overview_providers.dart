@@ -17,6 +17,8 @@ import '../../notifications/application/attention_inbox.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../../explorer/application/workspace_session_entry.dart';
+import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'overview_board.dart';
 import 'overview_prefs.dart';
@@ -33,14 +35,26 @@ final overviewFactsProvider = Provider.autoDispose<OverviewFacts>((ref) {
     });
   final workspace = ref.read(workspaceDataProvider);
   final installations = ref.read(agentInstallationsDataProvider);
+  // By name, as the Explorer lists them.
+  final contexts = [...ref.watch(workspacesControllerProvider)]
+    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  final contextOfProject = {
+    for (final project in projects) project.id: project.workspaceId,
+  };
+  String? projectOf(WorkspaceSessionEntry entry) {
+    final repositoryId =
+        entry.native?.repositoryId ?? entry.imported?.repositoryId;
+    return repositoryId == null
+        ? null
+        : workspace.repository(repositoryId)?.projectId;
+  }
+
   return OverviewFacts(
-    projectOf: (entry) {
-      final repositoryId =
-          entry.native?.repositoryId ?? entry.imported?.repositoryId;
-      return repositoryId == null
-          ? null
-          : workspace.repository(repositoryId)?.projectId;
-    },
+    projectOf: projectOf,
+    contextOf: (entry) => contextOfProject[projectOf(entry)],
+    contexts: [
+      for (final context in contexts) OverviewLaneKey(context.id, context.name),
+    ],
     machineOf: (entry) => entry.directory?.environmentId,
     agentOf: (entry) =>
         entry.imported?.cli ??
@@ -79,6 +93,15 @@ final _overviewOrderProvider = Provider.autoDispose<BoardOrderMemo>(
   (ref) => BoardOrderMemo(),
 );
 
+/// How the Board groups: the saved choice, or Project when it is Context and
+/// no context is left to group by.
+final overviewGroupByProvider = Provider.autoDispose<OverviewGroupBy>(
+  (ref) => effectiveGroupBy(
+    ref.watch(overviewPrefsProvider.select((p) => p.groupBy)),
+    ref.watch(overviewFactsProvider),
+  ),
+);
+
 /// **The Board**, from the Agents lens's own groups — so it honours Hide
 /// while working and Show archived the way the lists do — filtered and laid
 /// out as this device chose. Recomputed only when those inputs move.
@@ -88,7 +111,7 @@ final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
     ref.watch(agentStateGroupsProvider),
     facts: ref.watch(overviewFactsProvider),
     filter: prefs.filter,
-    groupBy: prefs.groupBy,
+    groupBy: ref.watch(overviewGroupByProvider),
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewOrderProvider),
   );
@@ -114,7 +137,7 @@ final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
       agents: filter.agents,
       machines: filter.machines,
     ),
-    groupBy: prefs.groupBy,
+    groupBy: ref.watch(overviewGroupByProvider),
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewCountsOrderProvider),
   );

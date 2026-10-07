@@ -68,7 +68,14 @@ String watchOverviewPlace(WidgetRef ref, OverviewCard card) {
   final machine = machineId == null
       ? null
       : ref.watch(environmentLabelForIdProvider(machineId));
-  return [?project, ?machine].join(' · ');
+  final byContext =
+      ref.watch(overviewGroupByProvider) == OverviewGroupBy.context;
+  final contextId = byContext ? facts.contextOf(card.entry) : null;
+  final context = !byContext
+      ? null
+      : facts.contexts.where((c) => c.id == contextId).firstOrNull?.label ??
+            kOverviewNoContextLabel;
+  return [?context, ?project, ?machine].join(' · ');
 }
 
 /// The agent's display name for [card], or null when it is not known.
@@ -109,7 +116,11 @@ class OverviewStateGlyph extends StatelessWidget {
 
 /// The agent's logo inside a ring of its state.
 class OverviewAgentRing extends ConsumerWidget {
-  const OverviewAgentRing({required this.card, this.size = 28, super.key});
+  const OverviewAgentRing({
+    required this.card,
+    this.size = Chrome.control,
+    super.key,
+  });
 
   final OverviewCard card;
   final double size;

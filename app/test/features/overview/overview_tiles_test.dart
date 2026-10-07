@@ -6,9 +6,8 @@ import 'package:karmashala/src/features/overview/application/overview_board.dart
 import 'package:karmashala/src/features/overview/application/overview_tiles.dart';
 import 'package:karmashala_session/session.dart';
 
-/// **Mission control's model**: which project tile comes first, which
-/// session heads it, what folds away as quiet, how the counters filter, how
-/// the marks are capped and how the arrows move between them.
+/// **The Overview's model**: how the counters filter, how the arrows move
+/// between cards, which card an id names, and the active-filter chips.
 void main() {
   final now = DateTime.utc(2026, 10, 7, 15);
   final startOfToday = DateTime.utc(2026, 10, 7);
@@ -62,200 +61,6 @@ void main() {
     startOfToday: startOfToday,
     memo: BoardOrderMemo(),
   );
-
-  group('attention order', () {
-    test('needs you first, then working, then most recent activity', () {
-      final board = build(
-        {
-          AgentState.ready: [
-            entry('a-ready', age: const Duration(hours: 2)),
-            entry('d-ready', age: const Duration(minutes: 5)),
-          ],
-          AgentState.working: [
-            entry('b-work', age: const Duration(minutes: 30)),
-          ],
-          AgentState.needsYou: [entry('c-ask', age: const Duration(hours: 3))],
-        },
-        projectOf: const {
-          'a-ready': 'p1',
-          'b-work': 'p2',
-          'c-ask': 'p3',
-          'd-ready': 'p4',
-        },
-      );
-      final tiles = arrangeTiles(board.lanes);
-      expect(tiles.live.map((l) => l.label), [
-        'Gamma',
-        'Beta',
-        'Delta',
-        'Alpha',
-      ]);
-      expect(tiles.quiet, isEmpty);
-    });
-
-    test('a failed session counts as needing you', () {
-      final board = build(
-        {
-          AgentState.working: [entry('w')],
-          AgentState.failed: [entry('f', age: const Duration(hours: 1))],
-        },
-        projectOf: const {'w': 'p1', 'f': 'p2'},
-      );
-      expect(arrangeTiles(board.lanes).live.map((l) => l.label), [
-        'Beta',
-        'Alpha',
-      ]);
-    });
-
-    test('a project with nothing live and nothing today folds as quiet; '
-        'one that finished today stays a tile', () {
-      final board = build(
-        {
-          AgentState.working: [entry('w')],
-          AgentState.ended: [
-            entry('today', age: const Duration(hours: 2)),
-            entry('old', age: const Duration(days: 2)),
-          ],
-        },
-        projectOf: const {'w': 'p1', 'today': 'p2', 'old': 'p3'},
-      );
-      final tiles = arrangeTiles(board.lanes);
-      expect(tiles.live.map((l) => l.label), ['Alpha', 'Beta']);
-      expect(tiles.quiet.map((l) => l.label), ['Gamma']);
-    });
-  });
-
-  group('marks', () {
-    test('live sessions by column, then what finished today', () {
-      final lane = build({
-        AgentState.ended: [entry('e', age: const Duration(hours: 1))],
-        AgentState.ready: [entry('r')],
-        AgentState.working: [entry('w')],
-        AgentState.needsYou: [entry('n')],
-      }).lanes.single;
-      expect(marksOf(lane).map((c) => c.id), ['n', 'w', 'r', 'e']);
-    });
-
-    test('the row is capped at two rows with "+N"', () {
-      expect(capMarks(5, perRow: 4), (shown: 5, more: 0));
-      expect(capMarks(8, perRow: 4), (shown: 8, more: 0));
-      expect(capMarks(12, perRow: 4), (shown: 7, more: 5));
-      expect(capMarks(3, perRow: 0), (shown: 1, more: 2));
-    });
-
-    test('sub-session dots: three at most, the rest counted', () {
-      final few = childDots(
-        const ChildSummary(total: 2, needsYou: 1, working: 0),
-      );
-      expect(few.dots, [BoardColumn.needsYou, BoardColumn.done]);
-      expect(few.more, 0);
-      final many = childDots(
-        const ChildSummary(total: 7, needsYou: 1, working: 3),
-      );
-      expect(many.dots, [
-        BoardColumn.needsYou,
-        BoardColumn.working,
-        BoardColumn.working,
-      ]);
-      expect(many.more, 4);
-    });
-  });
-
-  group('headline', () {
-    test('the oldest wait wins', () {
-      final lane = build({
-        AgentState.needsYou: [entry('n1'), entry('n2')],
-        AgentState.working: [entry('w', started: const Duration(hours: 5))],
-      }).lanes.single;
-      final pick = headlineOf(
-        lane,
-        waitingSince: (id) => switch (id) {
-          'n1' => now.subtract(const Duration(minutes: 3)),
-          'n2' => now.subtract(const Duration(minutes: 12)),
-          _ => null,
-        },
-      );
-      expect(pick?.id, 'n2');
-    });
-
-    test('an undated wait falls back to its last activity', () {
-      final lane = build({
-        AgentState.needsYou: [
-          entry('n1', age: const Duration(minutes: 1)),
-          entry('n2', age: const Duration(minutes: 40)),
-        ],
-      }).lanes.single;
-      expect(
-        headlineOf(
-          lane,
-          waitingSince: (id) =>
-              id == 'n1' ? now.subtract(const Duration(minutes: 9)) : null,
-        )?.id,
-        'n2',
-      );
-    });
-
-    test('else the longest-running working one, quiet only after busy', () {
-      final lane = build({
-        AgentState.working: [
-          entry('w1', started: const Duration(minutes: 6)),
-          entry('w2', started: const Duration(hours: 1)),
-        ],
-        AgentState.quiet: [entry('q', started: const Duration(hours: 9))],
-        AgentState.ready: [entry('r')],
-      }).lanes.single;
-      expect(headlineOf(lane, waitingSince: (_) => null)?.id, 'w2');
-    });
-
-    test('else the newest ready one, else what finished last today', () {
-      final ready = build({
-        AgentState.ready: [
-          entry('r1', age: const Duration(hours: 1)),
-          entry('r2', age: const Duration(minutes: 2)),
-        ],
-      }).lanes.single;
-      expect(headlineOf(ready, waitingSince: (_) => null)?.id, 'r2');
-
-      final done = build({
-        AgentState.ended: [
-          entry('e1', age: const Duration(hours: 3)),
-          entry('e2', age: const Duration(hours: 1)),
-        ],
-      }).lanes.single;
-      expect(headlineOf(done, waitingSince: (_) => null)?.id, 'e2');
-    });
-  });
-
-  group('footer', () {
-    test('counts what is live and says when it was last active', () {
-      final lane = build({
-        AgentState.needsYou: [entry('n', age: const Duration(minutes: 8))],
-        AgentState.working: [
-          entry('w1', age: const Duration(minutes: 20)),
-          entry('w2', age: const Duration(minutes: 30)),
-          entry('q', age: const Duration(hours: 1)),
-        ],
-      }).lanes.single;
-      expect(
-        tileFooter(lane, now: now),
-        '1 needs you · 3 working · active 8m ago',
-      );
-    });
-
-    test('done today and just now', () {
-      final lane = build({
-        AgentState.ready: [entry('r')],
-        AgentState.ended: [
-          entry('e1', age: const Duration(hours: 1)),
-          entry('e2', age: const Duration(hours: 2)),
-        ],
-      }).lanes.single;
-      expect(
-        tileFooter(lane, now: now),
-        '1 ready · 2 done today · active just now',
-      );
-    });
-  });
 
   group('counters', () {
     test('tapping a counter shows only that state; again clears it', () {
@@ -315,6 +120,16 @@ void main() {
       expect(moveOnTiles(tiles, 'c2', BoardMove.up), 'b1');
       expect(moveOnTiles(tiles, 'a2', BoardMove.up), 'a2');
     });
+  });
+
+  test('an id names its card, a sub-session stacked on its parent too', () {
+    final board = build({
+      AgentState.working: [entry('parent'), entry('child', parent: 'parent')],
+    });
+    expect(overviewCardOf(board, 'parent')?.children?.total, 1);
+    expect(overviewCardOf(board, 'child')?.entry.id, 'child');
+    expect(board.children['parent']?.single.id, 'child');
+    expect(overviewCardOf(board, 'nobody'), isNull);
   });
 
   group('active filters', () {

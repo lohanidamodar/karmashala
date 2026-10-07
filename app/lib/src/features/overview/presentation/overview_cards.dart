@@ -87,7 +87,10 @@ class _Header extends ConsumerWidget {
       excludeSemantics: true,
       child: Row(
         children: [
-          OverviewAgentRing(card: card, size: density.isTouch ? 30 : 26),
+          OverviewAgentRing(
+            card: card,
+            size: density.isTouch ? Insets.xl + Insets.xs : Chrome.control,
+          ),
           const SizedBox(width: Insets.sm),
           Expanded(
             child: Column(
@@ -156,7 +159,8 @@ class OverviewQueueCard extends ConsumerWidget {
           _Header(card: card),
           const SizedBox(height: Insets.sm),
           OverviewActivityLine(card: card),
-          if (!failed) ApprovalRequestCard(sessionId: card.id),
+          if (!failed)
+            ApprovalRequestCard(sessionId: card.id, dense: true),
           if (plan != null) ...[
             const SizedBox(height: Insets.sm),
             OverviewPlanLine(plan: plan),
@@ -286,7 +290,7 @@ class OverviewDoneRow extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            OverviewAgentRing(card: card, size: 22),
+            OverviewAgentRing(card: card, size: Insets.xl - Insets.hair * 2),
             const SizedBox(width: Insets.sm),
             Expanded(
               child: Text.rich(

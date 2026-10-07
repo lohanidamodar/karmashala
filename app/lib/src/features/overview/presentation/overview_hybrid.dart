@@ -19,6 +19,19 @@ typedef OverviewSections = ({
   List<OverviewCard> done,
 });
 
+/// What is at work, as groups: each lane — project, machine or context — and
+/// its working and ready cards, in the board's lane order.
+List<(OverviewLane, List<OverviewCard>)> overviewWorkGroupsOf(
+  OverviewBoard board,
+) => [
+  for (final lane in board.lanes)
+    if ([
+      ...lane.cards(BoardColumn.working),
+      ...lane.cards(BoardColumn.ready),
+    ] case final cards when cards.isNotEmpty)
+      (lane, cards),
+];
+
 /// [board]'s cards as the Overview lays them out: what waits on you, oldest
 /// wait first; what is at work, lane by lane; what ended today, newest first.
 OverviewSections overviewSectionsOf(
@@ -70,12 +83,13 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   var _doneOpen = false;
 
   /// The narrowest a work card is drawn at 1x text, and the most across.
-  static const _cardMin = 300.0;
+  static const _cardMin = WidthClass.mediumMin / 2;
   static const _maxAcross = 3;
 
   /// The queue's column beside the work, and the least room for both.
+  // No layout token names a side column's width yet.
   static const _queueWidth = 380.0;
-  static const _sideBySide = 840.0;
+  static const _sideBySide = WidthClass.expandedMin;
 
   @override
   Widget build(BuildContext context) {
@@ -153,14 +167,31 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 style: muted,
               )
             else
-              ..._grid([
-                for (final card in sections.work)
-                  OverviewWorkCard(
-                    key: ValueKey('overview-work-card:${card.id}'),
-                    card: card,
-                    onOpen: onOpen,
+              for (final (lane, cards) in overviewWorkGroupsOf(board)) ...[
+                Padding(
+                  key: ValueKey('overview-work-group:${lane.key}'),
+                  padding: const EdgeInsets.only(
+                    top: Insets.xs,
+                    bottom: Insets.sm,
                   ),
-              ], across),
+                  child: Text(
+                    '${lane.label} · ${cards.length}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                ..._grid([
+                  for (final card in cards)
+                    OverviewWorkCard(
+                      key: ValueKey('overview-work-card:${card.id}'),
+                      card: card,
+                      onOpen: onOpen,
+                    ),
+                ], across),
+              ],
           ],
         );
         final done = sections.done;

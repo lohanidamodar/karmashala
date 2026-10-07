@@ -250,7 +250,7 @@ void main() {
         AgentState.ready,
         activityAt: now.subtract(const Duration(minutes: 9)),
       ),
-      'Ready · 9m',
+      'Finished its turn · waiting for you',
     );
     expect(
       line(AgentState.ended, details: {'followUp': 'merged r22'}),

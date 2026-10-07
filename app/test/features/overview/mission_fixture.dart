@@ -56,7 +56,13 @@ class MissionFixture {
     this.glances = const {},
     this.files = const {},
     this.activity = const [],
+    this.contexts = const [],
+    this.contextOfProject = const {},
   }) : sessions = sessions ?? realisticSessions();
+
+  /// The contexts the owner created, and which project each one holds.
+  final List<OverviewLaneKey> contexts;
+  final Map<String, String> contextOfProject;
 
   /// Each session's changed files.
   final Map<String, List<String>> files;
@@ -573,8 +579,10 @@ class MissionFixture {
     projectOf: (e) => _byId[e.id]?.project,
     machineOf: (e) => e.directory?.environmentId,
     agentOf: (e) => _byId[e.id]?.agent,
+    contextOf: (e) => contextOfProject[_byId[e.id]?.project],
     projects: projects,
     machines: machines,
+    contexts: contexts,
   );
 
   /// The providers mission control reads, answered from this fixture.
@@ -584,6 +592,12 @@ class MissionFixture {
     agentsHiddenWorkingCountProvider.overrideWith((ref) => hiddenWorking),
     overviewFactsProvider.overrideWith((ref) => facts),
     sessionStatusLookupProvider.overrideWithValue((id) => _byId[id]?.report),
+    agentSessionStatusProvider.overrideWith(
+      (ref, id) => switch (_byId[id]?.report) {
+        final report? => Stream.value(report),
+        null => const Stream<AgentStatusReport>.empty(),
+      },
+    ),
     overviewReaderProvider.overrideWithValue(
       FakeOverviewReader(answers: answers, glances: glances, files: files),
     ),

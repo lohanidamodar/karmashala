@@ -83,7 +83,7 @@ class OverviewPeek extends ConsumerWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: Insets.xs),
-                  child: OverviewAgentRing(card: card, size: 32),
+                  child: OverviewAgentRing(card: card, size: Insets.xxl),
                 ),
                 const SizedBox(width: Insets.sm),
                 Expanded(
@@ -259,8 +259,15 @@ class _LastAnswer extends ConsumerStatefulWidget {
 class _LastAnswerState extends ConsumerState<_LastAnswer> {
   var _more = false;
 
-  /// About six lines of body text.
-  static const _shut = 132.0;
+  /// How many lines of the answer show before "More".
+  static const _shutLines = 6;
+
+  /// [_shutLines] of the body text the markdown is set in, at this scale.
+  double _shutHeight(BuildContext context) {
+    final body = Theme.of(context).textTheme.bodyMedium;
+    final line = (body?.fontSize ?? Insets.lg) * (body?.height ?? 1.45);
+    return MediaQuery.textScalerOf(context).scale(line) * _shutLines;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +296,7 @@ class _LastAnswerState extends ConsumerState<_LastAnswer> {
                   constraints: BoxConstraints(
                     maxHeight: _more || !long
                         ? double.infinity
-                        : _shut * MediaQuery.textScalerOf(context).scale(1),
+                        : _shutHeight(context),
                   ),
                   child: ClipRect(
                     child: SingleChildScrollView(
@@ -377,7 +384,10 @@ class _SubSession extends ConsumerWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: Insets.hair * 2),
-              child: OverviewStateGlyph(state: card.state, size: 12),
+              child: OverviewStateGlyph(
+                state: card.state,
+                size: UiDensity.of(context).iconSmall + Insets.hair,
+              ),
             ),
             const SizedBox(width: Insets.sm),
             Expanded(

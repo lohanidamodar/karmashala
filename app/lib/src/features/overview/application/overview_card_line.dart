@@ -92,11 +92,11 @@ OverviewActivity overviewActivity({
     case AgentState.quiet:
       final at = report?.evidenceAt;
       return OverviewActivity(
-        at == null ? 'Quiet' : 'Nothing new for ${age(at)}',
+        at == null ? 'Quiet: nothing new recorded' : 'Nothing new for ${age(at)}',
       );
     case AgentState.ready:
       return OverviewActivity(
-        detailOf(InboxItemKind.finished) ?? 'Ready · ${age(activityAt)}',
+        detailOf(InboxItemKind.finished) ?? 'Finished its turn · waiting for you',
       );
     case AgentState.ended:
       final detail =

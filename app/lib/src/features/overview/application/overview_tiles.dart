@@ -1,132 +1,4 @@
-import 'package:karmashala_ui/rows.dart' show compactAge;
-
-import '../../explorer/application/agent_states.dart';
 import 'overview_board.dart';
-
-/// Mission control's tiles: lanes with something live or finished today, by
-/// attention, and the [quiet] ones that fold into one line at the end.
-({List<OverviewLane> live, List<OverviewLane> quiet}) arrangeTiles(
-  List<OverviewLane> lanes,
-) {
-  final live = [
-    for (final lane in lanes)
-      if (!_isQuietTile(lane)) lane,
-  ];
-  final latest = {for (final lane in live) lane.key: _lastActivity(lane)};
-  live.sort((a, b) {
-    final tier = _tier(a).compareTo(_tier(b));
-    if (tier != 0) return tier;
-    final byTime = latest[b.key]!.compareTo(latest[a.key]!);
-    return byTime != 0 ? byTime : a.label.compareTo(b.label);
-  });
-  return (
-    live: live,
-    quiet: [
-      for (final lane in lanes)
-        if (_isQuietTile(lane)) lane,
-    ],
-  );
-}
-
-bool _isQuietTile(OverviewLane lane) => lane.isQuiet && lane.doneToday.isEmpty;
-
-int _tier(OverviewLane lane) {
-  if (lane.cards(BoardColumn.needsYou).isNotEmpty) return 0;
-  if (lane.cards(BoardColumn.working).isNotEmpty) return 1;
-  return 2;
-}
-
-DateTime _lastActivity(OverviewLane lane) {
-  var latest = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
-  for (final card in [...marksOf(lane), ...lane.doneOlder]) {
-    if (card.entry.activityAt.isAfter(latest)) latest = card.entry.activityAt;
-  }
-  return latest;
-}
-
-/// The sessions a tile draws as marks: live ones column by column, then what
-/// finished today.
-List<OverviewCard> marksOf(OverviewLane lane) => [
-  ...lane.cards(BoardColumn.needsYou),
-  ...lane.cards(BoardColumn.working),
-  ...lane.cards(BoardColumn.ready),
-  ...lane.doneToday,
-];
-
-/// How many of [count] marks fit in [rows] rows of [perRow], keeping the last
-/// place for "+[more]" when they do not all fit.
-({int shown, int more}) capMarks(
-  int count, {
-  required int perRow,
-  int rows = 2,
-}) {
-  final room = (perRow < 1 ? 1 : perRow) * rows;
-  if (count <= room) return (shown: count, more: 0);
-  return (shown: room - 1, more: count - room + 1);
-}
-
-/// A parent's sub-sessions as dots under its mark: needs you, then working,
-/// then the rest ([BoardColumn.done] stands for any other state), three at
-/// most.
-({List<BoardColumn> dots, int more}) childDots(ChildSummary children) {
-  final all = [
-    for (var i = 0; i < children.needsYou; i++) BoardColumn.needsYou,
-    for (var i = 0; i < children.working; i++) BoardColumn.working,
-    for (var i = children.needsYou + children.working; i < children.total; i++)
-      BoardColumn.done,
-  ];
-  const most = 3;
-  return all.length <= most
-      ? (dots: all, more: 0)
-      : (dots: all.sublist(0, most), more: all.length - most);
-}
-
-/// **The one session that matters most in [lane]**: the oldest wait, else
-/// the working session that has run longest (busy before quiet), else the
-/// newest ready one, else what finished last today.
-OverviewCard? headlineOf(
-  OverviewLane lane, {
-  required DateTime? Function(String sessionId) waitingSince,
-}) {
-  OverviewCard? first(
-    Iterable<OverviewCard> cards,
-    int Function(OverviewCard a, OverviewCard b) compare,
-  ) => cards.isEmpty ? null : (cards.toList()..sort(compare)).first;
-
-  final asks = lane.cards(BoardColumn.needsYou);
-  if (asks.isNotEmpty) {
-    DateTime since(OverviewCard c) => waitingSince(c.id) ?? c.entry.activityAt;
-    return first(asks, (a, b) => since(a).compareTo(since(b)));
-  }
-  final working = lane.cards(BoardColumn.working);
-  if (working.isNotEmpty) {
-    final busy = working.where((c) => c.state == AgentState.working);
-    return first(
-      busy.isEmpty ? working : busy,
-      (a, b) => a.entry.createdAt.compareTo(b.entry.createdAt),
-    );
-  }
-  int newest(OverviewCard a, OverviewCard b) =>
-      b.entry.activityAt.compareTo(a.entry.activityAt);
-  return first(lane.cards(BoardColumn.ready), newest) ??
-      first(lane.doneToday, newest);
-}
-
-/// "1 needs you · 3 working · active 8m ago".
-String tileFooter(OverviewLane lane, {required DateTime now}) {
-  final needs = lane.cards(BoardColumn.needsYou).length;
-  final working = lane.cards(BoardColumn.working).length;
-  final ready = lane.cards(BoardColumn.ready).length;
-  final done = lane.doneToday.length;
-  final age = compactAge(now.difference(_lastActivity(lane)));
-  return [
-    if (needs > 0) '$needs needs you',
-    if (working > 0) '$working working',
-    if (ready > 0) '$ready ready',
-    if (done > 0) '$done done today',
-    age == 'now' ? 'active just now' : 'active $age ago',
-  ].join(' · ');
-}
 
 /// The state filter after its counter for [tapped] is tapped: that state
 /// alone, or none when it was already the one shown.
@@ -232,7 +104,10 @@ List<OverviewActiveFilter> activeFiltersOf(
 OverviewCard? overviewCardOf(OverviewBoard board, String? id) {
   if (id == null) return null;
   for (final lane in board.lanes) {
-    for (final card in [...marksOf(lane), ...lane.doneOlder]) {
+    for (final card in [
+      for (final column in BoardColumn.values) ...lane.cards(column),
+      ...lane.doneOlder,
+    ]) {
       if (card.id == id) return card;
     }
   }

@@ -15,7 +15,7 @@ class OverviewHeartbeat extends ConsumerWidget {
   const OverviewHeartbeat({super.key});
 
   /// The width under which the chart goes below the counters.
-  static const _sideBySide = 760.0;
+  static const _sideBySide = WidthClass.mediumMin;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

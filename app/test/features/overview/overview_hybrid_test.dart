@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,10 +9,15 @@ import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_list_prefs.dart';
+import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
+import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
+import 'package:karmashala/src/features/sessions/presentation/prompt_cards/question_prompt_card.dart';
+import 'package:karmashala_remote/remote.dart';
 
 import 'mission_fixture.dart';
 
@@ -407,5 +413,140 @@ void main() {
     );
     expect(find.text('4 done today'), findsOneWidget);
     await unmountMission(tester);
+  });
+
+  testWidgets('a question in the queue is round 35\'s dense card', (
+    tester,
+  ) async {
+    final now = MissionFixture.now;
+    final asking = (
+      id: 'ask-q',
+      title: 'Pick the matrix',
+      project: 'p-beej',
+      machine: 'windows',
+      agent: AgentIds.claudeCode,
+      state: AgentState.needsYou,
+      age: const Duration(minutes: 3),
+      parent: null,
+      report: AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 'cli-ask-q',
+        status: AgentActivityStatus.awaitingApproval,
+        observedAt: now,
+        source: AgentStatusSource.hook,
+        waiting: AgentWaitKind.question,
+        waitingSince: now.subtract(const Duration(minutes: 3)),
+      ),
+    );
+    const question = RemoteQuestion(
+      toolUseId: 'toolu_q',
+      questions: [
+        RemoteQuestionItem(
+          question: 'Which Xcode should the macOS matrix pin?',
+          header: 'Xcode',
+          multiSelect: false,
+          options: [
+            RemoteQuestionOption(label: '16.4 (stable)'),
+            RemoteQuestionOption(label: '26 beta'),
+          ],
+        ),
+      ],
+    );
+    await pumpMission(
+      tester,
+      fixture: MissionFixture(sessions: [asking]),
+      prefsDir: dir,
+      overrides: [
+        chatOpenQuestionProvider.overrideWith(
+          (ref, id) async => id == 'ask-q' ? question : null,
+        ),
+        sessionAnswerableProvider.overrideWithValue((_) => true),
+      ],
+    );
+
+    final card = find.descendant(
+      of: queueCard('ask-q'),
+      matching: find.byType(QuestionPromptCard),
+    );
+    expect(card, findsOneWidget);
+    final drawn = tester.widget<QuestionPromptCard>(card);
+    expect(drawn.dense, isTrue);
+    expect(drawn.showHeader, isFalse);
+    expect(find.text('16.4 (stable)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await unmountMission(tester);
+  });
+
+  group('group by context', () {
+    MissionFixture filed() => MissionFixture(
+      activity: MissionFixture.realisticActivity(),
+      contexts: const [
+        OverviewLaneKey('c-apps', 'Apps'),
+        OverviewLaneKey('c-web', 'Web'),
+      ],
+      contextOfProject: const {
+        'p-ks': 'c-apps',
+        'p-beej': 'c-apps',
+        'p-web': 'c-web',
+      },
+    );
+
+    Finder group(String key) =>
+        find.byKey(ValueKey('overview-work-group:$key'));
+
+    testWidgets('a header per context in order, "No context" last', (
+      tester,
+    ) async {
+      final c = await pump(tester, fixture: filed());
+      c.read(overviewPrefsProvider.notifier).setGroupBy(OverviewGroupBy.context);
+      await settleMission(tester);
+
+      expect(
+        find.descendant(
+          of: group('c-apps'),
+          matching: find.textContaining('Apps · '),
+        ),
+        findsOneWidget,
+      );
+      // Each card names its context too.
+      expect(find.textContaining('Apps · karmashala'), findsWidgets);
+      final apps = tester.getTopLeft(group('c-apps')).dy;
+      final web = tester.getTopLeft(group('c-web')).dy;
+      expect(apps, lessThan(web));
+      final none = group(kOverviewUnfiledLane);
+      await tester.scrollUntilVisible(none, 300, scrollable: hybridList);
+      expect(
+        find.descendant(of: none, matching: find.textContaining('No context')),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('the panel offers Context only when a context exists', (
+      tester,
+    ) async {
+      await pump(tester, fixture: filed());
+      await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
+      await settleMission(tester);
+      expect(find.byKey(const ValueKey('group-by:context')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('group-by:context')));
+      await settleMission(tester);
+      await unmountMission(tester);
+    });
+
+    testWidgets('a saved Context with no context left groups by project', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      c.read(overviewPrefsProvider.notifier).setGroupBy(OverviewGroupBy.context);
+      await settleMission(tester);
+
+      expect(c.read(overviewGroupByProvider), OverviewGroupBy.project);
+      expect(group('p-ks'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
+      await settleMission(tester);
+      expect(find.byKey(const ValueKey('group-by:context')), findsNothing);
+      await unmountMission(tester);
+    });
   });
 }
