@@ -192,8 +192,10 @@ class _UserMessageCard extends StatelessWidget {
       scheme.primary,
       _tintAlpha,
     )!;
+    // An automation's message says so, in a label, not in its first line.
+    final sent = AutomationAttribution.split(message.text);
     // Karmashala's own note to the agent is not the person's words.
-    final (:preamble, :rest) = splitScratchPreamble(message.text);
+    final (:preamble, :rest) = splitScratchPreamble(sent?.rest ?? message.text);
     final bubble = LayoutBuilder(
       builder: (context, constraints) => _TurnWithMeta(
         alignEnd: true,
@@ -240,13 +242,14 @@ class _UserMessageCard extends StatelessWidget {
         ),
       ),
     );
-    if (preamble == null && !message.queued) return bubble;
+    if (preamble == null && !message.queued && sent == null) return bubble;
     final muted = Theme.of(
       context,
     ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        if (sent != null) AutomationSentLabel(by: sent.by),
         if (preamble != null) _SessionNote(text: preamble),
         if (rest.isNotEmpty || message.images.isNotEmpty) bubble,
         // The agent read it mid-turn, not as the next turn.

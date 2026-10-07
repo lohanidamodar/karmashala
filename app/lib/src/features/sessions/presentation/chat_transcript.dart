@@ -14,7 +14,10 @@ import 'package:agent_cli/descriptors.dart' show AgentPlan;
 import 'package:agent_cli/read.dart'
     show kTranscriptNoticeRole, taskNotificationLine;
 import 'package:agent_cli/stream.dart';
+import 'package:karmashala_automations/automations.dart'
+    show AutomationAttribution;
 import 'package:karmashala_session/session.dart' show splitScratchPreamble;
+import '../../automations/presentation/automation_sent_label.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'chat_cards/plan_update_card.dart';
 import 'tool_activity_row.dart';

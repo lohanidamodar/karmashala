@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 
 import 'automation.dart';
+import 'automation_attribution.dart';
 import 'automation_trigger.dart';
 
 /// The event [report] is, given the status last witnessed before it — or
@@ -51,5 +52,7 @@ AutomationEventKind? automationEventWithWait(
 
 /// What an event rule types: its prompt, with who sent it on the same line
 /// so the agent and the person reading the pane both know it was not typed.
-String automationMessage(Automation rule) =>
-    '[from the Karmashala automation "${rule.name}"] ${rule.prompt}';
+String automationMessage(Automation rule) => AutomationAttribution(
+  automationId: rule.id,
+  name: rule.name,
+).render(rule.prompt);

@@ -198,7 +198,8 @@ void main() {
 
       expect(
         utf8.decode(pty.writes.first),
-        '[from the Karmashala automation "After each turn"] run the tests',
+        '[sent by the Karmashala automation "After each turn" (rule-1)] '
+        'run the tests',
       );
       final written = AutomationDao(db).runsFor('rule-1').single;
       expect(written.state, AutomationRunState.finished);

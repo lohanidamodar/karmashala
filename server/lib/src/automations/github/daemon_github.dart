@@ -241,7 +241,10 @@ class DaemonGithub {
           fireAt: at,
           state: ScheduledResumeState.pending,
           scheduledAt: at,
-          message: fillAgentText(automation.prompt, run.variables),
+          message: AutomationAttribution(
+            automationId: automation.id,
+            name: automation.name,
+          ).render(fillAgentText(automation.prompt, run.variables)),
           latePolicy: ResumeLatePolicy.resume,
           scheduledBy: 'automation "${automation.name}"',
         ),

@@ -294,7 +294,13 @@ void main() {
             ScheduledResumeDao(db).liveFor('s1') ??
             ScheduledResumeDao(db).lastEndedFor('s1')!;
         expect(resume.scheduledBy, 'automation "Answer PR comments"');
-        expect(resume.message, startsWith('Answer #7: [field 1]'));
+        expect(
+          resume.message,
+          startsWith(
+            '[sent by the Karmashala automation "Answer PR comments" '
+            '(gh-1)] Answer #7: [field 1]',
+          ),
+        );
         expect(resume.message, contains('written by other people'));
         expect(launcher.handles, hasLength(1), reason: 'no new agent');
       },

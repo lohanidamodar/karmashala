@@ -1,6 +1,7 @@
 import 'package:karmashala_core/verdicts.dart';
 
 import '../domain/automation.dart';
+import '../domain/automation_attribution.dart';
 import '../domain/automation_run.dart';
 import '../domain/automation_steps.dart';
 import '../domain/github_trigger.dart';
@@ -251,7 +252,10 @@ class AutomationFollowUps {
         fireAt: now,
         state: ScheduledResumeState.pending,
         scheduledAt: now,
-        message: text,
+        message: AutomationAttribution(
+          automationId: automation.id,
+          name: automation.name,
+        ).render(text),
         latePolicy: ResumeLatePolicy.resume,
         scheduledBy: 'automation "${automation.name}"',
       ),
