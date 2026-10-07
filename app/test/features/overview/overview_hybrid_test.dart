@@ -537,7 +537,10 @@ void main() {
           findsOneWidget,
         );
 
-        await tester.tap(find.text('Round 30 · webhooks').first);
+        final title = find.text('Round 30 · webhooks').first;
+        await tester.ensureVisible(title);
+        await settleMission(tester);
+        await tester.tap(title);
         await settleMission(tester);
         // The chat is told when the owner last looked, to draw its line.
         expect(

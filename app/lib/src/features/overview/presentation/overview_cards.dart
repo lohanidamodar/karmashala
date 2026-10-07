@@ -7,6 +7,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_states.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
+import 'overview_batch_bar.dart';
 import 'overview_card_parts.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
@@ -62,12 +63,21 @@ class OverviewCardFrame extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: radius,
-        onTap: onOpen == null ? null : () => onOpen!(card),
+        onTap: onOpen == null
+            ? null
+            : () {
+                if (!overviewPickSelects(ref, card, touch: _touch(context))) {
+                  onOpen!(card);
+                }
+              },
+        onLongPress: () => overviewPickSelects(ref, card, long: true),
         child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
       ),
     );
   }
 }
+
+bool _touch(BuildContext context) => UiDensity.of(context).isTouch;
 
 /// Title, where it runs, and the state chip.
 class OverviewCardHeader extends ConsumerWidget {
@@ -97,6 +107,7 @@ class OverviewCardHeader extends ConsumerWidget {
       excludeSemantics: true,
       child: Row(
         children: [
+          OverviewSelectBox(card: card),
           OverviewAgentRing(
             card: card,
             size: density.isTouch ? Insets.xl + Insets.xs : Chrome.control,
@@ -165,6 +176,7 @@ class OverviewWorkCard extends ConsumerWidget {
         OverviewLatestMessage(sessionId: card.id),
         const SizedBox(height: Insets.xs),
         OverviewMetaLine(card: card),
+        OverviewUsageLine(sessionId: card.id),
         if (card.children != null) ...[
           const SizedBox(height: Insets.xs),
           OverviewSubSessions(card: card, onOpen: onOpen),

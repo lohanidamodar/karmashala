@@ -12,13 +12,17 @@ import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../explorer/application/explorer_actions.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
+import '../application/overview_on_screen.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
+import 'overview_batch_bar.dart';
 import 'overview_filters.dart';
 import 'overview_hybrid.dart';
 import 'overview_peek.dart';
+import 'overview_pins.dart';
 import 'overview_queue_card.dart';
 import 'overview_resume_picker.dart';
 import 'overview_triage.dart';
@@ -36,34 +40,76 @@ class OverviewTabView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(overviewPrefsProvider.select((p) => p.view));
-    return WorkbenchTabScaffold(
-      icon: AppIcons.squaresFour,
-      title: 'Agent dashboard',
-      controls: [
-        CompactSegmented<OverviewView>(
-          key: const ValueKey('overview-view'),
-          segments: const [
-            ButtonSegment(value: OverviewView.board, label: Text('Board')),
-            ButtonSegment(
-              value: OverviewView.timeline,
-              label: Text('Timeline'),
-            ),
-          ],
-          selected: view,
-          onChanged: ref.read(overviewPrefsProvider.notifier).setView,
-        ),
-      ],
-      actions: [
-        const _ResumeButton(),
-        const _NewSessionButton(),
-        if (view == OverviewView.board) const OverviewFilterButton(),
-      ],
-      body: switch (view) {
-        OverviewView.board => const _BoardBody(),
-        OverviewView.timeline => const _TimelineBody(),
-      },
+    return _OnScreen(
+      child: WorkbenchTabScaffold(
+        icon: AppIcons.squaresFour,
+        title: 'Agent dashboard',
+        controls: [
+          CompactSegmented<OverviewView>(
+            key: const ValueKey('overview-view'),
+            segments: const [
+              ButtonSegment(value: OverviewView.board, label: Text('Board')),
+              ButtonSegment(
+                value: OverviewView.timeline,
+                label: Text('Timeline'),
+              ),
+            ],
+            selected: view,
+            onChanged: ref.read(overviewPrefsProvider.notifier).setView,
+          ),
+        ],
+        actions: [
+          const _ResumeButton(),
+          const _NewSessionButton(),
+          if (view == OverviewView.board) const OverviewFilterButton(),
+        ],
+        body: switch (view) {
+          OverviewView.board => const _BoardBody(),
+          OverviewView.timeline => const _TimelineBody(),
+        },
+      ),
     );
   }
+}
+
+/// Counts the dashboard as drawn while it is, for the chime to hold back:
+/// what is in front of the person needs no sound.
+class _OnScreen extends ConsumerStatefulWidget {
+  const _OnScreen({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_OnScreen> createState() => _OnScreenState();
+}
+
+class _OnScreenState extends ConsumerState<_OnScreen> {
+  late final OverviewOnScreen _shown;
+  var _counted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shown = ref.read(overviewOnScreenProvider.notifier);
+    // After the frame: a provider is not changed while the tree builds.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _shown.add();
+      _counted = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_counted) {
+      final shown = _shown;
+      Future.microtask(shown.remove);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// **Resume…**: a stopped or ended session brought back from here, kept on
@@ -484,13 +530,19 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     }),
     OverviewDismissIntent: _Triage<OverviewDismissIntent>(
       (_) {
+        if (!ref.read(overviewSelectionProvider).isEmpty) {
+          ref.read(overviewSelectionProvider.notifier).clear();
+          return;
+        }
         final focus = ref.read(overviewFocusProvider);
         final controller = ref.read(overviewFocusProvider.notifier);
         focus.peeked != null ? controller.closePeek() : controller.select(null);
       },
       enabled: (_) {
         final focus = ref.read(overviewFocusProvider);
-        return focus.peeked != null || focus.selected != null;
+        return focus.peeked != null ||
+            focus.selected != null ||
+            !ref.read(overviewSelectionProvider).isEmpty;
       },
     ),
     OverviewShowKeysIntent: _Triage<OverviewShowKeysIntent>(
@@ -518,6 +570,47 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     return _laidOut();
   }
 
+  /// Two live chats docked together beside the board, the board giving way
+  /// when it would be narrower than a peek.
+  Widget _sideBySide(
+    double width,
+    Widget main,
+    Widget first,
+    OverviewCard second,
+  ) {
+    final focus = ref.read(overviewFocusProvider.notifier);
+    final double each = ((width - kOverviewBoardMinWidth) / 2).clamp(
+      _peekMinWidth,
+      _peekMaxWidth,
+    );
+    final board = width - each * 2 >= _peekMinWidth;
+    final secondPeek = OverviewPeek(
+      key: ValueKey('overview-peek-beside:${second.id}'),
+      card: second,
+      beside: true,
+      onPeek: _open,
+      onClose: focus.closeBeside,
+    );
+    const divider = VerticalDivider(width: Insets.xs + Insets.hair);
+    return Row(
+      key: const ValueKey('overview-side-by-side-peeks'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (board) ...[
+          Expanded(child: main),
+          divider,
+          SizedBox(width: each, child: first),
+          divider,
+          SizedBox(width: each, child: secondPeek),
+        ] else ...[
+          Expanded(child: first),
+          divider,
+          Expanded(child: secondPeek),
+        ],
+      ],
+    );
+  }
+
   Widget _laidOut() => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.maxWidth;
@@ -528,12 +621,20 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.watch(overviewBoardProvider),
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
             );
-      final main = OverviewHybrid(
-        onOpen: _open,
-        onEdit: (card) => _open(card, editing: true),
-        onTerminal: _terminal,
-        onAnswered: _advance,
-        questionControllerOf: _questionOf,
+      final main = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const OverviewBatchBar(),
+          Expanded(
+            child: OverviewHybrid(
+              onOpen: _open,
+              onEdit: (card) => _open(card, editing: true),
+              onTerminal: _terminal,
+              onAnswered: _advance,
+              questionControllerOf: _questionOf,
+            ),
+          ),
+        ],
       );
       Widget? peek;
       if (peeked != null) {
@@ -557,8 +658,20 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ),
             )
           : math.min(kOverviewPeekWidth, width);
+      // A second peek only where two fit; narrower, the first stays alone.
+      final beside =
+          peek == null ||
+              _mode != OverviewPeekMode.docked ||
+              !overviewSideBySideFits(context)
+          ? null
+          : overviewCardOf(
+              ref.watch(overviewBoardProvider),
+              ref.watch(overviewFocusProvider.select((f) => f.beside)),
+            );
       final Widget laidOut = switch ((peek, _mode)) {
         (null, _) => main,
+        (final peek?, OverviewPeekMode.docked) when beside != null =>
+          _sideBySide(width, main, peek, beside),
         (final peek?, OverviewPeekMode.docked) => Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:agent_cli/usage.dart' show kUsageCriticalPercent;
+import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/tokens.dart';
+
+import '../../../core/util/clock_provider.dart';
+import '../../agents/presentation/usage_chip.dart' show formatUsageDuration;
 
 import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/session_diff_stat.dart';
@@ -8,6 +13,8 @@ import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
+import '../application/overview_usage.dart';
+import 'overview_batch_bar.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
@@ -342,7 +349,10 @@ class OverviewPhoneRow extends ConsumerWidget {
       color: selected ? StateLayers.selected(scheme) : Colors.transparent,
       child: InkWell(
         key: ValueKey('overview-phone-row:${card.id}'),
-        onTap: () => onOpen(card),
+        onTap: () {
+          if (!overviewPickSelects(ref, card, touch: true)) onOpen(card);
+        },
+        onLongPress: () => overviewPickSelects(ref, card, long: true),
         child: Container(
           constraints: const BoxConstraints(minHeight: Touch.target),
           padding: const EdgeInsets.symmetric(
@@ -359,6 +369,7 @@ class OverviewPhoneRow extends ConsumerWidget {
           ),
           child: Row(
             children: [
+              OverviewSelectBox(card: card),
               OverviewAgentRing(card: card, size: Insets.xl + Insets.xs),
               const SizedBox(width: Insets.sm),
               Expanded(
@@ -380,7 +391,8 @@ class OverviewPhoneRow extends ConsumerWidget {
                         ),
                         OverviewNewBadge(card: card),
                         const SizedBox(width: Insets.xs),
-                        OverviewStatePill(card: card),
+                        // At large text it ends before the row does.
+                        Flexible(child: OverviewStatePill(card: card)),
                         OverviewCardMenu(card: card),
                       ],
                     ),
@@ -399,6 +411,82 @@ class OverviewPhoneRow extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// "1.2M tokens · $0.42" as reported, or "Usage not recorded"; never a
+/// figure worked out here.
+String overviewUsageText(OverviewUsage usage) {
+  if (!usage.recorded) return 'Usage not recorded';
+  final tokens = usage.tokens;
+  final cost = usage.cost;
+  return [
+    tokens == null
+        ? 'tokens not recorded'
+        : '${formatCompactCount(tokens)} tokens',
+    if (cost != null)
+      switch (cost.currency?.trim() ?? '') {
+        'USD' => '\$${cost.amount.toStringAsFixed(2)}',
+        '' => cost.amount.toStringAsFixed(2),
+        final currency => '${cost.amount.toStringAsFixed(2)} $currency',
+      },
+  ].join(' · ');
+}
+
+/// "5h limit 92% · resets in 12 min": the account's own reading.
+String overviewLimitText(OverviewLimit limit, DateTime now) {
+  final reset = limit.resetsAt;
+  return [
+    '${limit.label} limit ${limit.percent.round()}%',
+    if (reset != null)
+      'resets in ${formatUsageDuration(reset.difference(now))}',
+  ].join(' · ');
+}
+
+/// **What a session has used**, and a warning when its account is near a
+/// limit. Says nothing until the counts have been read.
+class OverviewUsageLine extends ConsumerWidget {
+  const OverviewUsageLine({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final usage = ref.watch(overviewUsageProvider(sessionId));
+    final limit = ref.watch(overviewLimitProvider(sessionId));
+    if (!usage.read && limit == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final semantic = SemanticColors.of(context);
+    final small = theme.textTheme.labelSmall?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (usage.read)
+          Text(
+            overviewUsageText(usage),
+            key: ValueKey('overview-usage:$sessionId'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: small?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        if (limit != null)
+          Text(
+            overviewLimitText(limit, ref.read(clockProvider).nowUtc()),
+            key: ValueKey('overview-limit:$sessionId'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: small?.copyWith(
+              color: limit.percent >= kUsageCriticalPercent
+                  ? semantic.failure
+                  : semantic.attention,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+      ],
     );
   }
 }

@@ -18,6 +18,7 @@ import '../../core/probe/probe_mode.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../server/application/server_commands.dart';
 import '../server/application/server_overview.dart';
+import '../notifications/application/needs_you_chime.dart';
 import '../notifications/application/notification_providers.dart';
 import '../notifications/application/focus_mode.dart';
 import '../notifications/presentation/notify_level_text.dart';
@@ -368,6 +369,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
     );
 
     _container.read(attentionPresenterProvider).start();
+    _container.read(needsYouChimeProvider);
   }
 
   /// Applies [settings] to the OS. Prevent-close is the one value here that is

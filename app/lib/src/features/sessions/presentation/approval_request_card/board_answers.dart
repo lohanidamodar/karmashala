@@ -9,11 +9,11 @@ enum BoardApproval { allow, always, deny }
 /// options, else the agent's approve and deny keys, and Always by the menu
 /// option that keeps approving. Absent where the prompt offers none.
 Map<BoardApproval, Future<void> Function()> _boardAnswers(
-  WidgetRef ref,
+  ProviderReader read,
   String sessionId,
   AgentStatusReport report,
 ) {
-  final answers = ref.read(sessionPromptAnswersProvider);
+  final answers = read(sessionPromptAnswersProvider);
   Future<void> send(ApprovalAnswerRequest request) => answers.answer(request);
   final offered = report.toolAsk?.options ?? const <AgentToolAskOption>[];
   if (offered.isNotEmpty) {
@@ -35,12 +35,12 @@ Map<BoardApproval, Future<void> Function()> _boardAnswers(
       if (kind('reject_once') case final o?) BoardApproval.deny: choose(o),
     };
   }
-  final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);
+  final descriptor = read(agentRegistryProvider).byId(report.agentId);
   final rules = descriptor?.approval ?? const AgentApprovalRules();
   final menu = answers.menuOnScreen(sessionId);
   final ask = PromptAsk.drawnFrom(
     report,
-    menu: ref.read(promptMenuAtSessionGridProvider)(sessionId) ? menu : null,
+    menu: read(promptMenuAtSessionGridProvider)(sessionId) ? menu : null,
   );
   final always = menu == null ? null : _alwaysOption(menu, descriptor?.menus);
   return {
@@ -65,24 +65,35 @@ Map<BoardApproval, Future<void> Function()> _boardAnswers(
 
 /// The status of [sessionId] when it waits on a command approval this machine
 /// can answer; null otherwise.
-AgentStatusReport? _boardAsk(WidgetRef ref, String sessionId) {
-  final report = ref.read(sessionStatusLookupProvider)(sessionId);
+AgentStatusReport? _boardAsk(ProviderReader read, String sessionId) {
+  final report = read(sessionStatusLookupProvider)(sessionId);
   if (report == null ||
       report.status != AgentActivityStatus.awaitingApproval ||
       report.waiting != AgentWaitKind.approval ||
       report.toolAsk == null ||
-      !ref.read(sessionAnswerableProvider)(sessionId)) {
+      !read(sessionAnswerableProvider)(sessionId)) {
     return null;
   }
   return report;
 }
 
+/// Reads a provider: a widget's `ref.read`, or a container's `read` where no
+/// widget is left to ask — quick open runs after its dialog has closed.
+typedef ProviderReader = T Function<T>(ProviderListenable<T> provider);
+
 /// Which [BoardApproval]s [sessionId]'s open approval offers right now.
-Set<BoardApproval> boardApprovalOffers(WidgetRef ref, String sessionId) {
-  final report = _boardAsk(ref, sessionId);
+Set<BoardApproval> boardApprovalOffers(WidgetRef ref, String sessionId) =>
+    boardApprovalOffersBy(ref.read, sessionId);
+
+/// [boardApprovalOffers], read through [read].
+Set<BoardApproval> boardApprovalOffersBy(
+  ProviderReader read,
+  String sessionId,
+) {
+  final report = _boardAsk(read, sessionId);
   return report == null
       ? const {}
-      : _boardAnswers(ref, sessionId, report).keys.toSet();
+      : _boardAnswers(read, sessionId, report).keys.toSet();
 }
 
 /// Answers [sessionId]'s open approval with [kind]: null when it was sent,
@@ -91,10 +102,17 @@ Future<String?> answerBoardApproval(
   WidgetRef ref,
   String sessionId,
   BoardApproval kind,
+) => answerBoardApprovalBy(ref.read, sessionId, kind);
+
+/// [answerBoardApproval], read through [read].
+Future<String?> answerBoardApprovalBy(
+  ProviderReader read,
+  String sessionId,
+  BoardApproval kind,
 ) async {
-  final report = _boardAsk(ref, sessionId);
+  final report = _boardAsk(read, sessionId);
   if (report == null) return 'There is no approval open to answer.';
-  final send = _boardAnswers(ref, sessionId, report)[kind];
+  final send = _boardAnswers(read, sessionId, report)[kind];
   if (send == null) {
     return switch (kind) {
       BoardApproval.always => 'This prompt offers no way to always allow.',
@@ -156,7 +174,11 @@ class _BoardApprovalAnswersState extends ConsumerState<_BoardApprovalAnswers> {
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
     final summary = widget.summary;
-    final offers = _boardAnswers(ref, widget.sessionId, widget.report).keys;
+    final offers = _boardAnswers(
+      ref.read,
+      widget.sessionId,
+      widget.report,
+    ).keys;
     final idle = !_busy;
     final where = widget.where;
     final described = switch (widget.report.toolAsk?.input['description']) {
@@ -298,7 +320,9 @@ class _BoardEditCommandState extends ConsumerState<BoardEditCommand> {
   @override
   void initState() {
     super.initState();
-    final ask = ref.read(sessionStatusLookupProvider)(widget.sessionId)?.toolAsk;
+    final ask = ref
+        .read(sessionStatusLookupProvider)(widget.sessionId)
+        ?.toolAsk;
     _text = TextEditingController(
       text: ask == null ? '' : summarizeToolAsk(ask).subject,
     );
@@ -355,7 +379,8 @@ class _BoardEditCommandState extends ConsumerState<BoardEditCommand> {
               child: const Text('Cancel'),
             ),
             Tooltip(
-              message: 'Denies the command it asked for, then asks it to run '
+              message:
+                  'Denies the command it asked for, then asks it to run '
                   'this one',
               child: FilledButton(
                 key: const ValueKey('board-run-edited'),

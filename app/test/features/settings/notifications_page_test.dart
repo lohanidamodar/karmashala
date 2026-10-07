@@ -113,6 +113,23 @@ void main() {
       );
     });
 
+    testWidgets('$name: the chime is off until turned on, and the phone has '
+        'none', (tester) async {
+      final container = await pump(tester);
+      final row = find.text('Chime when something needs you');
+      if (!desktop) {
+        expect(row, findsNothing);
+        return;
+      }
+      final settings = notificationSettingsControllerProvider;
+      expect(container.read(settings).chime, isFalse);
+      await tester.ensureVisible(row);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(container.read(settings).chime, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('$name: a link opens the Inbox on its quiet items', (
       tester,
     ) async {

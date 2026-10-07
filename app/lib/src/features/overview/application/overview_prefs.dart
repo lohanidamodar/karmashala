@@ -26,7 +26,12 @@ class OverviewPrefs {
     this.view = OverviewView.board,
     this.newSessionKeepsHere = true,
     this.resumeKeepsHere = true,
+    this.pinned = const [],
   });
+
+  /// Sessions held at the top of the board, in the order they were pinned;
+  /// at most [kOverviewPinLimit].
+  final List<String> pinned;
 
   final OverviewFilter filter;
   final OverviewGroupBy groupBy;
@@ -46,6 +51,7 @@ class OverviewPrefs {
     OverviewView? view,
     bool? newSessionKeepsHere,
     bool? resumeKeepsHere,
+    List<String>? pinned,
   }) => OverviewPrefs(
     filter: filter ?? this.filter,
     groupBy: groupBy ?? this.groupBy,
@@ -53,6 +59,7 @@ class OverviewPrefs {
     view: view ?? this.view,
     newSessionKeepsHere: newSessionKeepsHere ?? this.newSessionKeepsHere,
     resumeKeepsHere: resumeKeepsHere ?? this.resumeKeepsHere,
+    pinned: pinned ?? this.pinned,
   );
 
   Map<String, Object?> toJson() => {
@@ -66,6 +73,7 @@ class OverviewPrefs {
     'view': view.name,
     'newSessionKeepsHere': newSessionKeepsHere,
     'resumeKeepsHere': resumeKeepsHere,
+    if (pinned.isNotEmpty) 'pinned': pinned,
   };
 
   static OverviewPrefs fromJson(Object? json) {
@@ -107,9 +115,18 @@ class OverviewPrefs {
       view: named(OverviewView.values, json['view'], OverviewView.board),
       newSessionKeepsHere: json['newSessionKeepsHere'] != false,
       resumeKeepsHere: json['resumeKeepsHere'] != false,
+      pinned: switch (json['pinned']) {
+        final List<Object?> ids => [
+          ...ids.whereType<String>().toSet().take(kOverviewPinLimit),
+        ],
+        _ => const [],
+      },
     );
   }
 }
+
+/// The most sessions pinned to the top of the board.
+const int kOverviewPinLimit = 3;
 
 /// Where [OverviewPrefsController] keeps its file; a test points it at a
 /// folder of its own.
@@ -198,6 +215,18 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
 
   void setView(OverviewView view) {
     if (state.view != view) _set(state.copyWith(view: view));
+  }
+
+  /// Pins [sessionId], or unpins it; false when the board already holds
+  /// [kOverviewPinLimit] and nothing changed.
+  bool togglePin(String sessionId) {
+    final pinned = [...state.pinned];
+    if (!pinned.remove(sessionId)) {
+      if (pinned.length >= kOverviewPinLimit) return false;
+      pinned.add(sessionId);
+    }
+    _set(state.copyWith(pinned: pinned));
+    return true;
   }
 
   void _setFilter({

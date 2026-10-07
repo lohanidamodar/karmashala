@@ -189,6 +189,8 @@ class QuickOpenFooter extends StatelessWidget {
   final Widget leading;
   final String hint;
 
+  static const _leadingShare = 0.6;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -200,14 +202,22 @@ class QuickOpenFooter extends StatelessWidget {
         style: theme.textTheme.labelSmall!.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
-        child: Row(
-          children: [
-            leading,
-            const Spacer(),
-            Flexible(
-              child: Text(hint, maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-          ],
+        // The count keeps its width on a phone; what it adds ends instead.
+        child: LayoutBuilder(
+          builder: (context, box) => Row(
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: box.maxWidth * _leadingShare,
+                ),
+                child: leading,
+              ),
+              const Spacer(),
+              Flexible(
+                child: Text(hint, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
         ),
       ),
     );

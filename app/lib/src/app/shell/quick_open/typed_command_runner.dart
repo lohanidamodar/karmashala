@@ -1,5 +1,18 @@
 import '../../../features/workspaces/data/workspace_data.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_remote/host.dart' show RemoteApiRefusal;
+import 'package:karmashala_remote/remote.dart'
+    show RemoteQuestionAnswer, RemoteQuestionAnswerRequest;
+
+import '../../../features/overview/application/overview_prefs.dart';
+import '../../../features/overview/application/overview_providers.dart';
+import '../../../features/overview/application/overview_quick_message.dart';
+import '../../../features/overview/application/overview_resume.dart';
+import '../../../features/remote/application/remote_approval_bindings.dart';
+import '../../../features/sessions/application/session_actions.dart';
+import '../../../features/sessions/presentation/approval_request_card.dart'
+    show BoardApproval, answerBoardApprovalBy;
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
@@ -58,10 +71,180 @@ class TypedCommandRunner {
     StopCommand() => Future.sync(() => _stop(action)),
     ForkCommand() => _fork(action),
     EndCommand() => Future.sync(() => _end(action)),
+    AnswerQuestionCommand() => _answerQuestion(action),
+    ApprovalCommand() => _approve(action),
+    MessageCommand() => _message(action),
+    StopAllCommand() => Future.sync(() => _stopAll(action)),
+    BackgroundResumeCommand() => _resume(action),
+    ArchiveCommand() => _archive(action),
+    PeekCommand() => Future.sync(() => _peek(action.sessionId)),
     // Resuming is quick open's own session jump, and the dialog needs a
     // context; the palette runs both.
     ResumeCommand() || OpenNewSessionDialogCommand() => Future.value(),
   };
+
+  String _title(String sessionId) =>
+      _container.read(sessionsDataProvider).getById(sessionId)?.title ??
+      'that session';
+
+  /// [sessionId] in the dashboard's peek once the board is up to take it.
+  /// Quick open brings the dashboard forward before it runs this.
+  void _peek(String sessionId) {
+    _container.read(overviewPrefsProvider.notifier).setView(OverviewView.board);
+    var tries = 0;
+    void peekWhenUp(Duration _) {
+      // The board's focus lives only while the dashboard is built.
+      if (!_container.exists(overviewFocusProvider)) {
+        if (++tries < 4) {
+          WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
+        }
+        return;
+      }
+      _container.read(overviewFocusProvider.notifier).peek(sessionId);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
+  }
+
+  Future<void> _answerQuestion(AnswerQuestionCommand command) async {
+    try {
+      await _container.read(chatQuestionAnswerProvider)(
+        RemoteQuestionAnswerRequest(
+          sessionId: command.sessionId,
+          toolUseId: command.toolUseId,
+          answers: [
+            RemoteQuestionAnswer.options([command.option]),
+          ],
+        ),
+      );
+      say('Answered "${_title(command.sessionId)}".');
+    } on RemoteApiRefusal catch (refusal) {
+      say(refusal.message);
+    } on Object catch (error) {
+      say('Could not answer: $error');
+    }
+  }
+
+  /// The board's Allow and Deny, by the same path.
+  Future<void> _approve(ApprovalCommand command) async {
+    final refused = await answerBoardApprovalBy(
+      _container.read,
+      command.sessionId,
+      command.allow ? BoardApproval.allow : BoardApproval.deny,
+    );
+    say(
+      refused ??
+          '${command.allow ? 'Allowed' : 'Denied'} for '
+              '"${_title(command.sessionId)}".',
+    );
+  }
+
+  /// The dashboard's quick message to each, which queues behind a turn that
+  /// is running and resumes a session that ended.
+  Future<void> _message(MessageCommand command) async {
+    final quick = _container.read(overviewQuickMessageProvider);
+    var queued = 0;
+    final failed = <String>[];
+    for (final id in command.sessionIds) {
+      try {
+        if (await quick.send(id, command.text) == QuickMessageOutcome.queued) {
+          queued++;
+        }
+      } on Object catch (error) {
+        failed.add(
+          '"${_title(id)}": ${error is StateError ? error.message : error}',
+        );
+      }
+    }
+    final sent = command.sessionIds.length - failed.length;
+    final one = command.sessionIds.length == 1;
+    say(
+      [
+        if (sent > 0)
+          one
+              ? queued > 0
+                    ? 'Queued for "${_title(command.sessionIds.single)}" — '
+                          'it goes when the turn ends.'
+                    : 'Sent to "${_title(command.sessionIds.single)}".'
+              : 'Sent to $sent${queued > 0 ? ' ($queued queued behind a '
+                          'turn)' : ''}.',
+        if (failed.isNotEmpty) 'Not sent to ${failed.join('; ')}.',
+      ].join(' '),
+    );
+  }
+
+  void _stopAll(StopAllCommand command) {
+    for (final id in command.sessionIds) {
+      _stop(StopCommand(id));
+    }
+  }
+
+  /// Round 43's Resume from the dashboard: at the server, with no tab.
+  Future<void> _resume(BackgroundResumeCommand command) async {
+    final result = await _container
+        .read(overviewResumerProvider)
+        .resume(command.sessionId, message: command.message);
+    say(
+      result.message ??
+          (result.isFailure
+              ? 'Could not resume "${_title(command.sessionId)}".'
+              : 'Resuming "${_title(command.sessionId)}".'),
+    );
+  }
+
+  /// The row's Archive, keeping any worktree: deleting one is asked for
+  /// where it can be chosen.
+  Future<void> _archive(ArchiveCommand command) async {
+    try {
+      final result = await _container
+          .read(sessionActionsProvider)
+          .archiveSessions([command.sessionId]);
+      say(
+        result.live.isNotEmpty
+            ? '"${_title(command.sessionId)}" is still running, so it was '
+                  'not archived.'
+            : 'Archived "${_title(command.sessionId)}".',
+      );
+    } on Object catch (error) {
+      say('Could not archive: ${error is StateError ? error.message : error}');
+    }
+  }
+
+  /// Round 40's New session from the dashboard: started at the server, no
+  /// tab, its card peeked.
+  Future<void> _startHere(StartCommand command, Repository repository) async {
+    final installation = _container
+        .read(agentInstallationsDataProvider)
+        .getById(command.installationId);
+    if (installation == null ||
+        installation.environmentId != repository.path.environmentId) {
+      say('That agent is no longer installed where this project runs.');
+      return;
+    }
+    try {
+      final launched = await _container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository,
+              installation: installation,
+              title: defaultSessionTitle,
+              purpose: SessionPurpose.newSession,
+              firstMessage: command.firstMessage,
+              openTab: false,
+            ),
+          );
+      _container
+          .read(newSessionMemoryProvider)
+          .remember(
+            projectId: repository.projectId,
+            installationId: installation.id,
+          );
+      _peek(launched.session.id);
+    } catch (error) {
+      say(error is StateError ? error.message : 'Could not start: $error');
+    }
+  }
 
   Future<void> _start(StartCommand command) async {
     final projectId = command.projectId;
@@ -77,6 +260,7 @@ class TypedCommandRunner {
       say(error.message);
       return;
     }
+    if (command.keepHere) return _startHere(command, repository);
     final installation = _container
         .read(agentInstallationsDataProvider)
         .getById(command.installationId);

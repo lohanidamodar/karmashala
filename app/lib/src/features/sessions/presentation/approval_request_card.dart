@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
@@ -151,9 +152,7 @@ class ApprovalRequestCard extends ConsumerWidget {
         ? _noLiveTerminal
         : kApprovalNotGranted;
 
-    if (board &&
-        waiting == AgentWaitKind.approval &&
-        report.toolAsk != null) {
+    if (board && waiting == AgentWaitKind.approval && report.toolAsk != null) {
       if (!canAnswer) {
         return Text(
           cannot,
