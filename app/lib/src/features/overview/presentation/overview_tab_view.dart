@@ -12,10 +12,12 @@ import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../explorer/application/explorer_actions.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
+import 'overview_batch_bar.dart';
 import 'overview_filters.dart';
 import 'overview_hybrid.dart';
 import 'overview_peek.dart';
@@ -484,13 +486,19 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     }),
     OverviewDismissIntent: _Triage<OverviewDismissIntent>(
       (_) {
+        if (!ref.read(overviewSelectionProvider).isEmpty) {
+          ref.read(overviewSelectionProvider.notifier).clear();
+          return;
+        }
         final focus = ref.read(overviewFocusProvider);
         final controller = ref.read(overviewFocusProvider.notifier);
         focus.peeked != null ? controller.closePeek() : controller.select(null);
       },
       enabled: (_) {
         final focus = ref.read(overviewFocusProvider);
-        return focus.peeked != null || focus.selected != null;
+        return focus.peeked != null ||
+            focus.selected != null ||
+            !ref.read(overviewSelectionProvider).isEmpty;
       },
     ),
     OverviewShowKeysIntent: _Triage<OverviewShowKeysIntent>(
@@ -528,12 +536,20 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.watch(overviewBoardProvider),
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
             );
-      final main = OverviewHybrid(
-        onOpen: _open,
-        onEdit: (card) => _open(card, editing: true),
-        onTerminal: _terminal,
-        onAnswered: _advance,
-        questionControllerOf: _questionOf,
+      final main = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const OverviewBatchBar(),
+          Expanded(
+            child: OverviewHybrid(
+              onOpen: _open,
+              onEdit: (card) => _open(card, editing: true),
+              onTerminal: _terminal,
+              onAnswered: _advance,
+              questionControllerOf: _questionOf,
+            ),
+          ),
+        ],
       );
       Widget? peek;
       if (peeked != null) {

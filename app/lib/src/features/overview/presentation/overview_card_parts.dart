@@ -8,6 +8,7 @@ import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
+import 'overview_batch_bar.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
@@ -342,7 +343,10 @@ class OverviewPhoneRow extends ConsumerWidget {
       color: selected ? StateLayers.selected(scheme) : Colors.transparent,
       child: InkWell(
         key: ValueKey('overview-phone-row:${card.id}'),
-        onTap: () => onOpen(card),
+        onTap: () {
+          if (!overviewPickSelects(ref, card, touch: true)) onOpen(card);
+        },
+        onLongPress: () => overviewPickSelects(ref, card, long: true),
         child: Container(
           constraints: const BoxConstraints(minHeight: Touch.target),
           padding: const EdgeInsets.symmetric(
@@ -359,6 +363,7 @@ class OverviewPhoneRow extends ConsumerWidget {
           ),
           child: Row(
             children: [
+              OverviewSelectBox(card: card),
               OverviewAgentRing(card: card, size: Insets.xl + Insets.xs),
               const SizedBox(width: Insets.sm),
               Expanded(
