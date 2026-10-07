@@ -167,7 +167,7 @@ class OverviewStatePill extends ConsumerWidget {
     final label = '${card.state.label} · ${compactAge(now.difference(since))}';
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: Insets.sm - Insets.hair * 2,
+        horizontal: Insets.sm - Insets.xxs,
         vertical: Insets.hair,
       ),
       decoration: BoxDecoration(
@@ -321,7 +321,7 @@ class _OverviewActivityLineState extends ConsumerState<OverviewActivityLine> {
 class OverviewActivityStrip extends ConsumerWidget {
   const OverviewActivityStrip({
     required this.sessionId,
-    this.height = Insets.sm + Insets.hair * 2,
+    this.height = Insets.sm + Insets.xxs,
     super.key,
   });
 
@@ -413,7 +413,7 @@ class OverviewStripPainter extends CustomPainter {
       );
     }
     canvas.drawRect(
-      Rect.fromLTWH(size.width - Insets.hair * 2, 0, Insets.hair * 2, size.height),
+      Rect.fromLTWH(size.width - Insets.xxs, 0, Insets.xxs, size.height),
       Paint()..color = now,
     );
   }

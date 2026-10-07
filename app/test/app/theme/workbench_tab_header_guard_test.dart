@@ -26,7 +26,6 @@ void main() {
   /// Rounds 33 and 34 are rewriting these; the parent moves them onto the
   /// shared header at merge, and then this list empties.
   const pendingMigration = {
-    'lib/src/features/overview/presentation/overview_tab_view.dart',
     'lib/src/app/shell/running_tab_view.dart',
   };
 

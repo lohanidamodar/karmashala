@@ -118,11 +118,11 @@ class _Chart extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: Insets.sm + Insets.hair * 2,
-          height: Insets.sm + Insets.hair * 2,
+          width: Insets.sm + Insets.xxs,
+          height: Insets.sm + Insets.xxs,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(Insets.hair * 2),
+            borderRadius: BorderRadius.circular(Insets.xxs),
           ),
         ),
         const SizedBox(width: Insets.xs),

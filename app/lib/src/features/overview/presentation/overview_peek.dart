@@ -220,12 +220,12 @@ class _PlanItem extends StatelessWidget {
       label: '$label: $text',
       excludeSemantics: true,
       child: Padding(
-        padding: const EdgeInsets.only(top: Insets.hair * 2),
+        padding: const EdgeInsets.only(top: Insets.xxs),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: Insets.hair * 2),
+              padding: const EdgeInsets.only(top: Insets.xxs),
               child: Icon(icon, size: UiDensity.of(context).iconSmall, color: color),
             ),
             const SizedBox(width: Insets.sm),
@@ -383,7 +383,7 @@ class _SubSession extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: Insets.hair * 2),
+              padding: const EdgeInsets.only(top: Insets.xxs),
               child: OverviewStateGlyph(
                 state: card.state,
                 size: UiDensity.of(context).iconSmall + Insets.hair,

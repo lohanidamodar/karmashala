@@ -253,7 +253,7 @@ class _AnswerQuote extends StatelessWidget {
       padding: const EdgeInsets.only(left: Insets.sm),
       decoration: BoxDecoration(
         border: Border(
-          left: BorderSide(color: scheme.outlineVariant, width: Insets.hair * 2),
+          left: BorderSide(color: scheme.outlineVariant, width: Insets.xxs),
         ),
       ),
       child: Text(
@@ -290,7 +290,7 @@ class OverviewDoneRow extends ConsumerWidget {
         ),
         child: Row(
           children: [
-            OverviewAgentRing(card: card, size: Insets.xl - Insets.hair * 2),
+            OverviewAgentRing(card: card, size: Insets.xl - Insets.xxs),
             const SizedBox(width: Insets.sm),
             Expanded(
               child: Text.rich(

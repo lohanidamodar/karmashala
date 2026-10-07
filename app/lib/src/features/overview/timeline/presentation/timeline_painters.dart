@@ -140,7 +140,7 @@ abstract final class _Marks {
   static const strokeBold = Insets.hair * 1.5;
 
   /// The gap between a hatch's lines and a paused span's dots.
-  static const patternGap = Insets.sm - Insets.hair * 2;
+  static const patternGap = Insets.sm - Insets.xxs;
 
   /// The least width a span gets its words in.
   static const labelMinWidth = Insets.xxl * 2 + Insets.sm;
@@ -392,10 +392,10 @@ class TimelineAxisPainter extends CustomPainter {
   ];
 
   /// A label's inset from its tick and from the top of the band.
-  static const double _labelInset = Insets.hair * 2;
+  static const double _labelInset = Insets.xxs;
 
   /// The tick under a label, and the now dot's radius.
-  static const double _tick = Insets.xs + Insets.hair * 2;
+  static const double _tick = Insets.xs + Insets.xxs;
   static const double _nowDot = Insets.hair * 3;
 
   /// About one label per this much width.
@@ -528,7 +528,7 @@ class TimelineArrowPainter extends CustomPainter {
 
   /// The arrowhead's half-width and length.
   static const double _head = Insets.xs;
-  static const double _headLength = Insets.sm - Insets.hair * 2;
+  static const double _headLength = Insets.sm - Insets.xxs;
 
   @override
   void paint(Canvas canvas, Size size) {

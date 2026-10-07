@@ -107,7 +107,7 @@ class _PhoneRow extends StatelessWidget {
                         : null,
                   ),
                 ),
-                const SizedBox(height: Insets.hair * 2),
+                const SizedBox(height: Insets.xxs),
                 Text(
                   subtitle,
                   maxLines: 1,
@@ -116,7 +116,7 @@ class _PhoneRow extends StatelessWidget {
                 ),
                 const SizedBox(height: Insets.xs),
                 SizedBox(
-                  height: Insets.sm + Insets.hair * 2,
+                  height: Insets.sm + Insets.xxs,
                   child: CustomPaint(
                     painter: TimelineLanePainter(
                       session: session,

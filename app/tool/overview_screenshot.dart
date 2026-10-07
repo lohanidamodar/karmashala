@@ -131,6 +131,33 @@ void main() {
     ),
   );
   testWidgets(
+    'desktop, by context',
+    (t) => shoot(
+      t,
+      'desktop-1440-contexts',
+      fixture: MissionFixture(
+        answers: MissionFixture.realisticAnswers(),
+        glances: MissionFixture.realisticGlances(),
+        files: MissionFixture.realisticFiles(),
+        activity: MissionFixture.realisticActivity(),
+        contexts: const [
+          OverviewLaneKey('c-apps', 'Apps'),
+          OverviewLaneKey('c-web', 'Web'),
+        ],
+        contextOfProject: const {
+          'p-ks': 'c-apps',
+          'p-beej': 'c-apps',
+          'p-web': 'c-web',
+        },
+      ),
+      before: (tester, container) async {
+        container
+            .read(overviewPrefsProvider.notifier)
+            .setGroupBy(OverviewGroupBy.context);
+      },
+    ),
+  );
+  testWidgets(
     'desktop, filters',
     (t) => shoot(
       t,

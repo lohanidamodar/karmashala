@@ -137,7 +137,7 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
             ),
             prefixIcon: Icon(
               AppIcons.chatCircle,
-              size: density.iconSmall + Insets.hair * 2,
+              size: density.iconSmall + Insets.xxs,
               color: scheme.onSurfaceVariant,
             ),
             prefixIconConstraints: const BoxConstraints(
