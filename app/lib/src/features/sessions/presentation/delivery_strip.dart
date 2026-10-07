@@ -590,27 +590,33 @@ class _StageMark extends ConsumerWidget {
         delivery.isDirty ? 'Uncommitted' : 'No changes yet',
       _ => stage.label,
     };
-    return Row(
+    // Ends rather than overflows a line the chips beside it have narrowed.
+    final text = Text(
+      word,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      style: style?.copyWith(color: colour),
+    );
+    return LayoutBuilder(
       key: const ValueKey('delivery-stage'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          stopped ? AppIcons.stopCircle : _stageIcon(stage),
-          size: Chrome.iconSmall,
-          color: colour,
-        ),
-        const SizedBox(width: Insets.xs),
-        // Ends rather than overflows a line the chips beside it have narrowed.
-        Flexible(
-          child: Text(
-            word,
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.ellipsis,
-            style: style?.copyWith(color: colour),
-          ),
-        ),
-      ],
+      // Narrower than the icon, as the phone bar's badges can leave it: the
+      // word alone, so the icon is the clause that gives way.
+      builder: (context, constraints) =>
+          constraints.maxWidth < Chrome.iconSmall + Insets.xs
+          ? text
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  stopped ? AppIcons.stopCircle : _stageIcon(stage),
+                  size: Chrome.iconSmall,
+                  color: colour,
+                ),
+                const SizedBox(width: Insets.xs),
+                Flexible(child: text),
+              ],
+            ),
     );
   }
 }

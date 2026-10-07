@@ -196,6 +196,7 @@ void main() {
     Size size = const Size(900, 600),
     bool singleLine = false,
     double? width,
+    double textScale = 1,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -217,6 +218,12 @@ void main() {
           ),
         ],
         child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
           home: Scaffold(
             body: Align(
               alignment: Alignment.topLeft,
@@ -279,6 +286,53 @@ void main() {
     }
     expect(line.height, lessThanOrEqualTo(32));
   });
+
+  // The phone bar's badges take nine parts of ten, so the one-line form can
+  // be left narrower than the stage's own icon.
+  for (final (form, singleLine, width) in [
+    ('one-line', true, 360.0),
+    ('wrapping', false, 360.0),
+    ('one-line, squeezed by the badges', true, 13.0),
+  ]) {
+    testWidgets('at 360 px and text scale 1.6 the $form line never '
+        'overflows', (tester) async {
+      await pumpStateLine(
+        tester,
+        SessionDelivery(
+          branch: 'feat/a-rather-long-branch-name',
+          baseBranch: 'origin/main',
+          hasRemote: true,
+          dirtyFiles: 12,
+          aheadOfBase: 7,
+          behindBase: 3,
+          hasWorktree: true,
+          pullRequest: openPr,
+        ),
+        size: const Size(360, 780),
+        singleLine: singleLine,
+        width: width,
+        textScale: 1.6,
+      );
+      expect(tester.takeException(), isNull);
+      final line = tester.getRect(find.byType(DeliveryStateLine));
+      expect(line.right, lessThanOrEqualTo(width + 0.5));
+      for (final text in tester.widgetList<Text>(
+        find.descendant(
+          of: find.byType(DeliveryStateLine),
+          matching: find.byType(Text),
+        ),
+      )) {
+        final rect = tester.getRect(find.byWidget(text));
+        final inside =
+            rect.left >= line.left - 0.5 &&
+            rect.right <= line.right + 0.5 &&
+            rect.top >= line.top - 0.5 &&
+            rect.bottom <= line.bottom + 0.5;
+        final outside = rect.top >= line.bottom || rect.left >= line.right;
+        expect(inside || outside, isTrue, reason: '${text.data} at $rect');
+      }
+    });
+  }
 
   testWidgets('shows the stage, the branch and the numbers behind it', (
     tester,

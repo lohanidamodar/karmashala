@@ -3025,17 +3025,18 @@ WorkbenchView
                                                                                   _FocusInheritedScope
                                                                                     Padding
                                                                                       _StageMark
-                                                                                        Row key=[<'delivery-stage'>]
-                                                                                          Icon
-                                                                                            Semantics
-                                                                                              ExcludeSemantics
-                                                                                                SizedBox
-                                                                                                  Center
-                                                                                                    RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="No changes yet"
-                                                                                              RichText
+                                                                                        LayoutBuilder key=[<'delivery-stage'>]
+                                                                                          Row
+                                                                                            Icon
+                                                                                              Semantics
+                                                                                                ExcludeSemantics
+                                                                                                  SizedBox
+                                                                                                    Center
+                                                                                                      RichText
+                                                                                            SizedBox
+                                                                                            Flexible
+                                                                                              Text text="No changes yet"
+                                                                                                RichText
                                                                               ExcludeFocus
                                                                                 Focus
                                                                                   _FocusInheritedScope
@@ -4272,17 +4273,18 @@ WorkbenchView
                                                                                   _FocusInheritedScope
                                                                                     Padding
                                                                                       _StageMark
-                                                                                        Row key=[<'delivery-stage'>]
-                                                                                          Icon
-                                                                                            Semantics
-                                                                                              ExcludeSemantics
-                                                                                                SizedBox
-                                                                                                  Center
-                                                                                                    RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="No changes yet"
-                                                                                              RichText
+                                                                                        LayoutBuilder key=[<'delivery-stage'>]
+                                                                                          Row
+                                                                                            Icon
+                                                                                              Semantics
+                                                                                                ExcludeSemantics
+                                                                                                  SizedBox
+                                                                                                    Center
+                                                                                                      RichText
+                                                                                            SizedBox
+                                                                                            Flexible
+                                                                                              Text text="No changes yet"
+                                                                                                RichText
                                                                               ExcludeFocus
                                                                                 Focus
                                                                                   _FocusInheritedScope
@@ -5114,17 +5116,18 @@ WorkbenchView
                                                                                   _FocusInheritedScope
                                                                                     Padding
                                                                                       _StageMark
-                                                                                        Row key=[<'delivery-stage'>]
-                                                                                          Icon
-                                                                                            Semantics
-                                                                                              ExcludeSemantics
-                                                                                                SizedBox
-                                                                                                  Center
-                                                                                                    RichText
-                                                                                          SizedBox
-                                                                                          Flexible
-                                                                                            Text text="Not running"
-                                                                                              RichText
+                                                                                        LayoutBuilder key=[<'delivery-stage'>]
+                                                                                          Row
+                                                                                            Icon
+                                                                                              Semantics
+                                                                                                ExcludeSemantics
+                                                                                                  SizedBox
+                                                                                                    Center
+                                                                                                      RichText
+                                                                                            SizedBox
+                                                                                            Flexible
+                                                                                              Text text="Not running"
+                                                                                                RichText
                                                                               ExcludeFocus
                                                                                 Focus
                                                                                   _FocusInheritedScope
@@ -5979,17 +5982,18 @@ WorkbenchView
                                                     Padding
                                                       Wrap
                                                         _StageMark
-                                                          Row key=[<'delivery-stage'>]
-                                                            Icon
-                                                              Semantics
-                                                                ExcludeSemantics
-                                                                  SizedBox
-                                                                    Center
-                                                                      RichText
-                                                            SizedBox
-                                                            Flexible
-                                                              Text text="No changes yet"
-                                                                RichText
+                                                          LayoutBuilder key=[<'delivery-stage'>]
+                                                            Row
+                                                              Icon
+                                                                Semantics
+                                                                  ExcludeSemantics
+                                                                    SizedBox
+                                                                      Center
+                                                                        RichText
+                                                              SizedBox
+                                                              Flexible
+                                                                Text text="No changes yet"
+                                                                  RichText
                                                         SessionVerdictMark
                                                           SizedBox
                                                         Row
