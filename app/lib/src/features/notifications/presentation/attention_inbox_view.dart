@@ -20,6 +20,8 @@ import '../../sessions/application/session_prompt_answers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import 'package:agent_cli/descriptors.dart' show AgentWaitKind;
 import 'package:karmashala_session/resume.dart';
+import '../../automations/presentation/proposal_actions.dart'
+    show ProposalActions, proposalOfInboxId, reviewProposal;
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../explorer/presentation/sidebar_chrome.dart';
 import '../application/attention_inbox.dart';
@@ -361,6 +363,10 @@ class _ContinueAction extends StatelessWidget {
     icon: AppIcons.arrowClockwise,
     color: semantic.attention,
   ),
+  InboxItemKind.automationProposed => (
+    icon: AppIcons.lightning,
+    color: semantic.attention,
+  ),
 };
 
 /// One waiting thing, and the two verbs it is for. No `⋮`: every action this
@@ -439,7 +445,11 @@ class _InboxRow extends ConsumerWidget {
           Sidebar.rowGap,
         ),
         child: InkWell(
-          onTap: onOpen,
+          // A proposal opens in the editor: there is no session to show.
+          onTap: switch (proposalOfInboxId(item.id)) {
+            final automationId? => () => reviewProposal(ref, automationId),
+            null => onOpen,
+          },
           borderRadius: const BorderRadius.all(Radius.circular(Radii.sm)),
           // The content paints the hover, which it also needs for the ×.
           hoverColor: Colors.transparent,
@@ -600,6 +610,8 @@ class _InboxRowContentState extends State<_InboxRowContent> {
                   if (item.kind == InboxItemKind.failed &&
                       !item.session.imported)
                     _ResumeAction(sessionId: item.session.openId),
+                  if (proposalOfInboxId(item.id) case final automationId?)
+                    ProposalActions(automationId: automationId),
                 ],
               ),
             ),

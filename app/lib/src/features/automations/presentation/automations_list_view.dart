@@ -19,6 +19,7 @@ import 'automation_editor.dart';
 import 'automation_run_actions.dart';
 import 'automation_run_status.dart';
 import 'project_checks_section.dart';
+import 'proposal_actions.dart';
 
 /// The Automations list: templates first, then every automation by checkout.
 class AutomationsListView extends ConsumerWidget {
@@ -49,6 +50,7 @@ class AutomationsListView extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const ProposalsNotice(),
                 const EyebrowLabel('Start from a template'),
                 const SizedBox(height: Insets.sm),
                 _Templates(repositories: repositories),

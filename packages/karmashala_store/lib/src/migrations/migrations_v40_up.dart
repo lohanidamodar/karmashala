@@ -1230,3 +1230,14 @@ void _migrateToV88(Database db) {
     'WHERE webhook_per_hour IS NOT NULL;',
   );
 }
+
+/// An automation an agent proposed: who proposed it, and from which session,
+/// until a person turns it on.
+void _migrateToV89(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('proposed_by')) return;
+  db.execute('ALTER TABLE automations ADD COLUMN proposed_by TEXT;');
+  db.execute('ALTER TABLE automations ADD COLUMN proposed_session TEXT;');
+}

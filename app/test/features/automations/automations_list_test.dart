@@ -103,6 +103,71 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Automation proposedHook() => hook().copyWith(
+    enabled: false,
+    permissionMode: const PermissionSelection({'mode': 'plan'}),
+  );
+
+  void propose() => server.automationRows.insert(
+    Automation(
+      id: 'hook1',
+      repositoryId: 'r1',
+      name: 'Triage new issues',
+      schedule: AutomationSchedule.once(now),
+      agentInstallationId: 'a1',
+      prompt: 'Triage {{issue.title}}',
+      permissionMode: proposedHook().permissionMode,
+      enabled: false,
+      armedAt: now,
+      webhook: const AutomationWebhook(hookId: 'h1'),
+      proposedBy: 'Claude Code in "Fix the cart"',
+      proposedSessionId: 's1',
+    ),
+  );
+
+  testWidgets('a proposal waits at the top with Review, Turn on and Discard, '
+      'at every size', (tester) async {
+    propose();
+    for (final (size, scale) in const [
+      (Size(360, 1600), 1.0),
+      (Size(1440, 1200), 1.0),
+      (Size(360, 2400), 1.6),
+    ]) {
+      await pump(tester, size: size, textScale: scale);
+      expect(tester.takeException(), isNull, reason: '$size $scale');
+      expect(
+        find.text('Claude Code in "Fix the cart" proposed an automation'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('proposal-on-hook1')), findsOneWidget);
+    }
+  });
+
+  testWidgets('turning one on arms it now, makes it the owner\'s, and shows '
+      'the webhook\'s secret to them', (tester) async {
+    propose();
+    await pump(tester);
+    await tester.tap(find.byKey(const ValueKey('proposal-on-hook1')));
+    await tester.pumpAndSettle();
+    final stored = server.automationRows.getAll().single;
+    expect(stored.enabled, isTrue);
+    expect(stored.isProposed, isFalse);
+    expect(stored.armedAt, now);
+    expect(server.webhooks.rotated, ['hook1']);
+    expect(find.textContaining('whsec_test_1'), findsWidgets);
+    expect(server.attention.dismissed, [proposalInboxId('hook1')]);
+  });
+
+  testWidgets('discarding one deletes it and its notice', (tester) async {
+    propose();
+    await pump(tester);
+    await tester.tap(find.byKey(const ValueKey('proposal-discard-hook1')));
+    await tester.pumpAndSettle();
+    expect(server.automationRows.getAll(), isEmpty);
+    expect(find.byKey(const ValueKey('proposal-hook1')), findsNothing);
+    expect(server.attention.dismissed, [proposalInboxId('hook1')]);
+  });
+
   testWidgets('templates come first, six of them, outcome first', (
     tester,
   ) async {

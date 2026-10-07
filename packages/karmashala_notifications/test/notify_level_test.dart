@@ -78,6 +78,7 @@ void main() {
         InboxItemKind.followUp,
         InboxItemKind.usageLimit,
         InboxItemKind.turnCutOff,
+        InboxItemKind.automationProposed,
       });
       for (final reason in NotificationReason.values) {
         expect(

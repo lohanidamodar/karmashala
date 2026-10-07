@@ -101,4 +101,5 @@ final Map<int, MigrationStep> schemaMigrations = {
   86: _migrateToV86,
   87: _migrateToV87,
   88: _migrateToV88,
+  89: _migrateToV89,
 };

@@ -4,3 +4,4 @@
 library;
 
 export 'src/mcp/tools/server_tool_schemas.dart' show serverToolSchemas;
+export 'src/mcp/tools/webhook_tool_set.dart' show kProposeOnlyAutomationTools;

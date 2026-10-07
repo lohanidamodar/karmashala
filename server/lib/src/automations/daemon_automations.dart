@@ -8,7 +8,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
 import 'package:karmashala_automations/automations.dart'
-    show Automation, AutomationEventAction;
+    show Automation, AutomationEventAction, proposalInboxId;
 import 'package:karmashala_automations/webhooks.dart'
     show fillWebhookTemplate, webhookSampleBody, webhookTemplateFields;
 import 'package:karmashala_automations/check_runner.dart';
@@ -113,7 +113,8 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   }) : _db = database,
        _tell = tell,
        _registry = registry,
-       _log = log ?? _ignore {
+       _log = log ?? _ignore,
+       _raise = raise {
     final now = _now = clock ?? _utcNow;
     final ids = _newId = newId ?? newUuid;
     final automations = ToldAutomations(AutomationDao(database), _told);
@@ -445,6 +446,34 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   /// GitHub automations: polled here, each item answered once.
   late final DaemonGithub github;
 
+  final void Function(InboxItem item)? _raise;
+
+  /// Files [proposal] in the inbox: an agent proposed it, and it does
+  /// nothing until a person turns it on. Filed again at every start, since
+  /// the inbox is not kept across one.
+  void fileProposal(Automation proposal) {
+    final raise = _raise;
+    if (raise == null || !proposal.isProposed) return;
+    final sessionId = proposal.proposedSessionId;
+    final session = sessionId == null ? null : _sessions.getById(sessionId);
+    raise(
+      InboxItem(
+        session: WatchedSession(
+          key: AgentSessionKey('automation', 'proposal:${proposal.id}'),
+          label: session?.title ?? proposal.name,
+          openId: session?.id ?? '',
+          imported: false,
+        ),
+        kind: InboxItemKind.automationProposed,
+        at: _now(),
+        id: proposalInboxId(proposal.id),
+        detail:
+            '${proposal.proposedBy} proposed an automation: '
+            '"${proposal.name}". It does nothing until you turn it on.',
+      ),
+    );
+  }
+
   /// Event rules answered here (slice 5c): a turn finished or failed.
   late final ServerEventRules eventRules;
 
@@ -656,6 +685,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     _resumes.failInterrupted();
     await scheduler.start();
     github.startPolling();
+    AutomationDao(_db).proposed().forEach(fileProposal);
   }
 
   Future<void> close() async {

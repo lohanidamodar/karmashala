@@ -32,9 +32,9 @@ class AutomationDao implements AutomationRecords {
     'disabled_reason, max_runtime_seconds, trigger_event, event_action, '
     'webhook_id, webhook_signature, webhook_model, webhook_worktree, '
     'webhook_per_hour, model_id, run_in_worktree, steps, github, '
-    'runs_per_hour, overlap, queue_limit) '
+    'runs_per_hour, overlap, queue_limit, proposed_by, proposed_session) '
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
-    '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       automation.id,
       automation.repositoryId,
@@ -68,7 +68,7 @@ class AutomationDao implements AutomationRecords {
     'webhook_id = ?, webhook_signature = ?, webhook_model = ?, '
     'webhook_worktree = ?, webhook_per_hour = ?, model_id = ?, '
     'run_in_worktree = ?, steps = ?, github = ?, runs_per_hour = ?, '
-    'overlap = ?, queue_limit = ? '
+    'overlap = ?, queue_limit = ?, proposed_by = ?, proposed_session = ? '
     'WHERE id = ?;',
     [
       automation.name,
@@ -112,6 +112,8 @@ class AutomationDao implements AutomationRecords {
     automation.runsPerHour,
     automation.overlap.name,
     automation.queueLimit,
+    automation.proposedBy,
+    automation.proposedSessionId,
   ];
 
   /// Every GitHub automation, paused ones included.
@@ -233,9 +235,21 @@ class AutomationDao implements AutomationRecords {
   /// alone. A paused automation is still authorised; it is just not due.
   @override
   void setEnabled(String id, {required bool enabled}) => _db.execute(
-    'UPDATE automations SET enabled = ? WHERE id = ?;',
-    [intFromBool(enabled), id],
+    // Turning a proposal on is a person accepting it: it is theirs now.
+    'UPDATE automations SET enabled = ?, proposed_by = CASE WHEN ? = 1 THEN '
+    'NULL ELSE proposed_by END, proposed_session = CASE WHEN ? = 1 THEN NULL '
+    'ELSE proposed_session END WHERE id = ?;',
+    [intFromBool(enabled), intFromBool(enabled), intFromBool(enabled), id],
   );
+
+  /// Every automation an agent proposed that nobody has turned on.
+  List<Automation> proposed() => _db
+      .query(
+        'SELECT * FROM automations WHERE proposed_by IS NOT NULL '
+        'ORDER BY name, id;',
+      )
+      .map(_automation)
+      .toList();
 
   void delete(String id) =>
       _db.execute('DELETE FROM automations WHERE id = ?;', [id]);
@@ -675,6 +689,8 @@ class AutomationDao implements AutomationRecords {
       runsPerHour: row['runs_per_hour'] as int? ?? kDefaultRunsPerHour,
       overlap: AutomationOverlap.fromName(row['overlap'] as String?),
       queueLimit: row['queue_limit'] as int? ?? kDefaultQueueLimit,
+      proposedBy: row['proposed_by'] as String?,
+      proposedSessionId: row['proposed_session'] as String?,
     );
   }
 

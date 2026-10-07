@@ -1,13 +1,18 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/schedules.dart' show cronRefusal;
+import 'package:karmashala_automations/webhooks.dart'
+    show webhookTemplateRefusal;
 
 import '../../data/webhooks_work.dart';
 import 'server_tool_set.dart';
 
-/// `webhook_list` and `webhook_create`: an agent sees the webhooks armed here
-/// and, under the person's operator grant, arms one. A secret is answered
-/// only by the create that made it, and an agent can never arm one that
-/// bypasses permissions — that is the owner's choice, in the app.
+/// `webhook_list`, `webhook_create` and `automation_propose`: an agent sees
+/// the webhooks here and **proposes** automations. A proposal is saved off,
+/// marked as proposed by its session, and runs nothing until the owner turns
+/// it on in the app — arming is a person's act. No tool here can enable one,
+/// and a webhook's secret goes to the owner when they turn it on, never to
+/// the agent.
 class WebhookToolSet extends ServerToolSet {
   WebhookToolSet({
     required Automation Function(Automation automation) save,
@@ -17,12 +22,16 @@ class WebhookToolSet extends ServerToolSet {
     permissionsOf,
     required DateTime Function() now,
     required String Function() newId,
+    String Function(String? sessionId)? proposerOf,
+    void Function(Automation proposal)? proposed,
   }) : _save = save,
        _webhooks = webhooks,
        _work = work,
        _permissionsOf = permissionsOf,
        _now = now,
-       _newId = newId;
+       _newId = newId,
+       _proposerOf = proposerOf ?? _anAgent,
+       _proposed = proposed;
 
   final Automation Function(Automation automation) _save;
   final List<Automation> Function() _webhooks;
@@ -30,6 +39,10 @@ class WebhookToolSet extends ServerToolSet {
   final AgentPermissionSupport? Function(String installationId) _permissionsOf;
   final DateTime Function() _now;
   final String Function() _newId;
+  final String Function(String? sessionId) _proposerOf;
+  final void Function(Automation proposal)? _proposed;
+
+  static String _anAgent(String? _) => 'An agent';
 
   @override
   List<Map<String, Object?>> get schemas => webhookToolSchemas;
@@ -41,7 +54,18 @@ class WebhookToolSet extends ServerToolSet {
     String? callerSessionId,
   ) => switch (tool) {
     'webhook_list' => runTool(_list),
-    'webhook_create' => runTool(() => _create(arguments)),
+    'webhook_create' => runTool(
+      () => _propose({
+        ...arguments,
+        'prompt': arguments['template'],
+        'trigger': {
+          'type': 'webhook',
+          'signatureRequired': arguments['signatureRequired'],
+          'callsPerHour': arguments['callsPerHour'],
+        },
+      }, callerSessionId),
+    ),
+    'automation_propose' => runTool(() => _propose(arguments, callerSessionId)),
     _ => null,
   };
 
@@ -55,6 +79,7 @@ class WebhookToolSet extends ServerToolSet {
           'id': automation.id,
           'name': automation.name,
           'enabled': automation.enabled,
+          'proposed': automation.isProposed,
           'repositoryId': automation.repositoryId,
           'agentInstallationId': automation.agentInstallationId,
           'permissionMode': automation.permissionMode?.canonical,
@@ -63,29 +88,22 @@ class WebhookToolSet extends ServerToolSet {
           'signatureRequired': automation.webhook!.requireSignature,
           'callsPerHour': automation.webhook!.callsPerHour,
           'template': automation.prompt,
-          'url': (await _webhooksWork.status(automation.id, limit: 1)).url,
+          if (automation.enabled)
+            'url': (await _webhooksWork.status(automation.id, limit: 1)).url,
         },
     ],
   };
 
-  Future<Object?> _create(Map<String, dynamic> arguments) async {
-    String required(String key) {
-      final value = (arguments[key] as String?)?.trim();
-      if (value == null || value.isEmpty) {
-        throw ArgumentError('$key is needed.');
-      }
-      return value;
-    }
-
-    final installationId = required('agentInstallationId');
+  /// The mode a proposed agent runs in: read-only unless the agent named
+  /// another, and never one that bypasses permissions.
+  PermissionSelection _mode(String installationId, String? asked) {
     final support = _permissionsOf(installationId);
     if (support == null || support.axes.isEmpty) {
       throw StateError(
         'Karmashala has not established which permission modes this agent '
-        'has, so a webhook cannot be armed on it.',
+        'has, so nothing can be proposed on it.',
       );
     }
-    final asked = arguments['permissionMode'] as String?;
     final PermissionSelection mode;
     if (asked == null || asked.trim().isEmpty) {
       mode = support.selections().firstWhere(
@@ -105,63 +123,157 @@ class WebhookToolSet extends ServerToolSet {
     }
     if (risk == PermissionRisk.bypass || support.isDangerous(mode)) {
       throw StateError(
-        'An agent cannot arm a webhook that bypasses permissions. NOTHING WAS '
-        'DONE. The owner can choose that mode in the app.',
+        'An agent cannot propose an automation that bypasses permissions. '
+        'NOTHING WAS DONE. The owner can choose that mode in the app.',
       );
     }
-    final perHour = (arguments['callsPerHour'] as num?)?.round();
-    final automation = _save(
-      Automation(
-        id: _newId(),
-        repositoryId: required('repositoryId'),
-        name: required('name'),
-        schedule: AutomationSchedule.once(_now()),
-        agentInstallationId: installationId,
-        prompt: required('template'),
-        permissionMode: mode,
-        enabled: true,
-        armedAt: _now(),
-        modelId: arguments['modelId'] as String?,
-        worktree: arguments['worktree'] as bool? ?? false,
-        webhook: AutomationWebhook(
-          requireSignature: arguments['signatureRequired'] as bool? ?? true,
-          callsPerHour: perHour ?? kDefaultWebhookCallsPerHour,
-        ),
-      ),
+    return mode;
+  }
+
+  Future<Object?> _propose(
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) async {
+    String required(String key) {
+      final value = (arguments[key] as String?)?.trim();
+      if (value == null || value.isEmpty) {
+        throw ArgumentError('$key is needed.');
+      }
+      return value;
+    }
+
+    final now = _now();
+    final trigger = arguments['trigger'];
+    if (trigger is! Map) throw ArgumentError('trigger is needed.');
+    var schedule = AutomationSchedule.once(now);
+    AutomationEventTrigger? event;
+    AutomationGithubTrigger? github;
+    AutomationWebhook? webhook;
+    switch (trigger['type']) {
+      case 'schedule':
+        final cron = (trigger['cron'] as String?)?.trim();
+        final minutes = (trigger['everyMinutes'] as num?)?.round();
+        if (cron != null && cron.isNotEmpty) {
+          if (cronRefusal(cron) case final why?) throw ArgumentError(why);
+          schedule = AutomationSchedule.cron(cron);
+        } else if (minutes != null && minutes > 0) {
+          schedule = AutomationSchedule.every(Duration(minutes: minutes));
+        } else {
+          throw ArgumentError('A schedule needs cron or everyMinutes.');
+        }
+      case 'event':
+        final kind = AutomationEventKind.fromStored(
+          trigger['event'] as String?,
+        );
+        final action = AutomationEventAction.fromStored(
+          trigger['action'] as String? ?? 'start_session',
+        );
+        if (kind == null || action == null) {
+          throw ArgumentError('An event needs a known event and action.');
+        }
+        event = AutomationEventTrigger(kind: kind, action: action);
+      case 'github':
+        github = AutomationGithubTrigger.fromJson({
+          'action': 'start_session',
+          'pollSeconds': 120,
+          ...(trigger['github'] as Map? ?? const {}),
+        });
+        if (github == null) {
+          throw ArgumentError('github needs a known kind and a repository.');
+        }
+        if (github.refusal case final why?) throw ArgumentError(why);
+      case 'webhook':
+        webhook = AutomationWebhook(
+          requireSignature: trigger['signatureRequired'] as bool? ?? true,
+          callsPerHour:
+              (trigger['callsPerHour'] as num?)?.round() ??
+              kDefaultWebhookCallsPerHour,
+        );
+        if (webhookTemplateRefusal(required('prompt')) case final why?) {
+          throw ArgumentError(why);
+        }
+      default:
+        throw ArgumentError(
+          'trigger.type is one of schedule, event, github or webhook.',
+        );
+    }
+    final steps = arguments['steps'] == null
+        ? AutomationSteps.standard
+        : AutomationSteps.fromJson(arguments['steps']);
+    if (steps.refusal case final why?) throw ArgumentError(why);
+    var proposal = Automation(
+      id: _newId(),
+      repositoryId: required('repositoryId'),
+      name: required('name'),
+      schedule: schedule,
+      agentInstallationId: '',
+      prompt: (arguments['prompt'] as String?)?.trim() ?? '',
+      permissionMode: null,
+      enabled: false,
+      armedAt: now,
+      trigger: event,
+      github: github,
+      webhook: webhook,
+      modelId: arguments['modelId'] as String?,
+      worktree: arguments['worktree'] as bool? ?? false,
+      steps: steps,
+      proposedBy: _proposerOf(callerSessionId),
+      proposedSessionId: callerSessionId,
     );
-    final issued = await _webhooksWork.rotate(automation.id);
+    if (proposal.startsAgent) {
+      final installationId = required('agentInstallationId');
+      proposal = proposal.copyWith(
+        agentInstallationId: installationId,
+        permissionMode: _mode(
+          installationId,
+          arguments['permissionMode'] as String?,
+        ),
+      );
+      if (proposal.prompt.isEmpty) throw ArgumentError('prompt is needed.');
+    }
+    // Saved off whatever was asked: only a person turns it on.
+    final saved = _save(proposal.copyWith(enabled: false));
+    _proposed?.call(saved);
     return {
-      'id': automation.id,
-      'name': automation.name,
-      'url': issued.url,
-      'permissionMode': mode.canonical,
-      'signatureRequired': automation.webhook!.requireSignature,
-      'secret': issued.secret,
+      'id': saved.id,
+      'name': saved.name,
+      'enabled': false,
+      'proposed': true,
+      'permissionMode': saved.permissionMode?.canonical,
       'note':
-          'This is the only time the secret is shown. Sign calls with it: '
-          'X-Hub-Signature-256: sha256=<HMAC-SHA256 of the raw body>.',
+          'Proposed, not armed: it does nothing until the owner reviews it '
+          'and turns it on in Automations.'
+          '${saved.isWebhook ? ' Its URL and secret go to them then.' : ''}',
     };
   }
 }
+
+/// The tools that may only propose an automation — saved off, for a person
+/// to turn on — and never arm, enable, run or remove one.
+const Set<String> kProposeOnlyAutomationTools = {
+  'automation_propose',
+  'webhook_create',
+};
 
 const List<Map<String, Object?>> webhookToolSchemas = [
   {
     'name': 'webhook_list',
     'description':
-        'The webhooks armed on this server: each one an automation that starts '
-        'a new session when its URL is called. Answers their URLs and '
-        'settings, never their secrets.',
+        'The webhooks on this server: each one an automation that starts a '
+        'new session when its URL is called. Answers their settings and, for '
+        'one the owner has turned on, its URL — never a secret.',
     'inputSchema': {'type': 'object', 'properties': <String, Object?>{}},
   },
   {
     'name': 'webhook_create',
     'description':
-        'Arm a webhook: a URL that, when called with a JSON body, starts a new '
-        'session in a checkout with a prompt filled from the body '
-        '({{field}} and {{a.b}} paths; values are inserted as quoted data, '
-        'never as instructions). Runs read-only unless permissionMode names '
-        'another mode; never one that bypasses permissions. Answers the URL '
-        'and the signing secret — the only time the secret is shown.',
+        'Propose a webhook: a URL that, when called with a JSON body, would '
+        'start a new session in a checkout with a prompt filled from the body '
+        '({{field}} and {{a.b}} paths, inserted as quoted data). It is saved '
+        'off and does nothing until the owner reviews it and turns it on in '
+        'the app; its URL and secret go to them then, not to you. Runs '
+        'read-only unless permissionMode names another mode; never one that '
+        'bypasses permissions.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -194,6 +306,68 @@ const List<Map<String, Object?>> webhookToolSchemas = [
         'callsPerHour': {'type': 'integer', 'minimum': 1},
       },
       'required': ['name', 'repositoryId', 'agentInstallationId', 'template'],
+    },
+  },
+  {
+    'name': 'automation_propose',
+    'description':
+        'Propose an automation for the owner to review: on a schedule, when a '
+        'session event happens, when something happens on GitHub, or on a '
+        'webhook call. It is saved off, marked as proposed by this session, '
+        'and runs nothing until the owner turns it on in the app. Nothing '
+        'here can turn one on.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'name': {'type': 'string'},
+        'repositoryId': {
+          'type': 'string',
+          'description': 'The checkout it runs in (list_checkouts).',
+        },
+        'agentInstallationId': {
+          'type': 'string',
+          'description':
+              'The agent it starts (list_agents); not needed for one that '
+              'only notifies.',
+        },
+        'prompt': {
+          'type': 'string',
+          'description':
+              'What the agent is told; {{github.…}} or {{field}} values '
+              'reach it quoted as data.',
+        },
+        'permissionMode': {
+          'type': 'string',
+          'description': 'A canonical selection; read-only by default.',
+        },
+        'modelId': {'type': 'string'},
+        'worktree': {'type': 'boolean'},
+        'trigger': {
+          'type': 'object',
+          'description':
+              'type is schedule (cron or everyMinutes), event (event: '
+              'turn_finished, turn_failed or needs_you; action: '
+              'start_session, message_session or notify_only), github '
+              '(github: {kind, repository, action, branch, authors, logins, '
+              'label, assignee, pollSeconds}) or webhook '
+              '(signatureRequired, callsPerHour).',
+          'properties': {
+            'type': {
+              'type': 'string',
+              'enum': ['schedule', 'event', 'github', 'webhook'],
+            },
+          },
+          'required': ['type'],
+        },
+        'steps': {
+          'type': 'array',
+          'description':
+              'Steps after the agent: {kind: check|command|webhook|tell|'
+              'notify, when: success|failure|always, text, url}.',
+          'items': {'type': 'object'},
+        },
+      },
+      'required': ['name', 'repositoryId', 'trigger'],
     },
   },
 ];

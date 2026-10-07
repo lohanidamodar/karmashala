@@ -167,6 +167,8 @@ class Automation {
     this.runsPerHour = kDefaultRunsPerHour,
     this.overlap = AutomationOverlap.queue,
     this.queueLimit = kDefaultQueueLimit,
+    this.proposedBy,
+    this.proposedSessionId,
   });
 
   final String id;
@@ -245,6 +247,16 @@ class Automation {
   /// How many triggers may wait, with [AutomationOverlap.queue].
   final int queueLimit;
 
+  /// Who proposed it — "Claude Code in "Fix the cart"" — while nobody has
+  /// turned it on. An agent's proposal is always saved off; a person turning
+  /// it on is what arms it, and clears this.
+  final String? proposedBy;
+
+  /// The session that proposed it, for the inbox.
+  final String? proposedSessionId;
+
+  bool get isProposed => proposedBy != null;
+
   bool get isEventDriven => trigger != null;
 
   bool get isWebhook => webhook != null;
@@ -293,6 +305,7 @@ class Automation {
     int? runsPerHour,
     AutomationOverlap? overlap,
     int? queueLimit,
+    bool clearProposed = false,
   }) => Automation(
     id: id,
     repositoryId: repositoryId,
@@ -319,6 +332,8 @@ class Automation {
     runsPerHour: runsPerHour ?? this.runsPerHour,
     overlap: overlap ?? this.overlap,
     queueLimit: queueLimit ?? this.queueLimit,
+    proposedBy: clearProposed ? null : proposedBy,
+    proposedSessionId: clearProposed ? null : proposedSessionId,
   );
 
   @override
@@ -326,3 +341,7 @@ class Automation {
       'Automation($id, $name, ${webhook ?? github ?? trigger ?? schedule}, '
       'enabled: $enabled)';
 }
+
+/// The inbox id of [automationId]'s proposal, which turning it on or
+/// discarding it dismisses.
+String proposalInboxId(String automationId) => 'proposal:$automationId';

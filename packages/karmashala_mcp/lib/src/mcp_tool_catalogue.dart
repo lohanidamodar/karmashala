@@ -1,6 +1,6 @@
 /// What each tool does to the world: the spec's four axes plus `movesAttention`,
-/// ours. Hints, never enforcement — and no `automation_*` tool is ever served;
-/// `webhook_create` arms only a webhook, under the grant, never bypassing.
+/// ours. Hints, never enforcement — and no tool arms an automation:
+/// `automation_propose` and `webhook_create` only propose one, saved off.
 library;
 
 /// Tools that change something and still need no grant: the records an agent
@@ -523,7 +523,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // Webhooks. Creating one arms a URL anyone holding it can call, so it is a
   // write the operator grant covers; nothing is called by creating it.
   'webhook_list': McpToolAnnotations.read,
-  'webhook_create': McpToolAnnotations(openWorld: true, movesAttention: false),
+  'webhook_create': McpToolAnnotations(movesAttention: false),
+  'automation_propose': McpToolAnnotations(movesAttention: false),
   'verification_list': McpToolAnnotations.read,
   'verification_get': McpToolAnnotations.read,
   // A `url` run connects a browser before it records anything, which lands
@@ -961,7 +962,11 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'webhook_create': McpToolListing(
     McpToolCategory.sessions,
-    'Arm a URL that starts a session from a JSON body; secret shown once.',
+    'Propose a webhook for the owner to turn on; no URL or secret here.',
+  ),
+  'automation_propose': McpToolListing(
+    McpToolCategory.sessions,
+    'Propose an automation, saved off, for the owner to review and turn on.',
   ),
   'verification_start': McpToolListing(
     McpToolCategory.verification,

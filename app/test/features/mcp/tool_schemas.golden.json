@@ -2361,7 +2361,7 @@
     },
     {
       "name": "webhook_list",
-      "description": "The webhooks armed on this server: each one an automation that starts a new session when its URL is called. Answers their URLs and settings, never their secrets.",
+      "description": "The webhooks on this server: each one an automation that starts a new session when its URL is called. Answers their settings and, for one the owner has turned on, its URL — never a secret.",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -2376,7 +2376,7 @@
     },
     {
       "name": "webhook_create",
-      "description": "Arm a webhook: a URL that, when called with a JSON body, starts a new session in a checkout with a prompt filled from the body ({{field}} and {{a.b}} paths; values are inserted as quoted data, never as instructions). Runs read-only unless permissionMode names another mode; never one that bypasses permissions. Answers the URL and the signing secret — the only time the secret is shown.",
+      "description": "Propose a webhook: a URL that, when called with a JSON body, would start a new session in a checkout with a prompt filled from the body ({{field}} and {{a.b}} paths, inserted as quoted data). It is saved off and does nothing until the owner reviews it and turns it on in the app; its URL and secret go to them then, not to you. Runs read-only unless permissionMode names another mode; never one that bypasses permissions.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2426,7 +2426,78 @@
         "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": false,
-        "openWorldHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "automation_propose",
+      "description": "Propose an automation for the owner to review: on a schedule, when a session event happens, when something happens on GitHub, or on a webhook call. It is saved off, marked as proposed by this session, and runs nothing until the owner turns it on in the app. Nothing here can turn one on.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "The checkout it runs in (list_checkouts)."
+          },
+          "agentInstallationId": {
+            "type": "string",
+            "description": "The agent it starts (list_agents); not needed for one that only notifies."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "What the agent is told; {{github.…}} or {{field}} values reach it quoted as data."
+          },
+          "permissionMode": {
+            "type": "string",
+            "description": "A canonical selection; read-only by default."
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "worktree": {
+            "type": "boolean"
+          },
+          "trigger": {
+            "type": "object",
+            "description": "type is schedule (cron or everyMinutes), event (event: turn_finished, turn_failed or needs_you; action: start_session, message_session or notify_only), github (github: {kind, repository, action, branch, authors, logins, label, assignee, pollSeconds}) or webhook (signatureRequired, callsPerHour).",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "schedule",
+                  "event",
+                  "github",
+                  "webhook"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "description": "Steps after the agent: {kind: check|command|webhook|tell|notify, when: success|failure|always, text, url}.",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "repositoryId",
+          "trigger"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
         "movesAttentionHint": false
       }
     },
@@ -6005,7 +6076,11 @@
     },
     "webhook_create": {
       "category": "sessions",
-      "summary": "Arm a URL that starts a session from a JSON body; secret shown once."
+      "summary": "Propose a webhook for the owner to turn on; no URL or secret here."
+    },
+    "automation_propose": {
+      "category": "sessions",
+      "summary": "Propose an automation, saved off, for the owner to review and turn on."
     },
     "session_send": {
       "category": "sessions",

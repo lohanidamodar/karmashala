@@ -1644,6 +1644,21 @@ Future<int> _serve(
         },
         now: () => DateTime.now().toUtc(),
         newId: newUuid,
+        // "Claude Code in "Fix the cart"": who proposed it, in the inbox.
+        proposerOf: (sessionId) {
+          final session = sessionId == null
+              ? null
+              : SessionDao(database).getById(sessionId);
+          final installation = session == null
+              ? null
+              : checkoutRows.installation(session.agentInstallationId);
+          final agent = installation == null
+              ? 'An agent'
+              : liveAgents.descriptorOf(installation.agentId)?.displayName ??
+                    installation.agentId;
+          return session == null ? agent : '$agent in "${session.title}"';
+        },
+        proposed: (proposal) => automations?.fileProposal(proposal),
       ),
     )
     // Every session is operated here: every agent runs in this server.

@@ -67,6 +67,8 @@ Map<String, Object?> automationToJson(Automation a) => {
   'runsPerHour': a.runsPerHour,
   'overlap': a.overlap.name,
   'queueLimit': a.queueLimit,
+  'proposedBy': ?a.proposedBy,
+  'proposedSessionId': ?a.proposedSessionId,
 };
 
 AutomationWebhook? _webhook(Object? json) {
@@ -123,6 +125,8 @@ Automation automationFromJson(Map<String, Object?> json) {
     runsPerHour: json['runsPerHour'] as int? ?? kDefaultRunsPerHour,
     overlap: AutomationOverlap.fromName(json['overlap'] as String?),
     queueLimit: json['queueLimit'] as int? ?? kDefaultQueueLimit,
+    proposedBy: json['proposedBy'] as String?,
+    proposedSessionId: json['proposedSessionId'] as String?,
   );
 }
 
