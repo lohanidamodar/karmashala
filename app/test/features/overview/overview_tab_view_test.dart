@@ -763,6 +763,38 @@ void main() {
         await settle(tester);
         expect(byKey('overview-resuming:paused'), findsNothing);
       });
+
+      testBoard("the peek's Archive waits while it comes back, and says "
+          'why', (tester) async {
+        final c = await pump(tester, const Size(1440, 900));
+        await peekPaused(tester);
+        const archives = ['overview-peek-archive'];
+        bool enabled(String key) =>
+            tester.widget<ButtonStyleButton>(byKey(key)).onPressed != null;
+        Finder saysResuming(String key) => find.ancestor(
+          of: byKey(key),
+          matching: find.byWidgetPredicate(
+            (w) => w is Tooltip && w.message == 'Resuming…',
+          ),
+        );
+        for (final key in archives) {
+          expect(enabled(key), isTrue, reason: key);
+        }
+
+        c.read(sessionsStartingProvider.notifier).add('paused');
+        await settle(tester);
+        for (final key in archives) {
+          expect(enabled(key), isFalse, reason: key);
+          expect(saysResuming(key), findsOneWidget, reason: key);
+        }
+
+        c.read(sessionsStartingProvider.notifier).remove('paused');
+        await settle(tester);
+        for (final key in archives) {
+          expect(enabled(key), isTrue, reason: key);
+          expect(saysResuming(key), findsNothing, reason: key);
+        }
+      });
     });
   });
 }

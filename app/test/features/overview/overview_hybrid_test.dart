@@ -17,6 +17,8 @@ import 'package:karmashala/src/features/sessions/presentation/new_session_dialog
 import 'package:karmashala_session/delivery.dart'
     show DeliveryAction, OfferedAction;
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart'
+    show sessionsStartingProvider;
 import 'package:karmashala/src/features/sessions/application/session_list_prefs.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
@@ -769,6 +771,36 @@ void main() {
         find.byKey(const ValueKey('overview-done-archive:ks-r29-child')),
         findsOneWidget,
       );
+      await unmountMission(tester);
+    });
+
+    testWidgets("a ready card's Archive waits while it is resumed, and says "
+        'why', (tester) async {
+      final c = await pump(tester);
+      final archive = find.byKey(
+        const ValueKey('overview-done-archive:ks-r30'),
+      );
+      await tester.scrollUntilVisible(archive, 300, scrollable: hybridList);
+      await settleMission(tester);
+      bool enabled() =>
+          tester.widget<ButtonStyleButton>(archive).onPressed != null;
+      final saysResuming = find.ancestor(
+        of: archive,
+        matching: find.byWidgetPredicate(
+          (w) => w is Tooltip && w.message == 'Resuming…',
+        ),
+      );
+      expect(enabled(), isTrue);
+
+      c.read(sessionsStartingProvider.notifier).add('ks-r30');
+      await settleMission(tester);
+      expect(enabled(), isFalse);
+      expect(saysResuming, findsOneWidget);
+
+      c.read(sessionsStartingProvider.notifier).remove('ks-r30');
+      await settleMission(tester);
+      expect(enabled(), isTrue);
+      expect(saysResuming, findsNothing);
       await unmountMission(tester);
     });
   });
