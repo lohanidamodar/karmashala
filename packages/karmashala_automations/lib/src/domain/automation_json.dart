@@ -2,6 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_core/verdicts.dart';
 
 import 'automation.dart';
+import 'automation_admission.dart';
 import 'automation_check_verdict.dart';
 import 'automation_run.dart';
 import 'automation_steps.dart';
@@ -63,6 +64,9 @@ Map<String, Object?> automationToJson(Automation a) => {
       'callsPerHour': w.callsPerHour,
     },
   if (a.github case final g?) 'github': g.toJson(),
+  'runsPerHour': a.runsPerHour,
+  'overlap': a.overlap.name,
+  'queueLimit': a.queueLimit,
 };
 
 AutomationWebhook? _webhook(Object? json) {
@@ -116,6 +120,9 @@ Automation automationFromJson(Map<String, Object?> json) {
     steps: json.containsKey('steps')
         ? AutomationSteps.fromJson(json['steps'])
         : AutomationSteps.unstated,
+    runsPerHour: json['runsPerHour'] as int? ?? kDefaultRunsPerHour,
+    overlap: AutomationOverlap.fromName(json['overlap'] as String?),
+    queueLimit: json['queueLimit'] as int? ?? kDefaultQueueLimit,
   );
 }
 

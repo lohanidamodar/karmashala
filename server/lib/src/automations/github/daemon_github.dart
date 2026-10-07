@@ -156,6 +156,16 @@ class DaemonGithub {
       startedBy: AutomationRunCause.github,
       variables: event.variables,
     );
+    final recent = automations.runsFor(
+      automation.id,
+      limit: recentRunsToRead(automation),
+    );
+    if (hourlyRefusal(automation, recent: recent, now: at) case final why?) {
+      automations.insertRun(
+        run.copyWith(state: AutomationRunState.missed, reason: why),
+      );
+      return;
+    }
     switch (github.action) {
       case AutomationEventAction.notifyOnly:
         final done = run.copyWith(
@@ -179,11 +189,29 @@ class DaemonGithub {
       case AutomationEventAction.startSession:
         break;
     }
-    if (github.kind.isPullRequest || automation.worktree) {
-      await start(automation, run.reason, run.variables);
+    if (github.kind.isPullRequest) {
+      // Its own worktree: one run per branch at a time, later ones queued
+      // or merged as the automation says.
+      switch (admitRun(
+        automation,
+        lane: event.branch,
+        recent: recent,
+        now: at,
+      )) {
+        case AdmitStart():
+          await start(automation, run.reason, run.variables);
+        case AdmitQueue(:final reason):
+          automations.insertRun(
+            run.copyWith(state: AutomationRunState.queued, reason: reason),
+          );
+        case AdmitRefuse(:final reason):
+          automations.insertRun(
+            run.copyWith(state: AutomationRunState.missed, reason: reason),
+          );
+      }
       return;
     }
-    // In the checkout itself: behind whatever holds it, as an event's run.
+    // Behind whatever holds the checkout, as an event's run.
     scheduler.queueEventRun(
       automation,
       run.copyWith(state: AutomationRunState.queued),

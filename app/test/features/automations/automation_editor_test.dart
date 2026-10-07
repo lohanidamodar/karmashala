@@ -628,6 +628,47 @@ void main() {
     }
   });
 
+  testWidgets('every kind has runs an hour, and queues or merges a trigger '
+      'while it runs', (tester) async {
+    makeReady();
+    await pump(
+      tester,
+      const AutomationDraft(
+        repositoryId: 'r1',
+        name: 'After each turn',
+        trigger: DraftTrigger.event,
+        prompt: 'run the tests',
+      ),
+      size: const Size(360, 3200),
+      textScale: 1.6,
+    );
+    await pickAgent(tester);
+    final limits = find.byKey(const ValueKey('automation-limits'));
+    await tester.ensureVisible(limits);
+    await tester.tap(limits);
+    await tester.pumpAndSettle();
+    expect(find.text('At most, runs an hour (0 is no limit)'), findsOneWidget);
+    expect(find.text('At most, waiting at once'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'At most, runs an hour (0 is no limit)'),
+      '5',
+    );
+    final merge = find.text(AutomationOverlap.merge.label);
+    await tester.ensureVisible(merge);
+    await tester.pumpAndSettle();
+    await tester.tap(merge);
+    await tester.pumpAndSettle();
+    expect(find.text('At most, waiting at once'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('automation-save')));
+    await tester.tap(find.byKey(const ValueKey('automation-save')));
+    await tester.pumpAndSettle();
+    final stored = server.automationRows.getAll().single;
+    expect(stored.runsPerHour, 5);
+    expect(stored.overlap, AutomationOverlap.merge);
+  });
+
   testWidgets('it fits a phone, a desktop and large text', (tester) async {
     for (final size in const [
       Size(360, 740),

@@ -1,5 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 
+import 'automation_admission.dart';
 import 'automation_steps.dart';
 import 'automation_trigger.dart';
 import 'automation_webhook.dart';
@@ -163,6 +164,9 @@ class Automation {
     this.modelId,
     this.worktree = false,
     this.steps = AutomationSteps.standard,
+    this.runsPerHour = kDefaultRunsPerHour,
+    this.overlap = AutomationOverlap.queue,
+    this.queueLimit = kDefaultQueueLimit,
   });
 
   final String id;
@@ -231,6 +235,16 @@ class Automation {
   /// What follows the agent: its checks, a message to it, a notification.
   final AutomationSteps steps;
 
+  /// Runs it may start in any hour; zero is no limit. Run now is a person's
+  /// act and does not count.
+  final int runsPerHour;
+
+  /// What a trigger does while a run of this one is going where it would run.
+  final AutomationOverlap overlap;
+
+  /// How many triggers may wait, with [AutomationOverlap.queue].
+  final int queueLimit;
+
   bool get isEventDriven => trigger != null;
 
   bool get isWebhook => webhook != null;
@@ -276,6 +290,9 @@ class Automation {
     bool clearModel = false,
     bool? worktree,
     AutomationSteps? steps,
+    int? runsPerHour,
+    AutomationOverlap? overlap,
+    int? queueLimit,
   }) => Automation(
     id: id,
     repositoryId: repositoryId,
@@ -299,6 +316,9 @@ class Automation {
     modelId: clearModel ? null : modelId ?? this.modelId,
     worktree: worktree ?? this.worktree,
     steps: steps ?? this.steps,
+    runsPerHour: runsPerHour ?? this.runsPerHour,
+    overlap: overlap ?? this.overlap,
+    queueLimit: queueLimit ?? this.queueLimit,
   );
 
   @override

@@ -148,7 +148,21 @@ class ServerEventRules {
       origin: verdict.origin,
       eventSessionId: event.sessionId,
     );
-    switch (rule.trigger!.action) {
+    final action = rule.trigger!.action;
+    if (action != AutomationEventAction.startSession) {
+      final overHour = hourlyRefusal(
+        rule,
+        recent: automations.runsFor(rule.id, limit: recentRunsToRead(rule)),
+        now: run.firedAt,
+      );
+      if (overHour != null) {
+        automations.insertRun(
+          run.copyWith(state: AutomationRunState.missed, reason: overHour),
+        );
+        return;
+      }
+    }
+    switch (action) {
       case AutomationEventAction.startSession:
         // Queued behind the checkout; the scheduler starts it when it is free.
         scheduler.queueEventRun(rule, run);

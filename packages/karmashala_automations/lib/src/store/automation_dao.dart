@@ -8,6 +8,7 @@ import '../service/automation_records.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_core/verdicts.dart';
 import '../domain/automation.dart';
+import '../domain/automation_admission.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/automation_steps.dart';
@@ -30,9 +31,10 @@ class AutomationDao implements AutomationRecords {
     'late_policy, stop_after_failures, consecutive_failures, '
     'disabled_reason, max_runtime_seconds, trigger_event, event_action, '
     'webhook_id, webhook_signature, webhook_model, webhook_worktree, '
-    'webhook_per_hour, model_id, run_in_worktree, steps, github) '
+    'webhook_per_hour, model_id, run_in_worktree, steps, github, '
+    'runs_per_hour, overlap, queue_limit) '
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
-    '?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       automation.id,
       automation.repositoryId,
@@ -65,7 +67,8 @@ class AutomationDao implements AutomationRecords {
     'max_runtime_seconds = ?, trigger_event = ?, event_action = ?, '
     'webhook_id = ?, webhook_signature = ?, webhook_model = ?, '
     'webhook_worktree = ?, webhook_per_hour = ?, model_id = ?, '
-    'run_in_worktree = ?, steps = ?, github = ? '
+    'run_in_worktree = ?, steps = ?, github = ?, runs_per_hour = ?, '
+    'overlap = ?, queue_limit = ? '
     'WHERE id = ?;',
     [
       automation.name,
@@ -106,6 +109,9 @@ class AutomationDao implements AutomationRecords {
     intFromBool(automation.worktree),
     automation.steps.toColumn(),
     automation.github?.toColumn(),
+    automation.runsPerHour,
+    automation.overlap.name,
+    automation.queueLimit,
   ];
 
   /// Every GitHub automation, paused ones included.
@@ -168,13 +174,11 @@ class AutomationDao implements AutomationRecords {
     return true;
   }
 
-  bool githubSeen(String automationId, String key) => _db
-      .query(
-        'SELECT 1 FROM automation_github_seen WHERE automation_id = ? AND '
-        'item_key = ?;',
-        [automationId, key],
-      )
-      .isNotEmpty;
+  bool githubSeen(String automationId, String key) => _db.query(
+    'SELECT 1 FROM automation_github_seen WHERE automation_id = ? AND '
+    'item_key = ?;',
+    [automationId, key],
+  ).isNotEmpty;
 
   /// Drops keys older than [before], so the table stays the size of what
   /// GitHub still lists.
@@ -668,6 +672,9 @@ class AutomationDao implements AutomationRecords {
       worktree: boolFromInt(row['run_in_worktree'] ?? 0),
       steps: AutomationSteps.fromColumn(row['steps'] as String?),
       github: AutomationGithubTrigger.fromColumn(row['github'] as String?),
+      runsPerHour: row['runs_per_hour'] as int? ?? kDefaultRunsPerHour,
+      overlap: AutomationOverlap.fromName(row['overlap'] as String?),
+      queueLimit: row['queue_limit'] as int? ?? kDefaultQueueLimit,
     );
   }
 

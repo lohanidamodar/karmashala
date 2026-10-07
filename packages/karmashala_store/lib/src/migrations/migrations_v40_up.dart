@@ -1205,3 +1205,28 @@ void _migrateToV87(Database db) {
     'PRIMARY KEY (automation_id, item_key));',
   );
 }
+
+/// Runs an hour for every kind of automation, and what a trigger does while
+/// a run of the same one is going: queue (up to a limit) or merge.
+void _migrateToV88(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automations);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('runs_per_hour')) return;
+  db.execute(
+    'ALTER TABLE automations ADD COLUMN runs_per_hour INTEGER NOT NULL '
+    'DEFAULT 30;',
+  );
+  db.execute(
+    "ALTER TABLE automations ADD COLUMN overlap TEXT NOT NULL DEFAULT 'queue';",
+  );
+  db.execute(
+    'ALTER TABLE automations ADD COLUMN queue_limit INTEGER NOT NULL '
+    'DEFAULT 3;',
+  );
+  // A webhook's own calls an hour were its only limit; it carries over.
+  db.execute(
+    'UPDATE automations SET runs_per_hour = webhook_per_hour '
+    'WHERE webhook_per_hour IS NOT NULL;',
+  );
+}

@@ -70,7 +70,13 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         kDefaultWebhookBody,
   );
   late final _ghRepo = TextEditingController(text: _draft.github.repository);
-  late final _perHour = TextEditingController(text: '${_draft.callsPerHour}');
+  late final _perHour = TextEditingController(text: '$_perHourValue');
+  late final _queueLimit = TextEditingController(text: '${_draft.queueLimit}');
+
+  /// A webhook's limit is its calls an hour; every other kind's, its runs.
+  int get _perHourValue => _draft.trigger == DraftTrigger.webhook
+      ? _draft.callsPerHour
+      : _draft.runsPerHour;
   late final _stopAfter = TextEditingController(
     text: '${_draft.stopAfterFailures}',
   );
@@ -103,6 +109,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       _hookBody,
       _ghRepo,
       _perHour,
+      _queueLimit,
       _stopAfter,
       _longest,
     ]) {
@@ -1260,13 +1267,42 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         children: [
-          if (_draft.trigger == DraftTrigger.webhook)
+          _numberField(
+            _perHour,
+            _draft.trigger == DraftTrigger.webhook
+                ? 'At most, runs an hour'
+                : 'At most, runs an hour (0 is no limit)',
+            (n) => _draft.trigger == DraftTrigger.webhook
+                ? _draft.copyWith(
+                    callsPerHour: (n ?? 1).clamp(1, kMaxWebhookCallsPerHour),
+                  )
+                : _draft.copyWith(runsPerHour: (n ?? 0).clamp(0, 10000)),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.sm),
+            child: Text(
+              'If it is already running there',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: CompactSegmented<AutomationOverlap>(
+              key: const ValueKey('automation-overlap'),
+              segments: [
+                for (final overlap in AutomationOverlap.values)
+                  ButtonSegment(value: overlap, label: Text(overlap.label)),
+              ],
+              selected: _draft.overlap,
+              onChanged: (overlap) =>
+                  _update(_draft.copyWith(overlap: overlap)),
+            ),
+          ),
+          if (_draft.overlap == AutomationOverlap.queue)
             _numberField(
-              _perHour,
-              'At most, runs an hour',
-              (n) => _draft.copyWith(
-                callsPerHour: (n ?? 1).clamp(1, kMaxWebhookCallsPerHour),
-              ),
+              _queueLimit,
+              'At most, waiting at once',
+              (n) => _draft.copyWith(queueLimit: (n ?? 1).clamp(1, 100)),
             ),
           _numberField(
             _stopAfter,
@@ -1292,8 +1328,14 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
 
   String _limitsWords() {
     final parts = [
-      if (_draft.trigger == DraftTrigger.webhook)
-        'at most ${_draft.callsPerHour} an hour',
+      switch (_perHourValue) {
+        0 => 'no limit an hour',
+        final n => 'at most $n an hour',
+      },
+      if (_draft.overlap == AutomationOverlap.merge)
+        'later triggers merge'
+      else
+        'up to ${_draft.queueLimit} waiting',
       _draft.stopAfterFailures == 0
           ? 'never pauses itself'
           : 'pauses after ${_draft.stopAfterFailures} failures in a row',
@@ -1328,7 +1370,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     required UnattendedRefusal? refusal,
   }) {
     final draft = _draft;
-    if (draft.notifyOnly && draft.trigger == DraftTrigger.event) {
+    if (draft.notifyOnly &&
+        (draft.trigger == DraftTrigger.event ||
+            draft.trigger == DraftTrigger.github)) {
       return const [
         ReadyRow(true, 'It starts nothing, so nothing can go wrong.'),
       ];

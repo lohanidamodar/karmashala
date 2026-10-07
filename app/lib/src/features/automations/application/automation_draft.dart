@@ -66,6 +66,9 @@ class AutomationDraft {
     this.requireSignature = true,
     this.callsPerHour = kDefaultWebhookCallsPerHour,
     this.github = kDraftGithub,
+    this.runsPerHour = kDefaultRunsPerHour,
+    this.overlap = AutomationOverlap.queue,
+    this.queueLimit = kDefaultQueueLimit,
     this.once,
     this.installationId,
     this.modelId,
@@ -106,6 +109,9 @@ class AutomationDraft {
 
   /// A GitHub trigger's settings; its action is [firstStep]'s.
   final AutomationGithubTrigger github;
+  final int runsPerHour;
+  final AutomationOverlap overlap;
+  final int queueLimit;
 
   /// Local time.
   final DateTime? once;
@@ -190,6 +196,9 @@ class AutomationDraft {
           (a.github?.action ?? a.trigger?.action) ==
           AutomationEventAction.notifyOnly,
       github: a.github ?? kDraftGithub,
+      runsPerHour: a.runsPerHour,
+      overlap: a.overlap,
+      queueLimit: a.queueLimit,
       requireSignature: a.webhook?.requireSignature ?? true,
       callsPerHour: a.webhook?.callsPerHour ?? kDefaultWebhookCallsPerHour,
       once: schedule.firesAt?.toLocal(),
@@ -224,6 +233,9 @@ class AutomationDraft {
     bool? requireSignature,
     int? callsPerHour,
     AutomationGithubTrigger? github,
+    int? runsPerHour,
+    AutomationOverlap? overlap,
+    int? queueLimit,
     DateTime? once,
     String? installationId,
     String? modelId,
@@ -256,6 +268,9 @@ class AutomationDraft {
     requireSignature: requireSignature ?? this.requireSignature,
     callsPerHour: callsPerHour ?? this.callsPerHour,
     github: github ?? this.github,
+    runsPerHour: runsPerHour ?? this.runsPerHour,
+    overlap: overlap ?? this.overlap,
+    queueLimit: queueLimit ?? this.queueLimit,
     once: once ?? this.once,
     installationId: installationId ?? this.installationId,
     modelId: clearModel ? null : modelId ?? this.modelId,
@@ -324,6 +339,9 @@ class AutomationDraft {
     requireSignature: requireSignature,
     callsPerHour: callsPerHour,
     github: github.copyWith(repository: ''),
+    runsPerHour: runsPerHour,
+    overlap: overlap,
+    queueLimit: queueLimit,
     once: once,
     prefersReadOnly: prefersReadOnly,
     worktree: worktree,
@@ -352,6 +370,9 @@ class AutomationDraft {
     requireSignature: requireSignature,
     callsPerHour: callsPerHour,
     github: github,
+    runsPerHour: runsPerHour,
+    overlap: overlap,
+    queueLimit: queueLimit,
     once: once,
     installationId: installationId,
     modelId: modelId,
@@ -445,6 +466,9 @@ class AutomationDraft {
       modelId: namesAgent ? modelId : null,
       worktree: namesAgent && worktree,
       steps: steps,
+      runsPerHour: trigger == DraftTrigger.webhook ? callsPerHour : runsPerHour,
+      overlap: overlap,
+      queueLimit: queueLimit,
     );
   }
 }

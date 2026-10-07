@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:karmashala_session/session.dart';
 
 import '../domain/automation.dart';
+import '../domain/automation_admission.dart';
 import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
 import '../domain/missed_fires.dart';
@@ -422,6 +423,16 @@ class AutomationScheduler {
     DateTime scheduledFor, {
     String note = '',
   }) async {
+    final now = _now();
+    final overHour = hourlyRefusal(
+      automation,
+      recent: _dao.runsFor(automation.id, limit: recentRunsToRead(automation)),
+      now: now,
+    );
+    if (overHour != null) {
+      _recordSkipped(automation, scheduledFor, now, overHour);
+      return;
+    }
     final busy = _liveInCheckout(automation.repositoryId);
     if (busy != null) {
       _dao.insertRun(
@@ -462,15 +473,30 @@ class AutomationScheduler {
   /// free. Called when a run settles; this is what makes the queue a queue.
   Future<void> drain(String repositoryId) async {
     if (_stopped) return;
+    final here = [
+      for (final run in _dao.liveRuns())
+        if (_dao.getById(run.automationId)?.repositoryId == repositoryId) run,
+    ];
+    final running = here.where((r) => r.state == AutomationRunState.running);
     AutomationRun? waiting;
-    for (final run in _dao.liveRuns()) {
-      final automation = _dao.getById(run.automationId);
-      if (automation == null || automation.repositoryId != repositoryId) {
-        continue;
+    var checkoutQueueWaits = false;
+    for (final run in here) {
+      if (run.state != AutomationRunState.queued) continue;
+      final lane = runLane(run);
+      // A pull request's run has a worktree of its own: it waits only for
+      // its automation's run on the same branch, never for the checkout.
+      final blocked = lane.isEmpty
+          ? checkoutQueueWaits || running.any((r) => runLane(r).isEmpty)
+          : running.any(
+              (r) => r.automationId == run.automationId && runLane(r) == lane,
+            );
+      if (!blocked) {
+        waiting = run;
+        break;
       }
-      if (run.state == AutomationRunState.running) return;
-      waiting ??= run;
+      if (lane.isEmpty) checkoutQueueWaits = true;
     }
+    if (waiting == null && running.isNotEmpty) return;
     if (waiting == null) {
       await _drainResumes(repositoryId);
       return;
@@ -529,14 +555,30 @@ AutomationRun queueEventRunIn(
   Automation automation,
   AutomationRun run,
 ) {
-  final live = records.liveRunOf(automation.id);
-  if (live != null) {
-    final missed = run.copyWith(
-      state: AutomationRunState.missed,
-      reason: alreadyRunningReason(live),
-    );
-    records.insertRun(missed);
-    return missed;
+  final admission = admitRun(
+    automation,
+    lane: runLane(run),
+    recent: records.runsFor(automation.id, limit: recentRunsToRead(automation)),
+    now: run.firedAt,
+    byPerson: run.startedBy == AutomationRunCause.runNow,
+  );
+  switch (admission) {
+    case AdmitRefuse(:final reason):
+      final missed = run.copyWith(
+        state: AutomationRunState.missed,
+        reason: reason,
+      );
+      records.insertRun(missed);
+      return missed;
+    case AdmitQueue(:final reason):
+      final queued = run.copyWith(
+        state: AutomationRunState.queued,
+        reason: reason,
+      );
+      records.insertRun(queued);
+      return queued;
+    case AdmitStart():
+      break;
   }
   final busy = liveInCheckout(records, automation.repositoryId);
   final queued = run.copyWith(
