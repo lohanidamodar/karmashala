@@ -116,7 +116,11 @@ void main() {
     insert('beta-done', status: SessionStatus.completed, repo: 'r2');
   });
 
-  Future<ProviderContainer> pump(WidgetTester tester, Size size) async {
+  Future<ProviderContainer> pump(
+    WidgetTester tester,
+    Size size, {
+    double textScale = 1,
+  }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -140,7 +144,17 @@ void main() {
         sessionChatTranscriptProvider.overrideWith(
           (ref, id) => Stream.value(const <TranscriptMessage>[]),
         ),
-        overviewReaderProvider.overrideWithValue(FakeOverviewReader()),
+        overviewReaderProvider.overrideWithValue(
+          FakeOverviewReader(
+            answers: const {
+              'parked': LastAnswer.of(
+                'Wired the **webhooks**: three events reach the inbox, the '
+                'retry backs off to five minutes, and the tests are in '
+                '`webhooks_test.dart`.',
+              ),
+            },
+          ),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -150,6 +164,12 @@ void main() {
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.dark(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
           home: const Scaffold(body: OverviewTabView()),
         ),
       ),
@@ -564,6 +584,62 @@ void main() {
       expect(c.read(overviewFocusProvider).peeked, 'parked');
       expectStayedPut(c);
     });
+
+    for (final (name, size) in [
+      ('360×800', const Size(360, 800)),
+      ('390×844', const Size(390, 844)),
+      ('1024×768', const Size(1024, 768)),
+      ('1920×1080', const Size(1920, 1080)),
+    ]) {
+      for (final scale in [1.0, 1.6]) {
+        testBoard('$name at ${scale}x text: the picker and its choice fit', (
+          tester,
+        ) async {
+          insert(
+            'a-very-long-session-title-that-has-to-ellipsize-somewhere',
+            status: SessionStatus.completed,
+            conversation: 'conv-long',
+            archived: true,
+          );
+          final c = await pump(tester, size, textScale: scale);
+          await openPicker(tester);
+          // Any overflow fails the test on its own; these say it laid out.
+          expect(row('parked'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('overview-resume-answer:parked')),
+            findsOneWidget,
+          );
+          await tester.tap(byKey('overview-resume-archived'));
+          await settle(tester);
+          final picker = tester.getRect(byKey('overview-resume-picker'));
+          expect(picker.width, lessThanOrEqualTo(size.width));
+          expect(picker.right, lessThanOrEqualTo(size.width));
+
+          await tester.tap(row('parked'));
+          await settle(tester);
+          for (final key in [
+            'overview-resume-message',
+            'overview-resume-cost',
+            'overview-resume-keep-here',
+            'overview-resume-idle',
+            'overview-resume-send',
+          ]) {
+            await tester.ensureVisible(byKey(key));
+            await settle(tester);
+            expect(byKey(key), findsOneWidget, reason: key);
+            expect(
+              tester.getRect(byKey(key)).right,
+              lessThanOrEqualTo(size.width),
+              reason: key,
+            );
+          }
+          await tester.tap(byKey('overview-resume-idle'));
+          await settle(tester);
+          expect(c.read(overviewFocusProvider).peeked, 'parked');
+          expectStayedPut(c);
+        });
+      }
+    }
 
     testBoard('R opens it, and "?" lists R', (tester) async {
       await pump(tester, const Size(1440, 900));
