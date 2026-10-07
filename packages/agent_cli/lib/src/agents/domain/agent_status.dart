@@ -1,4 +1,5 @@
 import 'agent_tool_ask.dart';
+import 'agent_working_line.dart';
 
 /// What an agent is doing right now, as far as any status source can tell.
 ///
@@ -103,28 +104,44 @@ class AgentStatusReport {
     this.waitingSince,
     this.inFlight = const [],
     this.backgroundOnly = false,
+    this.working,
   });
 
   /// This report with the ask it is about and when the wait began — both
   /// cleared when null. Everything else stays as it was read.
   AgentStatusReport withAsk({AgentToolAsk? toolAsk, DateTime? waitingSince}) =>
-      AgentStatusReport(
-        agentId: agentId,
-        sessionId: sessionId,
-        status: status,
-        observedAt: observedAt,
-        source: source,
-        detail: detail,
-        sourceModifiedAt: sourceModifiedAt,
-        evidence: evidence,
-        waiting: waiting,
-        ending: ending,
-        failureReason: failureReason,
-        toolAsk: toolAsk,
-        waitingSince: waitingSince,
-        inFlight: inFlight,
-        backgroundOnly: backgroundOnly,
-      );
+      _copy(toolAsk: toolAsk, waitingSince: waitingSince, working: working);
+
+  /// This report with [working] in place of its own, cleared when null.
+  AgentStatusReport withWorking(AgentWorkingDetail? working) =>
+      _copy(toolAsk: toolAsk, waitingSince: waitingSince, working: working);
+
+  AgentStatusReport _copy({
+    required AgentToolAsk? toolAsk,
+    required DateTime? waitingSince,
+    required AgentWorkingDetail? working,
+  }) => AgentStatusReport(
+    agentId: agentId,
+    sessionId: sessionId,
+    status: status,
+    observedAt: observedAt,
+    source: source,
+    detail: detail,
+    sourceModifiedAt: sourceModifiedAt,
+    evidence: evidence,
+    waiting: waiting,
+    ending: ending,
+    failureReason: failureReason,
+    toolAsk: toolAsk,
+    waitingSince: waitingSince,
+    inFlight: inFlight,
+    backgroundOnly: backgroundOnly,
+    working: working,
+  );
+
+  /// **What the agent's working line says** while its turn runs — its word,
+  /// when the turn began and its tokens. Null when no source said any of it.
+  final AgentWorkingDetail? working;
 
   /// Registry id of the agent (`AgentDescriptor.id`).
   final String agentId;
@@ -786,8 +803,13 @@ class AgentGridRules {
     this.working = const [],
     this.idle = const [],
     this.failed = const [],
+    this.workingLine,
     this.scanLines = 12,
   });
+
+  /// How to read the agent's own word, elapsed time and tokens off its working
+  /// line while a turn runs; null for an agent whose line nobody has read.
+  final WorkingLineRule? workingLine;
 
   /// A multiple-choice question's footer. Checked before [awaitingApproval]:
   /// the question's footer also ends Esc to cancel, and read as an approval it
