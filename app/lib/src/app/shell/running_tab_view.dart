@@ -62,7 +62,6 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
     final filter = ref.watch(runningFilterProvider);
     final localId = ref.watch(localEnvironmentProvider)?.id ?? 'local';
     final reading = snapshot.reading;
-    final theme = Theme.of(context);
     final label = ref.watch(runningMachinesProvider).label;
     final machines = reading == null
         ? const <String>[]
@@ -91,46 +90,14 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
           onPressed: _refresh,
         ),
     ];
-    // The Stores page's header: under a page that already names it (the
-    // phone's More), no second title, and its actions move to the status line.
-    final untitled = PaneTitleOverride.maybeOf(context) != null;
-    return Scaffold(
-      appBar: untitled
-          ? null
-          : AppBar(
-              toolbarHeight: 44,
-              // A workbench tab: an implied back button would pop the app's
-              // route.
-              automaticallyImplyLeading: false,
-              title: Row(
-                children: [
-                  Icon(
-                    AppIcons.listMagnifyingGlass,
-                    color: theme.colorScheme.tertiary,
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  const Flexible(
-                    child: Text(
-                      'Running',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                ...actions,
-                const SizedBox(width: Insets.sm),
-              ],
-            ),
+    return WorkbenchTabScaffold(
+      icon: AppIcons.listMagnifyingGlass,
+      title: 'Running',
+      actions: actions,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StatusLine(
-            reading: reading,
-            loading: snapshot.loading,
-            actions: untitled ? actions : const [],
-          ),
+          _StatusLine(reading: reading, loading: snapshot.loading),
           Expanded(child: _bodyOf(snapshot, filter, localId)),
         ],
       ),
@@ -178,19 +145,9 @@ class _MachineFilterButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final icon = Icon(picked == null ? AppIcons.funnel : AppIcons.funnelFill);
-    return IconButton(
+    return FilterFunnelButton(
       key: const ValueKey('running-machine-filter'),
-      tooltip: picked == null ? 'Machines' : 'Machines (${label(picked!)})',
-      icon: picked == null
-          ? icon
-          : Badge.count(
-              count: 1,
-              backgroundColor: scheme.primary,
-              textColor: scheme.onPrimary,
-              child: icon,
-            ),
+      count: picked == null ? 0 : 1,
       onPressed: () => showAdaptiveModal<void>(
         context: context,
         title: 'Machines',
@@ -221,18 +178,12 @@ class _MachineFilterButton extends ConsumerWidget {
   }
 }
 
-/// When it was read and how much it found; [actions] too where there is no
-/// title bar to hold them.
+/// When it was read and how much it found.
 class _StatusLine extends StatelessWidget {
-  const _StatusLine({
-    required this.reading,
-    required this.loading,
-    required this.actions,
-  });
+  const _StatusLine({required this.reading, required this.loading});
 
   final RunningReading? reading;
   final bool loading;
-  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -268,7 +219,6 @@ class _StatusLine extends StatelessWidget {
               ),
             ),
           ),
-          ...actions,
         ],
       ),
     );
@@ -500,10 +450,8 @@ class _Header extends ConsumerWidget {
       SearchField(
         key: const ValueKey('running-search'),
         onChanged: onQuery,
-        decoration: const InputDecoration(
-          prefixIcon: Icon(AppIcons.magnifyingGlass),
+        decoration: compactSearchDecoration(
           hintText: 'Filter ports and processes',
-          isDense: true,
         ),
       ),
       if (filter.sessionId case final sessionId?)
