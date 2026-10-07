@@ -98,8 +98,8 @@ enum SettingsSectionId {
     'Checkpoints and automations',
     AppIcons.clockCounterClockwise,
     SettingsGroup.agents,
-    'Snapshots of every agent turn, and agent runs armed to start on a '
-        'schedule, with nobody watching.',
+    'Snapshots of every agent turn; automations and resumes have their own '
+        'tab.',
     ['automations', 'checkpoints'],
   ),
   snippets(
@@ -472,9 +472,13 @@ enum SettingsAnchor {
   automations(SettingsSectionId.automations, 'Automations', [
     'automation',
     'automations',
+    'webhook',
+    'webhooks',
     'schedule',
     'scheduled',
     'cron',
+    'run now',
+    'runs',
     'nightly',
     'unattended',
     'event',
@@ -1073,10 +1077,19 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['env', 'secret', 'token', 'api key', 'wslenv'],
   ),
   SettingsEntry(
-    'Scheduled automations',
+    'Automations',
     anchor: SettingsAnchor.automations,
-    description: 'Arm, pause and review agent runs on a schedule.',
-    keywords: ['cron', 'nightly', 'schedule', 'event', 'project check'],
+    description:
+        'Agent runs on a schedule, an event or a webhook, in their own tab.',
+    keywords: [
+      'automation',
+      'webhook',
+      'cron',
+      'nightly',
+      'schedule',
+      'event',
+      'project check',
+    ],
   ),
   SettingsEntry(
     'Scheduled resumes',

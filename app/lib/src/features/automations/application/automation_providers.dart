@@ -1,5 +1,7 @@
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/records.dart'
+    show compareRunsNewestFirst;
 import 'package:karmashala_automations/runs.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -40,6 +42,13 @@ final sessionAutomationOriginProvider = Provider.family<String?, String>((
   return automation.isWebhook
       ? 'from webhook ${automation.name}'
       : 'from automation ${automation.name}';
+});
+
+/// Every run the client holds, across every automation, newest first.
+final allAutomationRunsProvider = Provider<List<AutomationRun>>((ref) {
+  ref.watch(automationsRevisionProvider);
+  return [...ref.watch(automationsDataProvider).runRows]
+    ..sort(compareRunsNewestFirst);
 });
 
 final automationRunsProvider = Provider.family<List<AutomationRun>, String>((

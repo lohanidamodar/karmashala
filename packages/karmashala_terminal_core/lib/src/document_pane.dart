@@ -56,12 +56,20 @@ const String kOverviewPaneId = '${kDocumentPanePrefix}overview';
 
 /// Whether [paneId] is the Overview document.
 bool isOverviewPane(String paneId) => paneId == kOverviewPaneId;
+
 /// Everything Karmashala runs, with its ports, as a tab. One, like Logs —
 /// it is a view of the server's processes, not the tab's.
 const String kRunningPaneId = '${kDocumentPanePrefix}running';
 
 /// Whether [paneId] is the Running document.
 bool isRunningPane(String paneId) => paneId == kRunningPaneId;
+
+/// Automations as a tab: every automation, its runs and the scheduled resumes.
+/// One, like Running — they are the workspace's, not the tab's.
+const String kAutomationsPaneId = '${kDocumentPanePrefix}automations';
+
+/// Whether [paneId] is the Automations document.
+bool isAutomationsPane(String paneId) => paneId == kAutomationsPaneId;
 
 /// The prefix an open file's pane id carries. The host path follows it: the id
 /// is the whole model, so restore rebuilds the buffer by reading that file.

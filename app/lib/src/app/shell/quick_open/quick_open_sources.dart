@@ -60,6 +60,7 @@ import '../../../features/server/application/server_commands.dart';
 import '../../../features/server/application/server_files.dart';
 import '../../../features/server/application/server_overview.dart';
 import '../../../features/server/presentation/server_command_actions.dart';
+import '../../../features/automations/presentation/automations_tab_state.dart';
 import '../../../features/settings/presentation/settings_catalog.dart'
     show settingsEntries;
 import '../../../features/settings/presentation/settings_nav.dart';
@@ -417,7 +418,7 @@ class QuickOpenSources {
           keywords: keywords,
           opensTab: true,
           onSelect: () =>
-              openSettingsTab(ref, anchor: SettingsAnchor.scheduledResumes),
+              openAutomationsTab(ref, section: AutomationsSection.resumes),
         ),
     ];
   }
@@ -726,6 +727,21 @@ class QuickOpenSources {
         ],
         opensTab: true,
         onSelect: () => openStoresTab(ref),
+      ),
+      _command(
+        'Open Automations',
+        subtitle: 'Agent runs on a schedule, an event or a webhook',
+        icon: AppIcons.lightning,
+        keywords: const [
+          'automations',
+          'schedule',
+          'cron',
+          'webhook',
+          'runs',
+          'resumes',
+        ],
+        opensTab: true,
+        onSelect: () => openAutomationsTab(ref),
       ),
       _command(
         'Open Logs',

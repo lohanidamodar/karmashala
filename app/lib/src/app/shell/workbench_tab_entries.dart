@@ -106,6 +106,7 @@ IconData? documentIconFor(TerminalTab tab) {
   if (isLogsPane(paneId)) return AppIcons.article;
   if (isOverviewPane(paneId)) return AppIcons.squaresFour;
   if (isRunningPane(paneId)) return AppIcons.listMagnifyingGlass;
+  if (isAutomationsPane(paneId)) return AppIcons.lightning;
   if (isEditorPane(paneId)) return AppIcons.fileCode;
   if (isDiffPane(paneId)) return AppIcons.gitDiff;
   if (isNotePane(paneId)) return AppIcons.note;

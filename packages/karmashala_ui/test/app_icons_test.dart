@@ -38,6 +38,10 @@ void main() {
     'arrowClockwise': (AppIcons.arrowClockwise, 0xe036, regular),
     'dotsThree': (AppIcons.dotsThree, 0xe1fe, regular),
     'circleFill': (AppIcons.circleFill, 0xe18a, fill),
+    'lightning': (AppIcons.lightning, 0xe2de, regular),
+    'webhooksLogo': (AppIcons.webhooksLogo, 0xecae, regular),
+    'bellSimple': (AppIcons.bellSimple, 0xe0d0, regular),
+    'calendarBlank': (AppIcons.calendarBlank, 0xe10a, regular),
   };
 
   expected.forEach((name, entry) {

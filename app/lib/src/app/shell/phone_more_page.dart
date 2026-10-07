@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
 import '../../features/agents/presentation/usage_tab/usage_tab_view.dart';
+import '../../features/automations/presentation/automations_tab_view.dart';
 import '../../features/notes/presentation/notes_view.dart';
 import '../../features/overview/presentation/overview_tab_view.dart';
 import '../../features/remote/presentation/machines_section.dart';
@@ -37,6 +38,11 @@ class PhoneMoreList extends StatelessWidget {
           'Stores',
           AppIcons.package,
           (_) => const PaneTitleOverride(child: StoresTabView()),
+        ),
+        PhoneMoreEntry.automations => (
+          'Automations',
+          AppIcons.lightning,
+          (_) => const PaneTitleOverride(child: AutomationsTabView()),
         ),
         PhoneMoreEntry.running => (
           'Running',
