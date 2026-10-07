@@ -92,7 +92,7 @@ class RunningInfoRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xs / 2),
             child: Icon(
               AppIcons.info,
               size: Chrome.iconSmall,
@@ -209,8 +209,10 @@ class RunningPortCard extends ConsumerWidget {
                 // On the link's centre-line when there is one.
                 padding: EdgeInsets.only(
                   top: url == null
-                      ? 3
-                      : ((phone ? Touch.target : 32) - Chrome.iconSmall) / 2,
+                      ? Insets.xs / 2
+                      : ((phone ? Touch.target : Chrome.menuRow) -
+                                Chrome.iconSmall) /
+                            2,
                 ),
                 child: Icon(
                   _iconFor(port.label.kind),
@@ -240,7 +242,7 @@ class RunningPortCard extends ConsumerWidget {
                                 'WSL forwards this port to Windows\' localhost',
                               _ => null,
                             },
-                            minHeight: phone ? Touch.target : 32,
+                            minHeight: phone ? Touch.target : Chrome.menuRow,
                             onOpen: (inPane) => openRunningUrl(
                               ref,
                               url,
@@ -263,7 +265,7 @@ class RunningPortCard extends ConsumerWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: Insets.xs / 2),
                     _PortOwnerLine(port: port, machineLabel: machineLabel),
                     if (port.port.host != null && port.label.isHttp)
                       RunningMuted(
@@ -333,7 +335,7 @@ class _PortOwnerLine extends ConsumerWidget {
     };
     return Wrap(
       spacing: Insets.xs,
-      runSpacing: 2,
+      runSpacing: Insets.xs / 2,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(port.label.name, style: style),
@@ -363,7 +365,7 @@ class RunningLink extends StatefulWidget {
     required this.url,
     required this.onOpen,
     this.tooltip,
-    this.minHeight = 32,
+    this.minHeight = Chrome.menuRow,
     super.key,
   });
 
@@ -403,7 +405,7 @@ class _RunningLinkState extends State<RunningLink> {
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: widget.minHeight),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: Insets.xs / 2),
             child: Align(
               alignment: Alignment.centerLeft,
               widthFactor: 1,
@@ -683,7 +685,7 @@ class _RunningSessionCardState extends ConsumerState<RunningSessionCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.only(top: Insets.xs / 2),
                       child: agentId != null
                           ? AgentLogo(agentId: agentId, size: Chrome.iconTitle)
                           : Icon(
@@ -937,7 +939,7 @@ class _ProcessLine extends StatelessWidget {
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
+                padding: const EdgeInsets.symmetric(vertical: Insets.xs / 2),
                 child: Text(
                   '${process.name ?? 'process'} · pid ${process.pid}'
                   '${ports.isEmpty ? '' : '  $ports'}',

@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:agent_cli/process.dart' show EnvironmentKind;
+import 'package:agent_cli/process.dart'
+    show EnvironmentKind, ExecutionEnvironment;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -15,6 +16,7 @@ import '../../features/environments/application/environments_controller.dart';
 import '../../features/running/application/running_providers.dart';
 import '../../features/running/domain/running_board.dart';
 import '../../features/running/domain/running_groups.dart';
+import '../widgets/adaptive_modal.dart';
 import 'phone_routes.dart';
 import 'running_cards.dart';
 import 'side_panel_state.dart';
@@ -64,8 +66,39 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
     final localId = ref.watch(localEnvironmentProvider)?.id ?? 'local';
     final reading = snapshot.reading;
     final theme = Theme.of(context);
+    final label = runningMachineLabel(
+      ref.watch(environmentsControllerProvider),
+      localId,
+    );
+    final machines = reading == null
+        ? const <String>[]
+        : groupByMachine(
+            reading,
+            localEnvironmentId: localId,
+          ).map((m) => m.environmentId).toList();
+    final actions = <Widget>[
+      _MachineFilterButton(
+        machines: machines,
+        picked: machines.contains(filter.environmentId)
+            ? filter.environmentId
+            : null,
+        label: label,
+      ),
+      if (snapshot.loading)
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: Insets.sm),
+          child: InlineSpinner(semanticsLabel: 'Reading what runs'),
+        )
+      else
+        IconButton(
+          key: const ValueKey('running-refresh'),
+          tooltip: 'Refresh',
+          icon: const Icon(AppIcons.arrowClockwise),
+          onPressed: _refresh,
+        ),
+    ];
     // The Stores page's header: under a page that already names it (the
-    // phone's More), no second title.
+    // phone's More), no second title, and its actions move to the status line.
     final untitled = PaneTitleOverride.maybeOf(context) != null;
     return Scaffold(
       appBar: untitled
@@ -91,14 +124,18 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
                   ),
                 ],
               ),
+              actions: [
+                ...actions,
+                const SizedBox(width: Insets.sm),
+              ],
             ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StatusRow(
+          _StatusLine(
             reading: reading,
             loading: snapshot.loading,
-            onRefresh: _refresh,
+            actions: untitled ? actions : const [],
           ),
           Expanded(child: _bodyOf(snapshot, filter, localId)),
         ],
@@ -132,18 +169,95 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
   }
 }
 
-/// When it was read, how much it found, and Refresh — the Stores page's
-/// status row.
-class _StatusRow extends StatelessWidget {
-  const _StatusRow({
+/// How [environments] name a machine: `This machine`, `WSL · archlinux`.
+MachineLabel runningMachineLabel(
+  List<ExecutionEnvironment> environments,
+  String localId,
+) => (id) {
+  if (id == localId) return 'This machine';
+  final environment = environments.where((e) => e.id == id).firstOrNull;
+  final name =
+      environment?.name ??
+      (id.contains(':') ? id.substring(id.indexOf(':') + 1) : id);
+  return switch (environment?.kind) {
+    EnvironmentKind.wsl => 'WSL · $name',
+    EnvironmentKind.ssh => 'SSH · $name',
+    _ when id.startsWith('wsl:') => 'WSL · $name',
+    _ when id.startsWith('ssh:') => 'SSH · $name',
+    _ => name,
+  };
+};
+
+/// The machine filter, behind a funnel as Overview's filters are: choice
+/// chips in a sheet on a phone, a dialog elsewhere.
+class _MachineFilterButton extends ConsumerWidget {
+  const _MachineFilterButton({
+    required this.machines,
+    required this.picked,
+    required this.label,
+  });
+
+  final List<String> machines;
+  final String? picked;
+  final MachineLabel label;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final icon = Icon(picked == null ? AppIcons.funnel : AppIcons.funnelFill);
+    return IconButton(
+      key: const ValueKey('running-machine-filter'),
+      tooltip: picked == null ? 'Machines' : 'Machines (${label(picked!)})',
+      icon: picked == null
+          ? icon
+          : Badge.count(
+              count: 1,
+              backgroundColor: scheme.primary,
+              textColor: scheme.onPrimary,
+              child: icon,
+            ),
+      onPressed: () => showAdaptiveModal<void>(
+        context: context,
+        title: 'Machines',
+        builder: (context) => Consumer(
+          builder: (context, ref, _) {
+            final now = ref.watch(runningFilterProvider).environmentId;
+            return Padding(
+              padding: const EdgeInsets.all(Insets.lg),
+              child: Wrap(
+                spacing: Insets.sm,
+                runSpacing: Insets.sm,
+                children: [
+                  for (final id in <String?>[null, ...machines])
+                    ChoiceChip(
+                      key: ValueKey('running-machine-${id ?? 'all'}'),
+                      label: Text(id == null ? 'All machines' : label(id)),
+                      selected: id == now,
+                      onSelected: (_) =>
+                          ref.read(runningFilterProvider.notifier).machine(id),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// When it was read and how much it found; [actions] too where there is no
+/// title bar to hold them.
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({
     required this.reading,
     required this.loading,
-    required this.onRefresh,
+    required this.actions,
   });
 
   final RunningReading? reading;
   final bool loading;
-  final VoidCallback onRefresh;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -179,15 +293,7 @@ class _StatusRow extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: Insets.sm),
-          TextButton.icon(
-            key: const ValueKey('running-refresh'),
-            onPressed: loading ? null : onRefresh,
-            icon: loading
-                ? const InlineSpinner(semanticsLabel: 'Reading what runs')
-                : const Icon(AppIcons.arrowClockwise),
-            label: const Text('Refresh'),
-          ),
+          ...actions,
         ],
       ),
     );
@@ -225,27 +331,9 @@ class _RunningBodyState extends ConsumerState<_RunningBody> {
     final localId = widget.localEnvironmentId;
     final environments = ref.watch(environmentsControllerProvider);
     final kinds = {for (final e in environments) e.id: e.kind};
-    String label(String id) {
-      if (id == localId) return 'This machine';
-      final environment = environments.where((e) => e.id == id).firstOrNull;
-      final name =
-          environment?.name ??
-          (id.contains(':') ? id.substring(id.indexOf(':') + 1) : id);
-      return switch (environment?.kind) {
-        EnvironmentKind.wsl => 'WSL · $name',
-        EnvironmentKind.ssh => 'SSH · $name',
-        _ when id.startsWith('wsl:') => 'WSL · $name',
-        _ when id.startsWith('ssh:') => 'SSH · $name',
-        _ => name,
-      };
-    }
-
+    final label = runningMachineLabel(environments, localId);
     bool isWsl(String id) =>
         kinds[id] == EnvironmentKind.wsl || id.startsWith('wsl:');
-    final everyMachine = groupByMachine(
-      reading,
-      localEnvironmentId: localId,
-    ).map((m) => m.environmentId).toList();
     final board = buildRunningBoard(
       reading,
       localEnvironmentId: localId,
@@ -287,11 +375,8 @@ class _RunningBodyState extends ConsumerState<_RunningBody> {
         );
         final compact = width.isCompact;
         final header = _Header(
-          machines: everyMachine,
-          label: label,
           filter: filter,
           reading: reading,
-          compact: compact,
           onQuery: (text) => setState(() => _query = text),
         );
         final listening = <Widget>[
@@ -383,7 +468,10 @@ class _RunningBodyState extends ConsumerState<_RunningBody> {
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1480),
+              // Two readable columns side by side, and no wider.
+              constraints: const BoxConstraints(
+                maxWidth: Chrome.readableWidth * 2,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -419,83 +507,48 @@ class _RunningBodyState extends ConsumerState<_RunningBody> {
   }
 }
 
-/// The machine filter, a filter box for ports and processes, the session a
-/// badge opened it on, and when it was read.
+/// The filter box for ports and processes, and the session a badge opened the
+/// tab on.
 class _Header extends ConsumerWidget {
   const _Header({
-    required this.machines,
-    required this.label,
     required this.filter,
     required this.reading,
-    required this.compact,
     required this.onQuery,
   });
 
-  final List<String> machines;
-  final MachineLabel label;
   final RunningFilter filter;
   final RunningReading reading;
-  final bool compact;
   final ValueChanged<String> onQuery;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // The app's search box, as the Stores picker draws it: the theme's own
-    // filled, outlined field.
-    final search = SearchField(
-      key: const ValueKey('running-search'),
-      onChanged: onQuery,
-      decoration: const InputDecoration(
-        prefixIcon: Icon(AppIcons.magnifyingGlass),
-        hintText: 'Filter ports and processes',
-        isDense: true,
-      ),
-    );
-    final picked = machines.contains(filter.environmentId)
-        ? filter.environmentId
-        : null;
-    final picker = _MachinePicker(
-      machines: machines,
-      picked: picked,
-      label: label,
-      onPick: (id) => ref.read(runningFilterProvider.notifier).machine(id),
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            picker,
-            const SizedBox(width: Insets.sm),
-            if (compact)
-              Expanded(child: search)
-            else
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: search,
-                ),
-              ),
-          ],
+  Widget build(BuildContext context, WidgetRef ref) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SearchField(
+        key: const ValueKey('running-search'),
+        onChanged: onQuery,
+        decoration: const InputDecoration(
+          prefixIcon: Icon(AppIcons.magnifyingGlass),
+          hintText: 'Filter ports and processes',
+          isDense: true,
         ),
-        if (filter.sessionId case final sessionId?)
-          Padding(
-            padding: const EdgeInsets.only(top: Insets.sm),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: InputChip(
-                key: const ValueKey('running-session-filter'),
-                label: Text(
-                  'One session: ${_sessionTitle(reading, sessionId)}',
-                ),
-                onDeleted: () =>
-                    ref.read(runningFilterProvider.notifier).session(null),
-              ),
+      ),
+      if (filter.sessionId case final sessionId?)
+        Padding(
+          padding: const EdgeInsets.only(top: Insets.sm),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              key: const ValueKey('running-session-filter'),
+              label: Text('One session: ${_sessionTitle(reading, sessionId)}'),
+              selected: true,
+              onSelected: (_) =>
+                  ref.read(runningFilterProvider.notifier).session(null),
             ),
           ),
-      ],
-    );
-  }
+        ),
+    ],
+  );
 
   static String _sessionTitle(RunningReading reading, String sessionId) =>
       reading.processes
@@ -504,86 +557,6 @@ class _Header extends ConsumerWidget {
           .nonNulls
           .firstOrNull ??
       sessionId;
-}
-
-/// Which machine the tab shows, as a chip with a menu: the theme's chip
-/// surface and outline, not Material's underlined dropdown.
-class _MachinePicker extends StatelessWidget {
-  const _MachinePicker({
-    required this.machines,
-    required this.picked,
-    required this.label,
-    required this.onPick,
-  });
-
-  final List<String> machines;
-  final String? picked;
-  final MachineLabel label;
-  final ValueChanged<String?> onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final name = picked == null ? 'All machines' : label(picked!);
-    return MenuAnchor(
-      menuChildren: [
-        for (final id in <String?>[null, ...machines])
-          MenuItemButton(
-            key: ValueKey('running-machine-${id ?? 'all'}'),
-            leadingIcon: Icon(
-              id == picked ? AppIcons.check : null,
-              size: Chrome.iconAction,
-            ),
-            onPressed: () => onPick(id),
-            child: Text(id == null ? 'All machines' : label(id)),
-          ),
-      ],
-      builder: (context, controller, _) => Semantics(
-        button: true,
-        label: 'Machine: $name',
-        excludeSemantics: true,
-        child: Material(
-          color: scheme.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            side: BorderSide(color: scheme.outlineVariant),
-          ),
-          child: InkWell(
-            key: const ValueKey('running-machine-filter'),
-            borderRadius: BorderRadius.circular(Radii.sm),
-            onTap: () =>
-                controller.isOpen ? controller.close() : controller.open(),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 32, maxWidth: 220),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelMedium,
-                      ),
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Icon(
-                      AppIcons.caretDown,
-                      size: Chrome.iconAction,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Shows [url] in the Browser pane. The page is the server machine's

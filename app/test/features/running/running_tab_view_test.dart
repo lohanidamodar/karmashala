@@ -366,6 +366,33 @@ void main() {
     expect(find.byKey(const ValueKey('running-card-pn')), findsNothing);
   });
 
+  testWidgets('the header is the Stores page\'s: a title bar, Refresh and a '
+      'funnel that picks a machine from choice chips', (tester) async {
+    await pump(tester);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Running')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byKey(const ValueKey('running-refresh')),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const ValueKey('running-machine-filter')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChoiceChip), findsNWidgets(4));
+    await tester.tap(
+      find.byKey(const ValueKey('running-machine-wsl:archlinux')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('running-card-pn')), findsNothing);
+    expect(find.byKey(const ValueKey('running-card-pa')), findsOneWidget);
+  });
+
   testWidgets('one machine can be picked', (tester) async {
     final container = await pump(tester);
     container.read(runningFilterProvider.notifier).machine('wsl:archlinux');
