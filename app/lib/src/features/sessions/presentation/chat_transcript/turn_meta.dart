@@ -18,10 +18,22 @@ class _MessageAge extends StatelessWidget {
   );
 }
 
-/// Save-as-note, when notes are on, then Copy: every header's actions.
-List<Widget> _messageActions(VoidCallback? onSaveNote, String copyText) => [
+/// Save-as-note, when notes are on, then Copy, then Copy turn where offered.
+List<Widget> _messageActions(
+  VoidCallback? onSaveNote,
+  String copyText, {
+  String Function()? copyTurn,
+}) => [
   if (onSaveNote != null) _SaveNoteButton(onSave: onSaveNote),
   _CopyButton(text: copyText),
+  if (copyTurn != null)
+    _ConfirmingIconButton(
+      key: const ValueKey('chat-copy-turn'),
+      icon: AppIcons.clipboardText,
+      tooltip: 'Copy turn',
+      confirmedTooltip: 'Copied',
+      onPressed: () => Clipboard.setData(ClipboardData(text: copyTurn())),
+    ),
 ];
 
 /// Glyph, eyebrow and actions: a tool card's header row. The user's and the
@@ -267,6 +279,7 @@ class _ConfirmingIconButton extends StatefulWidget {
     required this.tooltip,
     required this.confirmedTooltip,
     required this.onPressed,
+    super.key,
   });
 
   final IconData icon;

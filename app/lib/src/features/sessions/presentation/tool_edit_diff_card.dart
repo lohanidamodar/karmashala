@@ -90,23 +90,55 @@ class ToolEditDiffCard extends StatelessWidget {
 
 /// One section per edit in [edits], each its own collapsed diff, and a line
 /// saying so when [truncated] content was cut before it got here.
-class FileEditDiffs extends StatelessWidget {
+class FileEditDiffs extends StatefulWidget {
   const FileEditDiffs({required this.edits, this.truncated = false, super.key});
 
   final List<FileEditRecord> edits;
   final bool truncated;
 
   @override
+  State<FileEditDiffs> createState() => _FileEditDiffsState();
+}
+
+/// Files a change shows before the rest fold behind "Show N more files".
+const int kDiffCardShownFiles = 5;
+
+class _FileEditDiffsState extends State<FileEditDiffs> {
+  bool _allFiles = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final edits = widget.edits;
+    final folds = edits.length > kDiffCardShownFiles + 1 && !_allFiles;
+    final shown = folds ? edits.take(kDiffCardShownFiles) : edits;
+    final truncated = widget.truncated;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final edit in edits)
+        for (final edit in shown)
           Padding(
             padding: const EdgeInsets.only(top: Insets.xs),
             child: _EditDiff(edit: edit),
+          ),
+        if (folds)
+          SelectionContainer.disabled(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const ValueKey('diff-more-files'),
+                onPressed: () => setState(() => _allFiles = true),
+                icon: const Icon(AppIcons.caretDown, size: Chrome.iconSmall),
+                label: Text(
+                  'Show ${edits.length - kDiffCardShownFiles} more files',
+                ),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: theme.textTheme.labelSmall,
+                ),
+              ),
+            ),
           ),
         if (truncated)
           Padding(

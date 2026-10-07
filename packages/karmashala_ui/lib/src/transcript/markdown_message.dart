@@ -8,6 +8,7 @@ import '../design_tokens.dart';
 import '../diagram/mermaid_fences.dart';
 import '../diagram/mermaid_view.dart';
 import 'package:karmashala_session/transcript.dart';
+import 'code_block.dart';
 import 'transcript_selection.dart';
 
 /// What tells a link this app made out of a bare path from one the author
@@ -33,6 +34,7 @@ class MarkdownMessage extends StatelessWidget {
     this.onPathTap,
     this.onLinkTap,
     this.selectable = true,
+    this.foldLong = false,
     super.key,
   });
 
@@ -51,8 +53,23 @@ class MarkdownMessage extends StatelessWidget {
   /// the blocks then copy a line each rather than as one run-on.
   final bool selectable;
 
+  /// Whether a message past [kMessageFoldLines] lines folds behind "Show all".
+  final bool foldLong;
+
   @override
   Widget build(BuildContext context) {
+    if (!foldLong) return _render(context, data);
+    final lines = '\n'.allMatches(data).length + 1;
+    if (lines <= kMessageFoldLines) return _render(context, data);
+    return _FoldedMarkdown(
+      lines: lines,
+      head: markdownHead(data, kMessageHeadLines),
+      render: (context, all) => _render(context, all ? data : null),
+    );
+  }
+
+  Widget _render(BuildContext context, String? text) {
+    final data = text ?? markdownHead(this.data, kMessageHeadLines);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
@@ -90,15 +107,12 @@ class MarkdownMessage extends StatelessWidget {
       styleSheet: sheet,
       // A thumb gets code wrapped: a sideways-scrolling block at phone width
       // shows as a clipped line with nothing saying it scrolls.
-      builders: UiDensity.of(context).isTouch
-          ? {
-              'pre': _WrappedCodeBuilder(
-                highlight: highlight,
-                decoration: sheet.codeblockDecoration,
-                padding: sheet.codeblockPadding,
-              ),
-            }
-          : const {},
+      builders: {
+        'pre': _CodeBlockBuilder(
+          highlight: highlight,
+          wrap: UiDensity.of(context).isTouch,
+        ),
+      },
       inlineSyntaxes: onPathTap == null ? null : kPathLinkSyntaxes,
       onTapLink: (text, href, title) {
         if (href == null) return;
@@ -130,6 +144,67 @@ class MarkdownMessage extends StatelessWidget {
             ],
           );
     return selectable ? body : TranscriptSelectionGroup(child: body);
+  }
+}
+
+/// Lines a message may run to before it folds.
+const int kMessageFoldLines = 300;
+
+/// Lines a folded message keeps in sight.
+const int kMessageHeadLines = 120;
+
+/// [text]'s first [lines] lines, closing a code fence the cut runs through.
+String markdownHead(String text, int lines) {
+  final head = text.split('\n').take(lines).toList();
+  final fences = head.where((l) => l.trimLeft().startsWith('```')).length;
+  if (fences.isOdd) head.add('```');
+  return head.join('\n');
+}
+
+class _FoldedMarkdown extends StatefulWidget {
+  const _FoldedMarkdown({
+    required this.lines,
+    required this.head,
+    required this.render,
+  });
+
+  final int lines;
+  final String head;
+  final Widget Function(BuildContext context, bool all) render;
+
+  @override
+  State<_FoldedMarkdown> createState() => _FoldedMarkdownState();
+}
+
+class _FoldedMarkdownState extends State<_FoldedMarkdown> {
+  bool _all = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        widget.render(context, _all),
+        SelectionContainer.disabled(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const ValueKey('message-fold'),
+              onPressed: () => setState(() => _all = !_all),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                textStyle: theme.textTheme.labelSmall,
+              ),
+              child: Text(
+                _all ? 'Show less' : 'Show all (${widget.lines} lines)',
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -169,18 +244,12 @@ class _PathLinkSyntax extends md.InlineSyntax {
   }
 }
 
-/// A fenced block drawn wrapped at the message's width, coloured as the
-/// scrolling block is. Under a thumb only.
-class _WrappedCodeBuilder extends MarkdownElementBuilder {
-  _WrappedCodeBuilder({
-    required this.highlight,
-    required this.decoration,
-    required this.padding,
-  });
+/// A fenced block as a [CodeBlock]: its language, a Copy, and a fold.
+class _CodeBlockBuilder extends MarkdownElementBuilder {
+  _CodeBlockBuilder({required this.highlight, required this.wrap});
 
   final Map<String, TextStyle> highlight;
-  final Decoration? decoration;
-  final EdgeInsets? padding;
+  final bool wrap;
 
   @override
   bool isBlockElement() => true;
@@ -194,13 +263,19 @@ class _WrappedCodeBuilder extends MarkdownElementBuilder {
   ) {
     // The fence's text, without the newline markdown leaves on its end.
     final source = element.textContent.replaceFirst(RegExp(r'\n$'), '');
-    return Container(
+    final code = element.children?.whereType<md.Element>().firstOrNull;
+    final language = code?.attributes['class']
+        ?.split(' ')
+        .where((name) => name.startsWith('language-'))
+        .firstOrNull
+        ?.substring('language-'.length);
+    return SizedBox(
       width: double.infinity,
-      decoration: decoration,
-      padding: padding,
-      child: Text.rich(
-        highlightedCode(source, theme: highlight, base: MonoStyles.label),
-        softWrap: true,
+      child: CodeBlock(
+        source: source,
+        language: language,
+        wrap: wrap,
+        highlight: highlight,
       ),
     );
   }

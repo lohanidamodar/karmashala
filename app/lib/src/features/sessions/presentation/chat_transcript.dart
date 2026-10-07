@@ -266,9 +266,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   /// Touch only: the turn whose actions a tap has shown.
   final _tappedTurn = ValueNotifier<Object?>(null);
 
-  /// Touch only: whether *Jump to latest* is offered, as the companion's was.
-  /// [_touch] is kept from the last build for [_onScroll], which has no context.
-  bool _touch = false;
+  /// Whether the reader has left the newest message: *Jump to latest* shows.
   bool _awayFromLatest = false;
 
   /// Messages kept in sight above the "new since" line before the fold.
@@ -350,15 +348,45 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     if (!_scroll.hasClients) return;
     final pos = _scroll.position;
     _stickToBottom = pos.pixels >= pos.maxScrollExtent - 24;
-    if (_touch && _awayFromLatest == _stickToBottom) {
+    if (_awayFromLatest == _stickToBottom) {
       setState(() => _awayFromLatest = !_stickToBottom);
     }
-    if (pos.pixels > 80) return;
+    if (pos.pixels - pos.minScrollExtent > 80) return;
     if (_shown < widget.messages.length) {
-      setState(() => _shown = math.min(_shown + _page, widget.messages.length));
+      _showMoreHeld();
     } else if (_canLoadEarlier) {
+      _anchorAtFirstRow();
       widget.onLoadEarlier!();
     }
+  }
+
+  String _turnTextAt(int ordinal) =>
+      transcriptTurnText(widget.messages, ordinal);
+
+  void _showMoreHeld() {
+    _anchorAtFirstRow();
+    setState(() => _shown = math.min(_shown + _page, widget.messages.length));
+  }
+
+  /// The ordinal of the first row the list grows down from. Older rows go
+  /// above it, growing up, so loading them never moves what the reader sees.
+  /// Null until something older is loaded: until then the list is a plain one.
+  int? _anchorOrdinal;
+  final _centerKey = GlobalKey(debugLabel: 'chat-center');
+  final _leadKey = GlobalKey(debugLabel: 'chat-lead');
+
+  /// Moves the list's origin to its first row, keeping every row where it is
+  /// on screen. A list shorter than its view stays plain: nothing moves there.
+  void _anchorAtFirstRow() {
+    if (_anchorOrdinal != null || !_scroll.hasClients) return;
+    final pos = _scroll.position;
+    if (pos.maxScrollExtent <= 0 || widget.messages.isEmpty) return;
+    final lead = _leadKey.currentContext?.findRenderObject();
+    final leadHeight = lead is RenderBox && lead.hasSize ? lead.size.height : 0;
+    final start = math.max(0, widget.messages.length - _shown);
+    _anchorOrdinal = widget.firstOrdinal + start;
+    pos.correctPixels(pos.pixels - (Insets.xl + leadHeight));
+    setState(() {});
   }
 
   bool get _canLoadEarlier =>
@@ -417,7 +445,6 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 
   @override
   Widget build(BuildContext context) {
-    _touch = UiDensity.of(context).isTouch;
     _followVisibility(Visibility.of(context));
     final total = widget.messages.length;
     final start = math.max(0, total - _shown);
@@ -434,8 +461,18 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         ? ValueKey<String>('${base + row.from}:live')
         : ValueKey<int>(base + row.from);
     final indexOfKey = <Key, int>{
-      for (var i = 0; i < rows.length; i++) keyOf(rows[i]): i + lead,
+      for (var i = 0; i < rows.length; i++) keyOf(rows[i]): i,
     };
+    // Rows before the anchor grow up from it; a transcript replaced under the
+    // view with nothing past the anchor falls back to a plain list.
+    var split = 0;
+    if (_anchorOrdinal case final anchor?) {
+      split = rows.indexWhere((row) => base + row.from >= anchor);
+      if (split <= 0) {
+        if (split < 0) _anchorOrdinal = null;
+        split = 0;
+      }
+    }
 
     // The row the "new since you last looked" line sits above, if in view.
     final firstNew = _firstNew();
@@ -455,6 +492,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         message: visible[offset],
         previousPlan: planBefore[start + offset],
         ordinal: start + offset,
+        turnText: _turnTextAt,
         onSaveNote: widget.onSaveNote,
         resolveHostPath: widget.resolveHostPath,
         onPathTap: widget.onPathTap,
@@ -462,6 +500,87 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         detailBuilder: widget.detailBuilder,
       ),
     );
+
+    Widget item(int index) {
+      final row = rows[index];
+      final drawn = !row.isBatch
+          ? rowAt(row.from)
+          : _ToolBatchTile(
+              key: keyOf(row),
+              messages: visible,
+              row: row,
+              rowAt: rowAt,
+            );
+      if (index != newRow) return drawn;
+      return Column(
+        key: keyOf(row),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [const _NewSinceLine(), drawn],
+      );
+    }
+
+    Widget list(double gutter) {
+      final pad = EdgeInsets.symmetric(horizontal: gutter);
+      final more = start > 0 ? start : widget.earlier;
+      final slivers = <Widget>[
+        const SliverToBoxAdapter(child: SizedBox(height: Insets.xl)),
+        if (lead == 1)
+          SliverToBoxAdapter(
+            // Held here first; then, from the server, the ones before those.
+            child: SelectionContainer.disabled(
+              key: _leadKey,
+              child: Center(
+                child: TextButton.icon(
+                  onPressed: start > 0
+                      ? _showMoreHeld
+                      : () {
+                          _anchorAtFirstRow();
+                          widget.onLoadEarlier?.call();
+                        },
+                  icon: const Icon(AppIcons.caretUp),
+                  label: Text(
+                    'Load $more earlier message${more == 1 ? '' : 's'}',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        SliverPadding(
+          padding: pad,
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => item(split - 1 - i),
+              childCount: split,
+              findChildIndexCallback: (key) {
+                final at = indexOfKey[key];
+                return at == null || at >= split ? null : split - 1 - at;
+              },
+            ),
+          ),
+        ),
+        SliverPadding(
+          key: _centerKey,
+          padding: pad,
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => item(split + i),
+              childCount: rows.length - split,
+              findChildIndexCallback: (key) {
+                final at = indexOfKey[key];
+                return at == null || at < split ? null : at - split;
+              },
+            ),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: Insets.xl)),
+      ];
+      return CustomScrollView(
+        key: const ValueKey('chat-transcript-list'),
+        controller: _scroll,
+        center: _anchorOrdinal == null ? null : _centerKey,
+        slivers: slivers,
+      );
+    }
 
     // The conversation sits on the terminal's tone (board N2), so switching a
     // pane between its two views changes what is drawn, not the room it is in.
@@ -495,76 +614,15 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                                         // One selection over every built row: a drag runs
                                         // from one message into the next.
                                         child: TranscriptSelectionArea(
-                                          child: NotificationListener<ScrollMetricsNotification>(
-                                            onNotification: _onMetrics,
-                                            child: ListView.builder(
-                                              controller: _scroll,
-                                              // The pane's whole width (owner, 2026-09-28),
-                                              // with a gutter so no word touches its edge.
-                                              padding: EdgeInsets.symmetric(
-                                                horizontal: gutter,
-                                                vertical: Insets.xl,
+                                          child:
+                                              NotificationListener<
+                                                ScrollMetricsNotification
+                                              >(
+                                                onNotification: _onMetrics,
+                                                // The pane's whole width (owner, 2026-09-28),
+                                                // with a gutter so no word touches its edge.
+                                                child: list(gutter),
                                               ),
-                                              itemCount: rows.length + lead,
-                                              findChildIndexCallback: (key) =>
-                                                  indexOfKey[key],
-                                              itemBuilder: (context, index) {
-                                                if (lead == 1 && index == 0) {
-                                                  // Held here first; then, from the
-                                                  // server, the ones before those.
-                                                  final more = start > 0
-                                                      ? start
-                                                      : widget.earlier;
-                                                  return SelectionContainer.disabled(
-                                                    child: Center(
-                                                      child: TextButton.icon(
-                                                        onPressed: start > 0
-                                                            ? () => setState(
-                                                                () => _shown =
-                                                                    math.min(
-                                                                      _shown +
-                                                                          _page,
-                                                                      total,
-                                                                    ),
-                                                              )
-                                                            : widget
-                                                                  .onLoadEarlier,
-                                                        icon: const Icon(
-                                                          AppIcons.caretUp,
-                                                        ),
-                                                        label: Text(
-                                                          'Load $more earlier message'
-                                                          '${more == 1 ? '' : 's'}',
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                                final row = rows[index - lead];
-                                                final drawn = !row.isBatch
-                                                    ? rowAt(row.from)
-                                                    : _ToolBatchTile(
-                                                        key: keyOf(row),
-                                                        messages: visible,
-                                                        row: row,
-                                                        rowAt: rowAt,
-                                                      );
-                                                if (index - lead != newRow) {
-                                                  return drawn;
-                                                }
-                                                return Column(
-                                                  key: keyOf(row),
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment
-                                                          .stretch,
-                                                  children: [
-                                                    const _NewSinceLine(),
-                                                    drawn,
-                                                  ],
-                                                );
-                                              },
-                                            ),
-                                          ),
                                         ),
                                       ),
                                     ),
@@ -576,7 +634,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                         // footer cost a line of the conversation and moved the
                         // composer every time it came and went (owner,
                         // 2026-10-01).
-                        if (_touch && _awayFromLatest && total > 0)
+                        if (_awayFromLatest && total > 0)
                           PositionedDirectional(
                             end: Insets.md,
                             bottom: Insets.md,
@@ -586,7 +644,10 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                               heroTag: null,
                               tooltip: 'Jump to latest',
                               onPressed: _toLatest,
-                              child: const Icon(AppIcons.arrowDown),
+                              child: const Icon(
+                                AppIcons.arrowDown,
+                                semanticLabel: 'Jump to latest',
+                              ),
                             ),
                           ),
                       ],
@@ -698,6 +759,47 @@ class _TappedTurn extends InheritedWidget {
   @override
   bool updateShouldNotify(_TappedTurn oldWidget) =>
       oldWidget.notifier != notifier;
+}
+
+/// A message as plain text: what "Show raw" shows and "Copy turn" copies.
+String rawMessageText(ChatMessage message) {
+  final tool = message.tool;
+  if (tool == null) return message.text;
+  return [
+    toolDisplayName(tool.name),
+    if (tool.subject case final subject? when subject.isNotEmpty) subject,
+    if (tool.output case final output? when output.isNotEmpty) output,
+  ].join('\n');
+}
+
+/// The turn holding [index] as text: from the person's message that opened it
+/// to the last row before their next one.
+String transcriptTurnText(List<ChatMessage> messages, int index) {
+  var start = index;
+  while (start > 0 && messages[start].role != 'user') {
+    start--;
+  }
+  var end = index + 1;
+  while (end < messages.length && messages[end].role != 'user') {
+    end++;
+  }
+  final parts = <String>[];
+  for (var i = start; i < end; i++) {
+    final message = messages[i];
+    switch (message.role) {
+      case 'user':
+        parts.add('You:\n${splitScratchPreamble(message.text).rest}');
+      case 'agent':
+        final (_, clean) = splitThinking(
+          message.text,
+          explicit: message.thinking,
+        );
+        if (clean.trim().isNotEmpty) parts.add(clean.trim());
+      default:
+        parts.add('› ${rawMessageText(message)}');
+    }
+  }
+  return parts.join('\n\n');
 }
 
 /// The plan each plan row replaced, by index into [messages]; a first plan

@@ -65,118 +65,125 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
         ? '${row.length} calls so far'
         : null;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SelectionContainer.disabled(
-            child: Semantics(
-              button: true,
-              expanded: _open,
-              label: [label, ?detail, ?earlier].join('. '),
-              child: InkWell(
-                onTap: () => setState(() => _open = !_open),
-                onHover: (hovered) => setState(() => _hovered = hovered),
-                hoverColor: tones.hover,
-                borderRadius: BorderRadius.circular(Radii.sm),
-                child: ConstrainedBox(
-                  // Board N2: one 26px line, however many calls it stands for;
-                  // a thumb's 48 at touch density, where the caret is the sign.
-                  constraints: BoxConstraints(minHeight: _lineHeight(context)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _open ? AppIcons.caretDown : AppIcons.caretRight,
-                          size: Chrome.iconSmall,
-                          color: muted?.color,
-                        ),
-                        const SizedBox(width: Insets.sm),
-                        if (glyph != null) ...[
-                          // A still glyph, not a spinner: the activity line
-                          // under the transcript already spins for the turn.
+    return MessageBoundary(
+      raw: run.map(rawMessageText).join('\n\n'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SelectionContainer.disabled(
+              child: Semantics(
+                button: true,
+                expanded: _open,
+                label: [label, ?detail, ?earlier].join('. '),
+                child: InkWell(
+                  onTap: () => setState(() => _open = !_open),
+                  onHover: (hovered) => setState(() => _hovered = hovered),
+                  hoverColor: tones.hover,
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  child: ConstrainedBox(
+                    // Board N2: one 26px line, however many calls it stands for;
+                    // a thumb's 48 at touch density, where the caret is the sign.
+                    constraints: BoxConstraints(
+                      minHeight: _lineHeight(context),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Insets.sm,
+                      ),
+                      child: Row(
+                        children: [
                           Icon(
-                            glyph,
+                            _open ? AppIcons.caretDown : AppIcons.caretRight,
                             size: Chrome.iconSmall,
-                            color: SemanticColors.of(context).working,
+                            color: muted?.color,
                           ),
-                          const SizedBox(width: Insets.xs),
-                        ],
-                        Flexible(
-                          flex: detail == null ? 1 : 0,
-                          child: Text.rich(
-                            labelSpan,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (detail != null) ...[
                           const SizedBox(width: Insets.sm),
-                          Expanded(
-                            child: Text(
-                              detail,
+                          if (glyph != null) ...[
+                            // A still glyph, not a spinner: the activity line
+                            // under the transcript already spins for the turn.
+                            Icon(
+                              glyph,
+                              size: Chrome.iconSmall,
+                              color: SemanticColors.of(context).working,
+                            ),
+                            const SizedBox(width: Insets.xs),
+                          ],
+                          Flexible(
+                            flex: detail == null ? 1 : 0,
+                            child: Text.rich(
+                              labelSpan,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: MonoStyles.body.copyWith(
-                                color: muted?.color,
+                            ),
+                          ),
+                          if (detail != null) ...[
+                            const SizedBox(width: Insets.sm),
+                            Expanded(
+                              child: Text(
+                                detail,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: MonoStyles.body.copyWith(
+                                  color: muted?.color,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                        if (earlier != null) ...[
-                          const SizedBox(width: Insets.sm),
-                          Flexible(
-                            child: Text(
-                              earlier,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: muted,
+                          ],
+                          if (earlier != null) ...[
+                            const SizedBox(width: Insets.sm),
+                            Flexible(
+                              child: Text(
+                                earlier,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: muted,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          if (_open)
-            // Board N2: the calls indented under the line, on a 1px rule.
-            Padding(
-              padding: const EdgeInsets.only(
-                left: Insets.lg + Insets.hair * 2,
-                top: Insets.hair * 2,
-              ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border(
-                    left: BorderSide(color: scheme.outlineVariant),
+            if (_open)
+              // Board N2: the calls indented under the line, on a 1px rule.
+              Padding(
+                padding: const EdgeInsets.only(
+                  left: Insets.lg + Insets.hair * 2,
+                  top: Insets.hair * 2,
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(color: scheme.outlineVariant),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: Insets.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = row.from; i < row.to; i++)
+                          _ToolCallLine(
+                            message: widget.messages[i],
+                            card: () => widget.rowAt(i),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: Insets.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = row.from; i < row.to; i++)
-                        _ToolCallLine(
-                          message: widget.messages[i],
-                          card: () => widget.rowAt(i),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            for (final i in row.pinned) widget.rowAt(i),
-          if (!row.live)
-            if (turnChangedFiles(widget.messages, row) case final files?)
-              TurnChangedFilesLine(files: files),
-        ],
+              )
+            else
+              for (final i in row.pinned) widget.rowAt(i),
+            if (!row.live)
+              if (turnChangedFiles(widget.messages, row) case final files?)
+                TurnChangedFilesLine(files: files),
+          ],
+        ),
       ),
     );
   }

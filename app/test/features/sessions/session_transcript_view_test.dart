@@ -289,7 +289,10 @@ void main() {
       // the beginning of a conversation is. The view opens pinned to the
       // bottom, and from there Tab never has to scroll forward at all.
       warmUp: (tester) async {
-        await tester.drag(find.byType(ListView), const Offset(0, 2000));
+        await tester.drag(
+          find.byKey(const ValueKey('chat-transcript-list')),
+          const Offset(0, 2000),
+        );
         await tester.pumpAndSettle();
       },
       because:

@@ -3,6 +3,8 @@
 library;
 
 export 'src/transcript/markdown_message.dart';
+export 'src/transcript/code_block.dart';
+export 'src/transcript/message_boundary.dart';
 export 'src/transcript/thinking_accordion.dart';
 export 'src/transcript/transcript_selection.dart';
 export 'src/chat/thinking_split.dart';

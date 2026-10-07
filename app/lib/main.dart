@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:agent_cli/stream.dart'
     show kToolImageFolderName, useToolImageDirectory;
+import 'package:karmashala_ui/transcript.dart' show installMessageBoundaries;
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path/path.dart' as p;
@@ -46,6 +47,8 @@ Future<void> main() async {
   AppLogger.initialize();
   final logger = AppLogger.named('bootstrap');
   UncaughtErrorHandlers(logger).install();
+  // A chat message that cannot be drawn shrinks to a line, not a blank pane.
+  installMessageBoundaries();
 
   try {
     await _bootstrap(logger);

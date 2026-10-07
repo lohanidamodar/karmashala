@@ -14,6 +14,7 @@ class _MessageRow extends StatefulWidget {
     required this.onPathTap,
     required this.onLinkTap,
     required this.detailBuilder,
+    this.turnText,
   });
 
   final ChatMessage message;
@@ -21,6 +22,9 @@ class _MessageRow extends StatefulWidget {
   /// The plan a plan row replaced, so it can say what changed.
   final AgentPlan? previousPlan;
   final int ordinal;
+
+  /// The whole turn around [ordinal] as text, asked for when it is copied.
+  final String Function(int ordinal)? turnText;
   final SaveNoteCallback? onSaveNote;
   final String? Function(String path)? resolveHostPath;
   final PathLinkCallback? onPathTap;
@@ -44,7 +48,8 @@ class _MessageRowState extends State<_MessageRow> {
         old.resolveHostPath != widget.resolveHostPath ||
         old.onPathTap != widget.onPathTap ||
         old.onLinkTap != widget.onLinkTap ||
-        old.detailBuilder != widget.detailBuilder) {
+        old.detailBuilder != widget.detailBuilder ||
+        old.turnText != widget.turnText) {
       _tile = null;
     }
   }
@@ -54,14 +59,21 @@ class _MessageRowState extends State<_MessageRow> {
     final message = widget.message;
     final ordinal = widget.ordinal;
     final save = widget.onSaveNote;
-    return _tile ??= _ChatMessageTile(
-      message: message,
-      previousPlan: widget.previousPlan,
-      resolveHostPath: widget.resolveHostPath,
-      onPathTap: widget.onPathTap,
-      onLinkTap: widget.onLinkTap,
-      detail: widget.detailBuilder?.call(message, ordinal),
-      onSaveNote: save == null ? null : () => save(message, ordinal),
+    final turn = widget.turnText;
+    // Its own boundary: one message that cannot be drawn must not take the
+    // conversation with it.
+    return _tile ??= MessageBoundary(
+      raw: rawMessageText(message),
+      child: _ChatMessageTile(
+        message: message,
+        previousPlan: widget.previousPlan,
+        resolveHostPath: widget.resolveHostPath,
+        onPathTap: widget.onPathTap,
+        onLinkTap: widget.onLinkTap,
+        detail: widget.detailBuilder?.call(message, ordinal),
+        onSaveNote: save == null ? null : () => save(message, ordinal),
+        onCopyTurn: turn == null ? null : () => turn(ordinal),
+      ),
     );
   }
 }
@@ -71,6 +83,7 @@ class _ChatMessageTile extends StatelessWidget {
     required this.message,
     this.previousPlan,
     this.onSaveNote,
+    this.onCopyTurn,
     this.resolveHostPath,
     this.onPathTap,
     this.onLinkTap,
@@ -79,6 +92,7 @@ class _ChatMessageTile extends StatelessWidget {
   final ChatMessage message;
   final AgentPlan? previousPlan;
   final VoidCallback? onSaveNote;
+  final String Function()? onCopyTurn;
   final String? Function(String path)? resolveHostPath;
   final PathLinkCallback? onPathTap;
   final ValueChanged<String>? onLinkTap;
@@ -133,6 +147,7 @@ class _ChatMessageTile extends StatelessWidget {
           'agent' => _AgentMessageBlock(
             message: message,
             onSaveNote: onSaveNote,
+            onCopyTurn: onCopyTurn,
             onPathTap: onPathTap,
             onLinkTap: onLinkTap,
             detail: detail,
@@ -232,6 +247,7 @@ class _UserMessageCard extends StatelessWidget {
                       onPathTap: onPathTap,
                       onLinkTap: onLinkTap,
                       selectable: false,
+                      foldLong: true,
                     ),
                 ],
               ),
@@ -322,6 +338,7 @@ class _AgentMessageBlock extends StatelessWidget {
     required this.onPathTap,
     required this.onLinkTap,
     required this.detail,
+    this.onCopyTurn,
   });
 
   final ChatMessage message;
@@ -329,6 +346,7 @@ class _AgentMessageBlock extends StatelessWidget {
   final PathLinkCallback? onPathTap;
   final ValueChanged<String>? onLinkTap;
   final Widget? detail;
+  final String Function()? onCopyTurn;
 
   @override
   Widget build(BuildContext context) {
@@ -340,7 +358,7 @@ class _AgentMessageBlock extends StatelessWidget {
     // the page, and the user's tinted bubbles are what mark the turns.
     return _TurnWithMeta(
       at: message.at,
-      actions: _messageActions(onSaveNote, cleanText),
+      actions: _messageActions(onSaveNote, cleanText, copyTurn: onCopyTurn),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -361,6 +379,7 @@ class _AgentMessageBlock extends StatelessWidget {
             onPathTap: onPathTap,
             onLinkTap: onLinkTap,
             selectable: false,
+            foldLong: true,
           ),
           ?detail,
         ],
