@@ -345,6 +345,7 @@ class _PeekHeader extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: muted,
                     ),
+                    OverviewUsageLine(sessionId: id),
                   ],
                 ),
               ),

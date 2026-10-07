@@ -176,6 +176,7 @@ class OverviewWorkCard extends ConsumerWidget {
         OverviewLatestMessage(sessionId: card.id),
         const SizedBox(height: Insets.xs),
         OverviewMetaLine(card: card),
+        OverviewUsageLine(sessionId: card.id),
         if (card.children != null) ...[
           const SizedBox(height: Insets.xs),
           OverviewSubSessions(card: card, onOpen: onOpen),

@@ -212,6 +212,7 @@ class OverviewStateChip extends StatelessWidget {
       child: Text(
         label ?? state.label,
         maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: theme.textTheme.labelSmall?.copyWith(
           color: ink,
           fontWeight: FontWeight.w600,

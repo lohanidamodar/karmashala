@@ -9,6 +9,7 @@ class OverviewOnScreen extends Notifier<int> {
   void add() => state++;
 
   void remove() {
+    if (!ref.mounted) return;
     if (state > 0) state--;
   }
 }
