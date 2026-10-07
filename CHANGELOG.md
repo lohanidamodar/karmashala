@@ -17,6 +17,14 @@ installs claim the same version name.
 
 ---
 
+## 1.33.2 — 2026-10-07 (build 65)
+
+- **An SSH host whose account uses zsh can be installed to.** Commands sent to
+  a host run under `sh -c`, so zsh's "no matches found" on an empty
+  `~/.karmashala/bin` no longer leaves the host "unknown" with no Install.
+- **No false "differ in version" warning.** Settings → Server compares
+  releases, so `Server 1.33.1 · app 1.33.1+64` is the same version.
+
 ## 1.33.1 — 2026-10-07 (build 64)
 
 - **Overview, redesigned as mission control.**
