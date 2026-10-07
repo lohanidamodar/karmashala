@@ -131,9 +131,16 @@ void main() {
       grokDescriptor.acp!.modeFor(PermissionRisk.readOnly, ['plan']),
       isNull,
     );
-    // Antigravity's modes have not been read: it offers none yet.
-    expect(antigravityAcpDescriptor.acp!.modeNames, isEmpty);
-    expect(antigravityAcpDescriptor.launch.permission.isKnown, isFalse);
+    // Antigravity's modes, read off 1.3.0: no read-only rung.
+    expect(
+      antigravityAcpDescriptor.acp!.modeFor(PermissionRisk.readOnly, [
+        'default',
+        'auto_edit',
+        'yolo',
+      ]),
+      isNull,
+    );
+    expect(antigravityAcpDescriptor.launch.permission.isKnown, isTrue);
   });
 
   test('Antigravity (ACP) is the registry\'s archive, found where it is '

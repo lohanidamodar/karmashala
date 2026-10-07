@@ -157,4 +157,53 @@ void main() {
       );
     },
   );
+  test('modes placed by name are found when their ids are URLs', () async {
+    const url = 'https://agentclientprotocol.com/protocol/session-modes';
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        modes: const SessionModeState(
+          currentModeId: '$url#agent',
+          availableModes: [
+            SessionMode(id: '$url#agent', name: 'Agent'),
+            SessionMode(id: '$url#plan', name: 'Plan'),
+            SessionMode(id: '$url#autopilot', name: 'Autopilot'),
+          ],
+        ),
+        turns: [
+          const FakeTurn([
+            FakeStep.toolCall(
+              toolCallId: 'c1',
+              title: 'Edit',
+              kind: ToolKind.edit,
+              permissionOptions: fakePermissionOptions,
+            ),
+          ]),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      spec: const AcpLaunchSpec(
+        modeNames: {
+          PermissionRisk.readOnly: ['Plan'],
+          PermissionRisk.ask: ['Agent'],
+          PermissionRisk.autoRun: ['Autopilot'],
+        },
+      ),
+      risk: PermissionRisk.readOnly,
+    );
+    await runtime.start();
+    expect(runtime.modes?.currentModeId, '$url#plan');
+    await runtime.setMode('$url#autopilot');
+    await runtime.send('Go');
+    await runtime.awaitTurn();
+    expect(runtime.hasOpenPermission, isFalse);
+    expect(process.agent.permissionOutcomes, [
+      const PermissionSelected('allow'),
+    ]);
+    await runtime.stop();
+  });
 }

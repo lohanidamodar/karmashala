@@ -17,11 +17,11 @@ void main() {
       .map((r) => r['name']! as String)
       .toList();
 
-  test('the head is 81 and the keys stay contiguous', () {
+  test('the head is 82 and the keys stay contiguous', () {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 81);
+    expect(db.schemaVersion, 82);
   });
 
   test('v66 adds leading_arguments, null for every row written before', () {
@@ -62,6 +62,8 @@ void main() {
       'created_at',
       // v68's column, after the ones v67 made.
       'icon_url',
+      // v82's.
+      'mode_rungs',
     ]);
     db.execute(
       'INSERT INTO acp_agents (id, name, command, source, created_at) '
@@ -103,5 +105,21 @@ void main() {
         .select('PRAGMA table_info(acp_agents);')
         .map((r) => r['name'] as String);
     expect(columns.where((c) => c == 'icon_url'), hasLength(1));
+  });
+
+  test('v82 adds mode_rungs, an empty object for every row before, once', () {
+    db.execute(
+      'INSERT INTO acp_agents (id, name, command, source, created_at) '
+      "VALUES ('r1', 'Mine', 'mine', 'custom', 't');",
+    );
+    expect(db.query('SELECT mode_rungs FROM acp_agents;').first, {
+      'mode_rungs': '{}',
+    });
+    final raw = sqlite3.openInMemory();
+    addTearDown(raw.close);
+    for (var v = 1; v <= 82; v++) {
+      schemaMigrations[v]!(raw);
+    }
+    expect(() => schemaMigrations[82]!(raw), returnsNormally);
   });
 }

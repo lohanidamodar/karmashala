@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show PermissionRisk;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -43,6 +44,7 @@ class AcpAgentsData {
     AcpAgentSource source = AcpAgentSource.custom,
     String? registryId,
     String? iconUrl,
+    Map<String, PermissionRisk>? modeRungs,
   }) => _client.write(
     AcpAgentPut(
       id: id,
@@ -53,6 +55,7 @@ class AcpAgentsData {
       source: source,
       registryId: registryId,
       iconUrl: iconUrl,
+      modeRungs: modeRungs,
     ),
     domain: DataDomain.agents,
   );

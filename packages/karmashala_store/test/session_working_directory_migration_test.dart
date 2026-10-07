@@ -24,7 +24,7 @@ void main() {
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 81);
+    expect(db.schemaVersion, 82);
   });
 
   test('v22 gives sessions a working directory bound to an environment', () {

@@ -45,6 +45,9 @@ class AcpAgentsHandler {
           ? null
           : request.iconUrl!.trim(),
       createdAt: existing?.createdAt ?? _now(),
+      modeRungs: Map.unmodifiable(
+        request.modeRungs ?? existing?.modeRungs ?? const {},
+      ),
     );
     _rows.upsert(row);
     changes.add(AcpAgentChanged(row));

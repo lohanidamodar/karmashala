@@ -127,6 +127,7 @@ class AcpAgentsSetup extends Notifier<AcpAgentsSetupState> {
     AcpAgentSource source = AcpAgentSource.custom,
     String? registryId,
     String? iconUrl,
+    Map<String, PermissionRisk>? modeRungs,
   }) async {
     final row = await ref
         .read(acpAgentsDataProvider)
@@ -139,6 +140,7 @@ class AcpAgentsSetup extends Notifier<AcpAgentsSetupState> {
           source: source,
           registryId: registryId,
           iconUrl: iconUrl,
+          modeRungs: modeRungs,
         );
     if (id == null) unawaited(_discover());
     return row;

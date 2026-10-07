@@ -112,6 +112,41 @@ void main() {
     expect(none.iconUrl, isNull);
   });
 
+  test('a put places modes; one that says nothing of them keeps them', () {
+    final placed = app
+        .handle(
+          const AcpAgentPut(
+            id: 'm',
+            agentName: 'Copilot',
+            command: 'copilot',
+            modeRungs: {'Plan': PermissionRisk.readOnly},
+          ),
+        )
+        .value;
+    expect(placed.modeRungs, {'Plan': PermissionRisk.readOnly});
+    final kept = app
+        .handle(
+          const AcpAgentPut(
+            id: 'm',
+            agentName: 'Copilot 2',
+            command: 'copilot',
+          ),
+        )
+        .value;
+    expect(kept.modeRungs, {'Plan': PermissionRisk.readOnly});
+    final cleared = app
+        .handle(
+          const AcpAgentPut(
+            id: 'm',
+            agentName: 'Copilot',
+            command: 'copilot',
+            modeRungs: {},
+          ),
+        )
+        .value;
+    expect(cleared.modeRungs, isEmpty);
+  });
+
   test('a put under an unknown id creates under that id', () {
     final row = app
         .handle(const AcpAgentPut(id: 'mine', agentName: 'n', command: 'c'))

@@ -193,7 +193,11 @@ class AcpSessionRuntime implements ScreenSession {
   /// Notes [modeId] as chosen for the session. Plan mode is not where it
   /// works: approving a plan returns to the mode it was in before.
   void _modeChosen(String modeId) {
-    final rung = spec.rungOfMode(modeId);
+    final name = _modes?.availableModes
+        .where((mode) => mode.id == modeId)
+        .firstOrNull
+        ?.name;
+    final rung = spec.rungOfOffered(modeId, name);
     _chosenRung = rung;
     if (rung != null && !rung.isAtMost(PermissionRisk.readOnly)) {
       _workingRung = rung;
@@ -1081,10 +1085,9 @@ class AcpSessionRuntime implements ScreenSession {
     _modes = modes;
     final rung = risk;
     if (modes != null && rung != null) {
-      final wanted = spec.modeFor(
-        rung,
-        modes.availableModes.map((mode) => mode.id),
-      );
+      final wanted = spec.modeForOffered(rung, [
+        for (final mode in modes.availableModes) (id: mode.id, name: mode.name),
+      ]);
       if (wanted == null) {
         notices.add(
           '$agentName offers no mode for "${rung.label}"; it stays in its '
