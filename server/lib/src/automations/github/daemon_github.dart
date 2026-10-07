@@ -12,6 +12,7 @@ import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../daemon_checkout_facts.dart';
+import '../step_runners.dart' show exactRunner;
 import 'gh_github_api.dart';
 
 /// Set to `off` and the server never polls GitHub for automations.
@@ -94,7 +95,7 @@ class DaemonGithub {
   CommandRunner? _runnerFor(EnvironmentPath path) {
     final place = facts.rows.environment(path.environmentId);
     if (place == null || !facts.runsChecksIn(path)) return null;
-    return facts.remoteRunnerFor(path) ?? _local.forEnvironment(place);
+    return facts.remoteRunnerFor(path) ?? exactRunner(place, _local);
   }
 
   GithubApi? _ghFor(Automation automation) {

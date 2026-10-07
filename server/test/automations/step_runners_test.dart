@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/store.dart';
@@ -14,6 +15,29 @@ import 'package:test/test.dart';
 /// only as its environment, and a webhook, which will not call into the
 /// owner's network unless they tick it.
 void main() {
+  test('in WSL a step\'s command and gh get their arguments byte for byte', () {
+    final wsl = ExecutionEnvironment(
+      id: 'wsl',
+      kind: EnvironmentKind.wsl,
+      name: 'Ubuntu',
+      createdAt: DateTime.utc(2026),
+      wslDistribution: 'Ubuntu',
+    );
+    final runner = exactRunner(wsl, const CommandRunnerFactory());
+    expect(runner, isA<WslCommandRunner>());
+    expect((runner as WslCommandRunner).exec, isTrue);
+    final args = buildWslInvocation(
+      'Ubuntu',
+      const CommandRequest(
+        executable: 'gh',
+        arguments: ['api', 'repos/o/r/pulls?state=open&per_page=10'],
+      ),
+      exec: runner.exec,
+    ).arguments;
+    expect(args, containsAllInOrder(['--exec', 'gh', 'api']));
+    expect(args.last, 'repos/o/r/pulls?state=open&per_page=10');
+  });
+
   group('private addresses', () {
     test('loopback, private, link-local and their IPv6 forms are private', () {
       for (final address in [

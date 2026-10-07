@@ -45,7 +45,7 @@ class ServerStepCommands implements StepCommandRunner {
       );
     }
     final runner =
-        facts.remoteRunnerFor(directory) ?? _local.forEnvironment(place);
+        facts.remoteRunnerFor(directory) ?? exactRunner(place, _local);
     final windows = place.kind == EnvironmentKind.windowsNative;
     final CommandResult result;
     try {
@@ -75,6 +75,24 @@ class ServerStepCommands implements StepCommandRunner {
       output: '${result.stdout}${result.stderr}',
     );
   }
+}
+
+/// A runner for [place] that hands each argument over byte for byte. In WSL
+/// that is `wsl.exe --exec`: the default re-parses the line in the user's
+/// shell, where a query's `&` or a header's quotes break it.
+CommandRunner exactRunner(
+  ExecutionEnvironment place,
+  CommandRunnerFactory runners,
+) {
+  final distribution = place.wslDistribution;
+  if (place.kind == EnvironmentKind.wsl && distribution != null) {
+    return WslCommandRunner(
+      environmentId: place.id,
+      distribution: distribution,
+      exec: true,
+    );
+  }
+  return runners.forEnvironment(place);
 }
 
 /// Whether [address] is private, loopback, link-local, multicast or
