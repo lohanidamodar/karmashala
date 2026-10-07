@@ -50,4 +50,17 @@ changes that are not yours. **Pushing is still only when asked.**
 its own `KARMASHALA_DATA_DIR` (PROJECT.md §23). An ordinary second instance
 takes over the real app's agent hooks.
 
+**Every new or changed UI uses the app's own design tokens and is responsive**
+— the owner's rule (2026-10-07).
+- **Tokens:** spacing from `Insets`, sizes from `Chrome` and `Touch`, colours
+  from `colorScheme`, type from `textTheme`. Use the shared components: the
+  shared tab header (`WorkbenchTabScaffold`), the compact pickers, filter and
+  search controls, `SettingsRow`, the dialogs and sheets. A value with no token
+  gets one in `design_tokens.dart`, never a literal in the widget.
+- **Responsive:** it works from a 360 px phone to a wide desktop, and at text
+  scale 1.6, with no overflow. Test it at those sizes.
+- **A prototype is a guide to layout and behaviour, never to styling.** Match
+  the screens around it: consistent, clean and compact. PROJECT.md §5–6 has the
+  detail.
+
 **Read [PROJECT.md](PROJECT.md) before changing anything** — it is the full guide for this repository.
