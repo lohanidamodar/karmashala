@@ -233,47 +233,75 @@ final overviewPullRequestProvider = Provider.autoDispose
       return client.forgeReadings[checkout]?.pullRequest;
     });
 
-/// Which card the keyboard is on, and which one the peek shows.
+/// The peek's views of a session.
+enum OverviewPeekTab { chat, terminal, files, subSessions }
+
+/// Which card the keyboard is on, and which one the peek shows, on which tab.
 @immutable
 class OverviewFocus {
-  const OverviewFocus({this.selected, this.peeked, this.editing = false});
+  const OverviewFocus({
+    this.selected,
+    this.peeked,
+    this.editing = false,
+    this.tab = OverviewPeekTab.chat,
+  });
 
   final String? selected;
   final String? peeked;
 
   /// The peek opened with its command approval's command editable.
   final bool editing;
+  final OverviewPeekTab tab;
 
   @override
   bool operator ==(Object other) =>
       other is OverviewFocus &&
       other.selected == selected &&
       other.peeked == peeked &&
-      other.editing == editing;
+      other.editing == editing &&
+      other.tab == tab;
 
   @override
-  int get hashCode => Object.hash(selected, peeked, editing);
+  int get hashCode => Object.hash(selected, peeked, editing, tab);
 }
 
 class OverviewFocusController extends Notifier<OverviewFocus> {
   @override
   OverviewFocus build() => const OverviewFocus();
 
-  void select(String? id) =>
-      state = OverviewFocus(
-        selected: id,
-        peeked: state.peeked,
-        editing: state.editing,
-      );
+  void select(String? id) => state = OverviewFocus(
+    selected: id,
+    peeked: state.peeked,
+    editing: state.editing,
+    tab: state.tab,
+  );
 
-  /// Peeks [id], which is also where the keyboard now is; with [editing],
-  /// its command approval's command is open to change.
-  void peek(String id, {bool editing = false}) =>
-      state = OverviewFocus(selected: id, peeked: id, editing: editing);
+  /// Peeks [id] on [tab], which is also where the keyboard now is; with
+  /// [editing], its command approval's command is open to change.
+  void peek(
+    String id, {
+    bool editing = false,
+    OverviewPeekTab tab = OverviewPeekTab.chat,
+  }) => state = OverviewFocus(
+    selected: id,
+    peeked: id,
+    editing: editing,
+    tab: tab,
+  );
+
+  void showTab(OverviewPeekTab tab) => state = OverviewFocus(
+    selected: state.selected,
+    peeked: state.peeked,
+    editing: state.editing,
+    tab: tab,
+  );
 
   /// The command is no longer being edited.
-  void stopEditing() =>
-      state = OverviewFocus(selected: state.selected, peeked: state.peeked);
+  void stopEditing() => state = OverviewFocus(
+    selected: state.selected,
+    peeked: state.peeked,
+    tab: state.tab,
+  );
 
   void closePeek() => state = OverviewFocus(selected: state.selected);
 }

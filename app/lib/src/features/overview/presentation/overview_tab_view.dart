@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../explorer/application/explorer_actions.dart';
@@ -67,8 +71,26 @@ bool overviewTyping() =>
 /// The least width mission control keeps beside a docked peek.
 const double kOverviewBoardMinWidth = 720;
 
-/// The docked peek's width.
-const double _peekWidth = 340;
+/// From this width the peek docks beside the board, resizable; below it, it
+/// floats over the board so the cards keep their columns.
+const double kOverviewPeekDocksFrom = 1280;
+
+/// The peek's width when it opens, and the bounds a drag keeps it in.
+const double kOverviewPeekWidth = 520;
+const double _peekMinWidth = 360;
+const double _peekMaxWidth = 820;
+
+/// How the peek sits beside the board at a width.
+enum OverviewPeekMode { docked, overlay, sheet }
+
+/// The peek's place at [width]: a full-screen sheet on a phone, over the
+/// board below [kOverviewPeekDocksFrom], docked from it.
+OverviewPeekMode overviewPeekModeAt(double width) =>
+    width < WidthClass.mediumMin
+    ? OverviewPeekMode.sheet
+    : width < kOverviewPeekDocksFrom
+    ? OverviewPeekMode.overlay
+    : OverviewPeekMode.docked;
 
 /// The Timeline, opening a bar's session as the Board does. Its log outlives
 /// the sessions it draws, so a bar can name one that has since been deleted:
@@ -127,12 +149,29 @@ class _BoardBody extends ConsumerStatefulWidget {
 class _BoardBodyState extends ConsumerState<_BoardBody> {
   final _focus = FocusNode(debugLabel: 'overview-board');
   final _questions = <String, QuestionPromptController>{};
-  var _docks = true;
+  var _mode = OverviewPeekMode.docked;
+  var _peekWidth = kOverviewPeekWidth;
+
+  bool get _inSheet => _mode == OverviewPeekMode.sheet;
 
   @override
   void dispose() {
     _focus.dispose();
     super.dispose();
+  }
+
+  /// The ids ↑ and ↓ walk, as drawn.
+  List<String> _order() {
+    final sections = _sections();
+    return [for (final card in [...sections.queue, ...sections.work]) card.id];
+  }
+
+  /// The session [step] places from [id] in [_order], or null past an end.
+  String? _stepFrom(String id, int step) {
+    final order = _order();
+    final at = order.indexOf(id);
+    final next = at + step;
+    return at < 0 || next < 0 || next >= order.length ? null : order[next];
   }
 
   QuestionPromptController _questionOf(String id) =>
@@ -144,37 +183,42 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
   );
 
-  void _open(OverviewCard card, {bool editing = false}) {
-    _focus.requestFocus();
+  void _open(
+    OverviewCard card, {
+    bool editing = false,
+    OverviewPeekTab tab = OverviewPeekTab.chat,
+  }) {
     final focus = ref.read(overviewFocusProvider.notifier);
-    if (_docks) {
-      focus.peek(card.id, editing: editing);
+    final wasOpen = ref.read(overviewFocusProvider).peeked != null;
+    focus.peek(card.id, editing: editing, tab: tab);
+    if (!_inSheet) {
+      _focus.requestFocus();
       return;
     }
-    editing ? focus.peek(card.id, editing: true) : focus.select(card.id);
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheet) => FractionallySizedBox(
-        heightFactor: 0.85,
-        child: Consumer(
+    // One sheet at a time: a sub-session opened from the sheet replaces it.
+    if (wasOpen) return;
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (sheet) => Consumer(
           builder: (context, ref, _) {
-            final live = overviewCardOf(
-              ref.watch(overviewBoardProvider),
-              card.id,
-            );
+            final board = ref.watch(overviewBoardProvider);
+            final id = ref.watch(overviewFocusProvider.select((f) => f.peeked));
+            final live = overviewCardOf(board, id) ?? card;
             return OverviewPeek(
-              card: live ?? card,
+              key: ValueKey('overview-peek:${live.id}'),
+              card: live,
               onClose: () => Navigator.of(sheet).pop(),
-              onPeek: (child) {
-                Navigator.of(sheet).pop();
-                _open(child);
-              },
+              onPeek: _open,
             );
           },
         ),
-      ),
+      ).whenComplete(() {
+        if (mounted) ref.read(overviewFocusProvider.notifier).closePeek();
+      }),
     );
   }
 
@@ -182,7 +226,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   void _goTo(String id) {
     final focus = ref.read(overviewFocusProvider);
     final card = overviewCardOf(ref.read(overviewBoardProvider), id);
-    if (card != null && focus.peeked != null && _docks) {
+    if (card != null && focus.peeked != null) {
       _open(card);
     } else {
       ref.read(overviewFocusProvider.notifier).select(id);
@@ -229,7 +273,15 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     return null;
   }
 
-  void _terminal(OverviewCard card) => openSessionTerminal(ref, card.id);
+  /// The session's terminal: the peek's Terminal tab where this machine
+  /// hosts it, else the workbench's.
+  void _terminal(OverviewCard card) {
+    if (ref.read(overviewSessionPaneProvider(card.id)) != null) {
+      _open(card, tab: OverviewPeekTab.terminal);
+    } else {
+      openSessionTerminal(ref, card.id);
+    }
+  }
 
   Map<Type, Action<Intent>> get _actions => {
     OverviewNextWaitingIntent: _Triage<OverviewNextWaitingIntent>((_) {
@@ -329,13 +381,14 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      _docks = constraints.maxWidth >= kOverviewBoardMinWidth + _peekWidth;
-      final peeked = _docks
-          ? overviewCardOf(
+      final width = constraints.maxWidth;
+      _mode = overviewPeekModeAt(width);
+      final peeked = _inSheet
+          ? null
+          : overviewCardOf(
               ref.watch(overviewBoardProvider),
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
-            )
-          : null;
+            );
       final main = OverviewHybrid(
         onOpen: _open,
         onEdit: (card) => _open(card, editing: true),
@@ -343,37 +396,89 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         onAnswered: _advance,
         questionControllerOf: _questionOf,
       );
+      Widget? peek;
+      if (peeked != null) {
+        final previous = _stepFrom(peeked.id, -1);
+        final next = _stepFrom(peeked.id, 1);
+        peek = OverviewPeek(
+          key: ValueKey('overview-peek:${peeked.id}'),
+          card: peeked,
+          onPeek: _open,
+          onPrevious: previous == null ? null : () => _goTo(previous),
+          onNext: next == null ? null : () => _goTo(next),
+          onClose: ref.read(overviewFocusProvider.notifier).closePeek,
+        );
+      }
+      final double peekWidth = _mode == OverviewPeekMode.docked
+          ? _peekWidth.clamp(
+              _peekMinWidth,
+              math.max(_peekMinWidth, math.min(_peekMaxWidth, width - kOverviewBoardMinWidth)),
+            )
+          : math.min(kOverviewPeekWidth, width);
+      final Widget laidOut = switch ((peek, _mode)) {
+        (null, _) => main,
+        (final peek?, OverviewPeekMode.docked) => Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: main),
+            _PeekResizer(
+              onDrag: (dx) => setState(
+                () => _peekWidth = (peekWidth - dx).clamp(
+                  _peekMinWidth,
+                  _peekMaxWidth,
+                ),
+              ),
+            ),
+            SizedBox(width: peekWidth, child: peek),
+          ],
+        ),
+        (final peek?, _) => Stack(
+          children: [
+            Positioned.fill(child: main),
+            Positioned(
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: peekWidth,
+              child: Material(
+                key: const ValueKey('overview-peek-overlay'),
+                elevation: Elevations.popup,
+                shadowColor: Theme.of(context).colorScheme.shadow,
+                child: peek,
+              ),
+            ),
+          ],
+        ),
+      };
       return Shortcuts(
         shortcuts: overviewTriageShortcuts,
         child: Actions(
           actions: _actions,
-          child: Focus(
-            focusNode: _focus,
-            autofocus: true,
-            child: peeked == null
-                ? main
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: main),
-                      const VerticalDivider(width: 1),
-                      SizedBox(
-                        width: _peekWidth,
-                        child: OverviewPeek(
-                          key: ValueKey('overview-peek:${peeked.id}'),
-                          card: peeked,
-                          onPeek: _open,
-                          onClose: ref
-                              .read(overviewFocusProvider.notifier)
-                              .closePeek,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
+          child: Focus(focusNode: _focus, autofocus: true, child: laidOut),
         ),
       );
     },
+  );
+}
+
+/// The docked peek's edge, dragged to resize it.
+class _PeekResizer extends StatelessWidget {
+  const _PeekResizer({required this.onDrag});
+
+  final ValueChanged<double> onDrag;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.resizeColumn,
+    child: GestureDetector(
+      key: const ValueKey('overview-peek-resizer'),
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
+      child: const SizedBox(
+        width: Insets.xs + Insets.hair,
+        child: VerticalDivider(width: Insets.xs + Insets.hair),
+      ),
+    ),
   );
 }
 

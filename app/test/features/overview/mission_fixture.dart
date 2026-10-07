@@ -18,6 +18,8 @@ import 'package:karmashala/src/features/overview/application/overview_prefs.dart
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_peek.dart';
+import 'package:karmashala_git/git.dart' show FileDiffStat;
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ActivityEntry, ActivityKind;
@@ -58,6 +60,8 @@ class MissionFixture {
     this.glances = const {},
     this.files = const {},
     this.stats = const {},
+    this.panes = const {},
+    this.fileStats = const {},
     this.activity = const [],
     this.contexts = const [],
     this.contextOfProject = const {},
@@ -72,6 +76,12 @@ class MissionFixture {
 
   /// Each session's diff against its base, as git would count it.
   final Map<String, SessionDiffStat> stats;
+
+  /// The terminal pane each terminal-hosted session has on this machine.
+  final Map<String, String> panes;
+
+  /// Lines added and removed per file, by checkout path.
+  final Map<String, Map<String, FileDiffStat>> fileStats;
 
   /// The server's activity log, which the strips and the heartbeat draw.
   final List<ActivityEntry> activity;
@@ -545,6 +555,14 @@ class MissionFixture {
   /// [MissionFixture] with every reading above filled in.
   static MissionFixture full() => MissionFixture(
     stats: realisticStats(),
+    fileStats: const {
+      '/src/ks-r32': {
+        'app/lib/src/features/overview/presentation/overview_hybrid.dart':
+            FileDiffStat(added: 212, removed: 40),
+        'app/lib/src/features/overview/presentation/overview_cards.dart':
+            FileDiffStat(added: 168, removed: 0),
+      },
+    },
     answers: realisticAnswers(),
     glances: realisticGlances(),
     files: realisticFiles(),
@@ -617,6 +635,16 @@ class MissionFixture {
         final report? => Stream.value(report),
         null => const Stream<AgentStatusReport>.empty(),
       },
+    ),
+    overviewPeekChatProvider.overrideWithValue(
+      (entry, seenUntil) => Text(
+        'chat:${entry.id} seen:${seenUntil?.toIso8601String()}',
+        key: ValueKey('overview-peek-chat:${entry.id}'),
+      ),
+    ),
+    overviewSessionPaneProvider.overrideWith((ref, id) => panes[id]),
+    overviewFileStatsProvider.overrideWith(
+      (ref, checkout) async => fileStats[checkout.path] ?? const {},
     ),
     sessionDiffStatProvider.overrideWith(
       (ref, id) async => stats[id] ?? SessionDiffStat.unknown,

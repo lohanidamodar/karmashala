@@ -128,6 +128,7 @@ class OverviewCardHeader extends ConsumerWidget {
               ],
             ),
           ),
+          OverviewNewBadge(card: card),
           const SizedBox(width: Insets.sm),
           chip ?? OverviewStatePill(card: card),
         ],

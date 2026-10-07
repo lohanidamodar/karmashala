@@ -12,7 +12,11 @@ import 'package:karmashala_session/delivery.dart'
     show SessionChangedFilesOutcome;
 import 'package:riverpod/riverpod.dart';
 
+import 'package:agent_cli/process.dart' show EnvironmentPath;
+import 'package:karmashala_git/git.dart' show FileDiffStat;
+
 import '../../../core/capabilities/capabilities.dart';
+import '../../git/data/git_data.dart';
 import '../../agents/data/agents_data.dart';
 import '../../sessions/application/session_changed_files_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
@@ -83,21 +87,32 @@ class OverviewOpenCall {
 /// stands on and its open calls, oldest first.
 @immutable
 class OverviewGlance {
-  const OverviewGlance({this.plan, this.open = const []});
+  const OverviewGlance({
+    this.plan,
+    this.open = const [],
+    this.messageTimes = const [],
+  });
 
   static const empty = OverviewGlance();
 
   final AgentPlan? plan;
   final List<OverviewOpenCall> open;
 
+  /// When each message the read held was written, the person's and the
+  /// agent's: what "new since you last looked" counts.
+  final List<DateTime> messageTimes;
+
   @override
   bool operator ==(Object other) =>
       other is OverviewGlance &&
       other.plan == plan &&
-      _sameCalls(other.open, open);
+      _sameCalls(other.open, open) &&
+      other.messageTimes.length == messageTimes.length &&
+      (messageTimes.isEmpty || other.messageTimes.last == messageTimes.last);
 
   @override
-  int get hashCode => Object.hash(plan, Object.hashAll(open));
+  int get hashCode =>
+      Object.hash(plan, Object.hashAll(open), messageTimes.length);
 
   static bool _sameCalls(List<OverviewOpenCall> a, List<OverviewOpenCall> b) {
     if (a.length != b.length) return false;
@@ -131,6 +146,12 @@ OverviewGlance overviewGlanceOf(TranscriptPage page) {
   ];
   return OverviewGlance(
     plan: plan,
+    messageTimes: [
+      for (final row in page.messages)
+        if ((row.role == 'agent' || row.role == 'user') &&
+            row.text.trim().isNotEmpty)
+          ?row.at,
+    ],
     open: [
       for (final row in rows)
         if (row.tool case final tool?)
@@ -321,4 +342,15 @@ final overviewChangedFilesProvider = FutureProvider.autoDispose
     .family<List<String>?, String>((ref, sessionId) {
       _turnOf(ref, sessionId);
       return ref.read(overviewReaderProvider).changedFiles(sessionId);
+    });
+
+/// Lines added and removed per file in [EnvironmentPath] checkout, for the
+/// peek's Files; empty when git cannot say.
+final overviewFileStatsProvider = FutureProvider.autoDispose
+    .family<Map<String, FileDiffStat>, EnvironmentPath>((ref, checkout) async {
+      try {
+        return await ref.read(gitDataProvider).fileDiffStats(checkout);
+      } on Object {
+        return const {};
+      }
     });

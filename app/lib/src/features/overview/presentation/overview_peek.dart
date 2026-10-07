@@ -1,185 +1,362 @@
-import 'package:agent_cli/descriptors.dart' show AgentPlanItemState;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_git/git.dart' show FileDiffStat;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ui/transcript.dart';
 
 import '../../../app/shell/phone_shell.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../cli_detection/presentation/imported_session_view.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../explorer/application/workspace_session_entry.dart';
+import '../../git/presentation/diff_view.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/end_session_action.dart';
+import '../../sessions/presentation/session_transcript_view.dart';
+import '../../settings/application/settings_controller.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/application/terminal_theme_controller.dart';
+import '../../terminal/presentation/pane_frame.dart';
+import '../../terminal/presentation/terminal_actions.dart';
+import '../../terminal/presentation/terminal_theme_colors.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
-import 'overview_quick_composer.dart';
+import '../application/overview_seen.dart';
+import '../application/overview_tiles.dart';
+import 'overview_card_parts.dart';
 import 'overview_session_parts.dart';
 
-/// **The peek**: one session at a glance — what it is doing in words, its
-/// open ask through the ask path every surface uses, its plan, its last
-/// answer, the files it changed and its sub-sessions — a quick message, and
-/// Open, Stop and Archive.
-class OverviewPeek extends ConsumerWidget {
+/// The session's own conversation, as its tab draws it: streaming, with its
+/// asks and its composer. A test puts a stand-in here.
+final overviewPeekChatProvider =
+    Provider<Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)>(
+      (ref) =>
+          (entry, seenUntil) => entry.native != null
+          ? SessionTranscriptView(
+              key: ValueKey('overview-peek-chat:${entry.id}'),
+              sessionId: entry.id,
+              seenUntil: seenUntil,
+            )
+          : ImportedSessionView(
+              key: ValueKey('overview-peek-chat:${entry.id}'),
+              sessionId: entry.id,
+            ),
+    );
+
+/// The pane that hosts [String] session's terminal on this machine, or null.
+final overviewSessionPaneProvider = Provider.autoDispose
+    .family<String?, String>(
+      (ref, sessionId) => ref.watch(paneSessionsProvider).paneOf(sessionId),
+    );
+
+/// **The peek**: the session's real, live chat — its asks and composer as
+/// its own tab has them — with its terminal, its files and its sub-sessions
+/// beside it, under a header with Stop, Archive and Open tab.
+class OverviewPeek extends ConsumerStatefulWidget {
   const OverviewPeek({
     required this.card,
     required this.onClose,
     this.onPeek,
+    this.onPrevious,
+    this.onNext,
     super.key,
   });
 
   final OverviewCard card;
   final VoidCallback onClose;
 
-  /// A sub-session was tapped: peek it instead.
+  /// Another session — a sub-session or the parent — was opened from here.
   final ValueChanged<OverviewCard>? onPeek;
+
+  /// ↑ and ↓: the session before and after this one; null at an end.
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  ConsumerState<OverviewPeek> createState() => _OverviewPeekState();
+}
+
+class _OverviewPeekState extends ConsumerState<OverviewPeek> {
+  /// When the owner last looked, before this look: fixed while it is open.
+  DateTime? _seenUntil;
+  late final OverviewSeenController _seen;
+
+  @override
+  void initState() {
+    super.initState();
+    _seen = ref.read(overviewSeenProvider.notifier);
+    final id = widget.card.id;
+    _seenUntil = ref.read(overviewSeenProvider)[id];
+    // Marked after the frame: a provider is not changed while one builds.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _seen.markSeen(id, ref.read(clockProvider).nowUtc());
+    });
+  }
+
+  @override
+  void dispose() {
+    // Everything that came while it was open has been seen too; marked once
+    // the tree is done, which a provider may not be changed under.
+    final seen = _seen;
+    final id = widget.card.id;
+    final at = DateTime.now().toUtc();
+    Future.microtask(() => seen.markSeen(id, at));
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final card = widget.card;
+    final entry = card.entry;
+    final id = entry.id;
+    final focus = ref.read(overviewFocusProvider.notifier);
+    final pane = ref.watch(overviewSessionPaneProvider(id));
+    final children = byUrgency(
+      ref.watch(overviewBoardProvider.select((b) => b.children[id])) ??
+          const <OverviewCard>[],
+    );
+    final files = ref.watch(overviewChangedFilesProvider(id)).asData?.value;
+    final editing = ref.watch(
+      overviewFocusProvider.select((f) => f.editing && f.peeked == id),
+    );
+    final asked = ref.watch(overviewFocusProvider.select((f) => f.tab));
+    final tabs = [
+      OverviewPeekTab.chat,
+      if (pane != null) OverviewPeekTab.terminal,
+      OverviewPeekTab.files,
+      if (children.isNotEmpty) OverviewPeekTab.subSessions,
+    ];
+    final tab = tabs.contains(asked) ? asked : OverviewPeekTab.chat;
+    String label(OverviewPeekTab t) => switch (t) {
+      OverviewPeekTab.chat => 'Chat',
+      OverviewPeekTab.terminal => 'Terminal',
+      OverviewPeekTab.files =>
+        files == null || files.isEmpty ? 'Files' : 'Files · ${files.length}',
+      OverviewPeekTab.subSessions => 'Sub-sessions · ${children.length}',
+    };
+
+    final Widget body = switch (tab) {
+      OverviewPeekTab.chat => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (editing && card.column == BoardColumn.needsYou)
+            Padding(
+              padding: const EdgeInsets.all(Insets.md),
+              child: BoardEditCommand(
+                sessionId: id,
+                onDone: focus.stopEditing,
+              ),
+            ),
+          Expanded(
+            child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
+          ),
+        ],
+      ),
+      OverviewPeekTab.terminal => _PeekTerminal(paneId: pane!),
+      OverviewPeekTab.files => _PeekFiles(card: card, files: files),
+      OverviewPeekTab.subSessions => ListView(
+        key: const ValueKey('overview-peek-subs'),
+        padding: const EdgeInsets.all(Insets.md),
+        children: [
+          Text(
+            subSessionSummary(children),
+            style: UiDensity.of(context).muted(Theme.of(context)),
+          ),
+          const SizedBox(height: Insets.xs),
+          for (final child in children)
+            _PeekSubSession(card: child, onTap: widget.onPeek),
+        ],
+      ),
+    };
+
+    return Semantics(
+      container: true,
+      label: 'Peek: ${entry.title}',
+      child: Material(
+        key: const ValueKey('overview-peek'),
+        color: Theme.of(context).colorScheme.surface,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PeekHeader(
+              card: card,
+              onClose: widget.onClose,
+              onPeek: widget.onPeek,
+              onPrevious: widget.onPrevious,
+              onNext: widget.onNext,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.md,
+                0,
+                Insets.md,
+                Insets.sm,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: CompactSegmented<OverviewPeekTab>(
+                    key: const ValueKey('overview-peek-tabs'),
+                    segments: [
+                      for (final t in tabs)
+                        ButtonSegment(
+                          value: t,
+                          label: Text(
+                            label(t),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            key: ValueKey('overview-peek-tab:${t.name}'),
+                          ),
+                        ),
+                    ],
+                    selected: tab,
+                    onChanged: focus.showTab,
+                  ),
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(child: body),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Title, where it runs, ↑ ↓ ✕, the state, Stop / Archive / Open tab, and
+/// the plan.
+class _PeekHeader extends ConsumerWidget {
+  const _PeekHeader({
+    required this.card,
+    required this.onClose,
+    this.onPeek,
+    this.onPrevious,
+    this.onNext,
+  });
+
+  final OverviewCard card;
+  final VoidCallback onClose;
+  final ValueChanged<OverviewCard>? onPeek;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entry = card.entry;
     final id = entry.id;
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final muted = UiDensity.of(context).muted(theme);
     final agent = watchOverviewAgentName(ref, card);
     final place = watchOverviewPlace(ref, card);
+    final directory = entry.directory;
+    final branch = directory == null
+        ? null
+        : ref.watch(overviewKnownBranchProvider(directory));
     final native = entry.native;
     final live = native != null && sessionHasLiveProcess(ref, id);
     final archivable =
         native != null && !native.isArchived && !sessionIsLive(ref, native);
     final ended = card.state == AgentState.ended;
-    final editing = ref.watch(
-      overviewFocusProvider.select((f) => f.editing && f.peeked == id),
-    );
     final plan = ref.watch(overviewGlanceProvider(id)).asData?.value?.plan;
-    final children =
-        ref.watch(overviewBoardProvider.select((b) => b.children[id])) ??
-        const <OverviewCard>[];
-
-    Widget section(String title, Widget body) => Padding(
-      padding: const EdgeInsets.only(top: Insets.lg),
+    final parentId = native?.parentSessionId;
+    final parent = parentId == null
+        ? null
+        : overviewCardOf(ref.watch(overviewBoardProvider), parentId);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.xs, Insets.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          EyebrowLabel(title, padding: const EdgeInsets.only(bottom: Insets.xs)),
-          body,
-        ],
-      ),
-    );
-
-    return Semantics(
-      container: true,
-      label: 'Peek: ${entry.title}',
-      child: SingleChildScrollView(
-        key: const ValueKey('overview-peek'),
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: Insets.xs),
-                  child: OverviewAgentRing(card: card, size: Insets.xxl),
-                ),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        [?agent, if (place.isNotEmpty) place].join(' · '),
-                        key: const ValueKey('overview-peek-place'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: muted,
-                      ),
-                      if (card.breadcrumb case final parent?)
-                        Text('↳ from $parent', style: muted),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Close peek',
-                  icon: const Icon(AppIcons.x),
-                  onPressed: onClose,
-                ),
-              ],
-            ),
-            const SizedBox(height: Insets.sm),
+          if (parent != null)
             Align(
               alignment: Alignment.centerLeft,
-              child: OverviewStatePill(card: card),
+              child: TextButton(
+                key: const ValueKey('overview-peek-parent'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+                ),
+                onPressed: onPeek == null ? null : () => onPeek!(parent),
+                child: Text(
+                  '↑ Sub-session of ${parent.entry.title}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
-            section('Doing now', OverviewActivityLine(card: card, maxLines: 3)),
-            if (card.column == BoardColumn.needsYou)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Padding(
-                padding: const EdgeInsets.only(top: Insets.sm),
-                child: editing
-                    ? BoardEditCommand(
-                        sessionId: id,
-                        onDone: ref
-                            .read(overviewFocusProvider.notifier)
-                            .stopEditing,
-                      )
-                    : ApprovalRequestCard(sessionId: id),
+                padding: const EdgeInsets.only(top: Insets.xxs),
+                child: OverviewAgentRing(card: card),
               ),
-            if (plan != null)
-              section(
-                'Plan',
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    OverviewPlanLine(plan: plan),
-                    const SizedBox(height: Insets.xs),
-                    for (final item in plan.items.take(8))
-                      _PlanItem(text: item.text, state: item.state),
-                    if (plan.items.length > 8)
-                      Text('+${plan.items.length - 8} more', style: muted),
+                    Text(
+                      entry.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      [
+                        ?agent,
+                        if (place.isNotEmpty) place,
+                        ?branch,
+                      ].join(' · '),
+                      key: const ValueKey('overview-peek-place'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
+                    OverviewPeekModel(sessionId: id),
                   ],
                 ),
               ),
-            section('Last answer', _LastAnswer(sessionId: id)),
-            _Files(sessionId: id),
-            if (children.isNotEmpty)
-              section(
-                'Sub-sessions · ${children.length}',
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final child in children)
-                      _SubSession(card: child, onTap: onPeek),
-                  ],
-                ),
+              IconButton(
+                key: const ValueKey('overview-peek-previous'),
+                tooltip: 'Previous session (↑)',
+                visualDensity: VisualDensity.compact,
+                onPressed: onPrevious,
+                icon: const Icon(AppIcons.caretUp),
               ),
-            section('Message', OverviewQuickComposer(card: card)),
-            const SizedBox(height: Insets.md),
-            Divider(color: scheme.outlineVariant, height: 1),
-            const SizedBox(height: Insets.sm),
-            Wrap(
-              spacing: Insets.sm,
+              IconButton(
+                key: const ValueKey('overview-peek-next'),
+                tooltip: 'Next session (↓)',
+                visualDensity: VisualDensity.compact,
+                onPressed: onNext,
+                icon: const Icon(AppIcons.caretDown),
+              ),
+              IconButton(
+                key: const ValueKey('overview-peek-close'),
+                tooltip: 'Close peek (Esc)',
+                visualDensity: VisualDensity.compact,
+                onPressed: onClose,
+                icon: const Icon(AppIcons.x),
+              ),
+            ],
+          ),
+          const SizedBox(height: Insets.xs),
+          Padding(
+            padding: const EdgeInsets.only(right: Insets.sm),
+            child: Wrap(
+              spacing: Insets.xs,
               runSpacing: Insets.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                OutlinedButton.icon(
-                  key: const ValueKey('overview-peek-open'),
-                  onPressed: () => openOverviewSession(context, ref, entry),
-                  icon: const Icon(AppIcons.arrowSquareOut),
-                  label: Text(ended && native != null ? 'Resume' : 'Open'),
-                ),
+                OverviewStatePill(card: card),
                 if (live)
                   TextButton.icon(
                     key: const ValueKey('overview-peek-stop'),
@@ -196,185 +373,216 @@ class OverviewPeek extends ConsumerWidget {
                     icon: const Icon(AppIcons.tray),
                     label: const Text('Archive'),
                   ),
+                OutlinedButton.icon(
+                  key: const ValueKey('overview-peek-open'),
+                  onPressed: () => openOverviewSession(context, ref, entry),
+                  icon: const Icon(AppIcons.arrowSquareOut),
+                  label: Text(ended && native != null ? 'Resume' : 'Open tab'),
+                ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlanItem extends StatelessWidget {
-  const _PlanItem({required this.text, required this.state});
-
-  final String text;
-  final AgentPlanItemState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final semantic = SemanticColors.of(context);
-    final done = state == AgentPlanItemState.completed;
-    final (icon, color, label) = switch (state) {
-      AgentPlanItemState.completed => (AppIcons.checkCircle, semantic.idle, 'done'),
-      AgentPlanItemState.inProgress => (
-        AppIcons.circleHalf,
-        semantic.working,
-        'now',
-      ),
-      _ => (AppIcons.circle, scheme.onSurfaceVariant, 'to do'),
-    };
-    return Semantics(
-      label: '$label: $text',
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.only(top: Insets.xxs),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.xxs),
-              child: Icon(icon, size: UiDensity.of(context).iconSmall, color: color),
-            ),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Text(
-                text,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: done ? scheme.onSurfaceVariant : null,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The last answer as markdown, a few lines with "More", or why there is none.
-class _LastAnswer extends ConsumerStatefulWidget {
-  const _LastAnswer({required this.sessionId});
-
-  final String sessionId;
-
-  @override
-  ConsumerState<_LastAnswer> createState() => _LastAnswerState();
-}
-
-class _LastAnswerState extends ConsumerState<_LastAnswer> {
-  var _more = false;
-
-  /// How many lines of the answer show before "More".
-  static const _shutLines = 6;
-
-  /// [_shutLines] of the body text the markdown is set in, at this scale.
-  double _shutHeight(BuildContext context) {
-    final body = Theme.of(context).textTheme.bodyMedium;
-    final line = (body?.fontSize ?? Insets.lg) * (body?.height ?? 1.45);
-    return MediaQuery.textScalerOf(context).scale(line) * _shutLines;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = UiDensity.of(context).muted(Theme.of(context));
-    return ref
-        .watch(overviewLastAnswerProvider(widget.sessionId))
-        .when(
-          loading: () => Text('Reading…', style: muted),
-          error: (error, _) =>
-              Text('The last answer could not be read: $error', style: muted),
-          data: (answer) {
-            final text = answer.text;
-            if (text == null) {
-              return Text(
-                answer.why!,
-                key: const ValueKey('overview-peek-no-answer'),
-                style: muted,
-              );
-            }
-            final long = text.length > 280 || '\n'.allMatches(text).length > 5;
-            return Column(
-              key: const ValueKey('overview-peek-answer'),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: _more || !long
-                        ? double.infinity
-                        : _shutHeight(context),
-                  ),
-                  child: ClipRect(
-                    child: SingleChildScrollView(
-                      physics: const NeverScrollableScrollPhysics(),
-                      child: MarkdownMessage(text),
-                    ),
-                  ),
-                ),
-                if (long)
-                  TextButton(
-                    key: const ValueKey('overview-peek-more'),
-                    onPressed: () => setState(() => _more = !_more),
-                    child: Text(_more ? 'Less' : 'More'),
-                  ),
-              ],
-            );
-          },
-        );
-  }
-}
-
-/// "3 files changed" and their names, when the session's record says.
-class _Files extends ConsumerWidget {
-  const _Files({required this.sessionId});
-
-  final String sessionId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final files = ref
-        .watch(overviewChangedFilesProvider(sessionId))
-        .asData
-        ?.value;
-    if (files == null || files.isEmpty) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final muted = UiDensity.of(context).muted(theme);
-    String name(String path) =>
-        path.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty).lastOrNull ??
-        path;
-    return Padding(
-      padding: const EdgeInsets.only(top: Insets.lg),
-      child: Column(
-        key: const ValueKey('overview-peek-files'),
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          EyebrowLabel(
-            files.length == 1 ? '1 file changed' : '${files.length} files changed',
-            padding: const EdgeInsets.only(bottom: Insets.xs),
           ),
-          for (final path in files.take(6))
-            Tooltip(
-              message: path,
-              child: Text(
-                name(path),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
+          if (plan != null && plan.total > 0) ...[
+            const SizedBox(height: Insets.sm),
+            Padding(
+              padding: const EdgeInsets.only(right: Insets.sm),
+              child: OverviewPlanLine(plan: plan),
             ),
-          if (files.length > 6) Text('+${files.length - 6} more', style: muted),
+          ],
         ],
       ),
     );
   }
 }
 
-class _SubSession extends ConsumerWidget {
-  const _SubSession({required this.card, this.onTap});
+/// Where the session's active model will be named. Empty until the session
+/// reports one.
+class OverviewPeekModel extends StatelessWidget {
+  const OverviewPeekModel({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+/// The session's own terminal pane, live: what is typed here goes to it.
+class _PeekTerminal extends ConsumerWidget {
+  const _PeekTerminal({required this.paneId});
+
+  final String paneId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final instance = ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId);
+    if (instance == null) {
+      return const PanePlaceholder(
+        message: 'This session has no terminal open on this machine.',
+        icon: AppIcons.terminal,
+      );
+    }
+    final settings = ref.watch(settingsControllerProvider);
+    return KeyedSubtree(
+      key: ValueKey('overview-peek-terminal:$paneId'),
+      child: LiveTerminalPane(
+        paneId: paneId,
+        fallback: instance,
+        focused: true,
+        fontSize: settings.terminalFontSize,
+        terminalTheme: terminalThemeFor(
+          Theme.of(context),
+          ref.watch(terminalPaletteProvider),
+        ),
+        chordOverrides: settings.terminalChordOverrides,
+        onKeyEvent: TerminalActions(ref).onPaneKey,
+        onSecondaryTapDown: (_, _) {},
+      ),
+    );
+  }
+}
+
+/// The files the session changed, each with its +/− and, opened, its diff.
+class _PeekFiles extends ConsumerStatefulWidget {
+  const _PeekFiles({required this.card, required this.files});
+
+  final OverviewCard card;
+  final List<String>? files;
+
+  @override
+  ConsumerState<_PeekFiles> createState() => _PeekFilesState();
+}
+
+class _PeekFilesState extends ConsumerState<_PeekFiles> {
+  String? _open;
+
+  /// The height an opened diff is given inside the list.
+  static const _diffHeight = Insets.xxl * 10;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = UiDensity.of(context).muted(theme);
+    final files = widget.files;
+    if (files == null) {
+      return Center(
+        child: Text('What this session changed is not known.', style: muted),
+      );
+    }
+    if (files.isEmpty) {
+      return Center(
+        child: Text('No files changed in this session yet.', style: muted),
+      );
+    }
+    final checkout = widget.card.entry.directory;
+    final stats = checkout == null
+        ? const <String, FileDiffStat>{}
+        : ref.watch(overviewFileStatsProvider(checkout)).value ??
+              const <String, FileDiffStat>{};
+    final semantic = SemanticColors.of(context);
+    return ListView(
+      key: const ValueKey('overview-peek-files'),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      children: [
+        for (final path in files) ...[
+          () {
+            final relative = _relative(path, stats, checkout?.path);
+            final stat = stats[relative];
+            final name = path
+                .split(RegExp(r'[\\/]'))
+                .where((p) => p.isNotEmpty)
+                .lastOrNull;
+            return InkWell(
+              key: ValueKey('overview-peek-file:$path'),
+              onTap: checkout == null
+                  ? null
+                  : () => setState(() => _open = _open == path ? null : path),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Insets.md,
+                  vertical: Insets.xs,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _open == path ? AppIcons.caretDown : AppIcons.caretRight,
+                      size: UiDensity.of(context).iconSmall,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Expanded(
+                      child: Tooltip(
+                        message: path,
+                        child: Text(
+                          name ?? path,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    ),
+                    if (stat != null && !stat.isBinary)
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '+${stat.added}',
+                              style: TextStyle(color: semantic.diffAdded),
+                            ),
+                            const TextSpan(text: ' '),
+                            TextSpan(
+                              text: '−${stat.removed}',
+                              style: TextStyle(color: semantic.diffRemoved),
+                            ),
+                          ],
+                        ),
+                        key: ValueKey('overview-peek-file-stat:$path'),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }(),
+          if (_open == path && checkout != null)
+            SizedBox(
+              height: _diffHeight,
+              child: FileDiffView(
+                key: ValueKey('overview-peek-diff:$path'),
+                path: _relative(path, stats, checkout.path),
+                checkout: checkout,
+                repositoryId: widget.card.entry.native?.repositoryId,
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  /// [path] as the checkout's own git spells it: a key of [stats] it ends
+  /// with, else [path] with the checkout's prefix taken off.
+  static String _relative(
+    String path,
+    Map<String, FileDiffStat> stats,
+    String? checkout,
+  ) {
+    final slashed = path.replaceAll(r'\', '/');
+    for (final key in stats.keys) {
+      if (slashed == key || slashed.endsWith('/$key')) return key;
+    }
+    final root = checkout?.replaceAll(r'\', '/');
+    if (root != null && slashed.startsWith('$root/')) {
+      return slashed.substring(root.length + 1);
+    }
+    return slashed;
+  }
+}
+
+class _PeekSubSession extends ConsumerWidget {
+  const _PeekSubSession({required this.card, this.onTap});
 
   final OverviewCard card;
   final ValueChanged<OverviewCard>? onTap;
@@ -383,47 +591,30 @@ class _SubSession extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final line = watchOverviewLine(ref, card);
-    return InkWell(
+    return Column(
       key: ValueKey('overview-peek-sub:${card.id}'),
-      borderRadius: BorderRadius.circular(Radii.sm),
-      onTap: onTap == null ? null : () => onTap!(card),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.xxs),
-              child: OverviewStateGlyph(
-                state: card.state,
-                size: UiDensity.of(context).iconSmall + Insets.hair,
-              ),
-            ),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: card.entry.title,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    TextSpan(
-                      text: '  $line',
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-          ],
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OverviewSubSessionRow(
+          card: card,
+          onOpen: (c) => onTap?.call(c),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.only(
+            left: Insets.lg + Insets.xs,
+            bottom: Insets.xs,
+          ),
+          child: Text(
+            line,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

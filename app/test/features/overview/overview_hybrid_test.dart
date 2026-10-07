@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
@@ -11,6 +10,7 @@ import 'package:karmashala/src/features/overview/application/overview_board.dart
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
+import 'package:karmashala/src/features/overview/application/overview_seen.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_list_prefs.dart';
@@ -301,182 +301,268 @@ void main() {
     ]);
   });
 
-  group('quick message', () {
-    const queue = {'sessions.send', 'sessions.interrupt', 'sessions.queue'};
-
-    Future<Finder> peekComposer(
-      WidgetTester tester,
-      String title,
-      String id,
-    ) async {
+  group('the peek', () {
+    Future<void> peek(WidgetTester tester, String title) async {
       final open = find.text(title).first;
       await tester.scrollUntilVisible(open, 200, scrollable: hybridList);
       await tester.tap(open);
       await settleMission(tester);
-      final field = find.byKey(ValueKey('overview-composer:$id'));
-      await tester.ensureVisible(field);
-      await tester.tap(field);
-      await settleMission(tester);
-      return field;
     }
 
-    testWidgets('Enter sends through the send path; queued while working', (
-      tester,
-    ) async {
-      await pump(tester, features: queue);
-      final field = await peekComposer(
-        tester,
-        'Round 32 · Overview redesign',
-        'ks-r32',
-      );
+    Finder inPeek(Finder f) =>
+        find.descendant(of: find.byKey(const ValueKey('overview-peek')), matching: f);
 
-      await tester.enterText(field, 'Also check the phone layout');
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await settleMission(tester);
-
-      expect(sent, [('ks-r32', 'Also check the phone layout')]);
-      expect(
-        find.text('Queued · goes when this turn ends'),
-        findsOneWidget,
-      );
-      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
-      await unmountMission(tester);
-    });
-
-    testWidgets('a session between turns takes it now: "Sent"', (
-      tester,
-    ) async {
-      await pump(tester, features: queue);
-      final field = await peekComposer(tester, 'Round 30 · webhooks', 'ks-r30');
-
-      await tester.enterText(field, 'Ship it');
-      final send = find.byKey(const ValueKey('overview-composer-send:ks-r30'));
-      await tester.ensureVisible(send);
-      await settleMission(tester);
-      await tester.tap(send);
-      await settleMission(tester);
-
-      expect(sent, [('ks-r30', 'Ship it')]);
-      expect(find.text('Sent'), findsOneWidget);
-      await unmountMission(tester);
-    });
-
-    testWidgets('Shift+Enter makes a new line, Esc clears, nothing is sent', (
-      tester,
-    ) async {
-      await pump(tester, features: queue);
-      final field = await peekComposer(tester, 'Round 30 · webhooks', 'ks-r30');
-      await tester.enterText(field, 'one');
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await settleMission(tester);
-      expect(sent, isEmpty);
-      expect(tester.widget<TextField>(field).controller!.text, startsWith('one'));
-      // Still the field's: the Board did not take the Enter it let through.
-      expect(find.byKey(const ValueKey('overview-peek')), findsOneWidget);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await settleMission(tester);
-      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
-      expect(sent, isEmpty);
-      await unmountMission(tester);
-    });
-  });
-
-  group('the peek', () {
-    testWidgets('shows doing now, plan, last answer, files, the composer', (
+    testWidgets('is the session\'s own chat, under its header and tabs', (
       tester,
     ) async {
       await pump(tester);
-      await tester.tap(find.text('Round 32 · Overview redesign').first);
-      await settleMission(tester);
+      await peek(tester, 'Round 32 · Overview redesign');
 
-      final peek = find.byKey(const ValueKey('overview-peek'));
-      expect(peek, findsOneWidget);
-      Finder inPeek(Finder f) => find.descendant(of: peek, matching: f);
-      expect(inPeek(find.text('DOING NOW')), findsOneWidget);
-      expect(inPeek(find.text('Run the overview tests · 4m')), findsOneWidget);
-      expect(inPeek(find.text('Check it in a probe')), findsOneWidget);
-      expect(inPeek(find.text('3 FILES CHANGED')), findsOneWidget);
-      expect(inPeek(find.text('SUB-SESSIONS · 5')), findsOneWidget);
       expect(
-        inPeek(find.byKey(const ValueKey('overview-composer:ks-r32'))),
+        inPeek(find.byKey(const ValueKey('overview-peek-chat:ks-r32'))),
         findsOneWidget,
       );
-      // No answer recorded is said, not a "Reading…" that never ends.
+      expect(inPeek(find.text('Chat')), findsOneWidget);
+      expect(inPeek(find.text('Files · 3')), findsOneWidget);
+      expect(inPeek(find.text('Sub-sessions · 5')), findsOneWidget);
+      // No terminal on this machine: no Terminal tab.
+      expect(inPeek(find.text('Terminal')), findsNothing);
       expect(
-        inPeek(find.byKey(const ValueKey('overview-peek-no-answer'))),
+        inPeek(find.byKey(const ValueKey('overview-peek-open'))),
         findsOneWidget,
       );
-      expect(inPeek(find.text('Reading…')), findsNothing);
+      expect(inPeek(find.text('Open tab')), findsOneWidget);
+      expect(inPeek(find.text('2/4')), findsOneWidget);
+      // The old peek's sections are gone: the chat is the record.
+      expect(inPeek(find.text('DOING NOW')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('overview-composer:ks-r32')),
+        findsNothing,
+      );
       await unmountMission(tester);
     });
 
-    testWidgets('renders the last answer as markdown, with More', (
+    testWidgets('Files shows each file\'s +/− and opens its diff', (
       tester,
     ) async {
-      final long = [
-        'Webhooks are wired.',
-        for (var i = 1; i <= 9; i++) '- step $i of the change',
-      ].join('\n');
-      await pump(
-        tester,
-        fixture: MissionFixture(
-          answers: {'ks-r30': LastAnswer.of(long)},
-          activity: MissionFixture.realisticActivity(),
-        ),
-      );
-      await tester.tap(find.text('Round 30 · webhooks').first);
-      await settleMission(tester);
-
-      expect(
-        find.byKey(const ValueKey('overview-peek-answer')),
-        findsOneWidget,
-      );
-      expect(find.text('Webhooks are wired.'), findsOneWidget);
-      expect(find.byKey(const ValueKey('overview-peek-more')), findsOneWidget);
-      await unmountMission(tester);
-    });
-
-    testWidgets('a sub-session is peeked from its parent', (tester) async {
       await pump(tester);
-      await tester.tap(find.text('Round 32 · Overview redesign').first);
-      await settleMission(tester);
-
+      await peek(tester, 'Round 32 · Overview redesign');
       await tester.tap(
-        find.byKey(const ValueKey('overview-peek-sub:ks-r32-sub0')),
+        find.byKey(const ValueKey('overview-peek-tab:files')),
+      );
+      await settleMission(tester);
+
+      const path =
+          'app/lib/src/features/overview/presentation/overview_hybrid.dart';
+      final stat = tester.widget<Text>(
+        find.byKey(const ValueKey('overview-peek-file-stat:$path')),
+      );
+      expect(stat.textSpan!.toPlainText(), '+212 −40');
+      expect(inPeek(find.text('overview_hybrid_test.dart')), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('Sub-sessions lists them all; one opens with its way back', (
+      tester,
+    ) async {
+      await pump(tester);
+      await peek(tester, 'Round 32 · Overview redesign');
+      await tester.tap(
+        find.byKey(const ValueKey('overview-peek-tab:subSessions')),
+      );
+      await settleMission(tester);
+      for (var i = 0; i < 5; i++) {
+        expect(
+          find.byKey(ValueKey('overview-peek-sub:ks-r32-sub$i')),
+          findsOneWidget,
+        );
+      }
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('overview-peek-sub:ks-r32-sub0')),
+          matching: find.text('Subagent 1'),
+        ),
       );
       await settleMission(tester);
       expect(
         find.byKey(const ValueKey('overview-peek:ks-r32-sub0')),
         findsOneWidget,
       );
+      expect(
+        find.text('↑ Sub-session of Round 32 · Overview redesign'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('overview-peek-parent')));
+      await settleMission(tester);
+      expect(find.byKey(const ValueKey('overview-peek:ks-r32')), findsOneWidget);
       await unmountMission(tester);
     });
 
-    testWidgets('on a phone, the peek is a sheet with the composer', (
+    testWidgets('a terminal-hosted session has a Terminal tab', (
       tester,
     ) async {
+      await pump(
+        tester,
+        fixture: MissionFixture(
+          activity: MissionFixture.realisticActivity(),
+          panes: const {'ks-r32': 'pane-r32'},
+        ),
+      );
+      await peek(tester, 'Round 32 · Overview redesign');
+      expect(
+        find.byKey(const ValueKey('overview-peek-tab:terminal')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('overview-peek-tab:terminal')),
+      );
+      await settleMission(tester);
+      // No instance for the fixture's pane: said, not a blank.
+      expect(
+        find.text('This session has no terminal open on this machine.'),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('↑ ↓ walk the sessions; ✕ closes', (tester) async {
+      final c = await pump(tester);
+      await peek(tester, 'Round 21 · ACP sessions');
+      await tester.tap(find.byKey(const ValueKey('overview-peek-next')));
+      await settleMission(tester);
+      final next = c.read(overviewFocusProvider).peeked;
+      expect(next, isNot('ks-r21'));
+      await tester.tap(find.byKey(const ValueKey('overview-peek-previous')));
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'ks-r21');
+      await tester.tap(find.byKey(const ValueKey('overview-peek-close')));
+      await settleMission(tester);
+      expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
+      await unmountMission(tester);
+    });
+
+    for (final (name, size, mode) in [
+      ('1440', const Size(1440, 900), 'docked'),
+      ('1100', const Size(1100, 800), 'overlay'),
+    ]) {
+      testWidgets('$name px: the peek is $mode', (tester) async {
+        await pump(tester, size: size);
+        final workAt = tester.getTopLeft(
+          find.byKey(const ValueKey('overview-work')),
+        );
+        await peek(tester, 'Round 21 · ACP sessions');
+        final overlay = find.byKey(const ValueKey('overview-peek-overlay'));
+        if (mode == 'overlay') {
+          expect(overlay, findsOneWidget);
+          // The board keeps its columns under it.
+          expect(
+            tester.getTopLeft(find.byKey(const ValueKey('overview-work'))),
+            workAt,
+          );
+        } else {
+          expect(overlay, findsNothing);
+          expect(
+            find.byKey(const ValueKey('overview-peek-resizer')),
+            findsOneWidget,
+          );
+          final before = tester.getSize(
+            find.byKey(const ValueKey('overview-peek')),
+          );
+          await tester.drag(
+            find.byKey(const ValueKey('overview-peek-resizer')),
+            const Offset(-100, 0),
+          );
+          await settleMission(tester);
+          expect(
+            tester.getSize(find.byKey(const ValueKey('overview-peek'))).width,
+            greaterThan(before.width),
+          );
+        }
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      });
+    }
+
+    testWidgets('on a phone, the peek is a full-screen sheet', (tester) async {
       await pump(tester, size: const Size(390, 844), phone: true);
       await tester.tap(find.text('Round 21 · ACP sessions').first);
       await settleMission(tester);
 
       final peek = find.byKey(const ValueKey('overview-peek'));
       expect(peek, findsOneWidget);
+      expect(tester.getSize(peek).height, greaterThan(700));
       expect(
-        find.descendant(
-          of: peek,
-          matching: find.byKey(const ValueKey('overview-composer:ks-r21')),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: peek, matching: find.byType(ApprovalRequestCard)),
+        inPeek(find.byKey(const ValueKey('overview-peek-chat:ks-r21'))),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
       await unmountMission(tester);
+    });
+
+    testWidgets('since you last looked: a count on the card, the line in chat', (
+      tester,
+    ) async {
+      final now = MissionFixture.now;
+      final fixture = MissionFixture(
+        activity: MissionFixture.realisticActivity(),
+        glances: {
+          'ks-r30': OverviewGlance(
+            messageTimes: [
+              for (final m in [40, 30, 20, 10, 5])
+                now.subtract(Duration(minutes: m)),
+            ],
+          ),
+        },
+      );
+      final c = await pump(tester, fixture: fixture);
+      final badge = find.byKey(const ValueKey('overview-new:ks-r30'));
+      // Never opened here: nothing to count from.
+      expect(badge, findsNothing);
+      final looked = now.subtract(const Duration(minutes: 25));
+      c.read(overviewSeenProvider.notifier).markSeen('ks-r30', looked);
+      await settleMission(tester);
+      await tester.scrollUntilVisible(badge, 200, scrollable: hybridList);
+      expect(
+        find.descendant(of: badge, matching: find.text('3')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Round 30 · webhooks').first);
+      await settleMission(tester);
+      // The chat is told when the owner last looked, to draw its line.
+      expect(
+        find.text('chat:ks-r30 seen:${looked.toIso8601String()}'),
+        findsOneWidget,
+      );
+      expect(badge, findsNothing);
+      expect(
+        c.read(overviewSeenProvider)['ks-r30']!.isAfter(looked),
+        isTrue,
+      );
+      await unmountMission(tester);
+    });
+
+    test('the last look is kept on this device', () async {
+      final c = ProviderContainer(
+        overrides: [
+          overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
+        ],
+      );
+      final at = DateTime.utc(2026, 10, 7, 9);
+      c.read(overviewSeenProvider.notifier).markSeen('s1', at);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      c.dispose();
+      final again = ProviderContainer(
+        overrides: [
+          overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
+        ],
+      );
+      addTearDown(again.dispose);
+      again.read(overviewSeenProvider);
+      for (var i = 0; i < 50 && again.read(overviewSeenProvider).isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(again.read(overviewSeenProvider)['s1'], at);
     });
   });
 

@@ -156,6 +156,7 @@ void main() {
             report: waiting('term', AgentWaitKind.input),
           ),
         ],
+        panes: const {'term': 'pane-term'},
       ),
       prefsDir: dir,
       size: size,
@@ -222,6 +223,52 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     await unmountMission(tester);
+  });
+
+  group('reply in words', () {
+    Future<Finder> composer(WidgetTester tester) async {
+      await pump(tester);
+      await tester.ensureVisible(queueCard('ask-q'));
+      await settleMission(tester);
+      await tester.tap(find.byKey(const ValueKey('question-reply-in-words')));
+      await settleMission(tester);
+      final field = find.byKey(const ValueKey('overview-composer:ask-q'));
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await settleMission(tester);
+      return field;
+    }
+
+    testWidgets('Enter sends through the one send path', (tester) async {
+      final field = await composer(tester);
+      await tester.enterText(field, 'Merge it into feat/acp');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+
+      expect(sent, [('ask-q', 'Merge it into feat/acp')]);
+      expect(find.text('Sent'), findsOneWidget);
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+      await unmountMission(tester);
+    });
+
+    testWidgets('Shift+Enter makes a new line, Esc clears, nothing is sent', (
+      tester,
+    ) async {
+      final field = await composer(tester);
+      await tester.enterText(field, 'one');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await settleMission(tester);
+      expect(sent, isEmpty);
+      expect(tester.widget<TextField>(field).controller!.text, startsWith('one'));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settleMission(tester);
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+      expect(sent, isEmpty);
+      await unmountMission(tester);
+    });
   });
 
   testWidgets('a command: two lines of it, where, and Allow / Always / Deny', (
@@ -475,6 +522,37 @@ void main() {
       }
       expect(recorder.asked, isEmpty);
       expect(selected(c), 'ks-r21');
+      await unmountMission(tester);
+    });
+
+    testWidgets('T, or Answer in terminal, opens the peek on its terminal', (
+      tester,
+    ) async {
+      final (c, _) = await pump(tester);
+      c.read(overviewFocusProvider.notifier).select('term');
+      await settleMission(tester);
+      await press(tester, LogicalKeyboardKey.keyT);
+      expect(peeked(c), 'term');
+      expect(c.read(overviewFocusProvider).tab, OverviewPeekTab.terminal);
+      expect(
+        find.byKey(const ValueKey('overview-peek-tab:terminal')),
+        findsOneWidget,
+      );
+      await press(tester, LogicalKeyboardKey.escape);
+
+      // T on a command offers nothing: it goes on its way.
+      c.read(overviewFocusProvider.notifier).select('ks-r21');
+      await settleMission(tester);
+      await press(tester, LogicalKeyboardKey.keyT);
+      expect(peeked(c), isNull);
+
+      final button = find.byKey(const ValueKey('overview-answer-terminal:term'));
+      await tester.ensureVisible(button);
+      await settleMission(tester);
+      await tester.tap(button);
+      await settleMission(tester);
+      expect(peeked(c), 'term');
+      expect(c.read(overviewFocusProvider).tab, OverviewPeekTab.terminal);
       await unmountMission(tester);
     });
 

@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/overview/application/overview_board.dart
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
-import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
@@ -280,7 +280,7 @@ void main() {
     expect(find.text('2 done today'), findsOneWidget);
   });
 
-  testBoard('a waiting card peeks into the ask path the dock uses', (
+  testBoard("a waiting card peeks into the session's own chat and its asks", (
     tester,
   ) async {
     await pump(tester, const Size(1440, 900));
@@ -290,8 +290,9 @@ void main() {
 
     final peek = find.byKey(const ValueKey('overview-peek:ask'));
     expect(peek, findsOneWidget);
+    // The chat its own tab draws, whose dock answers what it asks.
     expect(
-      find.descendant(of: peek, matching: find.byType(ApprovalRequestCard)),
+      find.descendant(of: peek, matching: find.byType(SessionTranscriptView)),
       findsOneWidget,
     );
 
