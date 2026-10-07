@@ -196,6 +196,11 @@ class ServerTranscripts {
   Future<TranscriptPage> peek(String sessionId) =>
       _read(SessionTranscriptRead(sessionId, limit: 1));
 
+  /// The last [limit] rows of [sessionId]'s record and the digest of the rows
+  /// before them — its plan and open calls — without following it.
+  Future<TranscriptPage> glance(String sessionId, {int limit = 1}) =>
+      _read(SessionTranscriptRead(sessionId, limit: limit, digest: 0));
+
   /// A subagent's turns: the delegate at [path] of session [sessionId], read
   /// on the server a page at a time, or the background agent [agentId] when
   /// given. Throws [DataRefused].

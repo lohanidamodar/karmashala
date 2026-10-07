@@ -9,7 +9,6 @@ import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../explorer/application/workspace_session_entry.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/archive_session_action.dart';
@@ -17,6 +16,7 @@ import '../../sessions/presentation/end_session_action.dart';
 import '../application/overview_board.dart';
 import '../application/overview_card_line.dart';
 import '../application/overview_providers.dart';
+import '../application/overview_reads.dart';
 
 /// **The peek**: one card's last answer, its open ask through the ask path
 /// every other surface uses, and the actions that fit its state. The only
@@ -129,24 +129,16 @@ class _LastAnswer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final muted = UiDensity.of(context).muted(Theme.of(context));
-    final rows = ref.watch(sessionChatTranscriptProvider(sessionId));
-    return rows.when(
-      loading: () => Text('Reading…', style: muted),
-      error: (_, _) => Text('The transcript could not be read.', style: muted),
-      data: (rows) {
-        String? last;
-        for (final row in rows.reversed) {
-          if (row.role == 'agent' && row.text.trim().isNotEmpty) {
-            last = row.text.trim();
-            break;
-          }
-        }
-        if (last == null) {
-          return Text('No answer recorded yet.', style: muted);
-        }
-        return SelectableText(last, maxLines: 14);
-      },
-    );
+    return ref
+        .watch(overviewLastAnswerProvider(sessionId))
+        .when(
+          loading: () => Text('Reading…', style: muted),
+          error: (error, _) =>
+              Text('The last answer could not be read: $error', style: muted),
+          data: (answer) => answer.text == null
+              ? Text(answer.why!, style: muted)
+              : SelectableText(answer.text!, maxLines: 14),
+        );
   }
 }
 

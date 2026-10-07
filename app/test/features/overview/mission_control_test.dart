@@ -129,7 +129,7 @@ void main() {
       find.bySemanticsLabel(
         RegExp(
           r'^Needs you, Round 21 · ACP sessions, Claude Code, '
-          r'asks: run flutter test',
+          r'Asks to run a command',
         ),
       ),
       findsOneWidget,

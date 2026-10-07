@@ -15,6 +15,7 @@ import 'package:karmashala/src/features/explorer/application/workspace_session_e
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -46,8 +47,18 @@ typedef MissionSession = ({
 /// twenty top-level sessions in every state across three machines and three
 /// agents, sub-sessions under two parents, and one session that needs you.
 class MissionFixture {
-  MissionFixture({List<MissionSession>? sessions, this.hiddenWorking = 0})
-    : sessions = sessions ?? realisticSessions();
+  MissionFixture({
+    List<MissionSession>? sessions,
+    this.hiddenWorking = 0,
+    this.answers = const {},
+    this.glances = const {},
+  }) : sessions = sessions ?? realisticSessions();
+
+  /// Each session's last answer, as the reader would find it.
+  final Map<String, LastAnswer> answers;
+
+  /// Each session's plan and open calls, as one server read would say.
+  final Map<String, OverviewGlance> glances;
 
   final List<MissionSession> sessions;
 
@@ -385,7 +396,28 @@ class MissionFixture {
     agentsHiddenWorkingCountProvider.overrideWith((ref) => hiddenWorking),
     overviewFactsProvider.overrideWith((ref) => facts),
     sessionStatusLookupProvider.overrideWithValue((id) => _byId[id]?.report),
+    overviewReaderProvider.overrideWithValue(
+      FakeOverviewReader(answers: answers, glances: glances),
+    ),
   ];
+}
+
+/// The Overview's reads, answered from a fixture: nothing reaches a server.
+class FakeOverviewReader implements OverviewReader {
+  FakeOverviewReader({this.answers = const {}, this.glances = const {}});
+
+  final Map<String, LastAnswer> answers;
+  final Map<String, OverviewGlance> glances;
+  final asked = <String>[];
+
+  @override
+  Future<LastAnswer> lastAnswer(String sessionId) async {
+    asked.add(sessionId);
+    return answers[sessionId] ?? LastAnswer.none;
+  }
+
+  @override
+  Future<OverviewGlance?> glance(String sessionId) async => glances[sessionId];
 }
 
 /// Draws the Overview tab over [fixture] at [size]: the desktop's tab, or
