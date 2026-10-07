@@ -315,3 +315,88 @@ class OverviewNewBadge extends ConsumerWidget {
     );
   }
 }
+
+/// **One session as the phone lists it**: two lines — its title with what is
+/// new and its state, then what it is doing — opening its peek on a tap.
+class OverviewPhoneRow extends ConsumerWidget {
+  const OverviewPhoneRow({required this.card, required this.onOpen, super.key});
+
+  final OverviewCard card;
+  final ValueChanged<OverviewCard> onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final selected = ref.watch(
+      overviewFocusProvider.select((f) => f.selected == card.id),
+    );
+    final line = watchOverviewLine(ref, card);
+    final edge = switch (card.state) {
+      AgentState.needsYou => SemanticColors.of(context).attention,
+      AgentState.failed => SemanticColors.of(context).failure,
+      _ => null,
+    };
+    return Material(
+      color: selected ? StateLayers.selected(scheme) : Colors.transparent,
+      child: InkWell(
+        key: ValueKey('overview-phone-row:${card.id}'),
+        onTap: () => onOpen(card),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: Touch.target),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Insets.xs,
+            vertical: Insets.sm,
+          ),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: scheme.outlineVariant),
+              left: edge == null
+                  ? BorderSide.none
+                  : BorderSide(color: edge, width: Insets.xxs),
+            ),
+          ),
+          child: Row(
+            children: [
+              OverviewAgentRing(card: card, size: Insets.xl + Insets.xs),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            card.entry.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        OverviewNewBadge(card: card),
+                        const SizedBox(width: Insets.xs),
+                        OverviewStatePill(card: card),
+                      ],
+                    ),
+                    Text(
+                      line,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

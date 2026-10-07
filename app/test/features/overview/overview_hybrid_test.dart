@@ -91,6 +91,7 @@ void main() {
     ('1440×900', const Size(1440, 900), false),
     ('1024×768', const Size(1024, 768), false),
     ('390×844', const Size(390, 844), true),
+    ('360×800', const Size(360, 800), true),
   ]) {
     for (final scale in [1.0, 1.6]) {
       testWidgets('$name at ${scale}x text: heartbeat, queue, then work', (
@@ -568,6 +569,55 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
       expect(again.read(overviewSeenProvider)['s1'], at);
+    });
+  });
+
+  group('the phone', () {
+    for (final (name, size) in [
+      ('390', const Size(390, 844)),
+      ('360', const Size(360, 800)),
+    ]) {
+      testWidgets('$name px: a two-line list, the queue first', (tester) async {
+        await pump(tester, size: size, phone: true);
+        final row = find.byKey(const ValueKey('overview-phone-row:ks-r32'));
+        await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
+        expect(row, findsOneWidget);
+        expect(workCard('ks-r32'), findsNothing);
+        // Two lines: the title and what it is doing, nothing more.
+        expect(
+          find.descendant(of: row, matching: find.byType(Text)),
+          findsNWidgets(3),
+        );
+        final ready = find.byKey(const ValueKey('overview-phone-row:ks-r30'));
+        await tester.scrollUntilVisible(ready, 300, scrollable: hybridList);
+        expect(
+          find.byKey(const ValueKey('overview-ready-card:ks-r30')),
+          findsNothing,
+        );
+
+        await tester.scrollUntilVisible(row, -300, scrollable: hybridList);
+        await settleMission(tester);
+        await tester.tap(row);
+        await settleMission(tester);
+        final peek = find.byKey(const ValueKey('overview-peek'));
+        expect(peek, findsOneWidget);
+        expect(tester.getSize(peek).height, greaterThan(size.height * 0.8));
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      });
+    }
+
+    testWidgets('the queue comes before the list', (tester) async {
+      await pump(tester, size: const Size(390, 844), phone: true);
+      final queueAt = tester.getTopLeft(queueCard('ks-r21')).dy;
+      final row = find.byKey(const ValueKey('overview-phone-row:ks-r32'));
+      await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
+      final scrolled = tester
+          .state<ScrollableState>(hybridList)
+          .position
+          .pixels;
+      expect(queueAt, lessThan(tester.getTopLeft(row).dy + scrolled));
+      await unmountMission(tester);
     });
   });
 

@@ -13,7 +13,13 @@ void main() {
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('ks-overview-prefs');
   });
-  tearDown(() => dir.delete(recursive: true));
+  tearDown(() async {
+    try {
+      await dir.delete(recursive: true);
+    } on FileSystemException {
+      // The prefs file may still be held open on Windows; the OS sweeps temp.
+    }
+  });
 
   ProviderContainer open() {
     final c = ProviderContainer(

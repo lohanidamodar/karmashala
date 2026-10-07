@@ -8,6 +8,7 @@ import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
+import 'overview_card_parts.dart';
 import 'overview_cards.dart';
 import 'overview_filters.dart';
 import 'overview_done_card.dart';
@@ -131,6 +132,8 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     return LayoutBuilder(
       builder: (context, box) {
         final scaler = MediaQuery.textScalerOf(context);
+        // A phone lists what is at work in two lines a row, the queue first.
+        final phone = box.maxWidth < WidthClass.mediumMin;
         final gutter = box.maxWidth < WidthClass.mediumMin
             ? Insets.lg
             : Insets.xl;
@@ -205,14 +208,18 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     ),
                   ),
                 ),
-                ..._grid([
+                if (phone)
                   for (final card in cards)
-                    OverviewWorkCard(
-                      key: ValueKey('overview-work-card:${card.id}'),
-                      card: card,
-                      onOpen: onOpen,
-                    ),
-                ], across),
+                    OverviewPhoneRow(card: card, onOpen: onOpen)
+                else
+                  ..._grid([
+                    for (final card in cards)
+                      OverviewWorkCard(
+                        key: ValueKey('overview-work-card:${card.id}'),
+                        card: card,
+                        onOpen: onOpen,
+                      ),
+                  ], across),
               ],
             if (sections.ready.isNotEmpty) ...[
               EyebrowLabel(
@@ -223,14 +230,18 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   bottom: Insets.sm,
                 ),
               ),
-              ..._grid([
+              if (phone)
                 for (final card in sections.ready)
-                  OverviewDoneCard(
-                    key: ValueKey('overview-ready-card:${card.id}'),
-                    card: card,
-                    onOpen: onOpen,
-                  ),
-              ], across),
+                  OverviewPhoneRow(card: card, onOpen: onOpen)
+              else
+                ..._grid([
+                  for (final card in sections.ready)
+                    OverviewDoneCard(
+                      key: ValueKey('overview-ready-card:${card.id}'),
+                      card: card,
+                      onOpen: onOpen,
+                    ),
+                ], across),
             ],
           ],
         );
