@@ -114,17 +114,19 @@ void main() {
     expect(process.ports, isEmpty);
   });
 
-  test('a stop inside another machine names it; a local one says nothing new',
-      () {
-    const there = TerminalStopProcess(4242, machine: 'wsl:Ubuntu');
-    final read = DataEnvelope.readRequest(
-      overTheWire(DataEnvelope.request(3, there)),
-    );
-    expect((read.request! as TerminalStopProcess).machine, 'wsl:Ubuntu');
-    expect((read.request! as TerminalStopProcess).pid, 4242);
-    // An older server reads exactly what it always read.
-    expect(const TerminalStopProcess(7).argumentsToJson(), {'pid': 7});
-  });
+  test(
+    'a stop inside another machine names it; a local one says nothing new',
+    () {
+      const there = TerminalStopProcess(4242, machine: 'wsl:Ubuntu');
+      final read = DataEnvelope.readRequest(
+        overTheWire(DataEnvelope.request(3, there)),
+      );
+      expect((read.request! as TerminalStopProcess).machine, 'wsl:Ubuntu');
+      expect((read.request! as TerminalStopProcess).pid, 4242);
+      // An older server reads exactly what it always read.
+      expect(const TerminalStopProcess(7).argumentsToJson(), {'pid': 7});
+    },
+  );
 
   test('a process inside WSL or on an SSH box crosses with its machine, its '
       'command line and a Stop an older app cannot see', () {

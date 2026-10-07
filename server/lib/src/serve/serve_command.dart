@@ -534,6 +534,7 @@ Future<int> _serve(
     overlay: envVault.overlay,
     hostEnvironment: hostEnvironment,
     remote: ssh.remote,
+    boxShell: ssh.openShell,
   );
   data.terminalWork = terminals;
   // An ACP agent says its version over the protocol: detection asks each one

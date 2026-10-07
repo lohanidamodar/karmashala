@@ -16,6 +16,8 @@ import '../pty/pty.dart';
 import '../sessions/pane_facts.dart';
 import '../sessions/pane_source.dart';
 import '../ssh/ssh_domain.dart' show RemoteSessionRefused, RemoteSessions;
+import 'linux_running.dart' as linux;
+import 'linux_running.dart';
 import 'listening_ports.dart';
 
 /// What every terminal this server starts on its own machine is told about the
@@ -75,7 +77,10 @@ class ServerTerminals implements TerminalWork, PaneSource {
     this.settle = const Duration(milliseconds: 250),
     this.remote,
     ListeningPortProbe? ports,
+    LinuxShell Function(String? distribution)? wslShell,
+    this.boxShell,
   }) : _ports = ports ?? ListeningPortProbe(windows: windows),
+       _wslShell = wslShell ?? linux.wslShell,
        _environments = environments,
        _tell = tell,
        _overlay = overlay ?? (() => const {}),
@@ -86,6 +91,13 @@ class ServerTerminals implements TerminalWork, PaneSource {
 
   final SessionRegistry registry;
   final ListeningPortProbe _ports;
+
+  /// A shell in a WSL distribution (null for the default one).
+  final LinuxShell Function(String? distribution) _wslShell;
+
+  /// A shell on an SSH box over the connection already open to it; null when
+  /// none is. Listing never dials one.
+  final BoxShell? Function(String hostId)? boxShell;
 
   /// Sessions on SSH boxes (the ssh domain's); null opens none there.
   final RemoteSessions? remote;
@@ -160,9 +172,7 @@ class ServerTerminals implements TerminalWork, PaneSource {
   /// — the server's copy of one on a box.
   ScreenSession? _sessionOf(String sessionId) {
     final box = parseBoxSessionRef(sessionId);
-    return box == null
-        ? registry.find(sessionId)
-        : remote?.byId(box.sessionId);
+    return box == null ? registry.find(sessionId) : remote?.byId(box.sessionId);
   }
 
   List<TerminalRecord> get records => List.unmodifiable(_records.values);
@@ -185,21 +195,24 @@ class ServerTerminals implements TerminalWork, PaneSource {
         ),
         TerminalsListeningPorts() => await listeningPorts(),
         TerminalsRunning() => await running(),
-        TerminalStopProcess(:final pid) => await stopProcess(pid),
+        TerminalStopProcess(:final pid, :final machine) => await stopProcess(
+          pid,
+          machine: machine,
+        ),
       };
 
-  /// What this server runs, read now: itself, each local pane's process tree
-  /// and device mirroring. A pane on an SSH box is kept, unread.
+  /// What this server runs, read now: itself, each local pane's process tree,
+  /// device mirroring, and inside each WSL distribution and SSH box a live
+  /// pane runs on — one probe per machine. A box with no connection open is
+  /// kept, unread.
   Future<RunningReading> running() async {
     final roots = <RunningPaneRoot>[];
     final unlisted = <RunningProcess>[];
-    final notes = <RunningNote>[];
+    final machines = _linuxMachines();
     for (final record in _records.values) {
       final title = _renamed[record.sessionId] ?? record.title;
-      final agentSessionId = _agentSessionOf(record.sessionId);
       if (parseBoxSessionRef(record.sessionId) case final box?) {
         if (!record.isLive) continue;
-        final environmentId = record.environmentId ?? 'ssh:${box.hostId}';
         unlisted.add(
           RunningProcess(
             pid: 0,
@@ -208,14 +221,8 @@ class ServerTerminals implements TerminalWork, PaneSource {
             paneId: record.paneId,
             terminalSessionId: record.sessionId,
             title: title,
-            agentSessionId: agentSessionId,
-            environmentId: environmentId,
-          ),
-        );
-        notes.add(
-          RunningNote(
-            '"$title" runs on an SSH machine; its processes are not read.',
-            environmentId: environmentId,
+            agentSessionId: _agentSessionOf(box.sessionId),
+            environmentId: record.environmentId ?? 'ssh:${box.hostId}',
           ),
         );
         continue;
@@ -229,25 +236,162 @@ class ServerTerminals implements TerminalWork, PaneSource {
         paneId: record.paneId,
         terminalSessionId: record.sessionId,
         title: title,
-        agentSessionId: agentSessionId,
+        agentSessionId: _agentSessionOf(record.sessionId),
         environmentId:
             record.environmentId ??
             (record.profileId.startsWith('wsl:') ? record.profileId : null),
         command: session.facts?.lastCommand ?? record.lastCommand,
       ));
     }
-    return _ports.running(
+    final inside = Future.wait([
+      for (final machine in machines.values) _readInside(machine),
+    ]);
+    final reading = await _ports.running(
       roots,
       serverPid: pid,
       serverPorts: serverPorts(),
       unlisted: unlisted,
-      notes: notes,
+      readInside: {
+        for (final machine in machines.values)
+          if (machine.distribution != null) ...machine.paneIds,
+      },
+    );
+    final found = await inside;
+    return RunningReading(
+      serverPid: reading.serverPid,
+      checkedAt: reading.checkedAt,
+      processes: [
+        ...reading.processes,
+        for (final each in found) ...each.processes,
+      ],
+      notes: [...reading.notes, for (final each in found) ...each.notes],
     );
   }
 
+  /// The WSL distributions and SSH boxes live panes run on, by environment
+  /// id, with the sessions those panes run.
+  Map<String, _LinuxMachine> _linuxMachines() {
+    final machines = <String, _LinuxMachine>{};
+    for (final record in _records.values) {
+      if (!record.isLive) continue;
+      final title = _renamed[record.sessionId] ?? record.title;
+      final _LinuxMachine machine;
+      final String? sessionId;
+      if (parseBoxSessionRef(record.sessionId) case final box?) {
+        final id = record.environmentId ?? 'ssh:${box.hostId}';
+        machine = machines[id] ??= _LinuxMachine(id, hostId: box.hostId);
+        sessionId = _agentSessionOf(box.sessionId);
+      } else {
+        final session = registry.find(record.sessionId);
+        if (session == null || session.lifecycle.hasEnded) continue;
+        final distribution = _windows ? _distributionOf(record) : null;
+        if (distribution == null) continue;
+        final id = record.environmentId ?? TerminalProfile.wslId(distribution);
+        machine = machines[id] ??= _LinuxMachine(
+          id,
+          distribution: distribution,
+        );
+        sessionId = _agentSessionOf(record.sessionId);
+      }
+      machine.paneIds.add(record.paneId);
+      machine.titles.add(title);
+      if (sessionId != null) {
+        machine.sessions[sessionId] = (
+          paneId: record.paneId,
+          terminalSessionId: record.sessionId,
+          title: title,
+          command: record.lastCommand,
+        );
+      }
+    }
+    return machines;
+  }
+
+  /// The distribution a local pane runs in (`''` for the default one), or
+  /// null for a pane on Windows.
+  String? _distributionOf(TerminalRecord record) {
+    if (record.environmentId case final id?) {
+      final environment = _environments().where((e) => e.id == id).firstOrNull;
+      if (environment?.kind == EnvironmentKind.wsl) {
+        return environment!.wslDistribution ?? '';
+      }
+    }
+    final profile = record.profileId;
+    return profile.startsWith('wsl:') ? profile.substring(4) : null;
+  }
+
+  /// A shell on [machine], and where its ports are reached; null for a box
+  /// with no connection open.
+  ({LinuxShell run, String? host})? _shellOn(_LinuxMachine machine) {
+    if (machine.hostId case final hostId?) {
+      final box = boxShell?.call(hostId);
+      return box == null ? null : (run: box.run, host: box.address);
+    }
+    final distribution = machine.distribution!;
+    return (
+      run: _wslShell(distribution.isEmpty ? null : distribution),
+      host: null,
+    );
+  }
+
+  Future<LinuxListing> _listInside(LinuxShell run) async => parseLinuxListing(
+    await run(linuxRunningScript).timeout(ListeningPortProbe.timeout),
+  );
+
+  /// What runs inside [machine], filed under its sessions — or the note
+  /// saying why it was not read.
+  Future<({List<RunningProcess> processes, List<RunningNote> notes})>
+  _readInside(_LinuxMachine machine) async {
+    final shell = _shellOn(machine);
+    if (shell == null) {
+      return (
+        processes: const <RunningProcess>[],
+        notes: [
+          for (final title in machine.titles)
+            RunningNote(
+              '"$title" runs on an SSH machine with no connection open; its '
+              'processes are not read.',
+              environmentId: machine.id,
+            ),
+        ],
+      );
+    }
+    try {
+      final listing = await _listInside(shell.run);
+      return (
+        processes: attributeLinuxListing(
+          listing,
+          machine: machine.id,
+          sessions: machine.sessions,
+          host: shell.host,
+        ),
+        notes: const <RunningNote>[],
+      );
+    } on Object catch (error) {
+      final where = switch (machine.distribution) {
+        null => 'this SSH machine',
+        '' => 'the default WSL distribution',
+        final name => 'WSL ($name)',
+      };
+      return (
+        processes: const <RunningProcess>[],
+        notes: [
+          RunningNote(
+            'What runs inside $where could not be read '
+            '(${error.runtimeType}).',
+            environmentId: machine.id,
+          ),
+        ],
+      );
+    }
+  }
+
   /// Stops [processId] and its children when it is, now, under a local pane
-  /// — never a pane's root, never this server. Throws [DataRefused].
-  Future<DataAck> stopProcess(int processId) async {
+  /// — never a pane's root, never this server. With [machine], it is inside
+  /// that WSL distribution or SSH box, and a session here started it.
+  /// Throws [DataRefused].
+  Future<DataAck> stopProcess(int processId, {String? machine}) async {
+    if (machine != null) return _stopInside(processId, machine);
     final roots = <RunningPaneRoot>[
       for (final record in _records.values)
         if (registry.find(record.sessionId) case final session?
@@ -263,6 +407,40 @@ class ServerTerminals implements TerminalWork, PaneSource {
           ),
     ];
     await _ports.stop(processId, roots, serverPid: pid);
+    return const DataAck();
+  }
+
+  Future<DataAck> _stopInside(int processId, String machineId) async {
+    final machine = _linuxMachines()[machineId];
+    if (machine == null || machine.sessions.isEmpty) {
+      throw const DataRefused.denied(
+        'no session here runs on that machine any more',
+      );
+    }
+    final shell = _shellOn(machine);
+    if (shell == null) {
+      throw const DataRefused.unavailable(
+        'no connection to that SSH machine is open',
+      );
+    }
+    final LinuxListing listing;
+    try {
+      listing = await _listInside(shell.run);
+    } on Object catch (error) {
+      throw DataRefused.unavailable(
+        'what runs there could not be read (${error.runtimeType})',
+      );
+    }
+    final plan = linuxStopPlan(listing, processId, machine.sessions);
+    final said = await shell
+        .run(linuxStopScript(plan))
+        .timeout(ListeningPortProbe.timeout);
+    if (!said.contains('stopped')) {
+      throw DataRefused(
+        DataRefusalCode.failed,
+        'process $processId could not be stopped',
+      );
+    }
     return const DataAck();
   }
 
@@ -781,4 +959,17 @@ class ServerTerminals implements TerminalWork, PaneSource {
       return const [];
     }
   }
+}
+
+/// A WSL distribution ([distribution], `''` for the default one) or an SSH
+/// box ([hostId]) live panes run on, and the sessions they run.
+class _LinuxMachine {
+  _LinuxMachine(this.id, {this.distribution, this.hostId});
+
+  final String id;
+  final String? distribution;
+  final String? hostId;
+  final paneIds = <String>{};
+  final titles = <String>[];
+  final sessions = <String, LinuxSessionPane>{};
 }

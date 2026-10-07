@@ -104,6 +104,26 @@ class ServerSshDomain {
   /// Answers every `ssh.*` request from now on.
   void attach() => _data.sshWork = ServerSshRequests(ssh: ssh, admin: admin);
 
+  /// A shell on [hostId] (`sh -c`, whatever the account's login shell) over
+  /// the connection already open to it, and the box's address; null when none
+  /// is open. Only looking never dials.
+  ({String address, Future<String> Function(String script) run})? openShell(
+    String hostId,
+  ) {
+    final SshConnection connection;
+    try {
+      connection = ssh.pool.forHostId(hostId);
+    } on ArgumentError {
+      return null;
+    }
+    if (!connection.isConnected) return null;
+    final target = SshHostDeployTarget(connection);
+    return (
+      address: connection.host.address,
+      run: (script) async => (await target.run(script)).stdout,
+    );
+  }
+
   /// An SSH environment's files over the server's own SFTP; null for any
   /// other environment, or a host deleted while something still named it.
   FileSpace? fileSpaceFor(ExecutionEnvironment environment) {
