@@ -31,12 +31,16 @@ class AutomationAgentField extends StatelessWidget {
     }
     return DropdownButtonFormField<String>(
       initialValue: selectedId,
+      isExpanded: true,
       decoration: const InputDecoration(labelText: 'Agent'),
       items: [
         for (final installation in installations)
           DropdownMenuItem(
             value: installation.id,
-            child: Text(displayNameFor(installation.agentId)),
+            child: Text(
+              displayNameFor(installation.agentId),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: onChanged,

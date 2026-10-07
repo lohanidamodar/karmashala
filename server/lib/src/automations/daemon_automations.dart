@@ -58,6 +58,7 @@ import 'hosted_check_runner.dart';
 import 'server_event_rules.dart';
 import 'server_resume_runner.dart';
 import 'server_usage_limits.dart';
+import 'step_runners.dart';
 import 'session_mcp_access.dart';
 import '../domain/host_session.dart';
 import 'package:karmashala_notifications/attention.dart'
@@ -101,6 +102,8 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     WorktreeService? worktrees,
     AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
     acpAuth,
+    StepCommandRunner? stepCommands,
+    StepWebhookPoster? stepWebhooks,
   }) : _db = database,
        _tell = tell,
        _registry = registry,
@@ -291,6 +294,13 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       now: now,
       newId: ids,
       onChanged: _changed,
+      commands:
+          stepCommands ??
+          ServerStepCommands(facts: facts, sessionOf: sessions.getById),
+      webhooks: stepWebhooks ?? ServerStepWebhooks(),
+      checksOn: (repositoryId) =>
+          projectChecks.isVerificationEnabled(repositoryId) &&
+          projectChecks.countFor(repositoryId) > 0,
     );
     eventRules = ServerEventRules(
       automations: automations,
@@ -493,7 +503,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
           startedBy: AutomationRunCause.runNow,
         );
         _automations.insertRun(run);
-        _followUps.after(run);
+        await _followUps.after(run);
         return _automations.runById(run.id) ?? run;
       case AutomationEventAction.startSession || null:
         break;

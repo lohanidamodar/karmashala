@@ -51,7 +51,7 @@ void main() {
     [?sessionId],
   );
 
-  test('the head is 85', () => expect(db.schemaVersion, 85));
+  test('the head is 86', () => expect(db.schemaVersion, 86));
 
   test('v80 creates activity_log with its indexes and no foreign keys', () {
     final columns = db

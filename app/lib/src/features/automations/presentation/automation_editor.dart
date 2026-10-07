@@ -58,6 +58,17 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     text:
         _draft.steps.of(AutomationStepKind.notify)?.text ?? kDefaultNotifyText,
   );
+  late final _command = TextEditingController(
+    text: _draft.steps.of(AutomationStepKind.command)?.text ?? '',
+  );
+  late final _hookUrl = TextEditingController(
+    text: _draft.steps.of(AutomationStepKind.webhook)?.url ?? '',
+  );
+  late final _hookBody = TextEditingController(
+    text:
+        _draft.steps.of(AutomationStepKind.webhook)?.text ??
+        kDefaultWebhookBody,
+  );
   late final _perHour = TextEditingController(text: '${_draft.callsPerHour}');
   late final _stopAfter = TextEditingController(
     text: '${_draft.stopAfterFailures}',
@@ -86,6 +97,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       _every,
       _tell,
       _notify,
+      _command,
+      _hookUrl,
+      _hookBody,
       _perHour,
       _stopAfter,
       _longest,
@@ -101,11 +115,18 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     _dry = null;
   });
 
-  void _putStep(AutomationStepKind kind, {AutomationStepWhen? when}) {
+  void _putStep(
+    AutomationStepKind kind, {
+    AutomationStepWhen? when,
+    bool? allowPrivate,
+    int? timeoutSeconds,
+  }) {
     final existing = _draft.steps.of(kind);
     final text = switch (kind) {
       AutomationStepKind.tell => _tell.text,
       AutomationStepKind.notify => _notify.text,
+      AutomationStepKind.command => _command.text,
+      AutomationStepKind.webhook => _hookBody.text,
       AutomationStepKind.check => '',
     };
     _update(
@@ -115,6 +136,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
             kind: kind,
             when: when ?? existing?.when ?? _defaultWhen(kind),
             text: text,
+            url: kind == AutomationStepKind.webhook ? _hookUrl.text.trim() : '',
+            allowPrivate: allowPrivate ?? existing?.allowPrivate ?? false,
+            timeoutSeconds: timeoutSeconds ?? existing?.timeoutSeconds,
           ),
         ),
       ),
@@ -124,8 +148,10 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   static AutomationStepWhen _defaultWhen(AutomationStepKind kind) =>
       switch (kind) {
         AutomationStepKind.tell => AutomationStepWhen.failure,
-        AutomationStepKind.notify => AutomationStepWhen.always,
-        AutomationStepKind.check => AutomationStepWhen.success,
+        AutomationStepKind.notify ||
+        AutomationStepKind.webhook => AutomationStepWhen.always,
+        AutomationStepKind.check ||
+        AutomationStepKind.command => AutomationStepWhen.success,
       };
 
   Repository? _repository(List<Repository> all) =>
@@ -803,6 +829,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       );
       widgets.add(switch (step.kind) {
         AutomationStepKind.check => _checkStep(context, checks, repository),
+        AutomationStepKind.command => _commandStep(step, rail),
+        AutomationStepKind.webhook => _webhookStep(step, rail),
         AutomationStepKind.tell => _messageStep(
           context,
           step,
@@ -913,6 +941,127 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         controller: controller,
         onChanged: () => _putStep(step.kind),
       ),
+    ],
+  );
+
+  Widget _whenField(AutomationStep step) =>
+      DropdownButtonFormField<AutomationStepWhen>(
+        key: ValueKey('automation-when-${step.kind.storedName}'),
+        initialValue: step.when,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Runs'),
+        items: [
+          for (final when in AutomationStepWhen.values)
+            DropdownMenuItem(value: when, child: Text(when.label)),
+        ],
+        onChanged: (when) =>
+            when == null ? null : _putStep(step.kind, when: when),
+      );
+
+  Widget _timeoutField(AutomationStep step, {required bool minutes}) =>
+      TextFormField(
+        key: ValueKey('automation-timeout-${step.kind.storedName}'),
+        initialValue: minutes
+            ? '${step.timeout.inMinutes}'
+            : '${step.timeout.inSeconds}',
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: minutes
+              ? 'Time limit, in minutes'
+              : 'Time limit, in seconds',
+        ),
+        onChanged: (value) {
+          final n = int.tryParse(value.trim());
+          if (n == null || n <= 0) return;
+          _putStep(step.kind, timeoutSeconds: minutes ? n * 60 : n);
+        },
+      );
+
+  Widget _commandStep(AutomationStep step, Color? rail) => EditorNode(
+    result: _resultFor(step.kind.storedName),
+    title: 'Run a command',
+    icon: AppIcons.terminal,
+    hint: 'In the run\'s worktree or checkout, only where checks are on.',
+    rail: rail,
+    trailing: [_removeButton(step.kind)],
+    children: [
+      _whenField(step),
+      TextField(
+        key: const ValueKey('automation-text-command'),
+        controller: _command,
+        minLines: 1,
+        maxLines: 4,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontFamily: kMonoFamily,
+          fontFamilyFallback: kMonoFallback,
+        ),
+        decoration: const InputDecoration(labelText: 'Command'),
+        onChanged: (_) => _putStep(step.kind),
+      ),
+      if (step.refusal case final why? when _command.text.isNotEmpty)
+        _Problem(why)
+      else
+        EditorNote(
+          'Values reach it as environment variables, never in the command: '
+          '"\$${stepEnvironmentName('github.pr.branch')}" in sh, '
+          '\$env:${stepEnvironmentName('github.pr.branch')} in PowerShell. '
+          'Its output and exit code are {{steps.command.output}} and '
+          '{{steps.command.exit_code}} for the steps after.',
+        ),
+      _timeoutField(step, minutes: true),
+    ],
+  );
+
+  Widget _webhookStep(AutomationStep step, Color? rail) => EditorNode(
+    result: _resultFor(step.kind.storedName),
+    title: 'Call a webhook',
+    icon: AppIcons.webhooksLogo,
+    hint: 'POSTs JSON, with an Idempotency-Key per run.',
+    rail: rail,
+    trailing: [_removeButton(step.kind)],
+    children: [
+      _whenField(step),
+      TextField(
+        key: const ValueKey('automation-url-webhook'),
+        controller: _hookUrl,
+        keyboardType: TextInputType.url,
+        decoration: const InputDecoration(labelText: 'URL'),
+        onChanged: (_) => _putStep(step.kind),
+      ),
+      TextField(
+        key: const ValueKey('automation-text-webhook'),
+        controller: _hookBody,
+        minLines: 2,
+        maxLines: 6,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontFamily: kMonoFamily,
+          fontFamilyFallback: kMonoFallback,
+        ),
+        decoration: const InputDecoration(labelText: 'Body'),
+        onChanged: (_) => _putStep(step.kind),
+      ),
+      VariableChips(
+        names: kStepVariables.keys.toList(),
+        controller: _hookBody,
+        onChanged: () => _putStep(step.kind),
+      ),
+      if (step.refusal case final why? when _hookUrl.text.isNotEmpty)
+        _Problem(why)
+      else
+        const EditorNote(
+          'Values are JSON-escaped where they stand, so put each inside a '
+          'string.',
+        ),
+      SettingsSwitchRow(
+        key: const ValueKey('automation-private-webhook'),
+        label: 'Allow addresses on my network',
+        help:
+            'Off, private, loopback and link-local addresses are refused, so '
+            'a run cannot reach into your network.',
+        value: step.allowPrivate,
+        onChanged: (on) => _putStep(step.kind, allowPrivate: on),
+      ),
+      _timeoutField(step, minutes: false),
     ],
   );
 
@@ -1269,6 +1418,10 @@ const kDefaultTellText =
 
 /// The notify step's text until someone writes their own.
 const kDefaultNotifyText = '{{automation}} in {{project}}: {{run.status}}';
+
+/// The webhook step's body until someone writes their own.
+const kDefaultWebhookBody =
+    '{"automation": "{{automation}}", "status": "{{run.status}}"}';
 
 const kDayLetters = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 

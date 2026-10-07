@@ -517,6 +517,58 @@ void main() {
     expect(find.text('Bypass (full autonomy)'), findsWidgets);
   });
 
+  testWidgets('a command step refuses a variable in its text; a webhook step '
+      'has its URL, body and the network tick, and both fit every size', (
+    tester,
+  ) async {
+    makeReady();
+    final draft = AutomationDraft(
+      repositoryId: 'r1',
+      name: 'N',
+      prompt: 'p',
+      steps: AutomationSteps(const [
+        AutomationStep(kind: AutomationStepKind.check),
+        AutomationStep(kind: AutomationStepKind.command, text: 'make'),
+        AutomationStep(
+          kind: AutomationStepKind.webhook,
+          url: 'https://hooks.example.com/k',
+          text: '{"s": "{{run.status}}"}',
+          when: AutomationStepWhen.always,
+        ),
+      ]),
+    );
+    for (final (size, scale) in const [
+      (Size(360, 2400), 1.0),
+      (Size(1440, 1400), 1.0),
+      (Size(360, 3200), 1.6),
+    ]) {
+      await pump(tester, draft, size: size, textScale: scale);
+      expect(tester.takeException(), isNull, reason: '$size $scale');
+      expect(find.text('Run a command'), findsWidgets);
+      expect(find.text('Allow addresses on my network'), findsOneWidget);
+    }
+
+    final command = find.byKey(const ValueKey('automation-text-command'));
+    await tester.ensureVisible(command);
+    await tester.enterText(command, 'git push {{github.pr.branch}}');
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('never has variables put into it'),
+      findsWidgets,
+    );
+    expect(save(tester).onPressed, isNull);
+
+    final tick = find.descendant(
+      of: find.byKey(const ValueKey('automation-private-webhook')),
+      matching: find.byType(Switch),
+    );
+    await tester.ensureVisible(tick);
+    expect(tester.widget<Switch>(tick).value, isFalse);
+    await tester.tap(tick);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(tick).value, isTrue);
+  });
+
   testWidgets('it fits a phone, a desktop and large text', (tester) async {
     for (final size in const [
       Size(360, 740),

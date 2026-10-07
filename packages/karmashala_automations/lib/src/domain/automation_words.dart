@@ -181,6 +181,8 @@ String automationWords(
 String _stepWords(AutomationStep step) {
   final what = switch (step.kind) {
     AutomationStepKind.check => 'check the result',
+    AutomationStepKind.command => 'run a command',
+    AutomationStepKind.webhook => 'call a webhook',
     AutomationStepKind.tell => 'tell the agent',
     AutomationStepKind.notify => 'notify me',
   };

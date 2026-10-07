@@ -26,6 +26,9 @@ enum UnattendedRefusalKind {
   /// Verification is on and there is nothing configured for it to run.
   noProjectChecks,
 
+  /// A command step would run where checks are off or there are none.
+  commandWithoutChecks,
+
   /// The agent may change things and nothing after it checks the result.
   noCheckStep,
 
@@ -80,6 +83,7 @@ class UnattendedGateInput {
     this.agentInstalled = true,
     this.requiresChecks = true,
     this.hasCheckStep = true,
+    this.hasCommandStep = false,
     this.permissionLabel = '',
     this.permissionEvidence = '',
     this.reachReason = '',
@@ -98,6 +102,9 @@ class UnattendedGateInput {
 
   /// Whether a "Check the result" step follows the agent.
   final bool hasCheckStep;
+
+  /// Whether a "Run a command" step follows the agent.
+  final bool hasCommandStep;
 
   final String agentName;
 
@@ -154,6 +161,14 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
       '$repository has no check yet. An unattended run needs at least one '
       'command that says whether the work still stands, because nobody is '
       'there to look — add one first.',
+    );
+  }
+  if (input.hasCommandStep &&
+      (!input.verificationEnabled || input.projectCheckCount <= 0)) {
+    return UnattendedRefusal(
+      UnattendedRefusalKind.commandWithoutChecks,
+      'A "Run a command" step runs only where checks are on. Turn checks on '
+      'for $repository and give it at least one, or remove the step.',
     );
   }
   if (judged && !input.hasCheckStep) {

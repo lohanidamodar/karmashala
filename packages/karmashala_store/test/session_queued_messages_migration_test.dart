@@ -9,7 +9,7 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 85', () => expect(db.schemaVersion, 85));
+  test('the head is 86', () => expect(db.schemaVersion, 86));
 
   test('v71 creates session_queued_messages, and v75 adds cancelled_by', () {
     final columns = db

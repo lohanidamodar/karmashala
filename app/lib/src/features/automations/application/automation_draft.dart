@@ -360,9 +360,9 @@ class AutomationDraft {
           : 'Say what the session is told.';
     }
     if (trigger == DraftTrigger.webhook) {
-      return webhookTemplateRefusal(prompt);
+      if (webhookTemplateRefusal(prompt) case final why?) return why;
     }
-    return null;
+    return steps.refusal;
   }
 
   /// The automation this draft would save, dated [now], or null while

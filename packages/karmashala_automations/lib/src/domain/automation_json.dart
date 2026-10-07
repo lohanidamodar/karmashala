@@ -134,7 +134,16 @@ Map<String, Object?> automationRunToJson(AutomationRun r) => {
   'prompt': ?r.prompt,
   if (r.stepResults.isNotEmpty)
     'stepResults': [for (final step in r.stepResults) step.toJson()],
+  if (r.variables.isNotEmpty) 'variables': r.variables,
 };
+
+/// A string map, forgiving: a value that is not a string is left out.
+Map<String, String> stringMapFrom(Object? json) => json is Map
+    ? {
+        for (final MapEntry(:key, :value) in json.entries)
+          if (key is String && value is String) key: value,
+      }
+    : const {};
 
 AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
   id: _as<String>(json['id']),
@@ -153,6 +162,7 @@ AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
   startedBy: AutomationRunCause.fromName(json['startedBy'] as String?),
   stepResults: AutomationStepResult.listFromJson(json['stepResults']),
   prompt: json['prompt'] as String?,
+  variables: stringMapFrom(json['variables']),
 );
 
 Map<String, Object?> checkVerdictToJson(AutomationCheckVerdict v) => {

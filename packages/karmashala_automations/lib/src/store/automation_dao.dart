@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:karmashala_store/database.dart';
 
 import '../domain/automation_copy_rules.dart';
+import '../domain/automation_json.dart' show stringMapFrom;
 import '../service/automation_records.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_core/verdicts.dart';
@@ -262,8 +263,8 @@ class AutomationDao implements AutomationRecords {
     'INSERT INTO automation_runs '
     '(id, automation_id, scheduled_for, fired_at, state, reason, '
     'base_checkpoint_id, session_id, finished_at, commits_made, origin, '
-    'event_session_id, started_by, step_results, prompt) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'event_session_id, started_by, step_results, prompt, variables) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       run.id,
       run.automationId,
@@ -280,6 +281,7 @@ class AutomationDao implements AutomationRecords {
       run.startedBy?.name,
       _stepResultsColumn(run),
       run.prompt,
+      run.variables.isEmpty ? null : jsonEncode(run.variables),
     ],
   );
 
@@ -614,5 +616,15 @@ class AutomationDao implements AutomationRecords {
       row['step_results'] as String?,
     ),
     prompt: row['prompt'] as String?,
+    variables: _variables(row['variables'] as String?),
   );
+
+  static Map<String, String> _variables(String? raw) {
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      return stringMapFrom(jsonDecode(raw));
+    } on FormatException {
+      return const {};
+    }
+  }
 }

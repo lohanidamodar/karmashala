@@ -86,6 +86,7 @@ class AutomationRun {
     this.startedBy,
     this.stepResults = const [],
     this.prompt,
+    this.variables = const {},
   });
 
   final String id;
@@ -139,6 +140,10 @@ class AutomationRun {
   /// every other run, whose prompt is its automation's.
   final String? prompt;
 
+  /// What the trigger knew, as `{{…}}` values for the steps: a GitHub
+  /// event's `github.pr.number` and the rest. Empty for most runs.
+  final Map<String, String> variables;
+
   Duration? get duration => finishedAt?.difference(firedAt);
 
   AutomationRun copyWith({
@@ -167,6 +172,7 @@ class AutomationRun {
     startedBy: startedBy,
     stepResults: stepResults ?? this.stepResults,
     prompt: prompt,
+    variables: variables,
   );
 
   @override

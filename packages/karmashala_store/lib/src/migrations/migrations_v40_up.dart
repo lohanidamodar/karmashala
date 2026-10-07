@@ -1169,3 +1169,13 @@ void _migrateToV85(Database db) {
   if (columns.contains('prompt')) return;
   db.execute('ALTER TABLE automation_runs ADD COLUMN prompt TEXT;');
 }
+
+/// What a trigger knew, kept on the run as its steps' variables: a GitHub
+/// event's pull request, comment or check.
+void _migrateToV86(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automation_runs);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('variables')) return;
+  db.execute('ALTER TABLE automation_runs ADD COLUMN variables TEXT;');
+}

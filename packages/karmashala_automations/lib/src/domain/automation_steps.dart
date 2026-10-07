@@ -28,6 +28,13 @@ enum AutomationStepKind {
   /// Runs the checkout's project checks on what the agent did.
   check('check'),
 
+  /// Runs a shell command in the run's checkout or worktree. Variables reach
+  /// it only as environment variables ([stepEnvironment]).
+  command('command'),
+
+  /// POSTs JSON to a URL, its body a template of JSON-escaped values.
+  webhook('webhook'),
+
   /// Sends the agent's session a message, as a scheduled resume due now.
   tell('tell'),
 
@@ -47,35 +54,72 @@ enum AutomationStepKind {
 
   String get label => switch (this) {
     AutomationStepKind.check => 'Check the result',
+    AutomationStepKind.command => 'Run a command',
+    AutomationStepKind.webhook => 'Call a webhook',
     AutomationStepKind.tell => 'Tell the agent',
     AutomationStepKind.notify => 'Notify me',
+  };
+
+  /// How long the step may take when its owner names nothing.
+  Duration get defaultTimeout => switch (this) {
+    AutomationStepKind.command => const Duration(minutes: 10),
+    _ => const Duration(seconds: 30),
   };
 }
 
 /// One step after the agent. [text] is the message for tell and notify, with
-/// `{{…}}` variables ([fillStepText]); a check carries none.
+/// `{{…}}` variables ([fillStepText]); the command for a command step, never
+/// filled; the body template for a webhook ([fillJsonBody]). A check carries
+/// none.
 class AutomationStep {
   const AutomationStep({
     required this.kind,
     this.when = AutomationStepWhen.success,
     this.text = '',
+    this.url = '',
+    this.allowPrivate = false,
+    this.timeoutSeconds,
   });
 
   final AutomationStepKind kind;
   final AutomationStepWhen when;
   final String text;
 
-  AutomationStep copyWith({AutomationStepWhen? when, String? text}) =>
-      AutomationStep(
-        kind: kind,
-        when: when ?? this.when,
-        text: text ?? this.text,
-      );
+  /// Where a webhook step posts.
+  final String url;
+
+  /// A webhook step may post to private, loopback and link-local addresses.
+  final bool allowPrivate;
+
+  /// Null is [AutomationStepKind.defaultTimeout].
+  final int? timeoutSeconds;
+
+  Duration get timeout => timeoutSeconds == null || timeoutSeconds! <= 0
+      ? kind.defaultTimeout
+      : Duration(seconds: timeoutSeconds!);
+
+  AutomationStep copyWith({
+    AutomationStepWhen? when,
+    String? text,
+    String? url,
+    bool? allowPrivate,
+    int? timeoutSeconds,
+  }) => AutomationStep(
+    kind: kind,
+    when: when ?? this.when,
+    text: text ?? this.text,
+    url: url ?? this.url,
+    allowPrivate: allowPrivate ?? this.allowPrivate,
+    timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+  );
 
   Map<String, Object?> toJson() => {
     'kind': kind.storedName,
     'when': when.name,
     if (text.isNotEmpty) 'text': text,
+    if (url.isNotEmpty) 'url': url,
+    if (allowPrivate) 'allowPrivate': true,
+    'timeoutSeconds': ?timeoutSeconds,
   };
 
   /// Null for a step this build does not know, which is then left out rather
@@ -91,18 +135,37 @@ class AutomationStep {
         AutomationStepWhen.success,
       ),
       text: json['text'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      allowPrivate: json['allowPrivate'] == true,
+      timeoutSeconds: json['timeoutSeconds'] as int?,
     );
   }
+
+  /// Why this step cannot be saved, or null when it can.
+  String? get refusal => switch (kind) {
+    AutomationStepKind.command when text.trim().isEmpty =>
+      'Say what command to run.',
+    AutomationStepKind.command when text.contains('{{') =>
+      'A command never has variables put into it. Read them from the '
+          'environment instead, as "\$KARMASHALA_GITHUB_PR_BRANCH" (or '
+          '\$env:KARMASHALA_GITHUB_PR_BRANCH on Windows).',
+    AutomationStepKind.webhook => webhookStepRefusal(url, text),
+    _ => null,
+  };
 
   @override
   bool operator ==(Object other) =>
       other is AutomationStep &&
       other.kind == kind &&
       other.when == when &&
-      other.text == text;
+      other.text == text &&
+      other.url == url &&
+      other.allowPrivate == allowPrivate &&
+      other.timeoutSeconds == timeoutSeconds;
 
   @override
-  int get hashCode => Object.hash(kind, when, text);
+  int get hashCode =>
+      Object.hash(kind, when, text, url, allowPrivate, timeoutSeconds);
 
   @override
   String toString() => '${kind.storedName}(${when.name})';
@@ -196,6 +259,14 @@ class AutomationSteps {
 
   @override
   String toString() => 'steps$after';
+
+  /// The first step that cannot be saved, said as why, or null.
+  String? get refusal {
+    for (final step in after) {
+      if (step.refusal case final why?) return '${step.kind.label}: $why';
+    }
+    return null;
+  }
 }
 
 /// The variables a step's text may name, each with what it stands for.
@@ -205,7 +276,57 @@ const Map<String, String> kStepVariables = {
   'run.status': '"succeeded" or "failed"',
   'steps.agent.output': 'How the agent\'s run ended',
   'steps.check.output': 'What the checks said',
+  'steps.command.output': 'What the command printed',
+  'steps.command.exit_code': 'The command\'s exit code',
+  'steps.webhook.status': 'The webhook\'s HTTP status',
+  'steps.webhook.output': 'What the webhook answered',
 };
+
+/// The environment variable [name] reaches a command as:
+/// `github.pr.branch` is `KARMASHALA_GITHUB_PR_BRANCH`.
+String stepEnvironmentName(String name) =>
+    'KARMASHALA_${name.toUpperCase().replaceAll(RegExp('[^A-Z0-9]'), '_')}';
+
+/// [values] as a command's environment. The command text is never filled, so
+/// no value can become shell syntax; the shell reads them as variables.
+Map<String, String> stepEnvironment(Map<String, String> values) => {
+  for (final MapEntry(:key, :value) in values.entries)
+    stepEnvironmentName(key): value.replaceAll('\u0000', ''),
+};
+
+/// [template] with each known `{{name}}` replaced by its value JSON-escaped,
+/// for use inside a JSON string. Throws [FormatException] when the result is
+/// not JSON.
+String fillJsonBody(String template, Map<String, String> values) {
+  final filled = template.replaceAllMapped(_variable, (m) {
+    final value = values[m[1]!];
+    if (value == null) return m[0]!;
+    final quoted = jsonEncode(value);
+    return quoted.substring(1, quoted.length - 1);
+  });
+  jsonDecode(filled.trim().isEmpty ? '{}' : filled);
+  return filled.trim().isEmpty ? '{}' : filled;
+}
+
+/// Why a webhook step to [url] with [body] cannot be saved, or null.
+String? webhookStepRefusal(String url, String body) {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null ||
+      !(uri.scheme == 'https' || uri.scheme == 'http') ||
+      uri.host.isEmpty) {
+    return 'Give it an http or https URL.';
+  }
+  try {
+    fillJsonBody(body, {
+      for (final name in _variable.allMatches(body).map((m) => m[1]!))
+        name: 'example',
+    });
+  } on FormatException {
+    return 'The body is not JSON. Put variables inside strings, like '
+        '{"title": "{{github.pr.title}}"}.';
+  }
+  return null;
+}
 
 final RegExp _variable = RegExp(r'\{\{\s*([a-zA-Z0-9_.\-]+)\s*\}\}');
 
