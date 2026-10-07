@@ -40,12 +40,17 @@ void main() {
 
   /// Against the real tool when it is installed; skipped where it is not.
   group('real gitleaks', () {
+    // Each run by name, as the scan runs them: no `sh`, which Windows lacks.
+    bool runs(String tool, List<String> args) {
+      try {
+        return Process.runSync(tool, args).exitCode == 0;
+      } on ProcessException {
+        return false;
+      }
+    }
+
     final hasTools =
-        Process.runSync('sh', [
-          '-c',
-          'command -v gitleaks && command -v git',
-        ]).exitCode ==
-        0;
+        runs('gitleaks', ['version']) && runs('git', ['--version']);
     late Directory tmp;
     late String repo;
 
@@ -89,13 +94,13 @@ void main() {
       final scan = await service().scanOutgoingSecrets(at());
       expect(scan, isA<SecretScanFound>());
       expect((scan as SecretScanFound).findings.single.file, 'a.txt');
-    }, skip: hasTools ? false : 'needs gitleaks and git');
+    }, skip: hasTools ? false : 'needs gitleaks and git on the PATH');
 
     test('a commit a remote already has is not scanned again', () async {
       commitToken('a.txt');
       git(['update-ref', 'refs/remotes/origin/main', 'HEAD']);
       final scan = await service().scanOutgoingSecrets(at());
       expect(scan, isA<SecretScanClean>());
-    }, skip: hasTools ? false : 'needs gitleaks and git');
+    }, skip: hasTools ? false : 'needs gitleaks and git on the PATH');
   });
 }
