@@ -27,13 +27,14 @@ class TimelineChart extends StatefulWidget {
   /// Zoom from outside (the toolbar's buttons).
   final TimelineZoomController? controller;
 
+  /// The session-name column; no chart token says it yet.
   static const double labelWidth = 240;
 
   /// The axis band's least height; the band grows with the text scale
   /// (`TimelineAxisPainter.heightFor`).
-  static const double axisHeight = 24;
-  static const double headerHeight = 30;
-  static const double laneHeight = 28;
+  static const double axisHeight = Chrome.paneStrip;
+  static const double headerHeight = Chrome.tabStrip;
+  static const double laneHeight = Insets.xl + Insets.xs;
 
   @override
   State<TimelineChart> createState() => _TimelineChartState();
@@ -236,6 +237,7 @@ class _TimelineChartState extends State<TimelineChart> {
     final scaler = MediaQuery.textScalerOf(context);
     final axisHeight = TimelineAxisPainter.heightFor(
       scaler,
+      style: palette.axisDay,
       minimum: TimelineChart.axisHeight,
     );
     final items = _items();
@@ -331,12 +333,15 @@ class _TimelineChartState extends State<TimelineChart> {
               builder: (context, hover, _) {
                 if (hover == null) return const SizedBox.shrink();
                 final left = math.min(
-                  hover.position.dx + 12,
-                  math.max(0.0, constraints.maxWidth - 320),
+                  hover.position.dx + Insets.md,
+                  math.max(
+                    0.0,
+                    constraints.maxWidth - _HoverCard.maxWidth - Insets.lg,
+                  ),
                 );
                 return Positioned(
                   left: left,
-                  top: hover.position.dy + 14,
+                  top: hover.position.dy + Insets.md,
                   child: IgnorePointer(child: _HoverCard(text: hover.text)),
                 );
               },
@@ -384,11 +389,14 @@ class _HoverCard extends StatelessWidget {
 
   final String text;
 
+  /// The widest a hover card is drawn; no chart token says it yet.
+  static const double maxWidth = 300;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 300),
+      constraints: const BoxConstraints(maxWidth: maxWidth),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.colorScheme.inverseSurface,
@@ -509,12 +517,12 @@ class _LaneRow extends StatelessWidget {
                           : 'Hide what ${session.title} started',
                       child: Icon(
                         folded ? AppIcons.caretRight : AppIcons.caretDown,
-                        size: 14,
+                        size: Chrome.iconAction,
                       ),
                     ),
                   )
                 else
-                  const SizedBox(width: 14),
+                  const SizedBox(width: Chrome.iconAction),
                 const SizedBox(width: Insets.xs),
                 Expanded(
                   child: Text(

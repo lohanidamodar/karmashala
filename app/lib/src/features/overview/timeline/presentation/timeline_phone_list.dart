@@ -29,7 +29,7 @@ class TimelinePhoneList extends StatelessWidget {
     return ListView.separated(
       key: const ValueKey('timeline-phone-list'),
       itemCount: sessions.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
+      separatorBuilder: (_, _) => const Divider(height: Insets.hair),
       itemBuilder: (context, index) {
         final session = sessions[index];
         return _PhoneRow(
@@ -107,7 +107,7 @@ class _PhoneRow extends StatelessWidget {
                         : null,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: Insets.hair * 2),
                 Text(
                   subtitle,
                   maxLines: 1,
@@ -116,7 +116,7 @@ class _PhoneRow extends StatelessWidget {
                 ),
                 const SizedBox(height: Insets.xs),
                 SizedBox(
-                  height: 10,
+                  height: Insets.sm + Insets.hair * 2,
                   child: CustomPaint(
                     painter: TimelineLanePainter(
                       session: session,
