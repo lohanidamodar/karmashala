@@ -102,8 +102,12 @@ class SessionTranscriptView extends ConsumerStatefulWidget {
   const SessionTranscriptView({
     required this.sessionId,
     this.holdForPrompt = false,
+    this.seenUntil,
     super.key,
   });
+
+  /// See [ChatTranscriptView.seenUntil].
+  final DateTime? seenUntil;
 
   final String sessionId;
 
@@ -761,6 +765,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           key: ValueKey(widget.sessionId),
           toLatest: _toLatest,
           messages: messages,
+          seenUntil: widget.seenUntil,
           earlier: earlier,
           onLoadEarlier: earlier > 0
               ? () => unawaited(

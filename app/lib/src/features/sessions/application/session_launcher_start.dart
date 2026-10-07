@@ -72,6 +72,7 @@ extension SessionStartVerbs on SessionLauncher {
       started,
       targetPaneId: request.targetPaneId,
       externalTerminal: externalTerminal,
+      openTab: request.openTab,
     );
   }
 
@@ -101,6 +102,7 @@ extension SessionStartVerbs on SessionLauncher {
     String? targetPaneId,
     SystemTerminal? externalTerminal,
     TabReveal showing = TabReveal.front,
+    bool openTab = true,
   }) async {
     final session = started.session;
     final behind = showing == TabReveal.background
@@ -130,6 +132,26 @@ extension SessionStartVerbs on SessionLauncher {
             ),
             workingDirectory: distro == null ? external.workingDirectory : null,
           );
+      return SessionLaunchResult(
+        session: session,
+        workingDirectoryNotice: started.workingDirectoryNotice,
+      );
+    }
+    // Kept where the person is: the server runs it, and nothing here opens
+    // or takes focus. The lists and the Overview learn of it as of any row.
+    if (!openTab) {
+      _publish(
+        SessionChange(
+          sessionId: session.id,
+          kinds: const {SessionChangeKind.membership, SessionChangeKind.status},
+        ),
+      );
+      if (started.credentialNotice case final notice?) {
+        _ref
+            .read(sessionNoticesProvider.notifier)
+            .post(session.id, SessionNotice(message: notice));
+      }
+      _log.info('Started ${session.id} without showing it in this window.');
       return SessionLaunchResult(
         session: session,
         workingDirectoryNotice: started.workingDirectoryNotice,

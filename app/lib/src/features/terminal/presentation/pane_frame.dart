@@ -128,8 +128,16 @@ class LiveTerminalPane extends ConsumerWidget {
     required this.chordOverrides,
     required this.onKeyEvent,
     required this.onSecondaryTapDown,
+    this.claimsPaneFocus = true,
+    this.sizesGrid = true,
     super.key,
   });
+
+  /// See [TerminalPaneView.claimsPaneFocus].
+  final bool claimsPaneFocus;
+
+  /// See [TerminalPaneView.sizesGrid].
+  final bool sizesGrid;
 
   final String paneId;
   final TerminalInstance fallback;
@@ -158,6 +166,8 @@ class LiveTerminalPane extends ConsumerWidget {
       onKeyEvent: onKeyEvent,
       onSecondaryTapDown: (position) => onSecondaryTapDown(position, live),
       linkActions: ref.read(terminalLinkActionsProvider),
+      claimsPaneFocus: claimsPaneFocus,
+      sizesGrid: sizesGrid,
     );
   }
 }

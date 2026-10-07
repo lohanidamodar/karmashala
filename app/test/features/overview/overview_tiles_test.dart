@@ -94,34 +94,6 @@ void main() {
     });
   });
 
-  group('keyboard', () {
-    final tiles = [
-      ['a1', 'a2', 'a3'],
-      ['b1'],
-      <String>[],
-      ['c1', 'c2'],
-    ];
-
-    test('no mark yet picks the first', () {
-      expect(moveOnTiles(tiles, null, BoardMove.right), 'a1');
-      expect(moveOnTiles(const [], null, BoardMove.right), isNull);
-    });
-
-    test('left and right walk a tile and stop at its edges', () {
-      expect(moveOnTiles(tiles, 'a1', BoardMove.right), 'a2');
-      expect(moveOnTiles(tiles, 'a3', BoardMove.right), 'a3');
-      expect(moveOnTiles(tiles, 'a1', BoardMove.left), 'a1');
-    });
-
-    test('up and down reach the next tile with marks, at the same place '
-        'or its last', () {
-      expect(moveOnTiles(tiles, 'a3', BoardMove.down), 'b1');
-      expect(moveOnTiles(tiles, 'b1', BoardMove.down), 'c1');
-      expect(moveOnTiles(tiles, 'c2', BoardMove.up), 'b1');
-      expect(moveOnTiles(tiles, 'a2', BoardMove.up), 'a2');
-    });
-  });
-
   test('an id names its card, a sub-session stacked on its parent too', () {
     final board = build({
       AgentState.working: [entry('parent'), entry('child', parent: 'parent')],

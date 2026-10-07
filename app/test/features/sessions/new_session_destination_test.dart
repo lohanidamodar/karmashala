@@ -220,6 +220,103 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
+  group('keep working here', () {
+    Future<List<(String, bool)>> openWith(
+      WidgetTester tester,
+      ProviderContainer container, {
+      bool keepHere = false,
+      bool preferChat = false,
+    }) async {
+      final started = <(String, bool)>[];
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => NewSessionDialog.show(
+                    context,
+                    keepHere: keepHere,
+                    preferChat: preferChat,
+                    onStarted: (session, {required keptHere}) =>
+                        started.add((session.id, keptHere)),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      return started;
+    }
+
+    Finder keepHere() => find.byKey(const ValueKey('new-session-keep-here'));
+
+    testWidgets('the main dialog offers it unticked, and opens a tab', (
+      tester,
+    ) async {
+      final container = containerFor(selected: 'r1');
+      final started = await openWith(tester, container);
+      expect(keepHere(), findsOneWidget);
+      expect(tester.widget<CheckboxListTile>(keepHere()).value, isFalse);
+
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      expect(started.single.$2, isFalse);
+      expect(container.read(terminalSessionsControllerProvider).tabs, isNotEmpty);
+      expect(container.read(selectedSessionIdProvider), started.single.$1);
+      await closeAll(tester);
+    });
+
+    testWidgets('ticked, it starts with no tab and moves nothing', (
+      tester,
+    ) async {
+      final container = containerFor(selected: 'r1');
+      final started = await openWith(tester, container, keepHere: true);
+      expect(tester.widget<CheckboxListTile>(keepHere()).value, isTrue);
+
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      expect(started, hasLength(1));
+      expect(started.single.$2, isTrue);
+      expect(db.server.sessionRows.getById(started.single.$1), isNotNull);
+      expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+      expect(container.read(selectedSessionIdProvider), isNull);
+      expect(find.byType(NewSessionDialog), findsNothing);
+      await closeAll(tester);
+    });
+
+    testWidgets('chat is picked where the agent has one, unless changed', (
+      tester,
+    ) async {
+      server.installationRows.insert(
+        agentInstallation(
+          id: 'chat',
+          agentId: AgentIds.claudeAcp,
+          path: r'C:\Users\me\.bin\claude-agent-acp.exe',
+        ),
+      );
+      final container = containerFor(selected: 'r1');
+      final started = await openWith(
+        tester,
+        container,
+        keepHere: true,
+        preferChat: true,
+      );
+      await tester.tap(startButton());
+      await tester.pumpAndSettle();
+      expect(
+        db.server.sessionRows.getById(started.single.$1)?.agentInstallationId,
+        'chat',
+      );
+      await closeAll(tester);
+    });
+  });
+
   group('it opens where the app is already pointed', () {
     testWidgets('at the selected checkout', (tester) async {
       final container = containerFor(selected: 'r1');

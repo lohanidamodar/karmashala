@@ -36,8 +36,21 @@ class QuestionPromptCard extends StatefulWidget {
     this.trailing,
     this.onAnswerInTerminal,
     this.dense = false,
+    this.numbered = false,
+    this.onReplyInWords,
+    this.controller,
     super.key,
   });
+
+  /// Each option under its number, the key that picks it on the Overview's
+  /// board, with Decline in sight rather than under ⋯.
+  final bool numbered;
+
+  /// "Reply in words", in sight beside Decline; null draws none.
+  final VoidCallback? onReplyInWords;
+
+  /// Picks and sends from outside the card: the Overview's keys.
+  final QuestionPromptController? controller;
 
   final String agentName;
   final RemoteQuestion question;
@@ -68,6 +81,18 @@ class QuestionPromptCard extends StatefulWidget {
 
   @override
   State<QuestionPromptCard> createState() => _QuestionPromptCardState();
+}
+
+/// Picks and sends a [QuestionPromptCard]'s answer from outside it, through
+/// the card's own Send.
+class QuestionPromptController {
+  _QuestionPromptCardState? _card;
+
+  /// Picks option [index] of the first question; false when it has none.
+  bool pick(int index) => _card?._pickFromKeys(index) ?? false;
+
+  /// Sends what is picked; false when no complete answer is.
+  bool send() => _card?._sendFromKeys() ?? false;
 }
 
 enum _Secondary { decline, chat, terminal }
@@ -102,8 +127,32 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    widget.controller?._card = this;
+  }
+
+  bool _pickFromKeys(int index) {
+    final questions = widget.question.questions;
+    if (_busy || !widget.canAnswer || questions.isEmpty) return false;
+    if (index < 0 || index >= questions.first.options.length) return false;
+    _pick(0, index);
+    return true;
+  }
+
+  bool _sendFromKeys() {
+    if (_busy || !widget.canAnswer || !_complete) return false;
+    _send();
+    return true;
+  }
+
+  @override
   void didUpdateWidget(QuestionPromptCard old) {
     super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      if (old.controller?._card == this) old.controller!._card = null;
+      widget.controller?._card = this;
+    }
     // A new question is a new form: nothing chosen for the last one carries.
     if (old.question.toolUseId != widget.question.toolUseId) {
       for (final c in _words) {
@@ -120,6 +169,7 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
 
   @override
   void dispose() {
+    if (widget.controller?._card == this) widget.controller!._card = null;
     for (final c in _words) {
       c.dispose();
     }
@@ -336,11 +386,14 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
       );
     }
     final chat = widget.chatLabel;
+    // Numbered, Decline is in sight however narrow; the rest folds under ⋯.
+    final inSight = !compact || widget.numbered;
     final menu = [
-      if (compact) _Secondary.decline,
+      if (!inSight) _Secondary.decline,
       if (compact && chat != null) _Secondary.chat,
       if (widget.onAnswerInTerminal != null) _Secondary.terminal,
     ];
+    final reply = widget.onReplyInWords;
     String labelOf(_Secondary action) => switch (action) {
       _Secondary.decline => 'Decline',
       _Secondary.chat => chat ?? '',
@@ -360,27 +413,34 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
       child: Row(
         children: [
           Expanded(
-            child: compact
+            child: !inSight
                 ? const SizedBox.shrink()
-                : Row(
+                : Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      if (reply != null)
+                        TextButton(
+                          key: const ValueKey('question-reply-in-words'),
+                          style: quiet,
+                          onPressed: _busy ? null : reply,
+                          child: const Text('Reply in words'),
+                        ),
                       TextButton(
+                        key: const ValueKey('question-decline'),
                         style: quiet,
                         onPressed: _busy ? null : () => run(_Secondary.decline),
                         child: const Text('Decline'),
                       ),
-                      if (chat != null)
-                        Flexible(
-                          child: TextButton(
-                            style: quiet,
-                            onPressed: _busy
-                                ? null
-                                : () => run(_Secondary.chat),
-                            child: Text(
-                              chat,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      if (chat != null && !compact)
+                        TextButton(
+                          style: quiet,
+                          onPressed: _busy
+                              ? null
+                              : () => run(_Secondary.chat),
+                          child: Text(
+                            chat,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                     ],
@@ -462,6 +522,8 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
                 selected: selected,
                 opened: _opened.contains((i, o)),
                 dense: widget.dense,
+                // Only the first question's options have keys to pick them.
+                number: widget.numbered && i == 0 && o < 9 ? o + 1 : null,
                 preview: selected ? option.preview : '',
                 previewOpen: _previews.contains((i, o)),
                 onTogglePreview: () => _toggle(_previews, (i, o)),
@@ -598,6 +660,7 @@ class _OptionRow extends StatelessWidget {
     required this.selected,
     required this.onTap,
     required this.dense,
+    this.number,
     this.opened = false,
     this.preview = '',
     this.previewOpen = false,
@@ -613,6 +676,9 @@ class _OptionRow extends StatelessWidget {
   final bool selected;
   final bool opened;
   final bool dense;
+
+  /// Drawn in place of the radio: the key that picks this option.
+  final int? number;
 
   /// The chosen option's preview; empty when it has none or is not chosen.
   final String preview;
@@ -658,11 +724,15 @@ class _OptionRow extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Icon(
-                    icon,
-                    size: density.icon,
-                    color: selected ? scheme.primary : scheme.onSurfaceVariant,
-                  ),
+                  child: number == null
+                      ? Icon(
+                          icon,
+                          size: density.icon,
+                          color: selected
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                        )
+                      : _NumberCap(number: number!, selected: selected),
                 ),
                 SizedBox(width: density.glyphGap + 2),
                 Expanded(
@@ -779,6 +849,39 @@ class _OptionRow extends StatelessWidget {
         ),
       ),
   ];
+}
+
+/// An option's number in a small box, filled when chosen.
+class _NumberCap extends StatelessWidget {
+  const _NumberCap({required this.number, required this.selected});
+
+  final int number;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final side = UiDensity.of(context).icon;
+    return Container(
+      constraints: BoxConstraints(minWidth: side, minHeight: side),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? scheme.primary : null,
+        border: Border.all(
+          color: selected ? scheme.primary : scheme.outlineVariant,
+        ),
+        borderRadius: BorderRadius.circular(Insets.xs),
+      ),
+      child: Text(
+        '$number',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 }
 
 /// A word in a small rounded tag beside a label.

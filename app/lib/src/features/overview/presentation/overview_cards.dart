@@ -5,29 +5,39 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_states.dart';
-import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
-import '../application/overview_reads.dart';
-import 'overview_quick_composer.dart';
+import 'overview_card_parts.dart';
 import 'overview_session_parts.dart';
 
-/// The frame every Overview card shares: its surface, its edge in the state
+/// The edge a card of [state] is drawn with: colour only where the owner is
+/// wanted, on the border and never the surface.
+Color overviewCardEdge(BuildContext context, AgentState state) {
+  final semantic = SemanticColors.of(context);
+  return switch (state) {
+    AgentState.needsYou => semantic.attention.withValues(
+      alpha: SemanticColors.surfaceEdgeAlpha,
+    ),
+    AgentState.failed => semantic.failure.withValues(
+      alpha: SemanticColors.surfaceEdgeAlpha,
+    ),
+    _ => Theme.of(context).colorScheme.outlineVariant,
+  };
+}
+
+/// The frame every Overview card shares: one surface, its edge in the state
 /// that matters, the keyboard's ring, and a tap that peeks.
-class _CardFrame extends ConsumerWidget {
-  const _CardFrame({
+class OverviewCardFrame extends ConsumerWidget {
+  const OverviewCardFrame({
     required this.card,
     required this.onOpen,
     required this.child,
-    this.tone,
+    super.key,
   });
 
   final OverviewCard card;
-  final ValueChanged<OverviewCard> onOpen;
+  final ValueChanged<OverviewCard>? onOpen;
   final Widget child;
-
-  /// The card's surface and edge when its state asks for one.
-  final (Color, Color)? tone;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,38 +45,37 @@ class _CardFrame extends ConsumerWidget {
     final selected = ref.watch(
       overviewFocusProvider.select((f) => f.selected == card.id),
     );
-    final (surface, edge) = tone ?? (scheme.surfaceContainerLow, scheme.outlineVariant);
     final radius = BorderRadius.circular(Radii.lg);
     return Material(
       key: ValueKey('overview-card:${card.id}'),
-      color: surface,
+      color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: BorderSide(
-          color: selected ? scheme.primary : edge,
+          color: selected
+              ? scheme.primary
+              : overviewCardEdge(context, card.state),
           width: selected ? StateLayers.focusRingWidth * 2 : 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: radius,
-        onTap: () => onOpen(card),
-        child: Padding(
-          padding: EdgeInsets.all(
-            UiDensity.of(context).isTouch ? Insets.md : Insets.md,
-          ),
-          child: child,
-        ),
+        onTap: onOpen == null ? null : () => onOpen!(card),
+        child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
       ),
     );
   }
 }
 
-/// Title, where it runs, and the state pill.
-class _Header extends ConsumerWidget {
-  const _Header({required this.card});
+/// Title, where it runs, and the state chip.
+class OverviewCardHeader extends ConsumerWidget {
+  const OverviewCardHeader({required this.card, this.chip, super.key});
 
   final OverviewCard card;
+
+  /// In place of the state chip with its age.
+  final Widget? chip;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -106,10 +115,7 @@ class _Header extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  [
-                    if (parent != null) '↳ $parent',
-                    if (place.isNotEmpty) place,
-                  ].join(' · '),
+                  parent != null ? '↳ from $parent' : place,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -119,62 +125,17 @@ class _Header extends ConsumerWidget {
               ],
             ),
           ),
-          ...[
-            const SizedBox(width: Insets.sm),
-            OverviewStatePill(card: card),
-          ],
+          OverviewNewBadge(card: card),
+          const SizedBox(width: Insets.sm),
+          chip ?? OverviewStatePill(card: card),
         ],
       ),
     );
   }
 }
 
-/// **One session waiting on you**: what it asks, answerable here through the
-/// ask path every surface uses, its plan, and a reply in words.
-class OverviewQueueCard extends ConsumerWidget {
-  const OverviewQueueCard({required this.card, required this.onOpen, super.key});
-
-  final OverviewCard card;
-  final ValueChanged<OverviewCard> onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final failed = card.state == AgentState.failed;
-    final semantic = SemanticColors.of(context);
-    final tones = SurfaceTones.of(context);
-    final plan = ref.watch(overviewGlanceProvider(card.id)).asData?.value?.plan;
-    return _CardFrame(
-      card: card,
-      onOpen: onOpen,
-      tone: failed
-          ? (
-              semantic.failureSurface,
-              semantic.failure.withValues(alpha: SemanticColors.surfaceEdgeAlpha),
-            )
-          : (tones.attentionSurface, tones.attentionEdge),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _Header(card: card),
-          const SizedBox(height: Insets.sm),
-          OverviewActivityLine(card: card),
-          if (!failed)
-            ApprovalRequestCard(sessionId: card.id, dense: true),
-          if (plan != null) ...[
-            const SizedBox(height: Insets.sm),
-            OverviewPlanLine(plan: plan),
-          ],
-          const SizedBox(height: Insets.sm),
-          OverviewQuickComposer(card: card),
-        ],
-      ),
-    );
-  }
-}
-
-/// **One session at work**: what it is doing now, its last two hours, its
-/// plan, files and sub-sessions, and a quick message.
+/// **One session at work**, calm: its state, what it is doing in words, the
+/// latest thing it said, its plan step and diff, and its sub-sessions.
 class OverviewWorkCard extends ConsumerWidget {
   const OverviewWorkCard({required this.card, required this.onOpen, super.key});
 
@@ -182,88 +143,27 @@ class OverviewWorkCard extends ConsumerWidget {
   final ValueChanged<OverviewCard> onOpen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final plan = card.state == AgentState.working
-        ? ref.watch(overviewGlanceProvider(card.id)).asData?.value?.plan
-        : null;
-    final children = card.children;
-    final answer = card.state == AgentState.ready
-        ? ref.watch(overviewLastAnswerProvider(card.id)).asData?.value.text
-        : null;
-    return _CardFrame(
-      card: card,
-      onOpen: onOpen,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _Header(card: card),
-          const SizedBox(height: Insets.sm),
-          OverviewActivityLine(card: card),
-          const SizedBox(height: Insets.sm),
-          OverviewActivityStrip(sessionId: card.id),
+  Widget build(BuildContext context, WidgetRef ref) => OverviewCardFrame(
+    card: card,
+    onOpen: onOpen,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OverviewCardHeader(card: card),
+        const SizedBox(height: Insets.sm),
+        OverviewActivityLine(card: card),
+        const SizedBox(height: Insets.xs),
+        OverviewLatestMessage(sessionId: card.id),
+        const SizedBox(height: Insets.xs),
+        OverviewMetaLine(card: card),
+        if (card.children != null) ...[
           const SizedBox(height: Insets.xs),
-          Wrap(
-            spacing: Insets.md,
-            runSpacing: Insets.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OverviewFilesLine(sessionId: card.id),
-              if (children != null)
-                Text(
-                  children.label,
-                  key: ValueKey('overview-children:${card.id}'),
-                  style: muted,
-                ),
-            ],
-          ),
-          if (plan != null) ...[
-            const SizedBox(height: Insets.sm),
-            OverviewPlanLine(plan: plan),
-          ],
-          if (answer != null) ...[
-            const SizedBox(height: Insets.sm),
-            _AnswerQuote(text: answer),
-          ],
-          const SizedBox(height: Insets.sm),
-          OverviewQuickComposer(card: card),
+          OverviewSubSessions(card: card, onOpen: onOpen),
         ],
-      ),
-    );
-  }
-}
-
-/// The last answer's first lines, markdown marks dropped.
-class _AnswerQuote extends StatelessWidget {
-  const _AnswerQuote({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final plain = text
-        .replaceAll(RegExp(r'\*\*|__|`|^#+\s*', multiLine: true), '')
-        .replaceAll(RegExp(r'\s*\n+\s*'), ' ');
-    return Container(
-      padding: const EdgeInsets.only(left: Insets.sm),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(color: scheme.outlineVariant, width: Insets.xxs),
-        ),
-      ),
-      child: Text(
-        plain,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
 /// One session that ended today, as a line.

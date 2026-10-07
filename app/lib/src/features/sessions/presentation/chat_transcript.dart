@@ -186,10 +186,16 @@ class ChatTranscriptView extends StatefulWidget {
     this.agentId,
     this.emptyBuilder,
     this.toLatest,
+    this.seenUntil,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// When the reader last looked: the messages after it sit under a "New
+  /// since you last looked" line, with all but a few before it folded. Null
+  /// draws neither.
+  final DateTime? seenUntil;
 
   /// Each notification takes the list to its newest message, as *Jump to
   /// latest* does — where an open ask hangs.
@@ -265,9 +271,30 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   bool _touch = false;
   bool _awayFromLatest = false;
 
+  /// Messages kept in sight above the "new since" line before the fold.
+  static const _keptBeforeNew = 3;
+
+  /// The first message written after [ChatTranscriptView.seenUntil], or null
+  /// when there is none, or nothing older to set it apart from.
+  int? _firstNew() {
+    final seen = widget.seenUntil;
+    if (seen == null) return null;
+    final messages = widget.messages;
+    for (var i = 0; i < messages.length; i++) {
+      final at = messages[i].at;
+      if (at != null && at.isAfter(seen)) return i == 0 ? null : i;
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
+    // Older turns fold behind "Load earlier", the new ones and a few before
+    // them in sight.
+    if (_firstNew() case final first?) {
+      _shown = widget.messages.length - math.max(0, first - _keptBeforeNew);
+    }
     _scroll.addListener(_onScroll);
     FocusManager.instance.addListener(_revealFocused);
     widget.toLatest?.addListener(_toLatest);
@@ -410,6 +437,12 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       for (var i = 0; i < rows.length; i++) keyOf(rows[i]): i + lead,
     };
 
+    // The row the "new since you last looked" line sits above, if in view.
+    final firstNew = _firstNew();
+    final newRow = firstNew == null || firstNew < start
+        ? -1
+        : rows.indexWhere((row) => start + row.to > firstNew);
+
     // Each plan's predecessor among the held messages, so an update can say
     // what it changed.
     final planBefore = previousPlans(widget.messages);
@@ -508,14 +541,26 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                                                   );
                                                 }
                                                 final row = rows[index - lead];
-                                                if (!row.isBatch) {
-                                                  return rowAt(row.from);
+                                                final drawn = !row.isBatch
+                                                    ? rowAt(row.from)
+                                                    : _ToolBatchTile(
+                                                        key: keyOf(row),
+                                                        messages: visible,
+                                                        row: row,
+                                                        rowAt: rowAt,
+                                                      );
+                                                if (index - lead != newRow) {
+                                                  return drawn;
                                                 }
-                                                return _ToolBatchTile(
+                                                return Column(
                                                   key: keyOf(row),
-                                                  messages: visible,
-                                                  row: row,
-                                                  rowAt: rowAt,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .stretch,
+                                                  children: [
+                                                    const _NewSinceLine(),
+                                                    drawn,
+                                                  ],
                                                 );
                                               },
                                             ),
@@ -573,6 +618,44 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// "New since you last looked", a rule either side.
+class _NewSinceLine extends StatelessWidget {
+  const _NewSinceLine();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final rule = Expanded(
+      child: Divider(
+        color: accent.withValues(alpha: SemanticColors.surfaceEdgeAlpha),
+      ),
+    );
+    return SelectionContainer.disabled(
+      child: Padding(
+        key: const ValueKey('chat-new-since'),
+        padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+        child: Row(
+          children: [
+            rule,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+              child: Text(
+                'New since you last looked',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            rule,
+          ],
+        ),
       ),
     );
   }

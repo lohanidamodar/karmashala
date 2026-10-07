@@ -374,7 +374,7 @@ List<ShellChord> _buildChords() => [
     intent: OpenOverviewIntent(),
     command: 'overview.open',
     label: _commandLabel('O', shift: true),
-    does: 'Open Overview',
+    does: 'Open Agent dashboard',
     skipsShell: true,
   ),
   // Tabs, shifted because a shell owns the bare keys — ^W deletes a word, ^T

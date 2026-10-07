@@ -511,3 +511,29 @@ class _LinkConfirm extends StatelessWidget {
     );
   }
 }
+
+extension _FollowerPane on _TerminalPaneViewState {
+  /// The grid at the session's own size, sizing nothing, panned sideways
+  /// where the room is narrower — see [TerminalPaneView.sizesGrid].
+  Widget _followerGrid(double fontSize) => LayoutBuilder(
+    builder: (context, constraints) {
+      final cell = _cellSizeFor(fontSize);
+      final columns = widget.instance.terminal.viewWidth;
+      return Scrollbar(
+        controller: _panController,
+        child: SingleChildScrollView(
+          controller: _panController,
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: math.max(
+              constraints.maxWidth,
+              columns * cell.width + _gridInset,
+            ),
+            height: constraints.maxHeight,
+            child: _terminalView(fontSize: fontSize, autoResize: false),
+          ),
+        ),
+      );
+    },
+  );
+}

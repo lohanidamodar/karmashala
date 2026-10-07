@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
@@ -11,6 +10,12 @@ import 'package:karmashala/src/features/overview/application/overview_board.dart
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
+import 'package:karmashala/src/features/overview/application/overview_seen.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_done_card.dart';
+import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:karmashala_session/delivery.dart'
+    show DeliveryAction, OfferedAction;
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_list_prefs.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
@@ -86,6 +91,7 @@ void main() {
     ('1440×900', const Size(1440, 900), false),
     ('1024×768', const Size(1024, 768), false),
     ('390×844', const Size(390, 844), true),
+    ('360×800', const Size(360, 800), true),
   ]) {
     for (final scale in [1.0, 1.6]) {
       testWidgets('$name at ${scale}x text: heartbeat, queue, then work', (
@@ -93,7 +99,10 @@ void main() {
       ) async {
         await pump(tester, size: size, phone: phone, textScale: scale);
 
-        expect(find.byKey(const ValueKey('overview-heartbeat')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('overview-heartbeat')),
+          findsOneWidget,
+        );
         expect(queueCard('ks-r21'), findsOneWidget);
         expect(queueCard('store-reviews'), findsOneWidget);
         expect(find.byType(ApprovalRequestCard), findsWidgets);
@@ -135,24 +144,18 @@ void main() {
 
     final line = find.byKey(const ValueKey('overview-activity:ks-r32'));
     await tester.scrollUntilVisible(line, 200, scrollable: hybridList);
-    expect(
-      tester.widget<Text>(line).data,
-      'Running a background command',
-    );
+    expect(tester.widget<Text>(line).data, 'Running a background command');
     expect(find.textContaining(r'$sp ='), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey('overview-raw-toggle:ks-r32')).first,
     );
     await settleMission(tester);
-    expect(
-      find.byKey(const ValueKey('overview-raw:ks-r32')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('overview-raw:ks-r32')), findsOneWidget);
     expect(find.textContaining(r'$sp ='), findsOneWidget);
     await unmountMission(tester);
   });
 
-  testWidgets('a running call\'s own words lead, with its plan beside', (
+  testWidgets('a running call\'s own words lead, with its plan step beside', (
     tester,
   ) async {
     await pump(tester);
@@ -160,159 +163,81 @@ void main() {
     final line = find.byKey(const ValueKey('overview-activity:ks-r32'));
     await tester.scrollUntilVisible(line, 200, scrollable: hybridList);
     expect(tester.widget<Text>(line).data, 'Run the overview tests · 4m');
-    expect(find.text('Write the layout tests'), findsWidgets);
-    expect(find.text('3 files changed'), findsOneWidget);
+    expect(find.text('2/4 · Write the layout tests'), findsOneWidget);
     await unmountMission(tester);
   });
 
-  testWidgets('each card draws its last two hours from the activity log', (
-    tester,
-  ) async {
-    final handle = tester.ensureSemantics();
-    await pump(tester);
-
-    expect(
-      find.byKey(const ValueKey('overview-strip:ks-r32')),
-      findsOneWidget,
-    );
-    expect(
-      find.bySemanticsLabel(RegExp(r'^Last 2 hours: working 1h 37m')),
-      findsWidgets,
-    );
-    expect(
-      find.bySemanticsLabel(RegExp(r'^Agents over the last 2 hours')),
-      findsOneWidget,
-    );
-    handle.dispose();
-    await unmountMission(tester);
-  });
-
-  group('quick message', () {
-    const queue = {'sessions.send', 'sessions.interrupt', 'sessions.queue'};
-
-    testWidgets('Enter sends through the send path; queued while working', (
-      tester,
-    ) async {
-      await pump(tester, features: queue);
-      final field = find.byKey(const ValueKey('overview-composer:ks-r32'));
-      await tester.scrollUntilVisible(field, 200, scrollable: hybridList);
-
-      await tester.enterText(field, 'Also check the phone layout');
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await settleMission(tester);
-
-      expect(sent, [('ks-r32', 'Also check the phone layout')]);
-      expect(
-        find.text('Queued · goes when this turn ends'),
-        findsOneWidget,
-      );
-      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
-      await unmountMission(tester);
-    });
-
-    testWidgets('a session between turns takes it now: "Sent"', (
-      tester,
-    ) async {
-      await pump(tester, features: queue);
-      final field = find.byKey(const ValueKey('overview-composer:ks-r30'));
-      await tester.scrollUntilVisible(field, 200, scrollable: hybridList);
-
-      await tester.enterText(field, 'Ship it');
-      final send = find.byKey(const ValueKey('overview-composer-send:ks-r30'));
-      await tester.ensureVisible(send);
-      await settleMission(tester);
-      await tester.tap(send);
-      await settleMission(tester);
-
-      expect(sent, [('ks-r30', 'Ship it')]);
-      expect(find.text('Sent'), findsOneWidget);
-      await unmountMission(tester);
-    });
-
-    testWidgets('Shift+Enter makes a new line, Esc clears, nothing is sent', (
-      tester,
-    ) async {
-      await pump(tester, features: queue);
-      final field = find.byKey(const ValueKey('overview-composer:ks-r30'));
-      await tester.scrollUntilVisible(field, 200, scrollable: hybridList);
-      await tester.enterText(field, 'one');
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await settleMission(tester);
-      expect(sent, isEmpty);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await settleMission(tester);
-      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
-      expect(sent, isEmpty);
-      await unmountMission(tester);
-    });
-  });
-
-  group('the peek', () {
-    testWidgets('shows doing now, plan, last answer, files, the composer', (
+  group('calm cards', () {
+    testWidgets('a work card has no message box, strip or tinted surface', (
       tester,
     ) async {
       await pump(tester);
-      await tester.tap(find.text('Round 32 · Overview redesign').first);
-      await settleMission(tester);
+      final card = workCard('ks-r32');
+      await tester.scrollUntilVisible(card, 200, scrollable: hybridList);
+      Finder inCard(Finder f) => find.descendant(of: card, matching: f);
 
-      final peek = find.byKey(const ValueKey('overview-peek'));
-      expect(peek, findsOneWidget);
-      Finder inPeek(Finder f) => find.descendant(of: peek, matching: f);
-      expect(inPeek(find.text('DOING NOW')), findsOneWidget);
-      expect(inPeek(find.text('Run the overview tests · 4m')), findsOneWidget);
-      expect(inPeek(find.text('Check it in a probe')), findsOneWidget);
-      expect(inPeek(find.text('3 FILES CHANGED')), findsOneWidget);
-      expect(inPeek(find.text('SUB-SESSIONS · 5')), findsOneWidget);
-      expect(
-        inPeek(find.byKey(const ValueKey('overview-composer:ks-r32'))),
-        findsOneWidget,
+      expect(inCard(find.byType(TextField)), findsNothing);
+      expect(find.byKey(const ValueKey('overview-strip:ks-r32')), findsNothing);
+      final frame = tester.widget<Material>(
+        find.byKey(const ValueKey('overview-card:ks-r32')),
       );
-      // No answer recorded is said, not a "Reading…" that never ends.
-      expect(
-        inPeek(find.byKey(const ValueKey('overview-peek-no-answer'))),
-        findsOneWidget,
+      final scheme = Theme.of(tester.element(card)).colorScheme;
+      expect(frame.color, scheme.surfaceContainerLow);
+      // An ask's card is the same surface; only its edge is coloured.
+      final ask = tester.widget<Material>(
+        find.byKey(const ValueKey('overview-card:ks-r21')),
       );
-      expect(inPeek(find.text('Reading…')), findsNothing);
+      expect(ask.color, scheme.surfaceContainerLow);
+      expect(
+        (ask.shape as RoundedRectangleBorder).side.color,
+        isNot(scheme.outlineVariant),
+      );
       await unmountMission(tester);
     });
 
-    testWidgets('renders the last answer as markdown, with More', (
+    testWidgets('it shows the step, the diff and the latest message', (
       tester,
     ) async {
-      final long = [
-        'Webhooks are wired.',
-        for (var i = 1; i <= 9; i++) '- step $i of the change',
-      ].join('\n');
-      await pump(
-        tester,
-        fixture: MissionFixture(
-          answers: {'ks-r30': LastAnswer.of(long)},
-          activity: MissionFixture.realisticActivity(),
-        ),
-      );
-      await tester.tap(find.text('Round 30 · webhooks').first);
-      await settleMission(tester);
+      await pump(tester);
+      final card = find.byKey(const ValueKey('overview-ready-card:ks-r30'));
+      await tester.scrollUntilVisible(card, 200, scrollable: hybridList);
 
       expect(
-        find.byKey(const ValueKey('overview-peek-answer')),
-        findsOneWidget,
+        tester
+            .widget<Text>(find.byKey(const ValueKey('overview-last:ks-r30')))
+            .data,
+        startsWith('Webhooks are wired: 3 events reach the inbox'),
       );
-      expect(find.text('Webhooks are wired.'), findsOneWidget);
-      expect(find.byKey(const ValueKey('overview-peek-more')), findsOneWidget);
+      final diff = tester.widget<Text>(
+        find.byKey(const ValueKey('overview-diff:ks-r30')),
+      );
+      expect(diff.textSpan!.toPlainText(), '+310 −0 · 1 file');
+      final r32 = tester.widget<Text>(
+        find.byKey(const ValueKey('overview-diff:ks-r32')),
+      );
+      expect(r32.textSpan!.toPlainText(), '+620 −40 · 3 files');
       await unmountMission(tester);
     });
 
-    testWidgets('a sub-session is peeked from its parent', (tester) async {
+    testWidgets('sub-sessions: a summary, the three most urgent, "+2 more"', (
+      tester,
+    ) async {
       await pump(tester);
-      await tester.tap(find.text('Round 32 · Overview redesign').first);
-      await settleMission(tester);
+      final subs = find.byKey(const ValueKey('overview-subs:ks-r32'));
+      await tester.scrollUntilVisible(subs, 200, scrollable: hybridList);
 
-      await tester.tap(
-        find.byKey(const ValueKey('overview-peek-sub:ks-r32-sub0')),
+      expect(
+        find.text('↳ 5 sub-sessions · 2 working · 3 done'),
+        findsOneWidget,
       );
+      Finder row(String id) => find.byKey(ValueKey('overview-sub:$id'));
+      expect(row('ks-r32-sub0'), findsOneWidget);
+      expect(row('ks-r32-sub1'), findsOneWidget);
+      expect(row('ks-r32-sub2'), findsOneWidget);
+      expect(row('ks-r32-sub3'), findsNothing);
+      expect(find.text('+2 more'), findsOneWidget);
+
+      await tester.tap(row('ks-r32-sub0'));
       await settleMission(tester);
       expect(
         find.byKey(const ValueKey('overview-peek:ks-r32-sub0')),
@@ -321,27 +246,529 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('on a phone, the peek is a sheet with the composer', (
+    testWidgets('the latest message follows the agent, lit when it changes', (
       tester,
     ) async {
+      final fixture = MissionFixture.full();
+      final c = await pump(tester, fixture: fixture);
+      final last = find.byKey(const ValueKey('overview-last:ks-r30'));
+      await tester.scrollUntilVisible(last, 200, scrollable: hybridList);
+
+      double lit() {
+        final box = tester.widget<DecoratedBox>(
+          find.ancestor(of: last, matching: find.byType(DecoratedBox)).first,
+        );
+        return (box.decoration as BoxDecoration).color!.a;
+      }
+
+      expect(lit(), 0);
+      fixture.reader.answers['ks-r30'] = const LastAnswer.of(
+        'Retries now back off to ten minutes.',
+      );
+      c.invalidate(overviewLastAnswerProvider('ks-r30'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(
+        tester.widget<Text>(last).data,
+        'Retries now back off to ten minutes.',
+      );
+      expect(lit(), greaterThan(0));
+      await tester.pump(const Duration(seconds: 2));
+      expect(lit(), 0);
+      await unmountMission(tester);
+    });
+  });
+
+  test('within a group the most urgent comes first', () {
+    final fixture = MissionFixture();
+    final board = buildOverviewBoard(
+      fixture.groups,
+      facts: fixture.facts,
+      filter: const OverviewFilter(),
+      groupBy: OverviewGroupBy.project,
+      startOfToday: MissionFixture.now.subtract(const Duration(hours: 6)),
+      memo: BoardOrderMemo(),
+    );
+    final ks = overviewWorkGroupsOf(board).first.$2;
+    expect(
+      [for (final c in ks) c.state],
+      [AgentState.working, AgentState.working, AgentState.quiet],
+    );
+    final queue = overviewSectionsOf(board, waitingSince: (_) => null).queue;
+    expect(
+      [for (final c in queue) c.state],
+      [AgentState.needsYou, AgentState.failed],
+    );
+  });
+
+  group('the peek', () {
+    Future<void> peek(WidgetTester tester, String title) async {
+      final open = find.text(title).first;
+      await tester.scrollUntilVisible(open, 200, scrollable: hybridList);
+      await tester.tap(open);
+      await settleMission(tester);
+    }
+
+    Finder inPeek(Finder f) => find.descendant(
+      of: find.byKey(const ValueKey('overview-peek')),
+      matching: f,
+    );
+
+    testWidgets('is the session\'s own chat, under its header and tabs', (
+      tester,
+    ) async {
+      await pump(tester);
+      await peek(tester, 'Round 32 · Overview redesign');
+
+      expect(
+        inPeek(find.byKey(const ValueKey('overview-peek-chat:ks-r32'))),
+        findsOneWidget,
+      );
+      expect(inPeek(find.text('Chat')), findsOneWidget);
+      expect(inPeek(find.text('Files · 3')), findsOneWidget);
+      expect(inPeek(find.text('Sub-sessions · 5')), findsOneWidget);
+      // No terminal on this machine: no Terminal tab.
+      expect(inPeek(find.text('Terminal')), findsNothing);
+      expect(
+        inPeek(find.byKey(const ValueKey('overview-peek-open'))),
+        findsOneWidget,
+      );
+      expect(inPeek(find.text('Open tab')), findsOneWidget);
+      // The model its agent says it runs, beside the agent.
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('overview-peek-place')))
+            .data,
+        startsWith('Claude Code · Opus 5.5 · karmashala'),
+      );
+      expect(inPeek(find.text('2/4')), findsOneWidget);
+      // The old peek's sections are gone: the chat is the record.
+      expect(inPeek(find.text('DOING NOW')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('overview-composer:ks-r32')),
+        findsNothing,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('Files shows each file\'s +/− and opens its diff', (
+      tester,
+    ) async {
+      await pump(tester);
+      await peek(tester, 'Round 32 · Overview redesign');
+      await tester.tap(find.byKey(const ValueKey('overview-peek-tab:files')));
+      await settleMission(tester);
+
+      const path =
+          'app/lib/src/features/overview/presentation/overview_hybrid.dart';
+      final stat = tester.widget<Text>(
+        find.byKey(const ValueKey('overview-peek-file-stat:$path')),
+      );
+      expect(stat.textSpan!.toPlainText(), '+212 −40');
+      expect(inPeek(find.text('overview_hybrid_test.dart')), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('Sub-sessions lists them all; one opens with its way back', (
+      tester,
+    ) async {
+      await pump(tester);
+      await peek(tester, 'Round 32 · Overview redesign');
+      await tester.tap(
+        find.byKey(const ValueKey('overview-peek-tab:subSessions')),
+      );
+      await settleMission(tester);
+      for (var i = 0; i < 5; i++) {
+        expect(
+          find.byKey(ValueKey('overview-peek-sub:ks-r32-sub$i')),
+          findsOneWidget,
+        );
+      }
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('overview-peek-sub:ks-r32-sub0')),
+          matching: find.text('Subagent 1'),
+        ),
+      );
+      await settleMission(tester);
+      expect(
+        find.byKey(const ValueKey('overview-peek:ks-r32-sub0')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('↑ Sub-session of Round 32 · Overview redesign'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('overview-peek-parent')));
+      await settleMission(tester);
+      expect(
+        find.byKey(const ValueKey('overview-peek:ks-r32')),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('a terminal-hosted session has a Terminal tab', (tester) async {
+      await pump(
+        tester,
+        fixture: MissionFixture(
+          activity: MissionFixture.realisticActivity(),
+          panes: const {'ks-r32': 'pane-r32'},
+        ),
+      );
+      await peek(tester, 'Round 32 · Overview redesign');
+      expect(
+        find.byKey(const ValueKey('overview-peek-tab:terminal')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('overview-peek-tab:terminal')),
+      );
+      await settleMission(tester);
+      // No instance for the fixture's pane: said, not a blank.
+      expect(
+        find.text('This session has no terminal open on this machine.'),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('↑ ↓ walk the sessions; ✕ closes', (tester) async {
+      final c = await pump(tester);
+      await peek(tester, 'Round 21 · ACP sessions');
+      await tester.tap(find.byKey(const ValueKey('overview-peek-next')));
+      await settleMission(tester);
+      final next = c.read(overviewFocusProvider).peeked;
+      expect(next, isNot('ks-r21'));
+      await tester.tap(find.byKey(const ValueKey('overview-peek-previous')));
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'ks-r21');
+      await tester.tap(find.byKey(const ValueKey('overview-peek-close')));
+      await settleMission(tester);
+      expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
+      await unmountMission(tester);
+    });
+
+    for (final (name, size, mode) in [
+      ('1440', const Size(1440, 900), 'docked'),
+      ('1100', const Size(1100, 800), 'overlay'),
+    ]) {
+      testWidgets('$name px: the peek is $mode', (tester) async {
+        await pump(tester, size: size);
+        final workAt = tester.getTopLeft(
+          find.byKey(const ValueKey('overview-work')),
+        );
+        await peek(tester, 'Round 21 · ACP sessions');
+        final overlay = find.byKey(const ValueKey('overview-peek-overlay'));
+        if (mode == 'overlay') {
+          expect(overlay, findsOneWidget);
+          // The board keeps its columns under it.
+          expect(
+            tester.getTopLeft(find.byKey(const ValueKey('overview-work'))),
+            workAt,
+          );
+        } else {
+          expect(overlay, findsNothing);
+          expect(
+            find.byKey(const ValueKey('overview-peek-resizer')),
+            findsOneWidget,
+          );
+          final before = tester.getSize(
+            find.byKey(const ValueKey('overview-peek')),
+          );
+          await tester.drag(
+            find.byKey(const ValueKey('overview-peek-resizer')),
+            const Offset(-100, 0),
+          );
+          await settleMission(tester);
+          expect(
+            tester.getSize(find.byKey(const ValueKey('overview-peek'))).width,
+            greaterThan(before.width),
+          );
+        }
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      });
+    }
+
+    testWidgets('on a phone, the peek is a full-screen sheet', (tester) async {
       await pump(tester, size: const Size(390, 844), phone: true);
       await tester.tap(find.text('Round 21 · ACP sessions').first);
       await settleMission(tester);
 
       final peek = find.byKey(const ValueKey('overview-peek'));
       expect(peek, findsOneWidget);
+      expect(tester.getSize(peek).height, greaterThan(700));
       expect(
-        find.descendant(
-          of: peek,
-          matching: find.byKey(const ValueKey('overview-composer:ks-r21')),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: peek, matching: find.byType(ApprovalRequestCard)),
+        inPeek(find.byKey(const ValueKey('overview-peek-chat:ks-r21'))),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets(
+      'since you last looked: a count on the card, the line in chat',
+      (tester) async {
+        final now = MissionFixture.now;
+        final fixture = MissionFixture(
+          activity: MissionFixture.realisticActivity(),
+          glances: {
+            'ks-r30': OverviewGlance(
+              messageTimes: [
+                for (final m in [40, 30, 20, 10, 5])
+                  now.subtract(Duration(minutes: m)),
+              ],
+            ),
+          },
+        );
+        final c = await pump(tester, fixture: fixture);
+        final badge = find.byKey(const ValueKey('overview-new:ks-r30'));
+        // Never opened here: nothing to count from.
+        expect(badge, findsNothing);
+        final looked = now.subtract(const Duration(minutes: 25));
+        c.read(overviewSeenProvider.notifier).markSeen('ks-r30', looked);
+        await settleMission(tester);
+        await tester.scrollUntilVisible(badge, 200, scrollable: hybridList);
+        expect(
+          find.descendant(of: badge, matching: find.text('3')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('Round 30 · webhooks').first);
+        await settleMission(tester);
+        // The chat is told when the owner last looked, to draw its line.
+        expect(
+          find.text('chat:ks-r30 seen:${looked.toIso8601String()}'),
+          findsOneWidget,
+        );
+        expect(badge, findsNothing);
+        expect(c.read(overviewSeenProvider)['ks-r30']!.isAfter(looked), isTrue);
+        await unmountMission(tester);
+      },
+    );
+
+    test('the last look is kept on this device', () async {
+      final c = ProviderContainer(
+        overrides: [
+          overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
+        ],
+      );
+      final at = DateTime.utc(2026, 10, 7, 9);
+      c.read(overviewSeenProvider.notifier).markSeen('s1', at);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      c.dispose();
+      final again = ProviderContainer(
+        overrides: [
+          overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
+        ],
+      );
+      addTearDown(again.dispose);
+      again.read(overviewSeenProvider);
+      for (var i = 0; i < 50 && again.read(overviewSeenProvider).isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(again.read(overviewSeenProvider)['s1'], at);
+    });
+  });
+
+  group('the phone', () {
+    for (final (name, size) in [
+      ('390', const Size(390, 844)),
+      ('360', const Size(360, 800)),
+    ]) {
+      testWidgets('$name px: a two-line list, the queue first', (tester) async {
+        await pump(tester, size: size, phone: true);
+        final row = find.byKey(const ValueKey('overview-phone-row:ks-r32'));
+        await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
+        expect(row, findsOneWidget);
+        expect(workCard('ks-r32'), findsNothing);
+        // Two lines: the title and what it is doing, nothing more.
+        expect(
+          find.descendant(of: row, matching: find.byType(Text)),
+          findsNWidgets(3),
+        );
+        final ready = find.byKey(const ValueKey('overview-phone-row:ks-r30'));
+        await tester.scrollUntilVisible(ready, 300, scrollable: hybridList);
+        expect(
+          find.byKey(const ValueKey('overview-ready-card:ks-r30')),
+          findsNothing,
+        );
+
+        await tester.scrollUntilVisible(row, -300, scrollable: hybridList);
+        await settleMission(tester);
+        await tester.tap(row);
+        await settleMission(tester);
+        final peek = find.byKey(const ValueKey('overview-peek'));
+        expect(peek, findsOneWidget);
+        expect(tester.getSize(peek).height, greaterThan(size.height * 0.8));
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      });
+    }
+
+    testWidgets('the queue comes before the list', (tester) async {
+      await pump(tester, size: const Size(390, 844), phone: true);
+      final queueAt = tester.getTopLeft(queueCard('ks-r21')).dy;
+      final row = find.byKey(const ValueKey('overview-phone-row:ks-r32'));
+      await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
+      final scrolled = tester
+          .state<ScrollableState>(hybridList)
+          .position
+          .pixels;
+      expect(queueAt, lessThan(tester.getTopLeft(row).dy + scrolled));
+      await unmountMission(tester);
+    });
+  });
+
+  group('New session', () {
+    testWidgets('opens the app\'s dialog, kept here and in chat form', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      await tester.tap(find.byKey(const ValueKey('overview-new-session')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final dialog = tester.widget<NewSessionDialog>(
+        find.byType(NewSessionDialog),
+      );
+      expect(dialog.keepHere, isTrue);
+      expect(dialog.preferChat, isTrue);
+
+      // Kept here: its card is picked and peeked, and nothing else opens.
+      final started = MissionFixture().entry(
+        MissionFixture.realisticSessions().firstWhere((s) => s.id == 'ks-r30'),
+      );
+      dialog.onStarted!(started.native!, keptHere: true);
+      await tester.pump();
+      expect(c.read(overviewFocusProvider).peeked, 'ks-r30');
+      expect(c.read(overviewFocusProvider).selected, 'ks-r30');
+      expect(c.read(overviewPrefsProvider).newSessionKeepsHere, isTrue);
+
+      // Unticked: today's behaviour, and the choice is remembered.
+      c.read(overviewFocusProvider.notifier).closePeek();
+      dialog.onStarted!(started.native!, keptHere: false);
+      await tester.pump();
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(c.read(overviewPrefsProvider).newSessionKeepsHere, isFalse);
+      await unmountMission(tester);
+    });
+  });
+
+  group('the Done lane', () {
+    const merge = OfferedAction(
+      DeliveryAction.merge,
+      isPrimary: true,
+      promptOverride: 'Merge the pull request with a squash.',
+    );
+
+    testWidgets('ready sessions sit at the bottom, out of At work', (
+      tester,
+    ) async {
+      await pump(tester);
+      final lane = find.byKey(const ValueKey('overview-ready'));
+      await tester.scrollUntilVisible(lane, 300, scrollable: hybridList);
+      expect(find.text('DONE · READY TO CLOSE · 4'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('overview-ready-card:ks-r30')),
+        findsOneWidget,
+      );
+      expect(workCard('ks-r30'), findsNothing);
+      expect(
+        tester.getTopLeft(lane).dy,
+        greaterThan(tester.getTopLeft(workCard('relay-load')).dy),
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets(
+      'Merge sends the delivery strip\'s own merge, naming the base',
+      (tester) async {
+        final fixture = MissionFixture(
+          answers: MissionFixture.realisticAnswers(),
+          activity: MissionFixture.realisticActivity(),
+          merges: const {'ks-r30': (merge, 'origin/feat/acp')},
+        );
+        await pump(tester, fixture: fixture);
+        final button = find.byKey(const ValueKey('overview-merge:ks-r30'));
+        await tester.scrollUntilVisible(button, 300, scrollable: hybridList);
+        await tester.ensureVisible(button);
+        await settleMission(tester);
+        final tip = tester.widget<Tooltip>(
+          find.ancestor(of: button, matching: find.byType(Tooltip)).first,
+        );
+        expect(tip.message, contains('into origin/feat/acp'));
+        await tester.tap(button);
+        await settleMission(tester);
+        expect(sent, [('ks-r30', 'Merge the pull request with a squash.')]);
+
+        // No pull request: nothing to merge yet, and it says so.
+        final none = find.byKey(const ValueKey('overview-merge:beej-ci'));
+        await tester.scrollUntilVisible(none, 300, scrollable: hybridList);
+        expect(tester.widget<FilledButton>(none).onPressed, isNull);
+        expect(
+          tester
+              .widget<Tooltip>(
+                find.ancestor(of: none, matching: find.byType(Tooltip)).first,
+              )
+              .message,
+          startsWith('Nothing to merge yet'),
+        );
+        await unmountMission(tester);
+      },
+    );
+
+    testWidgets('a sub-session hands its last answer back to its parent', (
+      tester,
+    ) async {
+      final sessions = [
+        for (final s in MissionFixture.realisticSessions())
+          if (s.id != 'ks-r32-sub2') s,
+        (
+          id: 'ks-r29-child',
+          title: 'Fork benchmarks',
+          project: 'p-ks',
+          machine: 'windows',
+          agent: AgentIds.claudeCode,
+          state: AgentState.ready,
+          age: const Duration(minutes: 4),
+          parent: 'ks-r29',
+          report: null,
+        ),
+      ];
+      await pump(
+        tester,
+        fixture: MissionFixture(
+          sessions: sessions,
+          answers: const {
+            'ks-r29-child': LastAnswer.of('Forks are 3× faster on SSH.'),
+          },
+        ),
+      );
+      final button = find.byKey(
+        const ValueKey('overview-hand-back:ks-r29-child'),
+      );
+      await tester.scrollUntilVisible(button, 300, scrollable: hybridList);
+      await tester.ensureVisible(button);
+      await settleMission(tester);
+      await tester.tap(button);
+      await settleMission(tester);
+      expect(sent, [
+        (
+          'ks-r29',
+          handBackMessage('Fork benchmarks', 'Forks are 3× faster on SSH.'),
+        ),
+      ]);
+      // A top-level session has no parent to hand back to.
+      expect(
+        find.byKey(const ValueKey('overview-hand-back:ks-r30')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('overview-done-archive:ks-r29-child')),
+        findsOneWidget,
+      );
       await unmountMission(tester);
     });
   });
@@ -370,20 +797,14 @@ void main() {
     });
     expect(queueCard('ks-r21'), findsOneWidget);
     expect(workCard('ks-r32'), findsNothing);
-    expect(
-      find.byKey(const ValueKey('overview-none-at-work')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('overview-none-at-work')), findsOneWidget);
     await unmountMission(tester);
   });
 
   testWidgets('Hide while working leaves "N hidden · Show" on Working', (
     tester,
   ) async {
-    final c = await pump(
-      tester,
-      fixture: MissionFixture(hiddenWorking: 3),
-    );
+    final c = await pump(tester, fixture: MissionFixture(hiddenWorking: 3));
     c.read(sessionListPrefsProvider.notifier).setHideWorking(true);
     await settleMission(tester);
 
@@ -407,10 +828,7 @@ void main() {
       phone: true,
     );
     expect(find.byKey(const ValueKey('overview-queue')), findsNothing);
-    expect(
-      find.byKey(const ValueKey('overview-none-at-work')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('overview-none-at-work')), findsOneWidget);
     expect(find.text('4 done today'), findsOneWidget);
     await unmountMission(tester);
   });
@@ -477,6 +895,71 @@ void main() {
     await unmountMission(tester);
   });
 
+  group('heartbeat', () {
+    testWidgets('failed has its own counter, and it shows failures alone', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final c = await pump(tester);
+      expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r'^Failed, 1, ')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('overview-counter:failed')));
+      await settleMission(tester);
+      expect(c.read(overviewPrefsProvider).filter.states, {AgentState.failed});
+      expect(queueCard('store-reviews'), findsOneWidget);
+      expect(queueCard('ks-r21'), findsNothing);
+      expect(workCard('ks-r32'), findsNothing);
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Failed, 1, showing only these')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('overview-counter:needsYou')));
+      await settleMission(tester);
+      expect(queueCard('ks-r21'), findsOneWidget);
+      expect(queueCard('store-reviews'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('overview-counter:needsYou')));
+      await settleMission(tester);
+      expect(c.read(overviewPrefsProvider).filter.allStates, isTrue);
+      expect(queueCard('store-reviews'), findsOneWidget);
+      handle.dispose();
+      await unmountMission(tester);
+    });
+
+    testWidgets('one slim row with the sparkline beside the counters', (
+      tester,
+    ) async {
+      await pump(tester);
+      final heart = find.byKey(const ValueKey('overview-heartbeat'));
+      final chart = find.byKey(const ValueKey('overview-heartbeat-chart'));
+      expect(chart, findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-chart-toggle')), findsNothing);
+      expect(tester.getSize(heart).height, lessThan(64));
+      expect(
+        tester.getCenter(chart).dx,
+        greaterThan(
+          tester.getCenter(find.byKey(const ValueKey('overview-counters'))).dx,
+        ),
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('on a phone the sparkline folds behind a toggle', (
+      tester,
+    ) async {
+      await pump(tester, size: const Size(390, 844), phone: true);
+      final chart = find.byKey(const ValueKey('overview-heartbeat-chart'));
+      expect(chart, findsNothing);
+      await tester.tap(find.byKey(const ValueKey('overview-chart-toggle')));
+      await settleMission(tester);
+      expect(chart, findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+  });
+
   group('group by context', () {
     MissionFixture filed() => MissionFixture(
       activity: MissionFixture.realisticActivity(),
@@ -484,11 +967,7 @@ void main() {
         OverviewLaneKey('c-apps', 'Apps'),
         OverviewLaneKey('c-web', 'Web'),
       ],
-      contextOfProject: const {
-        'p-ks': 'c-apps',
-        'p-beej': 'c-apps',
-        'p-web': 'c-web',
-      },
+      contextOfProject: const {'p-ks': 'c-apps', 'p-beej': 'c-web'},
     );
 
     Finder group(String key) =>
@@ -498,7 +977,9 @@ void main() {
       tester,
     ) async {
       final c = await pump(tester, fixture: filed());
-      c.read(overviewPrefsProvider.notifier).setGroupBy(OverviewGroupBy.context);
+      c
+          .read(overviewPrefsProvider.notifier)
+          .setGroupBy(OverviewGroupBy.context);
       await settleMission(tester);
 
       expect(
@@ -538,7 +1019,9 @@ void main() {
       tester,
     ) async {
       final c = await pump(tester);
-      c.read(overviewPrefsProvider.notifier).setGroupBy(OverviewGroupBy.context);
+      c
+          .read(overviewPrefsProvider.notifier)
+          .setGroupBy(OverviewGroupBy.context);
       await settleMission(tester);
 
       expect(c.read(overviewGroupByProvider), OverviewGroupBy.project);

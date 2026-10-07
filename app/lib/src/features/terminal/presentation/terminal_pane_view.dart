@@ -44,8 +44,21 @@ class TerminalPaneView extends ConsumerStatefulWidget {
     required this.onKeyEvent,
     required this.onSecondaryTapDown,
     required this.linkActions,
+    this.claimsPaneFocus = true,
+    this.sizesGrid = true,
     super.key,
   });
+
+  /// Whether this view sizes the pane's grid to itself. False draws it at the
+  /// session's grid, panned sideways when narrower: a second view of a pane
+  /// its own tab still sizes, which would otherwise make the two take turns
+  /// reflowing it.
+  final bool sizesGrid;
+
+  /// Whether a click makes this the workbench's focused pane, bringing its tab
+  /// forward. False where the pane is shown away from its tab: the Agent
+  /// dashboard's peek.
+  final bool claimsPaneFocus;
 
   final TerminalInstance instance;
   final bool focused;
@@ -508,6 +521,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
 
   void _onPointerDown(PointerDownEvent event) {
     _pressedAt = event.buttons == kPrimaryButton ? event.position : null;
+    if (!widget.claimsPaneFocus) return;
     ref
         .read(terminalSessionsControllerProvider.notifier)
         .focusPane(widget.instance.id);
@@ -590,7 +604,9 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   @override
   Widget build(BuildContext context) {
     if (UiDensity.of(context).isTouch) return _buildTouch(context);
-    final view = _terminalView(fontSize: widget.fontSize);
+    final view = widget.sizesGrid
+        ? _terminalView(fontSize: widget.fontSize)
+        : _followerGrid(widget.fontSize);
 
     final hint = _hint;
     return MouseRegion(

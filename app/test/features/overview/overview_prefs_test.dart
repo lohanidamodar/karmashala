@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 
@@ -12,7 +13,13 @@ void main() {
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('ks-overview-prefs');
   });
-  tearDown(() => dir.delete(recursive: true));
+  tearDown(() async {
+    try {
+      await dir.delete(recursive: true);
+    } on FileSystemException {
+      // The prefs file may still be held open on Windows; the OS sweeps temp.
+    }
+  });
 
   ProviderContainer open() {
     final c = ProviderContainer(
@@ -105,5 +112,20 @@ void main() {
     expect(c.read(overviewPrefsProvider).filter.projects, isNull);
     prefs.showAllProjects();
     expect(c.read(overviewPrefsProvider).filter.projects, isNull);
+  });
+
+  test('the Failed counter is kept apart from Needs you, across a reload', () {
+    final kept = OverviewPrefs.fromJson(
+      const OverviewPrefs(
+        filter: OverviewFilter(
+          columns: {BoardColumn.needsYou},
+          states: {AgentState.failed},
+        ),
+      ).toJson(),
+    );
+    expect(OverviewCounter.failed.selectedIn(kept.filter), isTrue);
+    expect(OverviewCounter.needsYou.selectedIn(kept.filter), isFalse);
+    expect(kept.filter.shows(AgentState.failed), isTrue);
+    expect(kept.filter.shows(AgentState.needsYou), isFalse);
   });
 }

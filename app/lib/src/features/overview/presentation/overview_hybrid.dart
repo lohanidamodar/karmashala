@@ -8,32 +8,38 @@ import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
+import 'overview_card_parts.dart';
 import 'overview_cards.dart';
 import 'overview_filters.dart';
+import 'overview_done_card.dart';
 import 'overview_heartbeat.dart';
+import 'overview_queue_card.dart';
+import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 
 /// What the Overview draws, in reading order.
 typedef OverviewSections = ({
   List<OverviewCard> queue,
   List<OverviewCard> work,
+
+  /// Done with their turn, ready to close: the Done lane.
+  List<OverviewCard> ready,
   List<OverviewCard> done,
 });
 
 /// What is at work, as groups: each lane — project, machine or context — and
-/// its working and ready cards, in the board's lane order.
+/// its working cards, in the board's lane order.
 List<(OverviewLane, List<OverviewCard>)> overviewWorkGroupsOf(
   OverviewBoard board,
 ) => [
   for (final lane in board.lanes)
-    if ([
-      ...lane.cards(BoardColumn.working),
-      ...lane.cards(BoardColumn.ready),
-    ] case final cards when cards.isNotEmpty)
-      (lane, cards),
+    if (lane.cards(BoardColumn.working) case final cards when cards.isNotEmpty)
+      (lane, byUrgency(cards)),
 ];
 
-/// [board]'s cards as the Overview lays them out: what waits on you, oldest
-/// wait first; what is at work, lane by lane; what ended today, newest first.
+/// [board]'s cards as the Overview lays them out: what waits on you, asks
+/// before failures and oldest wait first; what is at work, lane by lane and
+/// most urgent first; what is ready to close, newest first; what ended
+/// today, newest first.
 OverviewSections overviewSectionsOf(
   OverviewBoard board, {
   required DateTime? Function(String id) waitingSince,
@@ -44,6 +50,8 @@ OverviewSections overviewSectionsOf(
   DateTime since(OverviewCard card) =>
       waitingSince(card.id) ?? card.entry.activityAt;
   queue.sort((a, b) {
+    final rank = overviewUrgency(a.state).compareTo(overviewUrgency(b.state));
+    if (rank != 0) return rank;
     final byWait = since(a).compareTo(since(b));
     return byWait != 0 ? byWait : a.id.compareTo(b.id);
   });
@@ -51,29 +59,38 @@ OverviewSections overviewSectionsOf(
     ..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt));
   return (
     queue: queue,
-    work: [
-      for (final lane in board.lanes) ...[
-        ...lane.cards(BoardColumn.working),
-        ...lane.cards(BoardColumn.ready),
-      ],
-    ],
+    work: [for (final (_, cards) in overviewWorkGroupsOf(board)) ...cards],
+    ready: [for (final lane in board.lanes) ...lane.cards(BoardColumn.ready)]
+      ..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt)),
     done: done,
   );
 }
-
-/// The ids the arrow keys move over, one card per row, as they are drawn.
-List<List<String>> overviewDrawnCards(OverviewSections sections) => [
-  for (final card in [...sections.queue, ...sections.work]) [card.id],
-];
 
 /// **The Overview, hybrid**: the fleet's heartbeat on top, what waits on you
 /// on the left — answerable in place — and what is at work on the right, each
 /// card with its last two hours. On a phone, the queue first, then the work.
 class OverviewHybrid extends ConsumerStatefulWidget {
-  const OverviewHybrid({required this.onOpen, super.key});
+  const OverviewHybrid({
+    required this.onOpen,
+    this.onEdit,
+    this.onTerminal,
+    this.questionControllerOf,
+    this.onAnswered,
+    super.key,
+  });
+
+  /// See [OverviewQueueCard.onAnswered].
+  final ValueChanged<OverviewCard>? onAnswered;
 
   /// A card was tapped: peek it.
   final ValueChanged<OverviewCard> onOpen;
+
+  /// See [OverviewQueueCard.onEdit] and [OverviewQueueCard.onTerminal].
+  final ValueChanged<OverviewCard>? onEdit;
+  final ValueChanged<OverviewCard>? onTerminal;
+
+  /// The keyboard's hold on each waiting question, by session id.
+  final QuestionPromptController Function(String id)? questionControllerOf;
 
   @override
   ConsumerState<OverviewHybrid> createState() => _OverviewHybridState();
@@ -105,8 +122,8 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       waitingSince: (id) => statusOf(id)?.waitingSince,
     );
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
-    final columns = ref.watch(
-      overviewPrefsProvider.select((p) => p.filter.columns),
+    final allStates = ref.watch(
+      overviewPrefsProvider.select((p) => p.filter.allStates),
     );
     final theme = Theme.of(context);
     final muted = UiDensity.of(context).muted(theme);
@@ -115,6 +132,8 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     return LayoutBuilder(
       builder: (context, box) {
         final scaler = MediaQuery.textScalerOf(context);
+        // A phone lists what is at work in two lines a row, the queue first.
+        final phone = box.maxWidth < WidthClass.mediumMin;
         final gutter = box.maxWidth < WidthClass.mediumMin
             ? Insets.lg
             : Insets.xl;
@@ -145,6 +164,12 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   key: ValueKey('overview-queue-card:${card.id}'),
                   card: card,
                   onOpen: onOpen,
+                  onEdit: widget.onEdit,
+                  onTerminal: widget.onTerminal,
+                  onAnswered: widget.onAnswered,
+                  questionController: widget.questionControllerOf?.call(
+                    card.id,
+                  ),
                 ),
               ),
           ],
@@ -160,7 +185,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             ),
             if (sections.work.isEmpty)
               Text(
-                columns == null
+                allStates
                     ? 'Nothing is running or ready right now.'
                     : 'Nothing here right now.',
                 key: const ValueKey('overview-none-at-work'),
@@ -183,15 +208,41 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     ),
                   ),
                 ),
-                ..._grid([
+                if (phone)
                   for (final card in cards)
-                    OverviewWorkCard(
-                      key: ValueKey('overview-work-card:${card.id}'),
+                    OverviewPhoneRow(card: card, onOpen: onOpen)
+                else
+                  ..._grid([
+                    for (final card in cards)
+                      OverviewWorkCard(
+                        key: ValueKey('overview-work-card:${card.id}'),
+                        card: card,
+                        onOpen: onOpen,
+                      ),
+                  ], across),
+              ],
+            if (sections.ready.isNotEmpty) ...[
+              EyebrowLabel(
+                'Done · ready to close · ${sections.ready.length}',
+                key: const ValueKey('overview-ready'),
+                padding: const EdgeInsets.only(
+                  top: Insets.md,
+                  bottom: Insets.sm,
+                ),
+              ),
+              if (phone)
+                for (final card in sections.ready)
+                  OverviewPhoneRow(card: card, onOpen: onOpen)
+              else
+                ..._grid([
+                  for (final card in sections.ready)
+                    OverviewDoneCard(
+                      key: ValueKey('overview-ready-card:${card.id}'),
                       card: card,
                       onOpen: onOpen,
                     ),
                 ], across),
-              ],
+            ],
           ],
         );
         final done = sections.done;

@@ -24,6 +24,46 @@ BoardColumn columnOf(AgentState state) => switch (state) {
   AgentState.ended => BoardColumn.done,
 };
 
+/// How soon [state] wants the owner, lowest first: needs you, failed,
+/// working, quiet, ready, ended.
+int overviewUrgency(AgentState state) => switch (state) {
+  AgentState.needsYou => 0,
+  AgentState.failed => 1,
+  AgentState.working => 2,
+  AgentState.quiet => 3,
+  AgentState.ready => 4,
+  AgentState.ended => 5,
+};
+
+/// [cards] most urgent first, keeping their order within one urgency.
+List<OverviewCard> byUrgency(Iterable<OverviewCard> cards) {
+  final indexed = cards.indexed.toList()
+    ..sort((a, b) {
+      final rank = overviewUrgency(
+        a.$2.state,
+      ).compareTo(overviewUrgency(b.$2.state));
+      return rank != 0 ? rank : a.$1.compareTo(b.$1);
+    });
+  return [for (final (_, card) in indexed) card];
+}
+
+/// "↳ 5 sub-sessions · 1 needs you · 2 working · 2 done", over a parent's
+/// direct sub-sessions.
+String subSessionSummary(List<OverviewCard> children) {
+  int count(bool Function(AgentState) test) =>
+      children.where((c) => test(c.state)).length;
+  final needs = count((s) => columnOf(s) == BoardColumn.needsYou);
+  final working = count((s) => columnOf(s) == BoardColumn.working);
+  final done = count((s) => s == AgentState.ready || s == AgentState.ended);
+  final n = children.length;
+  return [
+    '↳ $n ${n == 1 ? 'sub-session' : 'sub-sessions'}',
+    if (needs > 0) '$needs needs you',
+    if (working > 0) '$working working',
+    if (done > 0) '$done done',
+  ].join(' · ');
+}
+
 /// What the Board's rows are.
 enum OverviewGroupBy {
   project('Project'),
@@ -100,6 +140,7 @@ class OverviewFilter {
     this.agents,
     this.machines,
     this.columns,
+    this.states,
   });
 
   final Set<String>? projects;
@@ -107,8 +148,58 @@ class OverviewFilter {
   final Set<String>? machines;
   final Set<BoardColumn>? columns;
 
+  /// Narrower than [columns]: Needs you and Failed share one column.
+  final Set<AgentState>? states;
+
+  /// Neither [columns] nor [states] narrows what state is drawn.
+  bool get allStates => columns == null && states == null;
+
+  /// Whether a session of [state] is drawn.
+  bool shows(AgentState state) =>
+      (columns?.contains(columnOf(state)) ?? true) &&
+      (states?.contains(state) ?? true);
+
   bool get isEmpty =>
-      projects == null && agents == null && machines == null && columns == null;
+      projects == null && agents == null && machines == null && allStates;
+}
+
+/// The counters over the Board, each a filter on its own.
+enum OverviewCounter {
+  needsYou('needs you'),
+  failed('failed'),
+  working('working'),
+  ready('ready'),
+  done('done today');
+
+  const OverviewCounter(this.label);
+
+  final String label;
+
+  BoardColumn get column => switch (this) {
+    needsYou || failed => BoardColumn.needsYou,
+    working => BoardColumn.working,
+    ready => BoardColumn.ready,
+    done => BoardColumn.done,
+  };
+
+  /// The one state this counter singles out of its column, if any.
+  AgentState? get state => switch (this) {
+    needsYou => AgentState.needsYou,
+    failed => AgentState.failed,
+    _ => null,
+  };
+
+  /// Whether [filter] is this counter's own.
+  bool selectedIn(OverviewFilter filter) {
+    final columns = filter.columns;
+    final states = filter.states;
+    return columns != null &&
+        columns.length == 1 &&
+        columns.contains(column) &&
+        (state == null
+            ? states == null
+            : states != null && states.length == 1 && states.contains(state));
+  }
 }
 
 /// A parent card's sub-sessions, by what they need.
@@ -354,10 +445,7 @@ OverviewBoard buildOverviewBoard(
   final keys = <String, DateTime>{};
   final byLane = <String, Map<BoardColumn, List<(OverviewCard, DateTime)>>>{};
   for (final card in cards) {
-    if (filter.columns case final columns?
-        when !columns.contains(card.column)) {
-      continue;
-    }
+    if (!filter.shows(card.state)) continue;
     final key = memo._keyFor(card);
     keys[card.id] = key;
     ((byLane[laneOf(card.entry)] ??= {})[card.column] ??= []).add((card, key));
@@ -428,7 +516,7 @@ OverviewBoard buildOverviewBoard(
     ],
     states: Map.unmodifiable({
       for (final MapEntry(key: id, value: state) in stateOf.entries)
-        if (filter.columns?.contains(columnOf(state)) ?? true) id: state,
+        if (filter.shows(state)) id: state,
     }),
     activeAt: Map.unmodifiable({
       for (final entry in byId.values) entry.id: entry.activityAt,
@@ -525,6 +613,3 @@ OverviewStrip summarizeStrip(
     spend: Map.unmodifiable(spend),
   );
 }
-
-/// An arrow key on the Board.
-enum BoardMove { up, down, left, right }

@@ -10,6 +10,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/agent_state_providers.dart';
+import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
@@ -17,11 +18,18 @@ import 'package:karmashala/src/features/overview/application/overview_prefs.dart
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_peek.dart';
+import 'package:karmashala_git/git.dart' show FileDiffStat;
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
+import 'package:karmashala_session/delivery.dart'
+    show OfferedAction, SessionDelivery;
+import 'package:karmashala/src/features/sessions/application/session_active_model_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show ActivityEntry, ActivityKind;
+    show ActiveModelSource, ActivityEntry, ActivityKind;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/rows.dart' show SessionDiffStat;
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -55,6 +63,12 @@ class MissionFixture {
     this.answers = const {},
     this.glances = const {},
     this.files = const {},
+    this.stats = const {},
+    this.panes = const {},
+    this.fileStats = const {},
+    this.models = const {},
+    this.merges = const {},
+    this.peekChat,
     this.activity = const [],
     this.contexts = const [],
     this.contextOfProject = const {},
@@ -66,6 +80,26 @@ class MissionFixture {
 
   /// Each session's changed files.
   final Map<String, List<String>> files;
+
+  /// Each session's diff against its base, as git would count it.
+  final Map<String, SessionDiffStat> stats;
+
+  /// The terminal pane each terminal-hosted session has on this machine.
+  final Map<String, String> panes;
+
+  /// Lines added and removed per file, by checkout path.
+  final Map<String, Map<String, FileDiffStat>> fileStats;
+
+  /// The model each session's agent says it runs, by label.
+  final Map<String, String> models;
+
+  /// The Merge the delivery strip offers each session, and the base it
+  /// would merge into.
+  final Map<String, (OfferedAction, String)> merges;
+
+  /// What the peek draws for a session's chat; a line naming it by default.
+  final Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)?
+  peekChat;
 
   /// The server's activity log, which the strips and the heartbeat draw.
   final List<ActivityEntry> activity;
@@ -530,8 +564,27 @@ class MissionFixture {
     'ks-r30': ['server/lib/src/webhooks.dart'],
   };
 
+  /// Diff sizes for some of [realisticSessions].
+  static Map<String, SessionDiffStat> realisticStats() => const {
+    'ks-r32': SessionDiffStat(added: 620, removed: 40, changedFiles: 3),
+    'ks-r30': SessionDiffStat(added: 310, removed: 0, changedFiles: 2),
+  };
+
   /// [MissionFixture] with every reading above filled in.
-  static MissionFixture full() => MissionFixture(
+  static MissionFixture full({
+    Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)? peekChat,
+  }) => MissionFixture(
+    peekChat: peekChat,
+    models: const {'ks-r32': 'Opus 5.5'},
+    stats: realisticStats(),
+    fileStats: const {
+      '/src/ks-r32': {
+        'app/lib/src/features/overview/presentation/overview_hybrid.dart':
+            FileDiffStat(added: 212, removed: 40),
+        'app/lib/src/features/overview/presentation/overview_cards.dart':
+            FileDiffStat(added: 168, removed: 0),
+      },
+    },
     answers: realisticAnswers(),
     glances: realisticGlances(),
     files: realisticFiles(),
@@ -563,6 +616,13 @@ class MissionFixture {
       ),
     );
   }
+
+  /// The reads the Overview makes; its answers can be changed mid-test.
+  late final reader = FakeOverviewReader(
+    answers: {...answers},
+    glances: glances,
+    files: files,
+  );
 
   late final _entries = [for (final s in sessions) entry(s)];
   late final _byId = {for (final s in sessions) s.id: s};
@@ -598,9 +658,36 @@ class MissionFixture {
         null => const Stream<AgentStatusReport>.empty(),
       },
     ),
-    overviewReaderProvider.overrideWithValue(
-      FakeOverviewReader(answers: answers, glances: glances, files: files),
+    overviewPeekChatProvider.overrideWithValue(
+      peekChat ??
+          (entry, seenUntil) => Text(
+            'chat:${entry.id} seen:${seenUntil?.toIso8601String()}',
+            key: ValueKey('overview-peek-chat:${entry.id}'),
+          ),
     ),
+    overviewSessionPaneProvider.overrideWith((ref, id) => panes[id]),
+    sessionDeliveryActionsProvider.overrideWith((ref, id) => [?merges[id]?.$1]),
+    sessionDeliveryProvider.overrideWith(
+      (ref, id) async => SessionDelivery(baseBranch: merges[id]?.$2),
+    ),
+    sessionActiveModelProvider.overrideWith(
+      (ref, id) => switch (models[id]) {
+        final label? => SessionActiveModel(
+          modelId: label,
+          label: label,
+          observedAt: now,
+          source: ActiveModelSource.agent,
+        ),
+        null => null,
+      },
+    ),
+    overviewFileStatsProvider.overrideWith(
+      (ref, checkout) async => fileStats[checkout.path] ?? const {},
+    ),
+    sessionDiffStatProvider.overrideWith(
+      (ref, id) async => stats[id] ?? SessionDiffStat.unknown,
+    ),
+    overviewReaderProvider.overrideWithValue(reader),
   ];
 }
 
@@ -679,7 +766,7 @@ Future<ProviderContainer> pumpMission(
   Widget page = const OverviewTabView();
   if (phone) {
     page = Scaffold(
-      appBar: AppBar(title: const Text('Overview')),
+      appBar: AppBar(title: const Text('Agent dashboard')),
       body: const PaneTitleOverride(child: OverviewTabView()),
     );
   }

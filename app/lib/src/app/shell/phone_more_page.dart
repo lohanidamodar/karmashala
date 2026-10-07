@@ -28,7 +28,7 @@ class PhoneMoreList extends StatelessWidget {
   static (String, IconData, WidgetBuilder) _entry(PhoneMoreEntry entry) =>
       switch (entry) {
         PhoneMoreEntry.overview => (
-          'Overview',
+          'Agent dashboard',
           AppIcons.squaresFour,
           (_) => const PaneTitleOverride(child: OverviewTabView()),
         ),

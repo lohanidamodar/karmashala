@@ -77,6 +77,7 @@ class SessionLaunchRequest {
     this.modelOverride,
     this.view,
     this.targetPaneId,
+    this.openTab = true,
   });
 
   final Repository repository;
@@ -161,6 +162,11 @@ class SessionLaunchRequest {
   /// already filled fall back to a new tab rather than failing the launch.
   final String? targetPaneId;
 
+  /// Whether this window shows what started. False keeps the person where
+  /// they are: the server runs the session and no tab opens or takes focus.
+  /// An external surface still opens its terminal window, which is the ask.
+  final bool openTab;
+
   /// The same request against a re-read [installation]. The launch-time path
   /// check hands back the row a repair moved, and the spawn must use that one.
   SessionLaunchRequest withInstallation(AgentInstallation installation) =>
@@ -200,6 +206,7 @@ class SessionLaunchRequest {
     modelOverride: modelOverride,
     view: view,
     targetPaneId: targetPaneId,
+    openTab: openTab,
   );
 }
 

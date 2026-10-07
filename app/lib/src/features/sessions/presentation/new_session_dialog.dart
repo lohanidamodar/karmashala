@@ -39,6 +39,7 @@ import '../application/session_defaults.dart';
 import '../application/session_launcher.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/session.dart' show Session;
 import 'session_destination_picker.dart';
 import 'slow_start_note.dart';
 import 'filter_menu_field.dart';
@@ -68,6 +69,10 @@ bool _isBranchName(String name) =>
     !name.contains('@{') &&
     !RegExp(r'[\s~^:?*\[\\\x00-\x1f\x7f]').hasMatch(name);
 
+/// A session [NewSessionDialog] started, and whether it opened no tab.
+typedef NewSessionStarted =
+    void Function(Session session, {required bool keptHere});
+
 /// Creates a session **where you say**. Browsing and cancelling leaves the
 /// app's selection alone; pressing Start moves it, it being no longer a guess.
 class NewSessionDialog extends ConsumerStatefulWidget {
@@ -76,6 +81,9 @@ class NewSessionDialog extends ConsumerStatefulWidget {
     this.destination,
     this.firstPrompt,
     this.title,
+    this.keepHere = false,
+    this.preferChat = false,
+    this.onStarted,
     super.key,
   });
 
@@ -89,6 +97,9 @@ class NewSessionDialog extends ConsumerStatefulWidget {
     SessionDestination? destination,
     String? firstPrompt,
     String? title,
+    bool keepHere = false,
+    bool preferChat = false,
+    NewSessionStarted? onStarted,
   }) {
     final container = ProviderScope.containerOf(context, listen: false);
     if (!container.read(capabilitiesProvider).mayStart) {
@@ -104,11 +115,24 @@ class NewSessionDialog extends ConsumerStatefulWidget {
         destination: destination,
         firstPrompt: firstPrompt,
         title: title,
+        keepHere: keepHere,
+        preferChat: preferChat,
+        onStarted: onStarted,
       ),
     );
   }
 
   final String? targetPaneId;
+
+  /// Whether "Keep working here (don't open a tab)" starts ticked: the
+  /// session then starts at the server and no tab opens or takes focus.
+  final bool keepHere;
+
+  /// Whether an agent with a chat form starts in it unless the person picks.
+  final bool preferChat;
+
+  /// Told of the session once it started, and whether it was kept here.
+  final NewSessionStarted? onStarted;
 
   /// Filled into the first prompt for the person to read, edit and start:
   /// a review, a crash or a failed run handed over is never sent unseen.
@@ -168,6 +192,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// and its name or path.
   String? _existingPick;
   bool _external = false;
+  late bool _keepHere = widget.keepHere;
   SystemTerminal? _terminal;
   bool _busy = false;
   String? _error;
@@ -703,6 +728,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         setState(() => _error = 'Choose a terminal to launch in.');
         return;
       }
+      // An external terminal opens its own window whatever is ticked.
+      final keptHere = _keepHere && !_external;
       // One call for both branches: in-app and external are the same creation
       // path with a different surface, so every field means the same thing.
       final launched = await ref
@@ -726,6 +753,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               firstMessage: _promptController.text.trim().isEmpty
                   ? null
                   : _promptController.text.trim(),
+              openTab: !keptHere,
             ),
             externalTerminal: terminal,
           );
@@ -734,10 +762,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           .remember(projectId: repo.projectId, installationId: installation.id);
       // Now — and only now — the app follows, by the rule the Explorer uses
       // when a row is clicked. Only when the project differs: selecting scans.
-      if (ref.read(selectedProjectIdProvider) != repo.projectId) {
-        ref.read(selectedProjectIdProvider.notifier).select(repo.projectId);
+      // Kept here, nothing moves: following the row would bring its tab up.
+      if (!keptHere) {
+        if (ref.read(selectedProjectIdProvider) != repo.projectId) {
+          ref.read(selectedProjectIdProvider.notifier).select(repo.projectId);
+        }
+        ref.read(explorerActionsProvider).selectNative(launched.session);
       }
-      ref.read(explorerActionsProvider).selectNative(launched.session);
+      widget.onStarted?.call(launched.session, keptHere: keptHere);
       if (mounted) Navigator.of(context).pop();
     } on WorktreeCreationCancelled catch (e) {
       if (mounted) setState(() => _error = 'Cancelled. ${e.cleanup}');
@@ -839,6 +871,20 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     ],
   );
 
+  /// "Keep working here": start it at the server and open no tab.
+  Widget _keepHereChoice() => CheckboxListTile(
+    key: const ValueKey('new-session-keep-here'),
+    value: _keepHere,
+    dense: true,
+    contentPadding: EdgeInsets.zero,
+    controlAffinity: ListTileControlAffinity.leading,
+    visualDensity: UiDensity.of(context).controlDensity,
+    title: const Text("Keep working here (don't open a tab)"),
+    onChanged: _busy
+        ? null
+        : (value) => setState(() => _keepHere = value ?? false),
+  );
+
   /// In the app or in a terminal of its own, and in the checkout, a new
   /// worktree, or one that exists (spec §5). Worktrees are offered for both
   /// surfaces: they exist before the agent starts, so its window is moot.
@@ -872,6 +918,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         ),
         if (_external) _terminalPicker(),
       ],
+      if (!_external) _keepHereChoice(),
       if (worktreeOffered) ...[
         if (externalOffered) const SizedBox(height: Insets.xs),
         _placeChoice(checkout),
@@ -1035,10 +1082,19 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     i.environmentId == checkout.path.environmentId)))
           i,
     ];
-    final installation = scratch
+    final found = scratch
         ? _agentForScratch(installations)
         : _agentFor(checkout, installations);
     _cards = foldInstallations(registry, installations);
+    // Chat where the agent has one, until the person picks: a chat's asks
+    // can all be answered from the Overview.
+    final installation = widget.preferChat && _installation == null
+        ? _cards
+                  .where((c) => c.contains(found))
+                  .firstOrNull
+                  ?.installationFor(AgentRunForm.chat) ??
+              found
+        : found;
     _shownInstallation = installation;
 
     // A worktree is git's, so it is offered only where there is a repository to

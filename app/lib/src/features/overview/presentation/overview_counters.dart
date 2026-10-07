@@ -9,225 +9,159 @@ import '../../sessions/application/session_list_prefs.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
-import '../application/overview_tiles.dart';
 
-/// **The live counters**: Needs you, Working, Ready and Done today, each a
-/// chip that filters the cards to its state, and taps again to clear.
+/// **The live counters**: needs you, failed, working, ready and done today,
+/// each a slim toggle that shows only its own and taps again to clear.
 class OverviewCounters extends ConsumerWidget {
   const OverviewCounters({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final (:strip, :doneToday) = ref.watch(overviewCountersProvider);
-    final columns = ref.watch(
-      overviewPrefsProvider.select((p) => p.filter.columns),
-    );
+    final filter = ref.watch(overviewPrefsProvider.select((p) => p.filter));
     final hidden = ref.watch(agentsHiddenWorkingCountProvider);
     final controller = ref.read(overviewPrefsProvider.notifier);
     final wait = strip.oldestWait;
-    final needs = strip.needsYou + strip.failed;
-    final counters = [
-      _Counter(
-        column: BoardColumn.needsYou,
-        count: needs,
-        caption: [
-          if (wait != null && strip.needsYou > 0) 'oldest ${compactAge(wait)}',
-          if (strip.failed > 0) '${strip.failed} failed',
-        ].join(' · '),
-      ),
-      _Counter(column: BoardColumn.working, count: strip.working),
-      _Counter(column: BoardColumn.ready, count: strip.ready),
-      _Counter(column: BoardColumn.done, count: doneToday),
-    ];
-    Widget tile(_Counter counter) => _CounterTile(
-      counter: counter,
-      selected: columns?.contains(counter.column) ?? false,
-      hiddenWorking: counter.column == BoardColumn.working ? hidden : 0,
-      onTap: () =>
-          controller.setColumns(counterTapped(columns, counter.column)),
-    );
+    int count(OverviewCounter counter) => switch (counter) {
+      OverviewCounter.needsYou => strip.needsYou,
+      OverviewCounter.failed => strip.failed,
+      OverviewCounter.working => strip.working,
+      OverviewCounter.ready => strip.ready,
+      OverviewCounter.done => doneToday,
+    };
     return Wrap(
       key: const ValueKey('overview-counters'),
-      spacing: Insets.sm,
-      runSpacing: Insets.sm,
-      children: [for (final counter in counters) tile(counter)],
+      spacing: Insets.xs,
+      runSpacing: Insets.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (final counter in OverviewCounter.values) ...[
+          _CounterChip(
+            counter: counter,
+            count: count(counter),
+            caption:
+                counter == OverviewCounter.needsYou &&
+                    wait != null &&
+                    strip.needsYou > 0
+                ? 'oldest ${compactAge(wait)}'
+                : null,
+            selected: counter.selectedIn(filter),
+            onTap: () => controller.setCounter(
+              counter.selectedIn(filter) ? null : counter,
+            ),
+          ),
+          if (counter == OverviewCounter.working && hidden > 0)
+            _HiddenWorking(count: hidden),
+        ],
+      ],
     );
   }
 }
 
-class _Counter {
-  const _Counter({required this.column, required this.count, this.caption});
-
-  final BoardColumn column;
-  final int count;
-  final String? caption;
-
-  String get label => switch (column) {
-    BoardColumn.done => 'Done today',
-    _ => column.label,
-  };
-}
-
-class _CounterTile extends ConsumerWidget {
-  const _CounterTile({
+class _CounterChip extends StatelessWidget {
+  const _CounterChip({
     required this.counter,
+    required this.count,
     required this.selected,
-    required this.hiddenWorking,
     required this.onTap,
+    this.caption,
   });
 
-  final _Counter counter;
+  final OverviewCounter counter;
+  final int count;
   final bool selected;
-  final int hiddenWorking;
   final VoidCallback onTap;
+  final String? caption;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final density = UiDensity.of(context);
-    final count = counter.count;
     final live = count > 0;
-    final hue = switch (counter.column) {
-      BoardColumn.needsYou => semantic.attention,
-      BoardColumn.working => semantic.working,
-      BoardColumn.ready => semantic.idle,
-      BoardColumn.done => scheme.onSurface,
+    final hue = switch (counter) {
+      OverviewCounter.needsYou => semantic.attention,
+      OverviewCounter.failed => semantic.failure,
+      OverviewCounter.working => semantic.working,
+      OverviewCounter.ready => semantic.idle,
+      OverviewCounter.done => scheme.onSurface,
     };
-    final ink = live ? hue : scheme.onSurfaceVariant;
-    final glyphSize = density.icon;
-    final glyph = switch (counter.column) {
-      BoardColumn.needsYou when live => AskGlyph(size: glyphSize),
-      BoardColumn.needsYou => Icon(
-        AppIcons.shield,
-        size: glyphSize,
-        color: ink,
-      ),
-      BoardColumn.working when live => WorkingSpinner(
-        size: glyphSize,
-        color: hue,
-      ),
-      BoardColumn.working => Icon(AppIcons.circle, size: glyphSize, color: ink),
-      BoardColumn.ready => Icon(
-        AppIcons.checkCircle,
-        size: glyphSize,
-        color: ink,
-      ),
-      BoardColumn.done => Icon(
-        AppIcons.listChecks,
-        size: glyphSize,
-        color: scheme.onSurfaceVariant,
-      ),
-    };
-    final caption = counter.caption;
-    final spoken = [
-      counter.label,
-      '$count',
-      if (caption != null && caption.isNotEmpty) caption,
-      selected
-          ? 'showing only these; tap to show all'
-          : 'tap to show only these',
-    ].join(', ');
-    final radius = BorderRadius.circular(Radii.lg);
-    // An ask waiting is the one counter that should catch the eye unasked.
-    final asking = live && counter.column == BoardColumn.needsYou;
-    final tones = SurfaceTones.of(context);
-    final rest = asking ? tones.attentionSurface : scheme.surfaceContainerLow;
-    return Material(
-      key: ValueKey('overview-counter:${counter.column.name}'),
-      color: selected
-          ? Color.alphaBlend(StateLayers.selected(scheme), rest)
-          : rest,
-      shape: RoundedRectangleBorder(
-        borderRadius: radius,
-        side: BorderSide(
-          color: selected
-              ? scheme.primary
-              : asking
-              ? tones.attentionEdge
-              : scheme.outlineVariant,
-          width: selected ? StateLayers.focusRingWidth * 2 : 1,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: radius,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.md,
-            vertical: Insets.sm,
+    final caption = this.caption;
+    final radius = BorderRadius.circular(Radii.sm);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: [
+        '${counter.label[0].toUpperCase()}${counter.label.substring(1)}, '
+            '$count',
+        ?caption,
+        selected
+            ? 'showing only these; tap to show all'
+            : 'tap to show only these',
+      ].join(', '),
+      excludeSemantics: true,
+      child: Material(
+        key: ValueKey('overview-counter:${counter.name}'),
+        color: selected ? StateLayers.selected(scheme) : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(
+            color: selected ? scheme.primary : Colors.transparent,
+            width: StateLayers.focusRingWidth,
           ),
-          child: Wrap(
-            spacing: Insets.sm,
-            runSpacing: Insets.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Semantics(
-                button: true,
-                selected: selected,
-                label: spoken,
-                excludeSemantics: true,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    glyph,
-                    const SizedBox(width: Insets.sm),
-                    Text(
-                      '$count',
+        ),
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: density.minRow),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.sm,
+                vertical: Insets.xxs,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$count',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: live ? hue : scheme.onSurfaceVariant,
+                      fontWeight: live ? FontWeight.w700 : FontWeight.w400,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Flexible(
+                    child: Text(
+                      counter.label,
                       maxLines: 1,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: live ? ink : scheme.onSurfaceVariant,
-                        fontWeight: live ? FontWeight.w700 : FontWeight.w400,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: live
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
                       ),
                     ),
+                  ),
+                  if (caption != null) ...[
                     const SizedBox(width: Insets.xs),
                     Flexible(
                       child: Text(
-                        counter.label.toLowerCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: live
-                              ? scheme.onSurface
-                              : scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    if (caption != null && caption.isNotEmpty) ...[
-                      const SizedBox(width: Insets.sm),
-                      Flexible(
-                        child: Text(
                         caption,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: density
-                            .muted(theme)
-                            ?.copyWith(
-                              color: counter.column == BoardColumn.needsYou
-                                  ? hue
-                                  : null,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: hue,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
-                    ],
-                    if (selected) ...[
-                      const SizedBox(width: Insets.xs),
-                      Icon(
-                        AppIcons.funnelFill,
-                        size: density.iconSmall,
-                        color: scheme.primary,
-                      ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
-              if (hiddenWorking > 0) _HiddenWorking(count: hiddenWorking),
-            ],
+            ),
           ),
         ),
       ),

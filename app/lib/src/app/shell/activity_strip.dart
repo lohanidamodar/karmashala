@@ -162,7 +162,7 @@ class ActivityStrip extends StatelessWidget {
           if (onOverview case final onOverview?)
             _StripButton(
               icon: AppIcons.squaresFour,
-              label: 'Overview',
+              label: 'Agent dashboard',
               hint: overviewHint,
               selected: false,
               onPressed: onOverview,

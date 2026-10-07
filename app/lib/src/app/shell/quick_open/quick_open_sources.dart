@@ -737,7 +737,7 @@ class QuickOpenSources {
         onSelect: () => openLogsTab(ref),
       ),
       _command(
-        'Open Overview',
+        'Open Agent dashboard',
         subtitle: 'Every project’s sessions at a glance: what needs you',
         icon: AppIcons.squaresFour,
         shortcut: shellCommandLabel('overview.open'),

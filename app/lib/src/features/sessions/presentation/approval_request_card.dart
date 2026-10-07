@@ -23,6 +23,7 @@ import '../../remote/application/remote_approval_bindings.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
 import '../application/ask_resolutions.dart';
+import '../application/session_actions.dart';
 import '../application/session_input.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_status_providers.dart';
@@ -33,6 +34,7 @@ import 'chat_transcript.dart' show ChatViewportRoom;
 
 part 'approval_request_card/answered_elsewhere.dart';
 part 'approval_request_card/ask_dock.dart';
+part 'approval_request_card/board_answers.dart';
 part 'approval_request_card/dock_buttons.dart';
 part 'approval_request_card/permission_options.dart';
 part 'approval_request_card/tool_ask_answers.dart';
@@ -51,10 +53,32 @@ class ApprovalRequestCard extends ConsumerWidget {
     this.inline = false,
     this.dense = false,
     this.where,
+    this.board = false,
+    this.onEdit,
+    this.onReplyInWords,
+    this.questionController,
+    this.onAnswered,
     super.key,
   });
 
+  /// On the [board]: an answer went, by button or by key.
+  final VoidCallback? onAnswered;
+
   final String sessionId;
+
+  /// On the Overview's board: a command approval as its command, [where] it
+  /// runs and Allow / Always / Deny / Edit…; a question numbered, with
+  /// Decline and "Reply in words" in sight. Implies [dense].
+  final bool board;
+
+  /// On the [board]: Edit… was pressed, to change the command first.
+  final VoidCallback? onEdit;
+
+  /// On the [board]: "Reply in words" was pressed on a question.
+  final VoidCallback? onReplyInWords;
+
+  /// Picks and sends a [board] question's answer from the keyboard.
+  final QuestionPromptController? questionController;
 
   /// A question drawn as the compact card ([QuestionPromptCard.dense]), under
   /// a header the caller already draws: the Overview's queue.
@@ -126,6 +150,25 @@ class ApprovalRequestCard extends ConsumerWidget {
     final cannot = ref.watch(capabilitiesProvider.select((c) => c.mayApprove))
         ? _noLiveTerminal
         : kApprovalNotGranted;
+
+    if (board &&
+        waiting == AgentWaitKind.approval &&
+        report.toolAsk != null) {
+      if (!canAnswer) {
+        return Text(
+          cannot,
+          style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
+        );
+      }
+      return _BoardApprovalAnswers(
+        sessionId: sessionId,
+        report: report,
+        summary: summarizeToolAsk(report.toolAsk!),
+        where: where,
+        onEdit: onEdit,
+        onAnswered: onAnswered,
+      );
+    }
 
     if (docked) {
       final dock = _AskDock(
@@ -205,7 +248,36 @@ class ApprovalRequestCard extends ConsumerWidget {
       ],
     );
 
-    final card = Container(
+    // The phone's cards, answered through the phone's own guarded paths:
+    // a menu by the option chosen, a question by the options picked. Never
+    // Approve — Enter — on either.
+    final body = !canAnswer
+        ? standard
+        : switch (waiting) {
+            AgentWaitKind.approval => _MenuOr(
+              sessionId: sessionId,
+              agentName: agentName,
+              orElse: standard,
+            ),
+            AgentWaitKind.question => _QuestionOr(
+              sessionId: sessionId,
+              agentName: agentName,
+              orElse: standard,
+              dense: dense || board,
+              board: board,
+              onReplyInWords: onReplyInWords,
+              controller: questionController,
+              onAnswered: onAnswered,
+              where: board ? null : where,
+              trailing: dense && !board
+                  ? _WaitingFor(since: report.waitingSince)
+                  : null,
+            ),
+            _ => standard,
+          };
+    // The board's card is the frame already, and calm: no second surface.
+    if (board) return body;
+    return Container(
       // Flush with the composer stack it is pinned above.
       margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
       padding: const EdgeInsets.all(Insets.sm),
@@ -216,31 +288,8 @@ class ApprovalRequestCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(color: SurfaceTones.of(context).attentionEdge),
       ),
-      // The phone's cards, answered through the phone's own guarded paths:
-      // a menu by the option chosen, a question by the options picked. Never
-      // Approve — Enter — on either.
-      child: !canAnswer
-          ? standard
-          : switch (waiting) {
-              AgentWaitKind.approval => _MenuOr(
-                sessionId: sessionId,
-                agentName: agentName,
-                orElse: standard,
-              ),
-              AgentWaitKind.question => _QuestionOr(
-                sessionId: sessionId,
-                agentName: agentName,
-                orElse: standard,
-                dense: dense,
-                where: where,
-                trailing: dense
-                    ? _WaitingFor(since: report.waitingSince)
-                    : null,
-              ),
-              _ => standard,
-            },
+      child: body,
     );
-    return card;
   }
 }
 
@@ -396,6 +445,10 @@ class _QuestionOr extends ConsumerWidget {
     this.where,
     this.trailing,
     this.dense = false,
+    this.board = false,
+    this.onReplyInWords,
+    this.controller,
+    this.onAnswered,
   });
 
   final String sessionId;
@@ -404,6 +457,12 @@ class _QuestionOr extends ConsumerWidget {
 
   /// See [QuestionPromptCard.dense]; the caller draws the header.
   final bool dense;
+
+  /// See [ApprovalRequestCard.board].
+  final bool board;
+  final VoidCallback? onReplyInWords;
+  final QuestionPromptController? controller;
+  final VoidCallback? onAnswered;
 
   /// See [QuestionPromptCard.where] and [QuestionPromptCard.trailing].
   final String? where;
@@ -432,6 +491,9 @@ class _QuestionOr extends ConsumerWidget {
       trailing: trailing,
       dense: dense,
       showHeader: !dense,
+      numbered: board,
+      onReplyInWords: onReplyInWords,
+      controller: controller,
       onAnswerInTerminal: _hasTerminal(ref, sessionId)
           ? () => _openTerminal(ref, sessionId)
           : null,
@@ -457,6 +519,7 @@ class _QuestionOr extends ConsumerWidget {
               ? 'Left to talk over.'
               : 'Answered.',
         );
+        if (!chat) onAnswered?.call();
       },
     );
   }

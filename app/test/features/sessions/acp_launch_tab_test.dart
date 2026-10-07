@@ -142,4 +142,59 @@ void main() {
       isNotNull,
     );
   });
+
+  group('kept here: started, and no tab opens or takes focus', () {
+    for (final (name, installation) in [
+      ('over ACP', acpInstallation),
+      ('in a terminal', agentInstallation(id: 'pty')),
+    ]) {
+      test(name, () async {
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        final working = terminals.openTab(TerminalProfile.powerShell);
+
+        final launched = await container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                installation: installation,
+                title: 'Kept here',
+                purpose: SessionPurpose.newSession,
+                openTab: false,
+              ),
+            );
+
+        final state = container.read(terminalSessionsControllerProvider);
+        expect(launched.tabId, isNull);
+        expect(launched.paneId, isNull);
+        expect(state.tabs.map((t) => t.id), [working]);
+        expect(state.activeTabId, working);
+        expect(server.sessionWork.running, contains(launched.session.id));
+      });
+    }
+
+    test('its tab can still be shown later', () async {
+      final launched = await container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: acpInstallation,
+              title: 'Kept here',
+              purpose: SessionPurpose.newSession,
+              openTab: false,
+            ),
+          );
+      expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+
+      final shown = await container
+          .read(sessionLauncherProvider)
+          .showStarted(SessionStarted(session: launched.session));
+      final state = container.read(terminalSessionsControllerProvider);
+      expect(state.tabs.map((t) => t.id), [shown.tabId]);
+      expect(state.activeTabId, shown.tabId);
+    });
+  });
 }
