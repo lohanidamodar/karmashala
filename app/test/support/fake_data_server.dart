@@ -547,6 +547,9 @@ class FakeDataServer {
         case SessionUsageChanged():
           // Told, never kept: a late client reads it from `sessions.stats`.
           break;
+        case SessionActiveModelChanged():
+          // Told, never kept: the server's keeper greets it.
+          break;
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
           break;

@@ -18,6 +18,8 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionActiveModelChanged;
 
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
@@ -152,16 +154,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a session that never chose says so, and names no model', (
-    tester,
-  ) async {
+  testWidgets('a session that never chose, before its agent has said what '
+      'it runs, names no model and never says "default"', (tester) async {
     final h = await harness(tester);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
 
-    // Not a fabricated `sonnet`: nothing was passed to the agent, and the chip
-    // says exactly that.
-    expect(find.text('default'), findsOneWidget);
+    // Not a fabricated `sonnet`: nothing was passed to the agent and it has
+    // not said, and the chip says exactly that.
+    expect(find.text(kModelNotRecorded), findsOneWidget);
+    expect(find.text('default'), findsNothing);
     final tooltip = tester
         .widgetList<Tooltip>(find.byType(Tooltip))
         .firstWhere((t) => (t.message ?? '').isNotEmpty);
@@ -335,7 +337,39 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, isNull);
-    expect(find.text('default'), findsOneWidget);
+    expect(find.text(kModelNotRecorded), findsOneWidget);
+  });
+
+  testWidgets('once the agent says what it runs, that is the face — with '
+      '"default" beside it while it follows the default — and its menu row '
+      'says it is running now', (tester) async {
+    final h = await harness(tester, defaultModel: 'opus');
+    addTearDown(h.container.dispose);
+    await tester.pumpWidget(h.app);
+    expect(find.text('Opus'), findsOneWidget);
+
+    h.db.server.writeAsAnotherClient([
+      SessionActiveModelChanged(
+        sessionId: h.sessionId,
+        modelId: 'sonnet',
+        observedAt: testTime,
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    expect(find.text('Sonnet'), findsOneWidget);
+    expect(find.text('· default'), findsOneWidget);
+    final tooltip = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .firstWhere((t) => (t.message ?? '').isNotEmpty);
+    expect(tooltip.message, startsWith('Running Sonnet'));
+
+    await openMenu(tester);
+    final running = tester
+        .widgetList<DesktopMenuDetailRow>(find.byType(DesktopMenuDetailRow))
+        .where((row) => row.badge == kModelRunningBadge);
+    expect(running.single.label, 'Sonnet');
+    // Running is said, not ticked: the tick is on following the default.
+    expect(running.single.selected, isFalse);
   });
 
   testWidgets('idle and slash-capable: sent now, and the chip says so', (

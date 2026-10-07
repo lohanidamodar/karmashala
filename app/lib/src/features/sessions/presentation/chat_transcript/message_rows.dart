@@ -348,6 +348,10 @@ class _AgentMessageBlock extends StatelessWidget {
             _AgentByline(name: name, agentId: message.agentId),
             const SizedBox(height: Insets.xs),
           ],
+          if (message.model case final model?) ...[
+            _TurnModel(label: model),
+            const SizedBox(height: Insets.xs),
+          ],
           if (thinking != null && thinking.isNotEmpty) ...[
             ThinkingAccordion(thinking: thinking),
             const SizedBox(height: Insets.xs),
@@ -359,6 +363,39 @@ class _AgentMessageBlock extends StatelessWidget {
             selectable: false,
           ),
           ?detail,
+        ],
+      ),
+    );
+  }
+}
+
+/// The model that wrote an agent turn, said small where it changed.
+class _TurnModel extends StatelessWidget {
+  const _TurnModel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Semantics(
+      label: 'Model: $label',
+      excludeSemantics: true,
+      child: Row(
+        key: const ValueKey('chat-turn-model'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(AppIcons.robot, size: Chrome.iconSmall, color: muted),
+          const SizedBox(width: Insets.xs),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(color: muted),
+            ),
+          ),
         ],
       ),
     );

@@ -13,6 +13,7 @@ import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:agent_cli/read.dart';
 import '../../sessions/application/acp_session_providers.dart';
+import '../../sessions/application/session_active_model_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -144,6 +145,10 @@ class NativeSessionRow extends ConsumerWidget {
     // A value type: a bump that did not change these words rebuilds nothing.
     final resume = ref.watch(sessionResumeBadgeProvider(session.id));
     final registry = ref.watch(agentRegistryProvider);
+    // What its agent last said it runs; nothing until it has said.
+    final model = ref.watch(
+      sessionActiveModelProvider(session.id).select((m) => m?.label),
+    );
 
     return SessionCard(
       depth: depth,
@@ -163,6 +168,7 @@ class NativeSessionRow extends ConsumerWidget {
         // The glyph says the lifecycle; a row claiming to be live with nothing
         // of ours running it still says so in words (`SessionStatus.labelWhen`).
         if (lifecycle != status.name) lifecycle,
+        ?model,
       ].join('  ·  '),
       // One status glyph: what the agent is doing now while the session claims
       // to be live, its recorded lifecycle once it is not.
