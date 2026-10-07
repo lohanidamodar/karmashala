@@ -236,5 +236,11 @@ OverviewCard? overviewCardOf(OverviewBoard board, String? id) {
       if (card.id == id) return card;
     }
   }
+  // A sub-session stacked on its parent is peeked from the parent's list.
+  for (final below in board.children.values) {
+    for (final card in below) {
+      if (card.id == id) return card;
+    }
+  }
   return null;
 }

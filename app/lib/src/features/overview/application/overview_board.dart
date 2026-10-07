@@ -182,11 +182,15 @@ class OverviewBoard {
     required this.lanes,
     required this.states,
     this.activeAt = const {},
+    this.children = const {},
   });
 
   static final empty = OverviewBoard(lanes: const [], states: const {});
 
   final List<OverviewLane> lanes;
+
+  /// Each parent's direct sub-sessions in view, by the parent's id.
+  final Map<String, List<OverviewCard>> children;
 
   /// Every session the filters left in, by id: cards and stacked children.
   final Map<String, AgentState> states;
@@ -371,6 +375,15 @@ OverviewBoard buildOverviewBoard(
     );
   }
 
+  final children = <String, List<OverviewCard>>{};
+  for (final entry in byId.values) {
+    if (parentIn(entry) case final parent?) {
+      (children[parent] ??= []).add(
+        OverviewCard(entry: entry, state: stateOf[entry.id]!),
+      );
+    }
+  }
+
   final known = {for (final lane in laneOrder) lane.id};
   return OverviewBoard(
     lanes: [
@@ -387,6 +400,7 @@ OverviewBoard buildOverviewBoard(
     activeAt: Map.unmodifiable({
       for (final entry in byId.values) entry.id: entry.activityAt,
     }),
+    children: Map.unmodifiable(children),
   );
 }
 

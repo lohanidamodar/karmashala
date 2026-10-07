@@ -11,6 +11,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -25,6 +26,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
+import 'mission_fixture.dart' show FakeOverviewReader, hybridList;
 
 /// **The Overview tab, drawn** over the real data path: the counters and a
 /// tile per project at desktop and phone sizes, the counters filtering, the
@@ -118,6 +120,7 @@ void main() {
         explorerActionsProvider.overrideWith(
           (ref) => actions = _SpyActions(ref),
         ),
+        overviewReaderProvider.overrideWithValue(FakeOverviewReader()),
       ],
     );
     addTearDown(container.dispose);
@@ -157,8 +160,15 @@ void main() {
     return container;
   }
 
-  Finder card(String lane, String id) =>
-      find.byKey(ValueKey('overview:$lane:$id'));
+  Finder card(String id) => find.byKey(ValueKey('overview-card:$id'));
+
+  Future<void> openDone(WidgetTester tester) async {
+    final fold = find.byKey(const ValueKey('overview-done-fold'));
+    await tester.ensureVisible(fold);
+    await settle(tester);
+    await tester.tap(fold);
+    await settle(tester);
+  }
 
   Finder counter(BoardColumn column) =>
       find.byKey(ValueKey('overview-counter:${column.name}'));
@@ -168,25 +178,32 @@ void main() {
     ('1024×768', const Size(1024, 768)),
     ('390×844', const Size(390, 844)),
   ]) {
-    testBoard('$name: counters, then a tile per project with its marks', (
+    testBoard('$name: the heartbeat, what waits on you, then what works', (
       tester,
     ) async {
       await pump(tester, size);
 
-      expect(find.byKey(const ValueKey('overview-mission')), findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-hybrid')), findsOneWidget);
       for (final column in BoardColumn.values) {
         expect(counter(column), findsOneWidget);
       }
-      expect(find.byKey(const ValueKey('overview-lane:p1')), findsOneWidget);
-      expect(card('p1', 'ask'), findsOneWidget);
-      expect(card('p1', 'busy'), findsOneWidget);
-      expect(card('p1', 'idle'), findsOneWidget);
-      // Done today is a mark; what ended before today is not.
-      expect(card('p1', 'done'), findsOneWidget);
-      expect(card('p1', 'old'), findsNothing);
-      // Beta only finished today: still a tile, not a quiet line.
-      expect(find.byKey(const ValueKey('overview-lane:p2')), findsOneWidget);
-      expect(find.byKey(const ValueKey('overview-quiet-lanes')), findsNothing);
+      expect(card('ask'), findsOneWidget);
+      expect(card('busy'), findsOneWidget);
+      expect(card('idle'), findsOneWidget);
+      // Done today folds under a line; what ended before today is not drawn.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('overview-done-fold')),
+        200,
+        scrollable: hybridList,
+      );
+      expect(find.text('2 done today'), findsOneWidget);
+      await openDone(tester);
+      expect(find.byKey(const ValueKey('overview-done:done')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('overview-done:beta-done')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('overview-done:old')), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
@@ -213,9 +230,9 @@ void main() {
     await tester.tap(counter(BoardColumn.working));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.columns, {BoardColumn.working});
-    expect(card('p1', 'busy'), findsOneWidget);
-    expect(card('p1', 'ask'), findsNothing);
-    expect(find.byKey(const ValueKey('overview-lane:p2')), findsNothing);
+    expect(card('busy'), findsOneWidget);
+    expect(card('ask'), findsNothing);
+    expect(find.byKey(const ValueKey('overview-done-fold')), findsNothing);
     // The other counters keep their numbers.
     expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
     expect(
@@ -226,7 +243,7 @@ void main() {
     await tester.tap(counter(BoardColumn.working));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.columns, isNull);
-    expect(card('p1', 'ask'), findsOneWidget);
+    expect(card('ask'), findsOneWidget);
   });
 
   testBoard('the filter control sets the prefs; a chip clears its filter', (
@@ -250,7 +267,7 @@ void main() {
     await settle(tester);
 
     expect(find.text('Projects: Alpha'), findsOneWidget);
-    expect(find.byKey(const ValueKey('overview-lane:p2')), findsNothing);
+    expect(find.text('1 done today'), findsOneWidget);
     await tester.tap(
       find.descendant(
         of: find.byKey(const ValueKey('overview-active-filter:projects')),
@@ -260,38 +277,40 @@ void main() {
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.projects, isNull);
     expect(find.byKey(const ValueKey('overview-active-filters')), findsNothing);
-    expect(find.byKey(const ValueKey('overview-lane:p2')), findsOneWidget);
+    expect(find.text('2 done today'), findsOneWidget);
   });
 
-  testBoard('a waiting mark peeks into the ask path the dock uses', (
+  testBoard('a waiting card peeks into the ask path the dock uses', (
     tester,
   ) async {
     await pump(tester, const Size(1440, 900));
 
-    await tester.tap(card('p1', 'ask'));
+    await tester.tap(find.text('Chat ask').first);
     await settle(tester);
 
-    expect(find.byKey(const ValueKey('overview-peek')), findsOneWidget);
-    expect(find.byType(ApprovalRequestCard), findsOneWidget);
+    final peek = find.byKey(const ValueKey('overview-peek:ask'));
+    expect(peek, findsOneWidget);
+    expect(
+      find.descendant(of: peek, matching: find.byType(ApprovalRequestCard)),
+      findsOneWidget,
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settle(tester);
     expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
   });
 
-  testBoard('the headline peeks the session that matters most', (tester) async {
-    await pump(tester, const Size(1440, 900));
-
-    await tester.tap(find.byKey(const ValueKey('overview-headline:ask')));
-    await settle(tester);
-    expect(find.byKey(const ValueKey('overview-peek:ask')), findsOneWidget);
-  });
-
   testBoard("the peek's Resume and Archive reach the lists' own paths", (
     tester,
   ) async {
     await pump(tester, const Size(1440, 900));
-    await tester.tap(card('p1', 'done'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('overview-done-fold')),
+      200,
+      scrollable: hybridList,
+    );
+    await openDone(tester);
+    await tester.tap(find.byKey(const ValueKey('overview-done:done')));
     await settle(tester);
 
     await tester.tap(find.byKey(const ValueKey('overview-peek-open')));
@@ -307,15 +326,16 @@ void main() {
     );
   });
 
-  testBoard('the arrows move between marks and Enter peeks', (tester) async {
+  testBoard('the arrows move between cards and Enter peeks', (tester) async {
     await pump(tester, const Size(1440, 900));
     // Click once to give the Board the keyboard, then close what it opened.
-    await tester.tap(card('p1', 'busy'));
+    await tester.tap(find.text('Chat busy').first);
     await settle(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settle(tester);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    // The queue is drawn before the work, so up from the first card is it.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await settle(tester);
 

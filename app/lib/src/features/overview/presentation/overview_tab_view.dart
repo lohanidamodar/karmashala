@@ -8,12 +8,13 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../explorer/application/explorer_actions.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
 import 'overview_filters.dart';
-import 'overview_mission_control.dart';
+import 'overview_hybrid.dart';
 import 'overview_peek.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
 
@@ -199,7 +200,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (sheet) => FractionallySizedBox(
-        heightFactor: 0.7,
+        heightFactor: 0.85,
         child: Consumer(
           builder: (context, ref, _) {
             final live = overviewCardOf(
@@ -209,6 +210,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
             return OverviewPeek(
               card: live ?? card,
               onClose: () => Navigator.of(sheet).pop(),
+              onPeek: (child) {
+                Navigator.of(sheet).pop();
+                _open(child);
+              },
             );
           },
         ),
@@ -230,7 +235,13 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       _ => null,
     };
     if (move != null) {
-      final marks = drawnMarks(ref.read(overviewBoardProvider));
+      final marks = overviewDrawnCards(
+        overviewSectionsOf(
+          ref.read(overviewBoardProvider),
+          waitingSince: (id) =>
+              ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
+        ),
+      );
       controller.select(moveOnTiles(marks, focus.selected, move));
       return KeyEventResult.handled;
     }
@@ -268,7 +279,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
             )
           : null;
-      final main = OverviewMissionControl(onOpen: _open);
+      final main = OverviewHybrid(onOpen: _open);
       return Focus(
         focusNode: _focus,
         onKeyEvent: _key,
@@ -284,6 +295,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
                     child: OverviewPeek(
                       key: ValueKey('overview-peek:${peeked.id}'),
                       card: peeked,
+                      onPeek: _open,
                       onClose: ref
                           .read(overviewFocusProvider.notifier)
                           .closePeek,

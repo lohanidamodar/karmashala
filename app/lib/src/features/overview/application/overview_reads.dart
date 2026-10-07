@@ -8,10 +8,13 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused, TranscriptPage;
 import 'package:karmashala_session/transcript.dart'
     show ChatViewEvidence, SessionChatView;
+import 'package:karmashala_session/delivery.dart'
+    show SessionChangedFilesOutcome;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/capabilities/capabilities.dart';
 import '../../agents/data/agents_data.dart';
+import '../../sessions/application/session_changed_files_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -263,6 +266,28 @@ class OverviewReader {
       return null;
     }
   }
+
+  /// The files [sessionId] changed, from its own record or its checkpoints;
+  /// null when neither can say.
+  Future<List<String>?> changedFiles(String sessionId) async {
+    try {
+      final report = await _ref
+          .read(sessionChangedFilesServiceProvider)
+          .read(sessionId)
+          .timeout(kOverviewReadTimeout);
+      return switch (report.outcome) {
+        SessionChangedFilesOutcome.fromAgentRecord ||
+        SessionChangedFilesOutcome.fromCheckpoints ||
+        SessionChangedFilesOutcome.agentRecordNamesNoFile ||
+        SessionChangedFilesOutcome.checkpointsNameNoFile => [
+          for (final file in report.files) file.path,
+        ],
+        _ => null,
+      };
+    } on Object {
+      return null;
+    }
+  }
 }
 
 final overviewReaderProvider = Provider<OverviewReader>(OverviewReader.new);
@@ -288,4 +313,12 @@ final overviewGlanceProvider = FutureProvider.autoDispose
     .family<OverviewGlance?, String>((ref, sessionId) {
       _turnOf(ref, sessionId);
       return ref.read(overviewReaderProvider).glance(sessionId);
+    });
+
+/// The files session [String] changed, read once and again when its turn
+/// moves.
+final overviewChangedFilesProvider = FutureProvider.autoDispose
+    .family<List<String>?, String>((ref, sessionId) {
+      _turnOf(ref, sessionId);
+      return ref.read(overviewReaderProvider).changedFiles(sessionId);
     });

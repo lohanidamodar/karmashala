@@ -18,6 +18,8 @@ import 'package:karmashala/src/features/overview/application/overview_providers.
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ActivityEntry, ActivityKind;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -52,7 +54,15 @@ class MissionFixture {
     this.hiddenWorking = 0,
     this.answers = const {},
     this.glances = const {},
+    this.files = const {},
+    this.activity = const [],
   }) : sessions = sessions ?? realisticSessions();
+
+  /// Each session's changed files.
+  final Map<String, List<String>> files;
+
+  /// The server's activity log, which the strips and the heartbeat draw.
+  final List<ActivityEntry> activity;
 
   /// Each session's last answer, as the reader would find it.
   final Map<String, LastAnswer> answers;
@@ -158,7 +168,7 @@ class MissionFixture {
         'p-ks',
         AgentState.working,
         age: const Duration(minutes: 1),
-        report: _report('ks-r32', working, inFlight: const ['flutter test']),
+        report: _report('ks-r32', working, inFlight: const [rawScript]),
       ),
       for (final (i, state) in const [
         AgentState.working,
@@ -344,6 +354,184 @@ class MissionFixture {
     ];
   }
 
+  /// A raw script, as a hook names a background shell by its command.
+  static const rawScript =
+      r'$sp = "$env:TEMP\scratch"; Set-Location $root; '
+      r'flutter test > "$sp\app.txt" 2>&1; "exit=$LASTEXITCODE"';
+
+  /// The last two hours of the activity log for [realisticSessions]: turns,
+  /// waits, and what is still running now.
+  static List<ActivityEntry> realisticActivity() {
+    var id = 0;
+    final out = <ActivityEntry>[];
+    void at(String session, ActivityKind kind, int minutesAgo) => out.add(
+      ActivityEntry(
+        id: ++id,
+        at: now.subtract(Duration(minutes: minutesAgo)),
+        kind: kind,
+        sessionId: session,
+        source: 'fixture',
+      ),
+    );
+    void turn(String session, int from, [int? to]) {
+      at(session, ActivityKind.turnStarted, from);
+      if (to != null) at(session, ActivityKind.turnEnded, to);
+    }
+
+    void wait(String session, int from, [int? to]) {
+      at(session, ActivityKind.waitBegan, from);
+      if (to != null) at(session, ActivityKind.waitEnded, to);
+    }
+
+    for (final (session, started) in const [
+      ('ks-r21', 95),
+      ('ks-r32', 110),
+      ('ks-release', 50),
+      ('ks-r30', 75),
+      ('ks-r31', 85),
+      ('beej-scaffold', 130),
+      ('beej-ci', 55),
+      ('store-reviews', 80),
+      ('store-listing', 115),
+      ('relay-load', 52),
+      ('relay-tls', 65),
+      ('web-blog', 35),
+    ]) {
+      at(session, ActivityKind.sessionStarted, started);
+    }
+    turn('ks-r21', 90, 40);
+    turn('ks-r21', 30);
+    wait('ks-r21', 12);
+    turn('ks-r32', 105, 72);
+    turn('ks-r32', 64);
+    turn('ks-release', 45);
+    turn('ks-r30', 70, 25);
+    turn('ks-r31', 40);
+    turn('beej-scaffold', 125, 92);
+    wait('beej-scaffold', 92, 84);
+    turn('beej-scaffold', 84);
+    turn('beej-ci', 50, 18);
+    turn('store-reviews', 75, 30);
+    turn('store-listing', 110, 60);
+    turn('relay-load', 50);
+    turn('relay-tls', 60, 50);
+    turn('web-blog', 30, 9);
+    return out;
+  }
+
+  /// What one server read says some of [realisticSessions] are doing.
+  static Map<String, OverviewGlance> realisticGlances() => {
+    'ks-r32': OverviewGlance(
+      plan: const AgentPlan(
+        items: [
+          AgentPlanItem(
+            text: 'Map the Overview',
+            state: AgentPlanItemState.completed,
+          ),
+          AgentPlanItem(
+            text: 'Fix the last answer',
+            state: AgentPlanItemState.completed,
+          ),
+          AgentPlanItem(
+            text: 'Write the layout tests',
+            state: AgentPlanItemState.inProgress,
+          ),
+          AgentPlanItem(
+            text: 'Check it in a probe',
+            state: AgentPlanItemState.pending,
+          ),
+        ],
+      ),
+      open: [
+        OverviewOpenCall(
+          phrase: 'Run the overview tests',
+          raw: rawScript,
+          since: now.subtract(const Duration(minutes: 4)),
+          background: true,
+        ),
+      ],
+    ),
+    'ks-release': OverviewGlance(
+      open: [
+        OverviewOpenCall(
+          phrase: 'Editing CHANGELOG.md',
+          since: now.subtract(const Duration(minutes: 1)),
+        ),
+      ],
+    ),
+    'beej-scaffold': const OverviewGlance(
+      plan: AgentPlan(
+        items: [
+          AgentPlanItem(
+            text: 'Port the app template',
+            state: AgentPlanItemState.completed,
+          ),
+          AgentPlanItem(
+            text: 'Port the router template',
+            state: AgentPlanItemState.inProgress,
+          ),
+          AgentPlanItem(
+            text: 'Run the golden tests',
+            state: AgentPlanItemState.pending,
+          ),
+        ],
+      ),
+    ),
+    'ks-r21': const OverviewGlance(
+      plan: AgentPlan(
+        items: [
+          AgentPlanItem(
+            text: 'Wire the ACP client',
+            state: AgentPlanItemState.completed,
+          ),
+          AgentPlanItem(
+            text: 'Run the suite',
+            state: AgentPlanItemState.inProgress,
+          ),
+        ],
+      ),
+    ),
+  };
+
+  /// The last answers of some of [realisticSessions].
+  static Map<String, LastAnswer> realisticAnswers() => {
+    'ks-r30': const LastAnswer.of(
+      'Webhooks are wired: **3 events** reach the inbox, and the retry '
+      'backs off to five minutes. The tests are in `webhooks_test.dart`.',
+    ),
+    'beej-ci': const LastAnswer.of(
+      'The macOS matrix is green on **Xcode 16.4**; the beta job is '
+      'allowed to fail.',
+    ),
+    'web-blog': const LastAnswer.of(
+      'Drafted the post. It needs a hero image and your read of the '
+      'licensing paragraph.',
+    ),
+    'store-listing': const LastAnswer.of('Framed **8 screenshots**.'),
+  };
+
+  /// The files some of [realisticSessions] changed.
+  static Map<String, List<String>> realisticFiles() => {
+    'ks-r32': [
+      'app/lib/src/features/overview/presentation/overview_hybrid.dart',
+      'app/lib/src/features/overview/presentation/overview_cards.dart',
+      'app/test/features/overview/overview_hybrid_test.dart',
+    ],
+    'ks-release': ['CHANGELOG.md', 'app/pubspec.yaml'],
+    'beej-scaffold': [
+      for (var i = 1; i <= 9; i++) 'lib/templates/part_$i.dart',
+    ],
+    'ks-r30': ['server/lib/src/webhooks.dart'],
+  };
+
+  /// [MissionFixture] with every reading above filled in.
+  static MissionFixture full() => MissionFixture(
+    answers: realisticAnswers(),
+    glances: realisticGlances(),
+    files: realisticFiles(),
+    activity: realisticActivity(),
+  );
+
   WorkspaceSessionEntry entry(MissionSession s) {
     final at = now.subtract(s.age);
     return WorkspaceSessionEntry(
@@ -397,17 +585,22 @@ class MissionFixture {
     overviewFactsProvider.overrideWith((ref) => facts),
     sessionStatusLookupProvider.overrideWithValue((id) => _byId[id]?.report),
     overviewReaderProvider.overrideWithValue(
-      FakeOverviewReader(answers: answers, glances: glances),
+      FakeOverviewReader(answers: answers, glances: glances, files: files),
     ),
   ];
 }
 
 /// The Overview's reads, answered from a fixture: nothing reaches a server.
 class FakeOverviewReader implements OverviewReader {
-  FakeOverviewReader({this.answers = const {}, this.glances = const {}});
+  FakeOverviewReader({
+    this.answers = const {},
+    this.glances = const {},
+    this.files = const {},
+  });
 
   final Map<String, LastAnswer> answers;
   final Map<String, OverviewGlance> glances;
+  final Map<String, List<String>> files;
   final asked = <String>[];
 
   @override
@@ -418,6 +611,10 @@ class FakeOverviewReader implements OverviewReader {
 
   @override
   Future<OverviewGlance?> glance(String sessionId) async => glances[sessionId];
+
+  @override
+  Future<List<String>?> changedFiles(String sessionId) async =>
+      files[sessionId];
 }
 
 /// Draws the Overview tab over [fixture] at [size]: the desktop's tab, or
@@ -443,6 +640,7 @@ Future<ProviderContainer> pumpMission(
     ..upsert(wslEnv(id: 'wsl:arch', distro: 'arch'))
     ..upsert(sshEnvFixture(id: 'ssh:box', name: 'build-box'));
   server.installationRows.insert(agentInstallation());
+  server.activity.addAll(fixture.activity);
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(machine: db, data: await server.override()),
@@ -506,3 +704,11 @@ Future<void> unmountMission(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(seconds: 1));
 }
+
+/// The Overview's own list, for a scroll that must not pick a text field's.
+final Finder hybridList = find
+    .descendant(
+      of: find.byKey(const ValueKey('overview-hybrid')),
+      matching: find.byType(Scrollable),
+    )
+    .first;
