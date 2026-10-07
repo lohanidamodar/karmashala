@@ -906,6 +906,13 @@ class AcpSessionRuntime implements ScreenSession {
       );
       return;
     }
+    if (update is UnknownUpdate && update.kind == AcpExtensions.activeModel) {
+      if (update.raw['modelId'] case final String model when model.isNotEmpty) {
+        _bridgeModel = model;
+        _announceActiveModel();
+      }
+      return;
+    }
     if (update is UnknownUpdate && update.kind == AcpExtensions.notice) {
       if (update.raw['text'] case final String text) {
         _writer.notice(text, error: update.raw['role'] == 'error');
@@ -1129,8 +1136,40 @@ class AcpSessionRuntime implements ScreenSession {
     );
   }
 
-  void _announceConfigOptions() =>
-      host.configOptionsChanged(_configOptionsChange(_configOptions)!);
+  void _announceConfigOptions() {
+    host.configOptionsChanged(_configOptionsChange(_configOptions)!);
+    _announceActiveModel();
+  }
+
+  // The active model.
+
+  /// What a Karmashala bridge says the CLI under it resolved; null from an
+  /// ACP agent, whose `model` option is its own word.
+  String? _bridgeModel;
+  String? _announcedModel;
+
+  /// The model the agent says it is running, or null while it has said none.
+  /// An option value of `default` names no model, so it is not one.
+  String? get activeModelId {
+    final bridged = _bridgeModel;
+    if (bridged != null) return bridged;
+    for (final option in _configOptions ?? const <ConfigOption>[]) {
+      if (option.id != 'model' && option.category != 'model') continue;
+      final value = option.currentValue;
+      if (value is String && value.isNotEmpty && value != 'default') {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  void _announceActiveModel() {
+    final model = activeModelId;
+    if (model == null || model == _announcedModel) return;
+    _announcedModel = model;
+    _writer.model = model;
+    host.activeModelChanged(sessionId, model);
+  }
 
   SessionConfigOptionsChanged? _configOptionsChange(
     List<ConfigOption>? options,

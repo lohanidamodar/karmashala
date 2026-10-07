@@ -11,10 +11,15 @@ class AgentModel {
     required this.id,
     required this.label,
     required this.summary,
+    this.resolvedId,
   });
 
   /// What the CLI is given, verbatim.
   final String id;
+
+  /// The model [id] stands for today, where [id] is an alias the CLI resolves
+  /// (Claude Code's `opus`); what a running session reports itself as.
+  final String? resolvedId;
 
   /// What the picker shows. Short: it also has to fit on a status bar.
   final String label;
@@ -158,10 +163,14 @@ class AgentModelSupport {
   bool get switchesLive => style == AgentModelStyle.liveAndAtLaunch;
 
   /// The declared model with this id, or `null` when the list does not name it.
+  /// An id a session reported as running finds the alias that resolves to it.
   AgentModel? modelFor(String? id) {
     if (id == null || id.isEmpty) return null;
     for (final model in models) {
       if (model.id == id) return model;
+    }
+    for (final model in models) {
+      if (model.resolvedId == id) return model;
     }
     return null;
   }

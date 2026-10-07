@@ -9,6 +9,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/model_picker.dart';
 import '../../agents/presentation/picker_face.dart';
 import '../application/acp_session_providers.dart';
+import '../application/session_active_model_providers.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
 import 'session_config_option_picker.dart';
@@ -28,9 +29,11 @@ class ModelChipView {
     required this.inherited,
     required this.defaultModelId,
     required this.defaultDetail,
+    this.activeModelId,
   });
 
-  /// The words on the chip's face — a model's short label, or `default`.
+  /// The words on the chip's face: the model the agent says it runs, else
+  /// the one it is set or expected to start on, else [kModelNotRecorded].
   final String label;
 
   /// The small trailing qualifier, or null. `default` and `unlisted` are both
@@ -62,13 +65,24 @@ class ModelChipView {
   /// default" is not an answer to "what will this run on".
   final String defaultDetail;
 
+  /// The menu row of the model the agent last said it runs, or null while it
+  /// has said none.
+  final String? activeModelId;
+
   /// Whether there is anything to draw at all. An agent whose models nobody has
   /// recorded gets no chip, rather than an empty menu.
   bool get isEmpty => options.isEmpty;
 }
 
-/// What the chip should say about [state].
-ModelChipView modelChipViewFor(SessionModelState state) {
+/// The chip's face before anything names a model: never `default`.
+const String kModelNotRecorded = 'Model not recorded yet';
+
+/// What the chip should say about [state], and the model its agent last said
+/// it runs ([active]), which wins over what it was set to.
+ModelChipView modelChipViewFor(
+  SessionModelState state, {
+  SessionActiveModel? active,
+}) {
   final options = modelOptionsFor(
     state.descriptor,
     current: state.modelId,
@@ -107,17 +121,25 @@ ModelChipView modelChipViewFor(SessionModelState state) {
       : '${state.agentName} takes no model flag, so Karmashala cannot change '
             'this.';
 
+  final expected = current?.model.label ?? state.modelId;
+  final known = active != null || expected != null;
+  final running = active == null
+      ? expected == null
+            ? '$kModelNotRecorded: ${state.agentName} has not said which '
+                  'model it is running.'
+            : 'Set to start on $expected; ${state.agentName} has not said '
+                  'which model it is running yet.'
+      : active.label == expected || expected == null
+      ? 'Running ${active.label}, as ${state.agentName} reports it.'
+      : 'Running ${active.label}, as ${state.agentName} reports it; set '
+            'to $expected.';
   return ModelChipView(
-    label: current?.model.label ?? (state.modelId ?? 'default'),
-    qualifier: state.modelId == null
+    label: active?.label ?? expected ?? kModelNotRecorded,
+    qualifier: !known
         ? null
         : (current?.fitLabel ?? (state.inherited ? 'default' : null)),
     origin: origin,
-    tooltip: [
-      current?.model.label ?? state.modelId ?? 'Agent default',
-      origin,
-      rule,
-    ].join('\n'),
+    tooltip: [running, origin, rule].join('\n'),
     alarming: !tellable,
     options: options,
     selectedId: state.modelId,
@@ -128,8 +150,14 @@ ModelChipView modelChipViewFor(SessionModelState state) {
               'is passed and it starts on whatever it is configured to use.'
         : 'Currently $defaultLabel for ${state.agentName}. Changing that '
               'setting changes this session too.',
+    activeModelId: active == null
+        ? null
+        : state.support.modelFor(active.modelId)?.id ?? active.modelId,
   );
 }
+
+/// The badge on the menu row of the model the agent says it runs now.
+const String kModelRunningBadge = 'running now';
 
 /// The model this session runs on, and a menu of the models its agent can be
 /// put on. The way-back row is a [ModelChoice]: null reads as a *dismissal*.
@@ -196,8 +224,15 @@ class ModelChip extends StatelessWidget {
               // model, and ticking it too would read as a choice it made.
               selected: !view.inherited && option.model.id == view.selectedId,
               label: option.model.label,
-              badge: option.isSelectable ? lands : option.fitLabel,
-              badgeColor: option.isSelectable
+              // What it runs now is said, not ticked: the tick is the choice.
+              badge: option.model.id == view.activeModelId
+                  ? kModelRunningBadge
+                  : option.isSelectable
+                  ? lands
+                  : option.fitLabel,
+              badgeColor: option.model.id == view.activeModelId
+                  ? scheme.primary
+                  : option.isSelectable
                   ? (live ? scheme.tertiary : scheme.onSurfaceVariant)
                   : scheme.error,
               detail: option.summary,
@@ -249,13 +284,14 @@ class SessionModelChip extends ConsumerWidget {
       context,
       ref,
       ref.watch(sessionModelProvider(sessionId)),
+      active: ref.watch(sessionActiveModelProvider(sessionId)),
       maxLabelWidth: maxLabelWidth,
     );
   }
 }
 
-/// The model a session is **set to** run on, drawn as a fact, not a control. It
-/// will not claim the CLI is running it — nothing reads a model back out.
+/// The model a session runs on, drawn as a fact, not a control: what its
+/// agent last said it runs, else what it is set to start on.
 class SessionModelMark extends ConsumerWidget {
   const SessionModelMark({
     required this.sessionId,
@@ -283,12 +319,21 @@ class SessionModelMark extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     SessionModelMark.debugBuildCount++;
     final state = ref.watch(sessionModelProvider(sessionId));
-    if (!namesAModel(state)) return const SizedBox.shrink();
-    final view = modelChipViewFor(state!);
+    final active = ref.watch(sessionActiveModelProvider(sessionId));
+    if (active == null && !namesAModel(state)) return const SizedBox.shrink();
+    final view = state == null ? null : modelChipViewFor(state, active: active);
+    final label = view?.label ?? active!.label;
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     return Tooltip(
-      message: [view.label, view.origin, _modelMarkLimit(state)].join('\n'),
+      message: [
+        label,
+        ?view?.origin,
+        if (active != null)
+          'What the agent last said it runs, read from the agent itself.'
+        else
+          _modelMarkLimit(state!),
+      ].join('\n'),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -297,7 +342,7 @@ class SessionModelMark extends ConsumerWidget {
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
             child: Text(
-              view.label,
+              label,
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.ellipsis,
@@ -310,26 +355,25 @@ class SessionModelMark extends ConsumerWidget {
   }
 }
 
-/// The one thing the mark will not vouch for, worded for the agent. Two
+/// Why the mark shows a setting before the agent has said what it runs. Two
 /// sentences: a Codex user told the first would hunt for a live switch.
 String _modelMarkLimit(SessionModelState state) => state.support.switchesLive
-    ? '${state.agentName} is never asked what it is running, so this is what '
-          'the session is set to. A /model typed into the terminal, or a '
-          'change recorded while the agent was mid-turn, leaves this ahead of '
-          'the process.'
-    : '${state.agentName} takes its model at launch and is never asked what it '
-          'is running, so this is what the next launch uses — a change made '
-          'since this session started is not true of the process now.';
+    ? '${state.agentName} has not said which model it is running yet, so '
+          'this is what the session is set to. A /model typed into the '
+          'terminal shows here once it says.'
+    : '${state.agentName} takes its model at launch and has not said which '
+          'it is running yet, so this is what its launch was given.';
 
 /// The body of [SessionModelChip]: a state in, a chip or nothing out.
 Widget _buildModelChip(
   BuildContext context,
   WidgetRef ref,
   SessionModelState? state, {
+  SessionActiveModel? active,
   double maxLabelWidth = 120,
 }) {
   if (state == null) return const SizedBox.shrink();
-  final view = modelChipViewFor(state);
+  final view = modelChipViewFor(state, active: active);
   if (view.isEmpty) return const SizedBox.shrink();
   final launcher = ref.read(sessionLauncherProvider);
   return ModelChip(

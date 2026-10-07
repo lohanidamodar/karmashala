@@ -467,6 +467,7 @@ class LaunchToolSet extends ServerToolSet {
       'sessionId': child.id,
       'title': child.title,
       'agent': _agentNameOf(child),
+      'model': _context.modelOf(child.id),
       'state': view?.state ?? 'not recorded',
       'report': view?.reportMode ?? kReportModeNone,
       'followed': view?.followed ?? false,
@@ -619,7 +620,9 @@ class LaunchToolSet extends ServerToolSet {
         'childSessionId': session.id,
         'title': session.title,
         'agent': agents.nameOf(opened.agentId),
-        'model': session.modelId ?? "the agent's default (not recorded)",
+        // It has not said yet: what it was set to start on, if anything.
+        'model': _context.modelOf(session.id),
+        'modelSet': ?session.modelId,
         'depth': opened.answer['depth'],
         'permissionMode': opened.answer['permissionMode'],
         'permissionCapped': ?opened.answer['permissionCapped'],
@@ -650,6 +653,7 @@ class LaunchToolSet extends ServerToolSet {
         ? (null, false)
         : boundedText(answer.text, kFinalAnswerMaxChars);
     final tokens = await tokensOf?.call(session.id);
+    final reported = await _context.activeModels?.current(session.id);
     final block = outcome.block;
     final keepOpen = args['keepOpen'] == true;
     final ended = outcome.state == ChildTurnState.done && !keepOpen
@@ -663,7 +667,7 @@ class LaunchToolSet extends ServerToolSet {
       'childSessionId': session.id,
       'title': session.title,
       'agent': agents.nameOf(opened.agentId),
-      'model': session.modelId ?? "the agent's default (not recorded)",
+      'model': reported?.modelId ?? 'not recorded',
       'finalAnswer': text,
       if (cut) 'finalAnswerTruncated': true,
       'finalAnswerSource': text == null

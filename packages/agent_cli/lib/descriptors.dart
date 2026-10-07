@@ -10,6 +10,7 @@
 library;
 
 export 'src/agents/adapter/agent_accounts.dart';
+export 'src/agents/adapter/agent_active_model.dart';
 export 'src/agents/adapter/agent_artifact_markers.dart';
 export 'src/agents/adapter/agent_adapter.dart';
 export 'src/agents/adapter/agent_capability.dart';

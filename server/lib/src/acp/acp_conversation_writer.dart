@@ -51,6 +51,19 @@ class AcpConversationWriter {
   final _tools = <String, _ToolRow>{};
   final _rendered = <String>[];
   var _closed = false;
+  String? _model;
+
+  /// The model the agent says it is running, written on each agent row. A
+  /// report that lands while a row is open is that row's: Claude names the
+  /// model only once its reply is whole.
+  String? get model => _model;
+  set model(String? value) {
+    _model = value;
+    final open = _openRow;
+    if (open == null || value == null || _closed) return;
+    messages.patch(open, model: value);
+    onChanged();
+  }
 
   /// The latest state of each tool call this turn, by id.
   ToolCallUpdate? toolCall(String toolCallId) => _tools[toolCallId]?.state;
@@ -258,6 +271,7 @@ class AcpConversationWriter {
         messageId: messageId,
         createdAt: at,
         updatedAt: at,
+        model: role == SessionMessageRole.agent ? _model : null,
       ),
     );
     onChanged();

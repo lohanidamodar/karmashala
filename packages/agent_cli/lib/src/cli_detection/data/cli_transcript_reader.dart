@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../util/bounded_lines.dart';
 import '../../util/bounded_text.dart';
+import '../../agents/adapter/agent_active_model.dart';
 import '../../agents/adapter/agent_transcripts.dart';
 import '../../agents/adapter/injected_context.dart';
 import '../../agents/claude_code/claude_file_edits.dart';
@@ -104,6 +105,7 @@ class TranscriptMessage {
     this.queued = false,
     this.parentToolUseId,
     this.images = const [],
+    this.model,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -188,6 +190,10 @@ class TranscriptMessage {
   /// tool-image cache (or wherever the prompt's own were). Empty elsewhere.
   final List<String> images;
 
+  /// The model the agent's record says wrote an `agent` row, as its own id;
+  /// null where the record names none.
+  final String? model;
+
   /// This row with [thinking] set.
   TranscriptMessage withThinking(String? value) => TranscriptMessage(
     role: role,
@@ -204,6 +210,7 @@ class TranscriptMessage {
     queued: queued,
     parentToolUseId: parentToolUseId,
     images: images,
+    model: model,
   );
 
   /// This row with [tool] replaced, and the text that summarises it.
@@ -222,6 +229,7 @@ class TranscriptMessage {
     queued: queued,
     parentToolUseId: parentToolUseId,
     images: images,
+    model: model,
   );
 
   /// This row with [agentInstallationId] set.
@@ -240,6 +248,7 @@ class TranscriptMessage {
     queued: queued,
     parentToolUseId: parentToolUseId,
     images: images,
+    model: model,
   );
 
   /// This row with [images] set.
@@ -258,6 +267,26 @@ class TranscriptMessage {
     queued: queued,
     parentToolUseId: parentToolUseId,
     images: value,
+    model: model,
+  );
+
+  /// This row with [model] set.
+  TranscriptMessage withModel(String? value) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+    queued: queued,
+    parentToolUseId: parentToolUseId,
+    images: images,
+    model: value,
   );
 
   /// **The wire form a server's transcript page carries** (`sessions.transcript`),
@@ -278,6 +307,7 @@ class TranscriptMessage {
     if (queued) 'queued': true,
     'parentToolUseId': ?parentToolUseId,
     if (images.isNotEmpty) 'images': images,
+    'model': ?model,
   };
 
   /// Reads [toJson]'s form. An unknown field is ignored and a missing or
@@ -326,6 +356,7 @@ class TranscriptMessage {
           for (final path in list)
             if (path is String) path,
       ],
+      model: string('model'),
     );
   }
 }
@@ -480,6 +511,8 @@ class _TranscriptParse {
   // Reasoning the model wrote before its next row, which is written on a
   // line of its own: spent on that row.
   String? pendingThinking;
+  // The model Codex's latest turn_context set; Claude names one per reply.
+  String? turnModel;
   _CodexCalls codex = _CodexCalls();
   ClaudeCodeTaskLedger taskPlan = ClaudeCodeTaskLedger();
 
@@ -494,7 +527,8 @@ class _TranscriptParse {
     ..acrossBoundary.addAll(acrossBoundary)
     ..runs = runs.copy()
     ..pendingCompaction = pendingCompaction
-    ..pendingThinking = pendingThinking;
+    ..pendingThinking = pendingThinking
+    ..turnModel = turnModel;
 
   void add(String line) {
     if (line.isEmpty) return;
@@ -505,6 +539,9 @@ class _TranscriptParse {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
+    if (dialect == TranscriptDialect.codexRollout) {
+      turnModel = transcriptLineModel(decoded, dialect) ?? turnModel;
+    }
     final thought = _reasoningOf(decoded, dialect);
     if (thought != null) {
       final held = pendingThinking;
@@ -512,7 +549,23 @@ class _TranscriptParse {
     }
     final first = messages.length;
     _parse(decoded);
-    if (messages.length > first) _spendThinking(first);
+    if (messages.length > first) {
+      _spendThinking(first);
+      _stampModel(first, decoded);
+    }
+  }
+
+  /// Names the model on the agent rows this line made.
+  void _stampModel(int first, Map<String, dynamic> decoded) {
+    final said = transcriptLineModel(decoded, dialect);
+    final model = dialect == TranscriptDialect.codexRollout ? turnModel : said;
+    if (model == null) return;
+    for (var i = first; i < messages.length; i++) {
+      final row = messages[i];
+      if (row.role == 'agent' && row.model == null) {
+        messages[i] = row.withModel(model);
+      }
+    }
   }
 
   /// Hangs held reasoning on the row at [index], unless that row is the
@@ -641,6 +694,7 @@ TranscriptMessage _withCompaction(
   thinking: row.thinking,
   compaction: boundary,
   images: row.images,
+  model: row.model,
 );
 
 /// Marks the calls whose background subagents nothing has reported finished.

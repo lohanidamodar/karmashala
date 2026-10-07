@@ -2,6 +2,7 @@ import '../../ask/cli_invocation.dart';
 import '../../cli_detection/data/transcript_dialect.dart';
 import '../../process/command_runner_factory.dart';
 import '../adapter/agent_accounts.dart';
+import '../adapter/agent_active_model.dart';
 import '../adapter/agent_artifact_markers.dart';
 import '../adapter/agent_adapter.dart';
 import 'codex_visualize_markers.dart';
@@ -103,6 +104,10 @@ class CodexAdapter extends AgentAdapter {
 
   @override
   AgentModelLister get modelLister => const CodexModelLister();
+
+  @override
+  AgentActiveModel get activeModel =>
+      const TranscriptActiveModel(TranscriptDialect.codexRollout);
 
   @override
   AgentImportAudit get importAudit => const CodexImportAudit();

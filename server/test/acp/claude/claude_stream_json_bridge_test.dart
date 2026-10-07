@@ -12,6 +12,7 @@ import 'package:agent_cli/descriptors.dart'
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal;
 import 'package:karmashala_acp/karmashala_acp.dart';
+import 'package:karmashala_host/src/acp/acp_extensions.dart';
 import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
@@ -1399,6 +1400,51 @@ void main() {
       await rt.awaitTurn();
       await until(
         () => rt.configOptions!.options.single.currentValue == 'haiku',
+      );
+      await rt.stop();
+    });
+
+    test('the model Claude actually runs is told, never its alias: what '
+        "`default` resolves to at start, a pick at once, and each reply's "
+        "own; a subagent's is not the session's", () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.init(model: 'claude-haiku-4-5-20251001');
+            c.assistant(
+              'msg_sub',
+              [
+                {'type': 'text', 'text': 'Sub.'},
+              ],
+              parentToolUseId: 'task_1',
+              model: 'claude-sonnet-5-5',
+            );
+            c.assistant('msg_1', [
+              {'type': 'text', 'text': 'Hi.'},
+            ], model: 'claude-haiku-4-5-20251001');
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await until(() => host.activeModels.isNotEmpty);
+      expect(host.activeModels, ['claude-opus-5-5']);
+      expect(rt.configOptions!.options.single.currentValue, 'default');
+
+      await rt.setConfigOption('model', 'sonnet');
+      expect(host.activeModels.last, 'claude-sonnet-5-5');
+
+      await rt.send('Go');
+      await rt.awaitTurn();
+      expect(host.activeModels, [
+        'claude-opus-5-5',
+        'claude-sonnet-5-5',
+        'claude-haiku-4-5-20251001',
+      ]);
+      expect(
+        updates(AcpExtensions.activeModel).map((u) => u['modelId']),
+        host.activeModels,
       );
       await rt.stop();
     });

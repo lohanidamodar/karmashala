@@ -327,6 +327,17 @@ class DataClient {
   Stream<SessionUsageChanged> get sessionUsageChanges =>
       _sessionUsageChanges.stream;
 
+  /// The model each session's agent last said it runs, by session id. Kept
+  /// by the server, which greets a client arriving later with it.
+  final sessionActiveModels = <String, SessionActiveModelChanged>{};
+
+  final _sessionActiveModelChanges =
+      StreamController<SessionActiveModelChanged>.broadcast(sync: true);
+
+  /// A session's agent said it runs another model.
+  Stream<SessionActiveModelChanged> get sessionActiveModelChanges =>
+      _sessionActiveModelChanges.stream;
+
   /// The slash commands each session's agent accepts, by session id, as last
   /// told. In memory only, like [sessionModes].
   final sessionCommands = <String, SessionCommandsChanged>{};
@@ -1087,6 +1098,11 @@ class DataClient {
         case final SessionUsageChanged change:
           sessionUsage[change.sessionId] = change;
           if (!_sessionUsageChanges.isClosed) _sessionUsageChanges.add(change);
+        case final SessionActiveModelChanged change:
+          sessionActiveModels[change.sessionId] = change;
+          if (!_sessionActiveModelChanges.isClosed) {
+            _sessionActiveModelChanges.add(change);
+          }
         case final SessionQueueChanged change:
           sessionQueues[change.sessionId] = change.messages;
           if (!_sessionQueueChanges.isClosed) _sessionQueueChanges.add(change);
@@ -1342,6 +1358,7 @@ class DataClient {
     unawaited(_sessionModeChanges.close());
     unawaited(_sessionConfigOptionChanges.close());
     unawaited(_sessionUsageChanges.close());
+    unawaited(_sessionActiveModelChanges.close());
     unawaited(_sessionCommandChanges.close());
     unawaited(_sessionNotices.close());
     unawaited(_sessionPromptKindChanges.close());

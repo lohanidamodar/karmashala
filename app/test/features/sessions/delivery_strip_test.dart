@@ -26,6 +26,8 @@ import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionActiveModelChanged;
 
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
@@ -975,6 +977,26 @@ void main() {
     expect(find.byIcon(AppIcons.robot), findsNothing);
   });
 
+  testWidgets('once the agent says what it runs, the line names it', (
+    tester,
+  ) async {
+    final container = lineContainer();
+    await tester.pumpWidget(line(container));
+    await tester.pumpAndSettle();
+
+    server.writeAsAnotherClient([
+      SessionActiveModelChanged(
+        sessionId: 's1',
+        modelId: 'claude-opus-5-5',
+        observedAt: DateTime.utc(2026, 10, 7),
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    expect(find.byIcon(AppIcons.robot), findsOneWidget);
+    expect(find.text('claude-opus-5-5'), findsOneWidget);
+    expect(modelTooltip(tester), contains('last said it runs'));
+  });
+
   testWidgets('the model the launcher resolves is named, and claims no more', (
     tester,
   ) async {
@@ -995,7 +1017,7 @@ void main() {
     expect(tooltip, contains('Opus'));
     expect(tooltip, contains('Set for this session'));
     // The refusal, which is the whole reason the mark is shaped this way.
-    expect(tooltip, contains('never asked what it is running'));
+    expect(tooltip, contains('has not said which model it is running'));
     expect(tooltip, contains('A /model typed into the terminal'));
     // And nothing on the face that promises liveness — the words the request
     // asked for and the record cannot support.
@@ -1014,7 +1036,7 @@ void main() {
     expect(find.text('GPT-5.6-Sol'), findsOneWidget);
     final tooltip = modelTooltip(tester);
     expect(tooltip, contains('takes its model at launch'));
-    expect(tooltip, contains('not true of the process now'));
+    expect(tooltip, contains('what its launch was given'));
     // Not the live sentence. Codex's `/model` opens a picker and takes no
     // argument, so telling a Codex user that a typed `/model` goes unseen would
     // send them looking for a live switch that does not exist.

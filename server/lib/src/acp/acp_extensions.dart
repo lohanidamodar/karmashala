@@ -16,6 +16,10 @@ abstract final class AcpExtensions {
   /// failure or message, a turn that failed or was interrupted.
   static const notice = '_karmashala/notice';
 
+  /// The model the agent is actually running (`modelId`), where its `model`
+  /// option holds an alias such as `default`.
+  static const activeModel = '_karmashala/active_model';
+
   /// The `messageId` of the row a compaction writes, followed by
   /// `:<trigger>` when there is one.
   static const compactionMessageId = '_karmashala/compaction';

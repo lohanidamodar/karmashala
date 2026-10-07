@@ -120,6 +120,8 @@ class InventoryToolSet extends ServerToolSet {
             'repository': repo.name,
             'environmentId': repo.path.environmentId,
             'status': session.status.name,
+            // What its agent last said it runs, never a setting.
+            'model': _context.modelOf(session.id),
             'surface': session.surface.name,
             'view': session.view.name,
             if (session.parentSessionId != null)

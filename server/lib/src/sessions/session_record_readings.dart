@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/descriptors.dart'
     show
+        ActiveModelReading,
         AgentQuestionSet,
         AgentRegistry,
         AgentRewindPoints,
@@ -339,6 +340,31 @@ class SessionRecordReadings {
     } on FileSystemException {
       return null;
     }
+  }
+
+  /// The newest model [sessionId]'s record names, by its agent's own reader;
+  /// null when it names none in its last few megabytes or cannot be read.
+  Future<ActiveModelReading?> activeModel(String sessionId) async {
+    final found = await lookUp(sessionId);
+    final path = found.path;
+    final agentId = found.agentId;
+    if (path == null || agentId == null) return null;
+    final reader = registry.adapterFor(agentId)?.activeModel;
+    if (reader == null) return null;
+    final file = File(transcriptFileFor(path, agentId) ?? path);
+    try {
+      final size = await file.length();
+      // A wider look only when one long turn hides the last model named.
+      for (final bytes in const [262144, 4194304]) {
+        final tail = await _tail(file, bytes: bytes);
+        final reading = reader.latestIn(const LineSplitter().convert(tail));
+        if (reading != null) return reading;
+        if (size <= bytes) return null;
+      }
+    } on FileSystemException {
+      return null;
+    }
+    return null;
   }
 
   Future<void> close() async {

@@ -25,6 +25,7 @@ DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>
         ],
       ),
       'sessionUsageChanged' => SessionUsageChanged.fromJson(json),
+      'sessionActiveModelChanged' => SessionActiveModelChanged.fromJson(json),
       'sessionQueueChanged' => SessionQueueChanged.fromJson(json),
       'sessionAgentChanged' => SessionAgentChanged.fromJson(json),
       'sessionCommandsChanged' => SessionCommandsChanged.fromJson(json),
@@ -205,7 +206,7 @@ final class SessionConfigOption {
 
   /// The agent's `model` option, which stands where a session's model is
   /// shown.
-  bool get isModel => id == 'model';
+  bool get isModel => id == 'model' || category == 'model';
 
   /// An option that is the session's mode again: an agent may expose its
   /// modes both as `modes` and as a `mode` config option, and the mode
@@ -330,6 +331,69 @@ final class SessionUsageChanged extends DataChange {
     'costAmount': ?costAmount,
     'costCurrency': ?costCurrency,
   };
+}
+
+/// Where a session's active model was read from.
+enum ActiveModelSource {
+  /// The agent's own protocol: an ACP agent's `model` option, or what a
+  /// Karmashala bridge says the CLI under it resolved.
+  agent,
+
+  /// The session's record: the model its transcript names on its newest turn.
+  record,
+}
+
+/// The model session [sessionId]'s agent last said it is running — read from
+/// the agent, never from a setting — and when that was observed. A session
+/// nothing has reported for yet has no change at all.
+final class SessionActiveModelChanged extends DataChange {
+  const SessionActiveModelChanged({
+    required this.sessionId,
+    required this.modelId,
+    required this.observedAt,
+    this.source = ActiveModelSource.record,
+  });
+
+  factory SessionActiveModelChanged.fromJson(Map<String, Object?> json) =>
+      SessionActiveModelChanged(
+        sessionId: json['sessionId']! as String,
+        modelId: json['modelId']! as String,
+        observedAt:
+            DateTime.tryParse(json['observedAt'] as String? ?? '')?.toUtc() ??
+            DateTime.utc(1970),
+        source:
+            ActiveModelSource.values
+                .where((source) => source.name == json['source'])
+                .firstOrNull ??
+            ActiveModelSource.record,
+      );
+
+  final String sessionId;
+
+  /// The agent's own id for the model, as it wrote it.
+  final String modelId;
+  final DateTime observedAt;
+  final ActiveModelSource source;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'sessionActiveModelChanged',
+    'sessionId': sessionId,
+    'modelId': modelId,
+    'observedAt': observedAt.toUtc().toIso8601String(),
+    'source': source.name,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionActiveModelChanged &&
+      other.sessionId == sessionId &&
+      other.modelId == modelId &&
+      other.observedAt == observedAt &&
+      other.source == source;
+
+  @override
+  int get hashCode => Object.hash(sessionId, modelId, observedAt, source);
 }
 
 /// Session [sessionId]'s queued messages now stand at [messages] — queued,

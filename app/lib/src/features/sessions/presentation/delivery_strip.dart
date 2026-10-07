@@ -29,6 +29,7 @@ import '../application/delivery_update_service.dart';
 import 'archive_session_action.dart';
 import '../application/session_handoff_service.dart';
 import '../application/acp_session_providers.dart';
+import '../application/session_active_model_providers.dart';
 import '../application/host_lifecycle/host_lifecycle_providers.dart';
 import '../application/session_providers.dart';
 import '../application/session_resume_providers.dart';
@@ -496,9 +497,13 @@ class DeliveryStateLine extends ConsumerWidget {
     if (delivery == null) return const SizedBox.shrink();
     // Whether there is a model to name, and nothing more — the name is the
     // mark's own subscription. A mark that drew nothing would still take gaps.
-    final hasModel = ref.watch(
-      sessionModelProvider(sessionId).select(SessionModelMark.namesAModel),
-    );
+    final hasModel =
+        ref.watch(
+          sessionModelProvider(sessionId).select(SessionModelMark.namesAModel),
+        ) ||
+        ref.watch(
+          sessionActiveModelProvider(sessionId).select((a) => a != null),
+        );
     final facts = _deliveryFacts(
       context,
       delivery,
