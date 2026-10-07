@@ -29,11 +29,12 @@ List<(OverviewLane, List<OverviewCard>)> overviewWorkGroupsOf(
       ...lane.cards(BoardColumn.working),
       ...lane.cards(BoardColumn.ready),
     ] case final cards when cards.isNotEmpty)
-      (lane, cards),
+      (lane, byUrgency(cards)),
 ];
 
-/// [board]'s cards as the Overview lays them out: what waits on you, oldest
-/// wait first; what is at work, lane by lane; what ended today, newest first.
+/// [board]'s cards as the Overview lays them out: what waits on you, asks
+/// before failures and oldest wait first; what is at work, lane by lane and
+/// most urgent first; what ended today, newest first.
 OverviewSections overviewSectionsOf(
   OverviewBoard board, {
   required DateTime? Function(String id) waitingSince,
@@ -44,6 +45,8 @@ OverviewSections overviewSectionsOf(
   DateTime since(OverviewCard card) =>
       waitingSince(card.id) ?? card.entry.activityAt;
   queue.sort((a, b) {
+    final rank = overviewUrgency(a.state).compareTo(overviewUrgency(b.state));
+    if (rank != 0) return rank;
     final byWait = since(a).compareTo(since(b));
     return byWait != 0 ? byWait : a.id.compareTo(b.id);
   });
@@ -51,12 +54,7 @@ OverviewSections overviewSectionsOf(
     ..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt));
   return (
     queue: queue,
-    work: [
-      for (final lane in board.lanes) ...[
-        ...lane.cards(BoardColumn.working),
-        ...lane.cards(BoardColumn.ready),
-      ],
-    ],
+    work: [for (final (_, cards) in overviewWorkGroupsOf(board)) ...cards],
     done: done,
   );
 }

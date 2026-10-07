@@ -55,6 +55,12 @@ class OverviewTabView extends ConsumerWidget {
   }
 }
 
+/// Whether the keyboard is in a text field.
+bool overviewTyping() =>
+    FocusManager.instance.primaryFocus?.context
+        ?.findAncestorWidgetOfExactType<EditableText>() !=
+    null;
+
 /// The least width mission control keeps beside a docked peek.
 const double kOverviewBoardMinWidth = 720;
 
@@ -163,6 +169,8 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    // A key a text field let through is still the field's, never the Board's.
+    if (overviewTyping()) return KeyEventResult.ignored;
     final focus = ref.read(overviewFocusProvider);
     final controller = ref.read(overviewFocusProvider.notifier);
     final move = switch (event.logicalKey) {

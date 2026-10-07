@@ -10,6 +10,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/agent_state_providers.dart';
+import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
@@ -22,6 +23,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ActivityEntry, ActivityKind;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/rows.dart' show SessionDiffStat;
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -55,6 +57,7 @@ class MissionFixture {
     this.answers = const {},
     this.glances = const {},
     this.files = const {},
+    this.stats = const {},
     this.activity = const [],
     this.contexts = const [],
     this.contextOfProject = const {},
@@ -66,6 +69,9 @@ class MissionFixture {
 
   /// Each session's changed files.
   final Map<String, List<String>> files;
+
+  /// Each session's diff against its base, as git would count it.
+  final Map<String, SessionDiffStat> stats;
 
   /// The server's activity log, which the strips and the heartbeat draw.
   final List<ActivityEntry> activity;
@@ -530,8 +536,15 @@ class MissionFixture {
     'ks-r30': ['server/lib/src/webhooks.dart'],
   };
 
+  /// Diff sizes for some of [realisticSessions].
+  static Map<String, SessionDiffStat> realisticStats() => const {
+    'ks-r32': SessionDiffStat(added: 620, removed: 40, changedFiles: 3),
+    'ks-r30': SessionDiffStat(added: 310, removed: 0, changedFiles: 2),
+  };
+
   /// [MissionFixture] with every reading above filled in.
   static MissionFixture full() => MissionFixture(
+    stats: realisticStats(),
     answers: realisticAnswers(),
     glances: realisticGlances(),
     files: realisticFiles(),
@@ -563,6 +576,13 @@ class MissionFixture {
       ),
     );
   }
+
+  /// The reads the Overview makes; its answers can be changed mid-test.
+  late final reader = FakeOverviewReader(
+    answers: {...answers},
+    glances: glances,
+    files: files,
+  );
 
   late final _entries = [for (final s in sessions) entry(s)];
   late final _byId = {for (final s in sessions) s.id: s};
@@ -598,8 +618,11 @@ class MissionFixture {
         null => const Stream<AgentStatusReport>.empty(),
       },
     ),
+    sessionDiffStatProvider.overrideWith(
+      (ref, id) async => stats[id] ?? SessionDiffStat.unknown,
+    ),
     overviewReaderProvider.overrideWithValue(
-      FakeOverviewReader(answers: answers, glances: glances, files: files),
+      reader,
     ),
   ];
 }

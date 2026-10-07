@@ -24,6 +24,46 @@ BoardColumn columnOf(AgentState state) => switch (state) {
   AgentState.ended => BoardColumn.done,
 };
 
+/// How soon [state] wants the owner, lowest first: needs you, failed,
+/// working, quiet, ready, ended.
+int overviewUrgency(AgentState state) => switch (state) {
+  AgentState.needsYou => 0,
+  AgentState.failed => 1,
+  AgentState.working => 2,
+  AgentState.quiet => 3,
+  AgentState.ready => 4,
+  AgentState.ended => 5,
+};
+
+/// [cards] most urgent first, keeping their order within one urgency.
+List<OverviewCard> byUrgency(Iterable<OverviewCard> cards) {
+  final indexed = cards.indexed.toList()
+    ..sort((a, b) {
+      final rank = overviewUrgency(
+        a.$2.state,
+      ).compareTo(overviewUrgency(b.$2.state));
+      return rank != 0 ? rank : a.$1.compareTo(b.$1);
+    });
+  return [for (final (_, card) in indexed) card];
+}
+
+/// "↳ 5 sub-sessions · 1 needs you · 2 working · 2 done", over a parent's
+/// direct sub-sessions.
+String subSessionSummary(List<OverviewCard> children) {
+  int count(bool Function(AgentState) test) =>
+      children.where((c) => test(c.state)).length;
+  final needs = count((s) => columnOf(s) == BoardColumn.needsYou);
+  final working = count((s) => columnOf(s) == BoardColumn.working);
+  final done = count((s) => s == AgentState.ready || s == AgentState.ended);
+  final n = children.length;
+  return [
+    '↳ $n ${n == 1 ? 'sub-session' : 'sub-sessions'}',
+    if (needs > 0) '$needs needs you',
+    if (working > 0) '$working working',
+    if (done > 0) '$done done',
+  ].join(' · ');
+}
+
 /// What the Board's rows are.
 enum OverviewGroupBy {
   project('Project'),

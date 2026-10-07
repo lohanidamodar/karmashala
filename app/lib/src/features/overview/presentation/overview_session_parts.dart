@@ -12,12 +12,10 @@ import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_status_providers.dart';
-import '../application/overview_activity_strips.dart';
 import '../application/overview_board.dart';
 import '../application/overview_card_line.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
-import '../timeline/domain/timeline_model.dart';
 
 /// The colour a state is drawn in on the Overview; null for no colour.
 Color? overviewStateColor(BuildContext context, AgentState state) {
@@ -164,21 +162,50 @@ class OverviewStatePill extends ConsumerWidget {
     final since =
         ref.read(sessionStatusLookupProvider)(card.id)?.waitingSince ??
         card.entry.activityAt;
-    final label = '${card.state.label} · ${compactAge(now.difference(since))}';
+    return OverviewStateChip(
+      state: card.state,
+      label: '${card.state.label} · ${compactAge(now.difference(since))}',
+      color: color,
+    );
+  }
+}
+
+/// A state's chip: its words on a wash of its colour.
+class OverviewStateChip extends StatelessWidget {
+  const OverviewStateChip({
+    required this.state,
+    this.label,
+    this.color,
+    super.key,
+  });
+
+  final AgentState state;
+
+  /// The words, when not the state's own label.
+  final String? label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ink =
+        color ??
+        overviewStateColor(context, state) ??
+        theme.colorScheme.onSurfaceVariant;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.sm - Insets.xxs,
         vertical: Insets.hair,
       ),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: StateLayers.selectedAlpha),
+        color: ink.withValues(alpha: StateLayers.selectedAlpha),
         borderRadius: BorderRadius.circular(Radii.pill),
       ),
       child: Text(
-        label,
+        label ?? state.label,
         maxLines: 1,
         style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
+          color: ink,
           fontWeight: FontWeight.w600,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
@@ -316,117 +343,6 @@ class _OverviewActivityLineState extends ConsumerState<OverviewActivityLine> {
   }
 }
 
-/// **The last two hours of one session** as bands — working, waiting on you,
-/// idle between turns — with now at the right edge.
-class OverviewActivityStrip extends ConsumerWidget {
-  const OverviewActivityStrip({
-    required this.sessionId,
-    this.height = Insets.sm + Insets.xxs,
-    super.key,
-  });
-
-  final String sessionId;
-  final double height;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final model = ref.watch(overviewActivityProvider);
-    if (!model.recorded) return const SizedBox.shrink();
-    final spans = model.spans[sessionId] ?? const <TimelineSpan>[];
-    final scheme = Theme.of(context).colorScheme;
-    final semantic = SemanticColors.of(context);
-    Duration total(TimelineState state) => spans
-        .where((s) => s.state == state)
-        .fold(Duration.zero, (sum, s) => sum + s.duration);
-    final worked = total(TimelineState.working);
-    final waited = total(TimelineState.waiting);
-    final spoken = spans.isEmpty
-        ? 'No activity recorded in the last 2 hours'
-        : 'Last 2 hours: working ${describeDuration(worked)}'
-              '${waited > Duration.zero ? ', waiting on you ${describeDuration(waited)}' : ''}';
-    return Semantics(
-      container: true,
-      label: spoken,
-      excludeSemantics: true,
-      child: SizedBox(
-        key: ValueKey('overview-strip:$sessionId'),
-        height: height,
-        width: double.infinity,
-        child: CustomPaint(
-          painter: OverviewStripPainter(
-            spans: spans,
-            from: model.from,
-            to: model.to,
-            track: scheme.surfaceContainerHighest,
-            now: scheme.onSurfaceVariant,
-            colors: {
-              TimelineState.working: semantic.working,
-              TimelineState.waiting: semantic.attention,
-              TimelineState.ready: semantic.idle.withValues(
-                alpha: SemanticColors.surfaceEdgeAlpha,
-              ),
-              TimelineState.paused: semantic.neutral,
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Paints [spans] between [from] and [to] over a track, now at the right.
-class OverviewStripPainter extends CustomPainter {
-  const OverviewStripPainter({
-    required this.spans,
-    required this.from,
-    required this.to,
-    required this.track,
-    required this.now,
-    required this.colors,
-  });
-
-  final List<TimelineSpan> spans;
-  final DateTime from;
-  final DateTime to;
-  final Color track;
-  final Color now;
-  final Map<TimelineState, Color> colors;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final radius = Radius.circular(size.height / 2);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, radius),
-      Paint()..color = track,
-    );
-    final whole = to.difference(from).inMilliseconds;
-    if (whole <= 0) return;
-    double x(DateTime at) =>
-        size.width *
-        (at.difference(from).inMilliseconds / whole).clamp(0.0, 1.0);
-    for (final span in spans) {
-      final rect = Rect.fromLTRB(x(span.from), 0, x(span.to), size.height);
-      if (rect.width <= 0) continue;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, radius),
-        Paint()..color = colors[span.state] ?? track,
-      );
-    }
-    canvas.drawRect(
-      Rect.fromLTWH(size.width - Insets.xxs, 0, Insets.xxs, size.height),
-      Paint()..color = now,
-    );
-  }
-
-  @override
-  bool shouldRepaint(OverviewStripPainter old) =>
-      old.spans != spans ||
-      old.from != from ||
-      old.to != to ||
-      old.track != track ||
-      old.now != now;
-}
-
 /// "Step 3/7 · Fix the peek" over a thin meter.
 class OverviewPlanLine extends StatelessWidget {
   const OverviewPlanLine({required this.plan, super.key});
@@ -487,29 +403,3 @@ class OverviewPlanLine extends StatelessWidget {
   }
 }
 
-/// "6 files changed", or nothing while unknown.
-class OverviewFilesLine extends ConsumerWidget {
-  const OverviewFilesLine({required this.sessionId, super.key});
-
-  final String sessionId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final files = ref.watch(overviewChangedFilesProvider(sessionId)).asData?.value;
-    if (files == null || files.isEmpty) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final n = files.length;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(AppIcons.file, size: UiDensity.of(context).iconSmall, color: muted),
-        const SizedBox(width: Insets.xs),
-        Text(
-          n == 1 ? '1 file changed' : '$n files changed',
-          style: theme.textTheme.labelSmall?.copyWith(color: muted),
-        ),
-      ],
-    );
-  }
-}
