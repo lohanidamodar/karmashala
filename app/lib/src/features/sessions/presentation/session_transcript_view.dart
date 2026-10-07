@@ -1,6 +1,4 @@
-import '../../agents/application/session_model_providers.dart';
 import '../application/session_active_model_providers.dart';
-import '../application/session_config_options_providers.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -636,6 +634,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                                 (messages) => _fromTranscript(
                                   messages,
                                   earlier: window?.from ?? 0,
+                                  // Watched: a catalogue that arrives later
+                                  // relabels turns already drawn.
+                                  modelLabelOf: ref.watch(
+                                    sessionModelLabelerProvider(
+                                      widget.sessionId,
+                                    ),
+                                  ),
                                 ),
                               )
                             : ref
@@ -1083,6 +1088,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   List<ChatMessage> _fromTranscript(
     List<TranscriptMessage> messages, {
     int earlier = 0,
+    String Function(String modelId)? modelLabelOf,
   }) {
     final subagents = <int, SubagentRef>{};
     final out = chatMessagesFromTranscript(
@@ -1090,11 +1096,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       subagents: subagents,
       earlier: earlier,
       agentOf: _agentsIn(messages),
-      modelLabelOf: (id) => modelLabelIn(
-        id,
-        options: ref.read(sessionConfigOptionsProvider(widget.sessionId)),
-        support: ref.read(sessionModelProvider(widget.sessionId))?.support,
-      ),
+      modelLabelOf: modelLabelOf,
     );
     final delegations = delegationGroups(out);
     if (!mapEquals(subagents, _subagents) ||
