@@ -204,6 +204,49 @@ void main() {
       expect(AutomationDao(db).messagedOrigin('s1'), ['rule-1']);
     });
 
+    test(
+      'a notify-only rule starts nothing and files its notification',
+      () async {
+        AutomationDao(db).insert(
+          Automation(
+            id: 'rule-1',
+            repositoryId: 'r1',
+            name: 'Tell me',
+            schedule: AutomationSchedule.once(now),
+            agentInstallationId: '',
+            prompt: '',
+            permissionMode: null,
+            enabled: true,
+            armedAt: now,
+            trigger: const AutomationEventTrigger(
+              kind: AutomationEventKind.turnFinished,
+              action: AutomationEventAction.notifyOnly,
+            ),
+            steps: AutomationSteps(const [
+              AutomationStep(
+                kind: AutomationStepKind.notify,
+                when: AutomationStepWhen.always,
+                text: 'A turn ended in {{project}}.',
+              ),
+            ]),
+          ),
+        );
+        final pty = run();
+        automations
+          ..observeStatus(entry(AgentActivityStatus.working))
+          ..observeStatus(entry(AgentActivityStatus.idle));
+        await pump();
+
+        expect(pty.writes, isEmpty, reason: 'nothing is typed');
+        expect(launcher.handles, hasLength(1), reason: 'nothing is started');
+        final written = AutomationDao(db).runsFor('rule-1').single;
+        expect(written.state, AutomationRunState.finished);
+        expect(written.stepResults.single.outcome, AutomationStepOutcome.done);
+        expect(raised.single.detail, 'A turn ended in shop.');
+        expect(raised.single.session.openId, 's1');
+      },
+    );
+
     test('a first sighting is no event', () async {
       rule(AutomationEventAction.messageSession);
       run();
@@ -578,9 +621,9 @@ void main() {
 
   test('the legacy key: its "ask" was the old default, written on every save, '
       'so it reads as automatic; its "nothing" stays', () {
-    UsageLimitBehavior legacy(String value) =>
-        usageLimitSettingsFrom(jsonEncode({'usageLimitBehavior': value}))
-            .behavior;
+    UsageLimitBehavior legacy(String value) => usageLimitSettingsFrom(
+      jsonEncode({'usageLimitBehavior': value}),
+    ).behavior;
     expect(legacy('ask'), UsageLimitBehavior.schedule);
     expect(legacy('schedule'), UsageLimitBehavior.schedule);
     expect(legacy('nothing'), UsageLimitBehavior.nothing);

@@ -93,6 +93,35 @@ void main() {
     ).value;
   }
 
+  test('a page of runs carries its checks and whether there are more', () {
+    final page = roundTrip(
+      AutomationRunsPage(before: t0, limit: 10, automationId: 'auto1'),
+      AutomationRunsPageResult(
+        runs: [run],
+        checks: {
+          'run1': [verdict],
+        },
+        more: true,
+      ),
+    );
+    expect(page.runs.single.id, 'run1');
+    expect(page.checks['run1']!.single.verdict, VerificationVerdict.fail);
+    expect(page.more, isTrue);
+  });
+
+  test('Run now and Cancel answer the run as it was left', () {
+    final started = roundTrip(
+      const AutomationRunNow('auto1'),
+      run.copyWith(state: AutomationRunState.running),
+    );
+    expect(started.state, AutomationRunState.running);
+    final cancelled = roundTrip(
+      const AutomationRunCancel('run1'),
+      run.copyWith(state: AutomationRunState.failed, reason: 'Cancelled.'),
+    );
+    expect(cancelled.reason, 'Cancelled.');
+  });
+
   test('every request and its answer', () {
     final snapshot = roundTrip(
       const AutomationsList(),

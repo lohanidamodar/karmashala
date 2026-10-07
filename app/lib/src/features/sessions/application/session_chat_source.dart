@@ -26,13 +26,30 @@ final chatTranscriptPollIntervalProvider = Provider<Duration>(
   (ref) => kChatTranscriptPollInterval,
 );
 
+/// How many conversations are on screen outside a workbench group — the
+/// Agent dashboard's peek — which [anyChatVisibleProvider] cannot see.
+class ChatsShownOutsideGroups extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void add() => state++;
+
+  void remove() {
+    if (state > 0) state--;
+  }
+}
+
+final chatsShownOutsideGroupsProvider =
+    NotifierProvider<ChatsShownOutsideGroups, int>(ChatsShownOutsideGroups.new);
+
 /// Whether a mounted conversation is the surface on screen, and so whether its
 /// transcript is worth re-reading: one 43.8 MB parse costs 888 ms on the UI.
 /// A phone in the background is not showing it; a desktop window that lost
 /// focus still is.
 final chatTranscriptPollingProvider = Provider<bool>(
   (ref) =>
-      ref.watch(anyChatVisibleProvider) &&
+      (ref.watch(anyChatVisibleProvider) ||
+          ref.watch(chatsShownOutsideGroupsProvider) > 0) &&
       (ref.watch(capabilitiesProvider.select((c) => c.systemIntegration)) ||
           ref.watch(windowFocusedProvider)),
 );

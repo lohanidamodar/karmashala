@@ -14,6 +14,8 @@ import '../../explorer/application/workspace_session_entry.dart';
 import '../../git/presentation/diff_view.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_active_model_providers.dart';
+import '../../sessions/application/session_chat_source.dart'
+    show ChatsShownOutsideGroups, chatsShownOutsideGroupsProvider;
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/end_session_action.dart';
@@ -154,7 +156,9 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
               child: BoardEditCommand(sessionId: id, onDone: focus.stopEditing),
             ),
           Expanded(
-            child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
+            child: _ShownChat(
+              child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
+            ),
           ),
         ],
       ),
@@ -408,6 +412,47 @@ class _PeekHeader extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Counts the peek's chat as on screen while it is up: no workbench group
+/// shows it, so the chat gate would otherwise never read a terminal
+/// session's transcript.
+class _ShownChat extends ConsumerStatefulWidget {
+  const _ShownChat({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_ShownChat> createState() => _ShownChatState();
+}
+
+class _ShownChatState extends ConsumerState<_ShownChat> {
+  late final ChatsShownOutsideGroups _shown;
+  var _counted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shown = ref.read(chatsShownOutsideGroupsProvider.notifier);
+    // After the frame: a provider is not changed while the tree builds.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _shown.add();
+      _counted = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_counted) {
+      final shown = _shown;
+      Future.microtask(shown.remove);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// The session's own terminal pane, live: what is typed here goes to it.

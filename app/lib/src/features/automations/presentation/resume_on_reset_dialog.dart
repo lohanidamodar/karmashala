@@ -639,10 +639,10 @@ class _ModeField extends StatelessWidget {
         labelText: 'Permission mode',
         helperMaxLines: 3,
         helperText: live
-            ? 'A mode that stops to ask is refused: nobody would be there to '
+            ? 'A mode that stops to ask cannot run unattended: nobody would be there to '
                   'answer. Picking another mode restarts this open session '
                   'in it when the time comes.'
-            : 'A mode that stops to ask is refused: nobody would be there to '
+            : 'A mode that stops to ask cannot run unattended: nobody would be there to '
                   'answer.',
       ),
       items: [

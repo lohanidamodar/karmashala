@@ -45,7 +45,11 @@ enum AutomationEventAction {
 
   /// Types the prompt into the session the event came from, as a scheduled
   /// resume does. Never restarts an ended session and never moves focus.
-  messageSession('message_session');
+  messageSession('message_session'),
+
+  /// Starts nothing and tells nobody: only the steps after run, a
+  /// notification above all.
+  notifyOnly('notify_only');
 
   const AutomationEventAction(this.storedName);
 
@@ -61,6 +65,7 @@ enum AutomationEventAction {
   String get label => switch (this) {
     AutomationEventAction.startSession => 'Start a new session with the prompt',
     AutomationEventAction.messageSession => 'Send the prompt to that session',
+    AutomationEventAction.notifyOnly => 'Only notify me',
   };
 }
 
@@ -87,6 +92,7 @@ class AutomationEventTrigger {
       AutomationEventAction.startSession =>
         'start a new session there told "$quoted"',
       AutomationEventAction.messageSession => 'send it "$quoted"',
+      AutomationEventAction.notifyOnly => 'notify you',
     };
     return 'When a session in $checkout ${kind.phrase}, $what.';
   }

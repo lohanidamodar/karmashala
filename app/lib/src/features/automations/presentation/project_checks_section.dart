@@ -21,12 +21,13 @@ class ProjectChecksSection extends ConsumerWidget {
     final repositories = ref.watch(workspaceDataProvider).repositories;
 
     return SettingsSection(
-      title: 'VERIFICATION AND PROJECT CHECKS',
+      title: 'CHECKS FOR UNATTENDED RUNS',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SettingsNote(
-            'Automations need verification on and at least one check.',
+            'An agent that may change files runs unattended only where checks '
+            'are on and there is at least one.',
           ),
           if (repositories.isEmpty)
             const SettingsNote('No checkouts have been scanned yet.')
@@ -72,7 +73,7 @@ class _CheckoutChecks extends ConsumerWidget {
                 ),
               ),
               Semantics(
-                label: 'Verify ${repository.name}',
+                label: 'Checks on for ${repository.name}',
                 child: Switch(
                   value: enabled,
                   onChanged: (value) => ref
@@ -84,8 +85,8 @@ class _CheckoutChecks extends ConsumerWidget {
           ),
           if (checks.isEmpty)
             Text(
-              'No check yet. An automation cannot be armed here until there '
-              'is one.',
+              'No check yet. An agent that may change files cannot run '
+              'unattended here until there is one.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -96,7 +97,7 @@ class _CheckoutChecks extends ConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () => _addCheck(context, ref, repository),
+              onPressed: () => addProjectCheck(context, ref, repository),
               child: const Text('Add a check'),
             ),
           ),
@@ -145,19 +146,22 @@ class _CheckLine extends ConsumerWidget {
   }
 }
 
-Future<void> _addCheck(
+/// Asks for a check for [repository] and adds it; [turnOn] also turns its
+/// checks on, as making an automation ready means.
+Future<void> addProjectCheck(
   BuildContext context,
   WidgetRef ref,
-  Repository repository,
-) async {
+  Repository repository, {
+  bool turnOn = false,
+}) async {
   final result = await showDialog<({String name, List<String> command})>(
     context: context,
     builder: (_) => _AddCheckDialog(checkoutName: repository.name),
   );
   if (result == null) return;
-  ref
-      .read(automationControllerProvider)
-      .addCheck(repository.id, result.name, result.command);
+  final controller = ref.read(automationControllerProvider)
+    ..addCheck(repository.id, result.name, result.command);
+  if (turnOn) controller.setVerificationEnabled(repository.id, enabled: true);
 }
 
 class _AddCheckDialog extends StatefulWidget {

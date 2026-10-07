@@ -363,7 +363,7 @@ class ServerResumeRunner implements ScheduledResumeFiring {
         _finish(
           resume,
           ScheduledResumeState.failed,
-          'The session refused the message: ${refused.message}',
+          'The session did not take the message: ${refused.message}',
         );
         return;
       }
@@ -390,7 +390,7 @@ class ServerResumeRunner implements ScheduledResumeFiring {
           _finish(
             resume,
             ScheduledResumeState.failed,
-            'The session refused the message: ${refused.message}',
+            'The session did not take the message: ${refused.message}',
           );
           return;
         }
@@ -441,7 +441,7 @@ class ServerResumeRunner implements ScheduledResumeFiring {
       _finish(
         resume,
         ScheduledResumeState.failed,
-        'The checkout or the agent went away between the gate and the resume.',
+        'The checkout or the agent went away just before the resume.',
       );
       return;
     }

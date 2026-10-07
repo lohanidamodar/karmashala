@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
+import 'package:karmashala/src/features/automations/application/automation_draft.dart';
+import 'package:karmashala/src/features/automations/presentation/automation_agent_fields.dart';
+import 'package:karmashala/src/features/automations/presentation/automation_editor.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dry_run_dialog.dart';
-import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
+import 'package:karmashala/src/features/automations/presentation/automations_list_view.dart';
 import 'package:karmashala_automations/automations.dart';
 
 import '../../support/fakes.dart';
@@ -73,45 +75,51 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('arming a "when…" rule shows the whole rule and stores it', (
+  testWidgets('a rule that tells the session says so, and stores it', (
     tester,
   ) async {
-    // Opened the way the page opens it, so Arm has a route to pop.
     await pump(
       tester,
-      Builder(
-        builder: (context) => TextButton(
-          onPressed: () =>
-              AutomationDialog.show(context, repository: repository()),
-          child: const Text('open'),
-        ),
+      const AutomationEditor(
+        initial: AutomationDraft(repositoryId: 'r1', name: 'Keep going'),
+      ),
+      size: const Size(1440, 1400),
+    );
+    expect(
+      find.byType(AutomationAgentField),
+      findsOneWidget,
+      reason: 'a schedule needs one',
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('automation-trigger')),
+        matching: find.text('Event'),
       ),
     );
-    await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(find.text('Agent'), findsOneWidget, reason: 'a schedule needs one');
+    await tester.tap(find.text('Tell it'));
+    await tester.pumpAndSettle();
+    // Telling the session the event came from borrows its agent.
+    expect(find.byType(AutomationAgentField), findsNothing);
+    expect(find.byKey(const ValueKey('automation-late')), findsNothing);
 
-    await tester.tap(find.text('When…'));
-    await tester.pumpAndSettle();
-    // Messaging the session the event came from borrows its agent.
-    expect(find.text('Agent'), findsNothing);
-    expect(
-      find.text('If Karmashala was not running at the time'),
-      findsNothing,
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-prompt')),
+      'run the tests',
     );
-
-    await tester.enterText(find.byType(TextField).first, 'Keep going');
-    await tester.enterText(find.byType(TextField).last, 'run the tests');
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<Text>(find.byKey(const ValueKey('event-rule-sentence')))
-          .data,
-      'When a session in app finishes a turn, send it "run the tests".',
+          .widget<Text>(find.byKey(const ValueKey('automation-summary')))
+          .textSpan!
+          .toPlainText(),
+      'In plain words: When a session finishes a turn, in app → tell that '
+      'session → check the result',
     );
-    expect(find.textContaining('never answers an event its own'), findsOne);
+    expect(find.textContaining('never reacts to a run it started'), findsOne);
 
-    await tester.tap(find.text('Arm'));
+    await tester.tap(find.byKey(const ValueKey('automation-save')));
     await tester.pumpAndSettle();
     final stored = serverOf(container).automationRows.getAll().single;
     expect(stored.trigger?.kind, AutomationEventKind.turnFinished);
@@ -121,34 +129,35 @@ void main() {
   testWidgets('starting a session instead asks for the agent again', (
     tester,
   ) async {
-    // An armed message rule, which stores no agent of its own.
+    // A saved message rule, which stores no agent of its own.
     await pump(
       tester,
-      AutomationDialog(repository: repository(), existing: eventRule()),
+      AutomationEditor(initial: AutomationDraft.from(eventRule())),
+      size: const Size(1440, 1400),
     );
-    expect(find.text('Agent'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('event-action')));
+    expect(find.byType(AutomationAgentField), findsNothing);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('automation-first-step')),
+        matching: find.text('Agent'),
+      ),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start a new session with the prompt').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Agent'), findsOneWidget);
+    expect(find.byType(AutomationAgentField), findsOneWidget);
   });
 
-  testWidgets('the card says what the rule does and its limits', (
-    tester,
-  ) async {
+  testWidgets('the list says what the rule does, and names the event '
+      'rather than a time', (tester) async {
     serverOf(container).automationRows.insert(eventRule());
-    await pump(tester, const SingleChildScrollView(child: AutomationsPage()));
+    await pump(tester, const AutomationsListView());
     expect(
       find.text(
-        'When a session in app finishes a turn, send it "run the tests".',
+        'When a session finishes a turn, in app → tell that session → check '
+        'the result',
       ),
       findsOneWidget,
     );
-    expect(find.textContaining('at most once a second'), findsOneWidget);
-    expect(find.text('Dry run'), findsOneWidget);
-    // The active list names the event rather than inventing a time.
-    expect(find.text('on event'), findsOneWidget);
+    expect(find.text('On the next event'), findsOneWidget);
   });
 
   testWidgets('a dry run shows what would fire, and changes nothing', (
@@ -160,12 +169,12 @@ void main() {
     );
     await pump(tester, AutomationDryRunDialog(automation: eventRule()));
 
-    expect(find.text('Would fire · Keep going'), findsOneWidget);
+    expect(find.text('Would run · Keep going'), findsOneWidget);
     expect(
       find.text('Would send "run the tests" to "that session".'),
       findsOneWidget,
     );
-    expect(find.text('Would not fire · Asleep'), findsOneWidget);
+    expect(find.text('Would not run · Asleep'), findsOneWidget);
     expect(find.text('Paused.'), findsOneWidget);
 
     // Against a real session, by its title.
@@ -188,18 +197,14 @@ void main() {
   testWidgets('both surfaces fit a phone and a desktop', (tester) async {
     serverOf(container).automationRows.insert(eventRule());
     for (final size in const [Size(390, 844), Size(1440, 900)]) {
-      await pump(
-        tester,
-        const SingleChildScrollView(child: AutomationsPage()),
-        size: size,
-      );
+      await pump(tester, const AutomationsListView(), size: size);
       expect(tester.takeException(), isNull);
       await pump(
         tester,
-        AutomationDialog(repository: repository(), existing: eventRule()),
+        AutomationEditor(initial: AutomationDraft.from(eventRule())),
         size: size,
       );
-      expect(find.byKey(const ValueKey('event-kind')), findsOneWidget);
+      expect(find.byKey(const ValueKey('automation-event')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await pump(
         tester,

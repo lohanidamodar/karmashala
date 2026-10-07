@@ -39,6 +39,8 @@ class AutomationsHandler {
     final resumes = ToldResumes(_resumes, changes.add);
     final result = switch (request) {
       AutomationsList() => snapshot(),
+      AutomationRunsPage(:final before, :final limit, :final automationId) =>
+        _page(before, limit, automationId),
       AutomationSave(:final automation) => _save(automation, changes),
       AutomationSetEnabled(:final id, :final enabled) => _then(
         id,
@@ -104,6 +106,25 @@ class AutomationsHandler {
     );
   }
 
+  AutomationRunsPageResult _page(
+    DateTime? before,
+    int limit,
+    String? automationId,
+  ) {
+    final size = limit.clamp(1, 200);
+    final runs = _automations.runsPage(
+      before: before,
+      limit: size + 1,
+      automationId: automationId,
+    );
+    final page = runs.take(size).toList();
+    return AutomationRunsPageResult(
+      runs: page,
+      checks: _automations.checksOf([for (final r in page) r.id]),
+      more: runs.length > size,
+    );
+  }
+
   static DataAck _ack(void Function() write) {
     write();
     return const DataAck();
@@ -143,6 +164,7 @@ class AutomationsHandler {
     _repository(automation.repositoryId);
     final before = _automations.getById(automation.id);
     automation = _webhookOf(automation, before);
+    automation = _stepsOf(automation, before);
     if (before == null) {
       _automations.insert(automation);
     } else {
@@ -180,6 +202,23 @@ class AutomationsHandler {
         callsPerHour: asked.callsPerHour.clamp(1, kMaxWebhookCallsPerHour),
       ),
     );
+  }
+
+  /// A client that predates steps sends none, and its save must not drop the
+  /// steps, model or worktree a newer one set.
+  static Automation _stepsOf(Automation automation, Automation? before) {
+    if (automation.steps.stated) return automation;
+    var kept = automation.copyWith(
+      steps: before?.steps ?? AutomationSteps.standard,
+    );
+    if (kept.webhook == null && before != null) {
+      kept = kept.copyWith(
+        modelId: before.modelId,
+        clearModel: before.modelId == null,
+        worktree: before.worktree,
+      );
+    }
+    return kept;
   }
 
   DataAck _delete(String id, List<DataChange> changes) {

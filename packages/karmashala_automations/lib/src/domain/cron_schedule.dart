@@ -235,8 +235,8 @@ String? cronRefusal(String expression) {
     return '"$trimmed" is not a five-field cron expression Karmashala can '
         'read. It understands "*", a number, "a-b", a "/step" and "," lists, '
         'and nothing else — no "@daily", no "L", no seconds field. It is '
-        'refused rather than guessed at, because an expression that half '
-        'parsed would fire at times nobody asked for.';
+        'not used rather than guessed at, because an expression read halfway '
+        'would run at times nobody asked for.';
   }
   if (schedule.nextAfter(DateTime.now()) == null) {
     return '"$trimmed" parses but never comes round — nothing matches it in '
