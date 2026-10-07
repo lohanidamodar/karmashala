@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show acpModeRungWords;
 import 'package:flutter/material.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -9,6 +10,7 @@ class AcpCustomAgentForm extends StatelessWidget {
     required this.command,
     required this.args,
     required this.env,
+    required this.modes,
     required this.onSubmit,
     super.key,
   });
@@ -17,6 +19,9 @@ class AcpCustomAgentForm extends StatelessWidget {
   final TextEditingController command;
   final TextEditingController args;
   final TextEditingController env;
+
+  /// `<mode> = <rung>` lines; optional.
+  final TextEditingController modes;
   final VoidCallback onSubmit;
 
   @override
@@ -72,6 +77,25 @@ class AcpCustomAgentForm extends StatelessWidget {
             isDense: true,
             labelText: 'Environment',
             hintText: 'KEY=value, one per line',
+            alignLabelWithHint: true,
+          ),
+        ),
+        const SizedBox(height: Insets.md),
+        TextField(
+          key: const ValueKey('acp-agent-modes'),
+          controller: modes,
+          style: mono,
+          minLines: 2,
+          maxLines: 5,
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: 'Permission modes (optional)',
+            hintText: 'Plan = read-only\nAgent = ask',
+            helperText:
+                "Places each of the agent's modes, by id or name, on "
+                '${acpModeRungWords.values.join(', ')} — so the mode picker '
+                'says what a mode allows and asks before a bypassing one.',
+            helperMaxLines: 3,
             alignLabelWithHint: true,
           ),
         ),

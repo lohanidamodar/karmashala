@@ -1109,3 +1109,15 @@ void _migrateToV81(Database db) {
     'ON webhook_calls (automation_id, received_at);',
   );
 }
+
+/// The rung a person placed each of a person-added ACP agent's modes on,
+/// as JSON mode → rung name; empty for a row whose modes nobody placed.
+void _migrateToV82(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(acp_agents);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('mode_rungs')) return;
+  db.execute(
+    "ALTER TABLE acp_agents ADD COLUMN mode_rungs TEXT NOT NULL DEFAULT '{}';",
+  );
+}

@@ -25,6 +25,7 @@ class FakeAcpAgent {
     this.authMethods = const [AuthMethod(id: 'fake-login', name: 'Fake login')],
     this.modes,
     this.configOptions,
+    this.ignoresConfigChanges = false,
     this.sessionIdPrefix = 'fake-session',
     this.supportsLoadSession = true,
     this.holdsNoConversations = false,
@@ -49,6 +50,9 @@ class FakeAcpAgent {
   /// The options `session/new` and `session/load` answer with;
   /// `session/set_config_option` moves the one it names and answers them all.
   List<ConfigOption>? configOptions;
+
+  /// `session/set_config_option` is acknowledged and changes nothing.
+  final bool ignoresConfigChanges;
   final String sessionIdPrefix;
   final bool supportsLoadSession;
 
@@ -211,7 +215,9 @@ class FakeAcpAgent {
           );
         case AcpMethods.sessionSetConfigOption:
           configChanges.add(params);
-          _moveConfigOption(params.string('configId'), params['value']);
+          if (!ignoresConfigChanges) {
+            _moveConfigOption(params.string('configId'), params['value']);
+          }
           request.respond({
             'configOptions': [
               for (final o in configOptions ?? const <ConfigOption>[])

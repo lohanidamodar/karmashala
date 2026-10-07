@@ -17,6 +17,8 @@ Map<String, Object?> acpAgentRowToJson(AcpAgentRow row) => {
   'registryId': ?row.registryId,
   'iconUrl': ?row.iconUrl,
   'createdAt': row.createdAt.toUtc().toIso8601String(),
+  if (row.modeRungs.isNotEmpty)
+    'modeRungs': {for (final e in row.modeRungs.entries) e.key: e.value.name},
 };
 
 AcpAgentRow acpAgentRowFromJson(Map<String, Object?> json) => AcpAgentRow(
@@ -29,7 +31,18 @@ AcpAgentRow acpAgentRowFromJson(Map<String, Object?> json) => AcpAgentRow(
   registryId: _optional(json, 'registryId'),
   iconUrl: _optional(json, 'iconUrl'),
   createdAt: _date(json['createdAt']),
+  modeRungs: acpModeRungsFromJson(json['modeRungs'], 'modeRungs'),
 );
+
+/// Mode → rung name; a rung this build has no name for is left out, so a
+/// newer peer's row still reads.
+Map<String, PermissionRisk> acpModeRungsFromJson(Object? value, String key) {
+  final names = PermissionRisk.values.asNameMap();
+  return {
+    for (final e in acpStringMapFromJson(value, key).entries)
+      e.key: ?names[e.value],
+  };
+}
 
 /// A list of strings, or none when absent; anything else is out of shape.
 List<String> acpStringsFromJson(Object? value, String key) {

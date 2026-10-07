@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:karmashala_session/session.dart' show QueuedMessageState;
+import 'package:karmashala_session/session.dart'
+    show QueuedMessage, QueuedMessageOrigin, QueuedMessageState;
 import 'package:karmashala_session_engine/store.dart'
     show
         SessionDelegation,
@@ -65,6 +66,8 @@ class DelegationResult {
     required this.took,
     this.ended,
     this.turn = 1,
+    this.ask,
+    this.unreported = false,
   });
 
   final DelegatedChild child;
@@ -79,6 +82,14 @@ class DelegationResult {
 
   /// Which of the child's turns this is: 1, or a follow-up's.
   final int turn;
+
+  /// For a blocked turn, the prompt it stopped on (`openAskOf`); null when
+  /// not known.
+  final String? ask;
+
+  /// A turn that ended without its own `report_to_parent`, told under
+  /// `final` so a quiet child is not mistaken for a busy one.
+  final bool unreported;
 }
 
 /// What a child says of itself with `report_to_parent`.
@@ -201,6 +212,7 @@ class DelegationResults {
     bool Function(String parentId)? parentReachable,
     this.isWorking,
     this.isArchived,
+    this.openAskOf,
     this.restoreGrace = const Duration(minutes: 2),
     this.endChild,
     this.batchWindow = const Duration(seconds: 2),
@@ -228,6 +240,11 @@ class DelegationResults {
 
   /// Whether row [String] is archived: its delegation then ends unreported.
   final bool Function(String sessionId)? isArchived;
+
+  /// The prompt row [String] has open now, or null
+  /// (`HostedSessionWait.openAskOf`): a blocked result whose prompt was
+  /// answered before it went is dropped.
+  final String? Function(String sessionId)? openAskOf;
   final AnswerOf answerOf;
   final SessionQueue queue;
   final SessionDelegationDao store;
@@ -540,6 +557,12 @@ class DelegationResults {
           row.isOpen &&
           row.reportVia != kReportViaChild) {
         final last = _Follow(child, row.turn, child.startedAt);
+        // An answer a turn's push already carried is not said again.
+        final unsaid = _Follow(
+          child,
+          row.turn,
+          row.reportedAt ?? child.startedAt,
+        );
         _report(
           last,
           ChildTurnOutcome(
@@ -547,12 +570,14 @@ class DelegationResults {
             exitCode: outcome.exitCode,
             exitCodeKnown: outcome.exitCodeKnown,
           ),
-          await _answer(last),
+          await _answer(unsaid),
         );
         return;
       }
-      log?.call('delegation $id: ended between turns; followed again when '
-          'its parent sends to it');
+      log?.call(
+        'delegation $id: ended between turns; followed again when '
+        'its parent sends to it',
+      );
       return;
     }
     var settled = follow;
@@ -590,11 +615,16 @@ class DelegationResults {
       log?.call('delegation $id: turn ${settled.turn} reported by the child');
       return;
     }
-    // `final` hears of a turn only when the child cannot go on or is done
-    // for good; a turn that merely finished waits for its own report.
+    // `final` hears of a turn that merely finished only when the child did
+    // not report it: a child gone quiet must not look like one still working.
+    final unreported =
+        mode == kReportModeFinal &&
+        !over &&
+        outcome.state == ChildTurnState.done;
     final wanted =
         mode != kReportModeFinal ||
         over ||
+        unreported ||
         outcome.state == ChildTurnState.blocked ||
         outcome.state == ChildTurnState.failed;
     if (!wanted) {
@@ -610,7 +640,7 @@ class DelegationResults {
     final ended = child.endOnAnswer && outcome.state == ChildTurnState.done
         ? await _end(id)
         : null;
-    _report(settled, outcome, answer, ended: ended);
+    _report(settled, outcome, answer, ended: ended, unreported: unreported);
   }
 
   void _report(
@@ -618,6 +648,7 @@ class DelegationResults {
     ChildTurnOutcome outcome,
     String? answer, {
     bool? ended,
+    bool unreported = false,
   }) {
     final child = follow.child;
     final result = DelegationResult(
@@ -627,6 +658,10 @@ class DelegationResults {
       took: _now().difference(follow.since),
       ended: ended,
       turn: follow.turn,
+      ask: outcome.state == ChildTurnState.blocked
+          ? openAskOf?.call(child.childId)
+          : null,
+      unreported: unreported,
     );
     (_pending[child.parentId] ??= []).add((result, follow));
     _timers[child.parentId] ??= Timer(
@@ -655,10 +690,57 @@ class DelegationResults {
     }
   }
 
+  /// Whether [result] says a child is blocked on a prompt it no longer has
+  /// open: answered, or replaced by another, since it was read.
+  bool _stale(DelegationResult result) {
+    if (result.outcome.state != ChildTurnState.blocked) return false;
+    final askOf = openAskOf;
+    if (askOf == null) return false;
+    final open = askOf(result.child.childId);
+    return open == null || (result.ask != null && open != result.ask);
+  }
+
+  /// [head], when it is a batch of this tracker's, as it should go now: its
+  /// stale blocked results dropped (`SessionQueue.restate`).
+  String? restate(QueuedMessage head) {
+    if (head.origin != QueuedMessageOrigin.delegation) return null;
+    final batch = _batches[head.sessionId];
+    if (batch == null || batch.rowId != head.id) return null;
+    final kept = [
+      for (final result in batch.results)
+        if (!_stale(result)) result,
+    ];
+    if (kept.length == batch.results.length) return null;
+    log?.call(
+      'delegation: ${batch.results.length - kept.length} blocked result(s) '
+      'for ${head.sessionId} answered before delivery; dropped',
+    );
+    if (kept.isEmpty) {
+      _batches.remove(head.sessionId);
+      return '';
+    }
+    _batches[head.sessionId] = (rowId: batch.rowId, results: kept);
+    return delegationMessage(kept);
+  }
+
   void _flush(String parentId) {
     _timers.remove(parentId);
-    final fresh = _pending.remove(parentId);
-    if (_closed || fresh == null || fresh.isEmpty) return;
+    final pending = _pending.remove(parentId);
+    if (_closed || pending == null || pending.isEmpty) return;
+    final fresh = [
+      for (final entry in pending)
+        if (!_stale(entry.$1)) entry,
+    ];
+    // A dropped blocked turn is still a turn: the child is followed on.
+    for (final (result, follow) in pending) {
+      if (!_stale(result)) continue;
+      store.turnReported(follow.child.childId, turn: follow.turn);
+      log?.call(
+        'delegation ${follow.child.childId}: blocked, but answered before '
+        'it was pushed; dropped',
+      );
+    }
+    if (fresh.isEmpty) return;
     // A parent that is gone is never queued anything, nor resumed by it:
     // each result stays on its child's delegation instead.
     final reachable = parentReachable(parentId);
@@ -669,7 +751,7 @@ class DelegationResults {
           batch != null &&
           queue.dao.getById(batch.rowId)?.state == QueuedMessageState.queued;
       final results = [
-        if (growing) ...batch.results,
+        if (growing) ...batch.results.where((r) => !_stale(r)),
         for (final (r, _) in fresh) r,
       ];
       final row = queue.postDelegation(
@@ -767,7 +849,10 @@ String delegationMessage(List<DelegationResult> results) {
 /// The message a parent is given for a child's own [report].
 String parentReportMessage(ParentReport report) {
   final id = report.childId;
-  final (text, cut) = boundedText(report.text.trim(), kDelegationAnswerMaxChars);
+  final (text, cut) = boundedText(
+    report.text.trim(),
+    kDelegationAnswerMaxChars,
+  );
   final out = StringBuffer()
     ..writeln(
       '[Karmashala] "${report.title}" (session $id · ${report.agent}), a '
@@ -800,6 +885,8 @@ String parentReportMessage(ParentReport report) {
 }
 
 String _stateWords(DelegationResult result) => switch (result.outcome.state) {
+  ChildTurnState.done when result.unreported =>
+    'finished its turn without reporting',
   ChildTurnState.done => 'done',
   ChildTurnState.failed => 'BLOCKED: stopped on an error',
   ChildTurnState.blocked => 'BLOCKED on a person',
@@ -814,6 +901,9 @@ String _next(DelegationResult result) {
   final asked = said.isEmpty ? '' : ': "$said"';
   final transcript = 'Full transcript: session_transcript (sessionId: $id).';
   return switch (result.outcome.state) {
+    ChildTurnState.done when result.unreported =>
+      '$transcript It did not call report_to_parent: read what it did, or '
+          'ask it with session_send (sessionId: $id).',
     ChildTurnState.done => switch (result.ended) {
       true => '$transcript It was ended once it answered.',
       false =>

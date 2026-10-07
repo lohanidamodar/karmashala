@@ -50,6 +50,23 @@ void main() {
       expect(dao.getById('r1'), isNull);
     });
 
+    test('mode rungs round-trip, and a rung this build cannot name is '
+        'dropped', () {
+      final placed = row().copyWith(
+        modeRungs: const {
+          'Plan': PermissionRisk.readOnly,
+          'Autopilot': PermissionRisk.bypass,
+        },
+      );
+      dao.upsert(placed);
+      expect(dao.getById('r1'), placed);
+      db.execute(
+        "UPDATE acp_agents SET mode_rungs = '{\"Plan\":\"readOnly\","
+        "\"X\":\"someday\"}';",
+      );
+      expect(dao.getById('r1')!.modeRungs, {'Plan': PermissionRisk.readOnly});
+    });
+
     test('a custom row has no registry id', () {
       dao.upsert(
         AcpAgentRow(

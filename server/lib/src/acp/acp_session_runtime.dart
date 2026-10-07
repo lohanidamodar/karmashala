@@ -184,10 +184,21 @@ class AcpSessionRuntime implements ScreenSession {
   /// mode stays within. The agent's own mode changes never move it.
   PermissionRisk? _workingRung;
 
+  /// The rung the person last put the session on — [risk] at launch, the
+  /// picked mode's since, plan mode included — which decides what a
+  /// permission request is answered with unasked. Null for a mode the spec
+  /// cannot place: nothing is then allowed unasked but reads.
+  late PermissionRisk? _chosenRung = risk;
+
   /// Notes [modeId] as chosen for the session. Plan mode is not where it
   /// works: approving a plan returns to the mode it was in before.
   void _modeChosen(String modeId) {
-    final rung = spec.rungOfMode(modeId);
+    final name = _modes?.availableModes
+        .where((mode) => mode.id == modeId)
+        .firstOrNull
+        ?.name;
+    final rung = spec.rungOfOffered(modeId, name);
+    _chosenRung = rung;
     if (rung != null && !rung.isAtMost(PermissionRisk.readOnly)) {
       _workingRung = rung;
     }
@@ -374,7 +385,7 @@ class AcpSessionRuntime implements ScreenSession {
         options = created.configOptions;
       }
       await _applyInitialMode(modes, notices);
-      _configOptions = options;
+      _configOptions = options == null ? null : _distinct(options);
       _announceConfigOptions();
       host.promptKindsChanged(promptKinds!);
       _publish(
@@ -545,13 +556,48 @@ class AcpSessionRuntime implements ScreenSession {
     }
     // An agent that answers with no list has still taken the value.
     _configOptions = answered.isNotEmpty
-        ? answered
+        ? _distinct(answered)
         : [
             for (final o in options)
               if (o.id == configId) _moved(o, value) else o,
           ];
     _announceConfigOptions();
+    final held = _configOptions!.where((o) => o.id == configId).firstOrNull;
+    if (held != null && held.currentValue != value) {
+      final still = held.options
+          .where((choice) => choice.value == held.currentValue)
+          .firstOrNull;
+      throw StateError(
+        '$agentName accepted the change but still reports "${option.name}" as '
+        '"${still?.name ?? held.currentValue}", so nothing changed',
+      );
+    }
   }
+
+  /// [options] with each select's repeated choices dropped: an agent that
+  /// lists a model twice (Copilot 1.0.92 lists all of them twice) would
+  /// otherwise draw it twice, ticked twice.
+  static List<ConfigOption> _distinct(List<ConfigOption> options) => [
+    for (final option in options)
+      if (option.options.map((c) => c.value).toSet().length ==
+          option.options.length)
+        option
+      else
+        ConfigOption(
+          id: option.id,
+          name: option.name,
+          type: option.type,
+          description: option.description,
+          category: option.category,
+          currentValue: option.currentValue,
+          options: [
+            for (final (index, choice) in option.options.indexed)
+              if (option.options.indexWhere((c) => c.value == choice.value) ==
+                  index)
+                choice,
+          ],
+        ),
+  ];
 
   static ConfigOption _moved(ConfigOption option, Object value) => ConfigOption(
     id: option.id,
@@ -844,7 +890,7 @@ class AcpSessionRuntime implements ScreenSession {
       return;
     }
     if (update is ConfigOptionUpdate) {
-      _configOptions = update.configOptions;
+      _configOptions = _distinct(update.configOptions);
       _announceConfigOptions();
       return;
     }
@@ -1039,10 +1085,9 @@ class AcpSessionRuntime implements ScreenSession {
     _modes = modes;
     final rung = risk;
     if (modes != null && rung != null) {
-      final wanted = spec.modeFor(
-        rung,
-        modes.availableModes.map((mode) => mode.id),
-      );
+      final wanted = spec.modeForOffered(rung, [
+        for (final mode in modes.availableModes) (id: mode.id, name: mode.name),
+      ]);
       if (wanted == null) {
         notices.add(
           '$agentName offers no mode for "${rung.label}"; it stays in its '
@@ -1215,20 +1260,25 @@ class AcpSessionRuntime implements ScreenSession {
   ) async {
     final title = _titleOf(call);
     final question = _questionIn(call);
-    final rung = risk;
+    final rung = _chosenRung;
     // A question is the person's to answer at any rung.
-    if (question == null &&
-        rung != null &&
-        !rung.isAtMost(PermissionRisk.acceptEdits)) {
+    if (question == null) {
       final switching = _modeSwitchingAllow(options);
-      final once = switching != null
-          ? switching.option
-          : options
-                .where((o) => o.kind == PermissionOptionKind.allowOnce)
-                .firstOrNull;
-      if (once != null) {
+      final allowOnce = options
+          .where((o) => o.kind == PermissionOptionKind.allowOnce)
+          .firstOrNull;
+      final PermissionOption? unasked;
+      if (rung != null && !rung.isAtMost(PermissionRisk.acceptEdits)) {
+        unasked = switching != null ? switching.option : allowOnce;
+      } else if (switching == null && _readsOnly(call)) {
+        // A read is within every rung, read-only included.
+        unasked = allowOnce;
+      } else {
+        unasked = null;
+      }
+      if (unasked != null) {
         await _holdForEdit(call);
-        return PermissionOutcome.selected(once.optionId);
+        return PermissionOutcome.selected(unasked.optionId);
       }
     }
     final pending = _PendingPermission(call, options, title, question);
@@ -1265,6 +1315,13 @@ class AcpSessionRuntime implements ScreenSession {
     } finally {
       if (identical(_pending, pending)) _pending = null;
     }
+  }
+
+  /// Whether [call] only reads, by the ACP kind the agent gave it here or
+  /// earlier. A shell command cannot be judged, so `execute` is never one.
+  bool _readsOnly(ToolCallUpdate call) {
+    final kind = call.kind ?? _writer.kindOf(call.toolCallId);
+    return kind == ToolKind.read || kind == ToolKind.search;
   }
 
   /// The tool [call] is, by the agent's own name for it: a `toolName` an

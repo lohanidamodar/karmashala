@@ -303,7 +303,8 @@ class LaunchToolSet extends ServerToolSet {
           'changes that; delegations shows where it stands.',
     kReportModeFinal =>
       'End your turn now rather than polling: when session $id reports with '
-          'report_to_parent, stops blocked or failed, or ends, a message from '
+          'report_to_parent, stops blocked or failed, finishes a turn without '
+          'reporting, or ends, a message from '
           'Karmashala says so — at once if you are idle, after your turn if '
           'you are working.',
     _ =>
@@ -1209,7 +1210,8 @@ const List<Map<String, Object?>> launchToolSchemas = [
               'What you hear of it. This call never waits for it either way. '
               '"final" (the default unless Settings choose another): one '
               'message when it reports with report_to_parent, stops blocked '
-              'or failed, or ends. "each_turn": the end of every turn it '
+              'or failed, finishes a turn without reporting, or ends. '
+              '"each_turn": the end of every turn it '
               'works as well. "none": it runs on its own and nothing comes '
               'back. End your turn rather than polling; change it later '
               'with delegation_set_report. The session is never ended for '
@@ -1328,7 +1330,8 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'description':
               'With mode "async" and keepOpen, what you hear after its '
               'answer: "final" (default) when it reports, stops blocked or '
-              'failed, or ends; "each_turn" every turn; "none" nothing.',
+              'failed, finishes a turn without reporting, or ends; '
+              '"each_turn" every turn; "none" nothing.',
         },
       },
       'required': <String>['prompt'],

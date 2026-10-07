@@ -55,6 +55,9 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
   late final _env = TextEditingController(
     text: formatEnvironmentLines(widget.existing?.env ?? const {}),
   );
+  late final _modes = TextEditingController(
+    text: formatAcpModeRungLines(widget.existing?.modeRungs ?? const {}),
+  );
   AcpRegistryEntry? _picked;
   String? _refusal;
   bool _saving = false;
@@ -67,6 +70,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
     _command.dispose();
     _args.dispose();
     _env.dispose();
+    _modes.dispose();
     super.dispose();
   }
 
@@ -102,6 +106,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
     final AcpAgentSource source;
     final String? registryId;
     final String? iconUrl;
+    Map<String, PermissionRisk>? modeRungs;
     switch (_origin) {
       case AcpAgentOrigin.registry:
         final entry = _picked;
@@ -146,6 +151,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
           name: _name.text,
           command: _command.text,
           environment: _env.text,
+          modes: _modes.text,
         );
         if (refusal != null) {
           setState(() => _refusal = refusal);
@@ -155,6 +161,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
         command = _command.text.trim();
         args = splitCommandLine(_args.text);
         env = parseEnvironmentLines(_env.text).env;
+        modeRungs = parseAcpModeRungLines(_modes.text).rungs;
         source = existing?.source ?? AcpAgentSource.custom;
         registryId = existing?.registryId;
         iconUrl = existing?.iconUrl;
@@ -175,6 +182,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
         source: source,
         registryId: registryId,
         iconUrl: iconUrl,
+        modeRungs: modeRungs,
       );
       if (mounted) Navigator.of(context).pop();
     } on DataRefused catch (e) {
@@ -253,6 +261,7 @@ class _AcpAgentDialogState extends ConsumerState<AcpAgentDialog> {
                 command: _command,
                 args: _args,
                 env: _env,
+                modes: _modes,
                 onSubmit: _save,
               ),
             },

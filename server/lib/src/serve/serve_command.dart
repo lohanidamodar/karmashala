@@ -1584,9 +1584,11 @@ Future<int> _serve(
     },
     isWorking: sessionQueue.turns.running,
     isArchived: (id) => SessionDao(database).getById(id)?.isArchived ?? false,
+    openAskOf: sessionWaits.openAskOf,
     endChild: endChild,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   )..start();
+  sessionQueue.restate = delegations.restate;
   sessionInput.interrupted = delegations.stopped;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.

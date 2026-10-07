@@ -2,15 +2,19 @@
 /// tested in words.
 library;
 
+import 'package:agent_cli/descriptors.dart' show parseAcpModeRungLines;
+
 /// The first reason the typed agent cannot be kept, or null when it can.
 String? acpAgentFormRefusal({
   required String name,
   required String command,
   required String environment,
+  String modes = '',
 }) {
   if (name.trim().isEmpty) return 'Give the agent a name.';
   if (command.trim().isEmpty) return 'Say which command runs it.';
-  return parseEnvironmentLines(environment).refusal;
+  return parseEnvironmentLines(environment).refusal ??
+      parseAcpModeRungLines(modes).refusal;
 }
 
 /// `KEY=value`, one per line, blank lines skipped. The value keeps every
