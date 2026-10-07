@@ -55,7 +55,20 @@ void main() {
   );
 
   final inline = find.byKey(const ValueKey('chat-ask:toolu_1'));
+  final send = find.byKey(const ValueKey('question-send'));
+  final more = find.byKey(const ValueKey('question-more-actions'));
   late ChatCardHarness harness;
+
+  /// The card's answers: Send and ⋯ on a phone, Decline and Chat beside
+  /// them on a desktop.
+  Map<String, Finder> answers({required bool phone}) => {
+    'Send': send,
+    '⋯': more,
+    if (!phone) ...{
+      'Decline': find.widgetWithText(TextButton, 'Decline'),
+      'Chat about this': find.widgetWithText(TextButton, 'Chat about this'),
+    },
+  };
 
   Future<List<RemoteQuestionAnswerRequest>> open(
     WidgetTester tester, {
@@ -146,8 +159,10 @@ void main() {
       expect(card.height, lessThan(size.height));
 
       // The answers: pinned at the card's foot, wholly on screen.
-      for (final action in ['Decline', 'Chat about this', 'Send answer']) {
-        final button = find.descendant(of: inline, matching: find.text(action));
+      for (final MapEntry(key: action, value: finder) in answers(
+        phone: phone,
+      ).entries) {
+        final button = find.descendant(of: inline, matching: finder);
         expect(button, findsOneWidget, reason: action);
         final rect = rectOf(tester, button);
         expect(inside(rect, card), isTrue, reason: '$action $rect in $card');
@@ -181,10 +196,6 @@ void main() {
         find.descendant(of: inline, matching: find.text('Option $options')),
       );
       await tester.pumpAndSettle();
-      final send = find.descendant(
-        of: inline,
-        matching: find.text('Send answer'),
-      );
       expect(inside(rectOf(tester, send), screen), isTrue);
       await tester.tap(send);
       await tester.pumpAndSettle();
@@ -245,10 +256,6 @@ void main() {
       3000,
     );
     await tester.pumpAndSettle();
-    final send = find.descendant(
-      of: inline,
-      matching: find.text('Send answer'),
-    );
     bool onScreen() =>
         send.evaluate().isNotEmpty &&
         (Offset.zero & size).contains(tester.getCenter(send));
@@ -263,9 +270,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(onScreen(), isTrue);
-    for (final action in ['Decline', 'Chat about this', 'Send answer']) {
-      final button = find.descendant(of: inline, matching: find.text(action));
-      final rect = tester.getRect(button);
+    for (final MapEntry(key: action, value: finder) in answers(
+      phone: true,
+    ).entries) {
+      final rect = tester.getRect(
+        find.descendant(of: inline, matching: finder),
+      );
       expect(
         rect.top >= 0 && rect.bottom <= size.height,
         isTrue,

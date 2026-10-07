@@ -127,6 +127,7 @@ class ApprovalRequestCard extends ConsumerWidget {
         menus: descriptor?.menus,
         canAnswer: canAnswer,
         cannot: cannot,
+        inline: inline,
       );
       // Under its call, never taller than the conversation's own room, so
       // its answers are in sight with the list at its end; on a phone, never
@@ -378,11 +379,17 @@ class _QuestionOr extends ConsumerWidget {
     required this.sessionId,
     required this.agentName,
     required this.orElse,
+    this.where,
+    this.trailing,
   });
 
   final String sessionId;
   final String agentName;
   final Widget orElse;
+
+  /// See [QuestionPromptCard.where] and [QuestionPromptCard.trailing].
+  final String? where;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -399,41 +406,38 @@ class _QuestionOr extends ConsumerWidget {
     final chatRow = agentId == null
         ? null
         : ref.read(agentRegistryProvider).byId(agentId)?.questions?.chatRow;
-    return _FlexColumn(
-      flexible: 0,
-      children: [
-        QuestionPromptCard(
-          agentName: agentName,
-          question: question,
-          chatLabel: chatRow,
-          // Docked, the dock's header already says who is asking.
-          showHeader: !_Docked.of(context),
-          onAnswer: (answers, {decline = false, chat = false}) async {
-            final said = _AnswerSaid.of(context);
-            try {
-              await ref.read(chatQuestionAnswerProvider)(
-                RemoteQuestionAnswerRequest(
-                  sessionId: sessionId,
-                  toolUseId: question.toolUseId,
-                  answers: answers,
-                  decline: decline,
-                  chat: chat,
-                ),
-              );
-            } on RemoteApiRefusal catch (refusal) {
-              throw GatewayException(refusal.message);
-            }
-            said?.say(
-              decline
-                  ? 'Declined.'
-                  : chat
-                  ? 'Left to talk over.'
-                  : 'Answered.',
-            );
-          },
-        ),
-        _TerminalLink(sessionId: sessionId),
-      ],
+    return QuestionPromptCard(
+      agentName: agentName,
+      question: question,
+      chatLabel: chatRow,
+      where: where,
+      trailing: trailing,
+      onAnswerInTerminal: _hasTerminal(ref, sessionId)
+          ? () => _openTerminal(ref, sessionId)
+          : null,
+      onAnswer: (answers, {decline = false, chat = false}) async {
+        final said = _AnswerSaid.of(context);
+        try {
+          await ref.read(chatQuestionAnswerProvider)(
+            RemoteQuestionAnswerRequest(
+              sessionId: sessionId,
+              toolUseId: question.toolUseId,
+              answers: answers,
+              decline: decline,
+              chat: chat,
+            ),
+          );
+        } on RemoteApiRefusal catch (refusal) {
+          throw GatewayException(refusal.message);
+        }
+        said?.say(
+          decline
+              ? 'Declined.'
+              : chat
+              ? 'Left to talk over.'
+              : 'Answered.',
+        );
+      },
     );
   }
 }

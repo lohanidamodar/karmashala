@@ -75,6 +75,26 @@ void main() {
       expect(read.questions.last.multiSelect, isTrue);
     });
 
+    test('an option\'s preview is read when the agent drew one', () {
+      final read = AgentQuestionSet.fromToolInput('toolu_1', {
+        'questions': [
+          {
+            'question': 'Which layout?',
+            'options': [
+              {'label': 'Grid', 'preview': '+--+--+\n|  |  |'},
+              {'label': 'List', 'preview': 7},
+              {'label': 'None'},
+            ],
+          },
+        ],
+      })!;
+      expect(read.questions.single.options.map((o) => o.preview), [
+        '+--+--+\n|  |  |',
+        '',
+        '',
+      ]);
+    });
+
     test('a shape this build cannot read is no question at all', () {
       for (final input in <Object?>[
         null,

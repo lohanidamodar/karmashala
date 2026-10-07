@@ -168,7 +168,11 @@ RemoteQuestion remoteQuestionOf(AgentQuestionSet set) => RemoteQuestion(
         multiSelect: q.multiSelect,
         options: [
           for (final o in q.options)
-            RemoteQuestionOption(label: o.label, description: o.description),
+            RemoteQuestionOption(
+              label: o.label,
+              description: o.description,
+              preview: o.preview,
+            ),
         ],
       ),
   ],
