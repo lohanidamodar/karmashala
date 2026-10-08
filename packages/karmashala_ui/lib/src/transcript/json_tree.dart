@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_core/util.dart' show matchesSearch;
 
 import '../app_icons.dart';
 import '../compact_controls.dart';
@@ -62,16 +63,14 @@ class _JsonTreeViewState extends State<JsonTreeView> {
   }
 
   void _search(String query) {
-    final q = query.trim().toLowerCase();
+    final q = query.trim();
     final matches = <String>{};
     final onTheWay = <String>{};
     bool walk(Object? value, String path, String? key) {
       final hit =
           q.isNotEmpty &&
-          ((key?.toLowerCase().contains(q) ?? false) ||
-              (value is! Map &&
-                  value is! List &&
-                  '$value'.toLowerCase().contains(q)));
+          (matchesSearch(q, key) ||
+              (value is! Map && value is! List && matchesSearch(q, '$value')));
       if (hit) matches.add(path);
       var below = false;
       if (value is Map) {
@@ -198,7 +197,7 @@ class _JsonTreeViewState extends State<JsonTreeView> {
     final scheme = theme.colorScheme;
     final mono = MonoStyles.small.copyWith(color: scheme.onSurface);
     final highlight = _matches.contains(path)
-        ? scheme.primary.withValues(alpha: StateLayers.selectedAlpha)
+        ? StateLayers.selected(scheme)
         : null;
     final key = label == null
         ? null

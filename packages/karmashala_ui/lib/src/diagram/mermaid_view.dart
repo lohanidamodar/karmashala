@@ -373,8 +373,8 @@ class MermaidPainter extends CustomPainter {
       old.picture != picture || old.selected != selected;
 }
 
-class _Colors {
-  _Colors(ColorScheme scheme)
+class _DiagramInk {
+  _DiagramInk(ColorScheme scheme)
     : fill = scheme.surfaceContainerHigh,
       stroke = scheme.outline,
       line = scheme.onSurfaceVariant,
@@ -406,7 +406,7 @@ abstract class MermaidPicture {
       height: 1.25,
     );
     final scaler = MediaQuery.textScalerOf(context);
-    final colors = _Colors(theme.colorScheme);
+    final colors = _DiagramInk(theme.colorScheme);
     return switch (diagram) {
       final MermaidFlowchart chart => _FlowchartPicture(
         chart,
@@ -514,7 +514,7 @@ class _FlowchartPicture extends MermaidPicture {
   }
 
   final MermaidFlowchart chart;
-  final _Colors colors;
+  final _DiagramInk colors;
   final Map<String, TextPainter> _labels;
   final List<TextPainter?> _edgeLabels;
   late final FlowchartLayout _layout;
@@ -564,7 +564,7 @@ class _FlowchartPicture extends MermaidPicture {
         ? colors.line
         : lit.contains(i)
         ? colors.lit
-        : _Colors.dim(colors.line);
+        : _DiagramInk.dim(colors.line);
     for (final (i, edge) in chart.edges.indexed) {
       final route = _layout.edges[i];
       final color = edgeColor(i);
@@ -614,11 +614,11 @@ class _FlowchartPicture extends MermaidPicture {
   /// [lit] true for the selected node, false for one a selection leaves out.
   void _paintShape(Canvas canvas, MermaidShape shape, Rect r, bool? lit) {
     final fill = Paint()
-      ..color = lit == false ? _Colors.dim(colors.fill) : colors.fill;
+      ..color = lit == false ? _DiagramInk.dim(colors.fill) : colors.fill;
     final stroke = Paint()
       ..color = switch (lit) {
         true => colors.lit,
-        false => _Colors.dim(colors.stroke),
+        false => _DiagramInk.dim(colors.stroke),
         null => colors.stroke,
       }
       ..style = PaintingStyle.stroke
@@ -743,7 +743,7 @@ class _SequencePicture extends MermaidPicture {
   final MermaidSequence seq;
   final TextStyle style;
   final TextScaler scaler;
-  final _Colors colors;
+  final _DiagramInk colors;
 
   late final Map<String, double> _x;
   late final List<TextPainter> _heads;
@@ -897,7 +897,7 @@ class _SequencePicture extends MermaidPicture {
               ? colors.line
               : lit.contains(index)
               ? colors.lit
-              : _Colors.dim(colors.line);
+              : _DiagramInk.dim(colors.line);
           final line = Paint()
             ..color = color
             ..strokeWidth = lit.contains(index) ? 2.2 : 1.2;
