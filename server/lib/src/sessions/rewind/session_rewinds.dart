@@ -178,7 +178,7 @@ class SessionRewinds {
       final prompts = cut.promptsOf(lines, leaf: cuts.cutOf(sessionId));
       final at = _pick(
         [for (final p in prompts) p.text],
-        later == null ? null : prompts.length - 1 - later,
+        later == null ? request.turnIndex : prompts.length - 1 - later,
         words,
       );
       if (at == null) {
