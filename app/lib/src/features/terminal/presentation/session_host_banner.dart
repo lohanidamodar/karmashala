@@ -5,6 +5,7 @@ import 'package:karmashala_terminal_runtime/host_link.dart'
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart' show Chrome, Insets, WidthClass;
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../core/server/remote_server_access.dart';
 import '../../../core/server/server_link.dart';
@@ -210,13 +211,7 @@ class _ResumingStrip extends ConsumerWidget {
             child: Row(
               children: [
                 if (resuming)
-                  SizedBox.square(
-                    dimension: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: fore,
-                    ),
-                  )
+                  InlineSpinner(color: fore)
                 else
                   Icon(AppIcons.warningCircle, size: Chrome.icon, color: fore),
                 const SizedBox(width: Insets.sm),

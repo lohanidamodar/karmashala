@@ -7,6 +7,7 @@ import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart' show PanePlaceholder;
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/shell/side_panel_state.dart';
@@ -170,7 +171,7 @@ class SessionSubagentsPanel extends ConsumerWidget {
             ? error.message
             : kSubagentsUnreadable,
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
     };
   }
 }

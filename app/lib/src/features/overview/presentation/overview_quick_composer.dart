@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_session/session.dart' show QueuedMessageState;
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_input.dart' show newSessionInputId;
@@ -181,10 +182,7 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
               iconSize: density.icon,
               onPressed: _sending ? null : _send,
               icon: _sending
-                  ? SizedBox.square(
-                      dimension: density.iconSmall,
-                      child: const CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const InlineSpinner()
                   : Icon(AppIcons.paperPlaneRight, color: scheme.primary),
             ),
           ),

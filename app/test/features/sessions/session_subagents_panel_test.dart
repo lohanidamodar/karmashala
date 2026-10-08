@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/sessions/application/session_subagents_p
 import 'package:karmashala/src/features/sessions/presentation/session_subagents_panel.dart';
 import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// The subagent panel: every delegate and child of a session, a side panel
 /// at width and a bottom sheet on a phone, each row opening what it names.
@@ -275,7 +276,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(kSubagentsUnreadable), findsOneWidget);
     expect(find.textContaining('errno'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(InlineSpinner), findsNothing);
   });
 
   for (final size in const [Size(390, 844), Size(1440, 900)]) {
