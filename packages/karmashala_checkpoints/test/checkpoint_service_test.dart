@@ -416,6 +416,12 @@ void main() {
       ]);
       expect(gitCalls().any((c) => c.contains('apply')), isFalse);
       expect(dao.forSession('s1'), hasLength(2));
+
+      // A tree a restore went back to is not work done outside the agent.
+      trees = ['tree1'];
+      final restored = await service.restorePreview(target);
+      expect(restored.files, isEmpty);
+      expect(restored.outside, isEmpty);
     });
 
     test('does nothing when the tree already is the checkpoint', () async {

@@ -442,9 +442,12 @@ class CheckpointService {
     );
     final outside = <String>{};
     var headMoved = false;
+    // A tree recorded before is one a restore went back to, not new work.
+    final seen = <String>{};
     Checkpoint? before;
     for (final later in chain) {
       if (later.sequence <= checkpoint.sequence) {
+        seen.add(later.treeSha);
         before = later;
         continue;
       }
@@ -453,15 +456,25 @@ class CheckpointService {
       }
       // A turn's own checkpoint records the agent's work; any other records
       // what changed while no turn ran.
-      if (before != null && later.reason != CheckpointReason.turn) {
+      if (before != null &&
+          later.reason != CheckpointReason.turn &&
+          !seen.contains(later.treeSha)) {
         outside.addAll(await changed(before.treeSha, later.treeSha));
       }
+      seen.add(later.treeSha);
       before = later;
     }
-    if (before != null) outside.addAll(await changed(before.treeSha, current));
+    if (before != null && !seen.contains(current)) {
+      outside.addAll(await changed(before.treeSha, current));
+    }
+    final files = await changed(checkpoint.treeSha, current);
     return RestorePreview(
-      files: await changed(checkpoint.treeSha, current),
-      outside: outside.toList()..sort(),
+      files: files,
+      // Only what the restore would change is lost.
+      outside: [
+        for (final path in outside)
+          if (files.contains(path)) path,
+      ]..sort(),
       headMoved: headMoved,
     );
   }
