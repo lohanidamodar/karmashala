@@ -21,6 +21,7 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_handoff_service.dart';
 import '../../sessions/application/session_location_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/presentation/attach_session_action.dart';
 import '../../sessions/presentation/detach_session_action.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../sessions/presentation/session_subagents_panel.dart';
@@ -63,6 +64,10 @@ List<PopupMenuEntry<String>> sessionMenuItems(
   final detachable =
       ref.read(capabilitiesProvider).detachSessions &&
       session.parentSessionId != null;
+  final attachable =
+      ref.read(capabilitiesProvider).attachSessions &&
+      session.parentSessionId == null &&
+      !session.isArchived;
   DesktopMenuItem<String> item(
     String value,
     String label,
@@ -105,6 +110,7 @@ List<PopupMenuEntry<String>> sessionMenuItems(
     item(kMoreMenuValue, 'More…', AppIcons.dotsThree),
     const DesktopMenuDivider(),
     if (detachable) item('detach', kDetachLabel, AppIcons.linkBreak),
+    if (attachable) item('attach', kAttachLabel, AppIcons.linkSimple),
     // Only while something runs it: an ended session has nothing to end. Not
     // red — ending stops the process and keeps the conversation.
     if (sessionRunsNow(ref, id)) item('end', 'End session', AppIcons.power),
@@ -145,6 +151,7 @@ const kSessionMenuOrder = [
   'copy-path',
   kMoreMenuValue,
   'detach',
+  'attach',
   'end',
   'archive',
   'unarchive',
@@ -285,6 +292,8 @@ Future<void> runNativeSessionMenuAction(
       if (path != null) await _copy(context, path, 'Path copied');
     case 'detach':
       await detachSessionFromUi(context, ref, session.id);
+    case 'attach':
+      await attachSessionFromUi(context, ref, session.id);
     case 'recap':
       await requestSessionRecap(context, ref, session.id);
     case 'continue-with':

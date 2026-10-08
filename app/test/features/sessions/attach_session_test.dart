@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/explorer/presentation/session_row_menu.dart';
 import 'package:karmashala/src/features/sessions/application/session_attach.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/attach_session_action.dart';
@@ -144,6 +145,53 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('attach-parent-picker')), findsOneWidget);
     expect(db.server.sessionRows.getById('loose')!.parentSessionId, isNull);
+  });
+
+  testWidgets('the shared session menu offers it on a top-level session, '
+      'beside where Detach would be, and nowhere else', (tester) async {
+    final container = containerFor();
+    late List<String> top;
+    late List<String> sub;
+    late List<String> archived;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Consumer(
+            builder: (context, ref, _) {
+              final rows = ref.read(sessionsDataProvider);
+              List<String> values(String id) => [
+                for (final entry in sessionMenuItems(
+                  ref,
+                  rows.getById(id)!,
+                  terminals: const [],
+                ))
+                  if (entry is PopupMenuItem<String>) entry.value!,
+              ];
+              top = values('loose');
+              sub = values('kid');
+              archived = values('shelved');
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(top, contains('attach'));
+    expect(top, isNot(contains('detach')));
+    expect(sub, isNot(contains('attach')));
+    expect(archived, isNot(contains('attach')));
+    final shared = [
+      for (final v in top)
+        if (kSessionMenuOrder.contains(v)) kSessionMenuOrder.indexOf(v),
+    ];
+    expect(shared, [...shared]..sort());
+    expect(
+      kSessionMenuOrder.indexOf('attach'),
+      kSessionMenuOrder.indexOf('detach') + 1,
+    );
   });
 
   testWidgets('search narrows by title, project and agent', (tester) async {
