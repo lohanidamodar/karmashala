@@ -127,13 +127,41 @@ void main() {
     expect(kept.filter.shows(AgentState.needsYou), isFalse);
   });
 
-  test("Resume…'s keep-here starts ticked, apart from New session's, and "
-      'is kept', () {
-    expect(const OverviewPrefs().resumeKeepsHere, isTrue);
+  test('resuming and starting in the background is on until turned off, '
+      'and kept', () {
+    expect(const OverviewPrefs().launchInBackground, isTrue);
     final kept = OverviewPrefs.fromJson(
-      const OverviewPrefs(resumeKeepsHere: false).toJson(),
+      const OverviewPrefs(launchInBackground: false).toJson(),
     );
-    expect(kept.resumeKeepsHere, isFalse);
-    expect(kept.newSessionKeepsHere, isTrue);
+    expect(kept.launchInBackground, isFalse);
+    // The dialogs' own keys from before the setting decide nothing now.
+    expect(
+      OverviewPrefs.fromJson({
+        'newSessionKeepsHere': false,
+        'resumeKeepsHere': false,
+      }).launchInBackground,
+      isTrue,
+    );
+  });
+
+  test('the choice is kept in this device\'s file', () async {
+    final folder = Directory.systemTemp.createTempSync('ks-r56-prefs');
+    addTearDown(() => folder.deleteSync(recursive: true));
+    ProviderContainer make() {
+      final c = ProviderContainer(
+        overrides: [
+          overviewPrefsDirectoryProvider.overrideWithValue(() async => folder),
+        ],
+      );
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    make().read(overviewPrefsProvider.notifier).setLaunchInBackground(false);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final again = make()..read(overviewPrefsProvider);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(again.read(overviewPrefsProvider).launchInBackground, isFalse);
   });
 }

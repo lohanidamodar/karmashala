@@ -49,9 +49,13 @@ enum ExplorerOutcome {
 
 /// The outcome of an Explorer action, plus whatever the user needs told.
 class ExplorerResult {
-  const ExplorerResult(this.outcome, {this.message});
+  const ExplorerResult(this.outcome, {this.message, this.sessionId});
 
   final ExplorerOutcome outcome;
+
+  /// The session a start made, so a caller that opened no tab can point at
+  /// it.
+  final String? sessionId;
 
   /// What to put in front of the user, or null when the change on screen is the
   /// whole answer. A reattach needs no sentence: the pane is simply back.
@@ -423,13 +427,15 @@ class ExplorerActions {
 
   /// Starts a session in [repository], or in [existingWorktree]; [installation]
   /// omitted means the environment's default agent. A worktree needs no
-  /// `repositories` row: the owning repository supplies the id.
+  /// `repositories` row: the owning repository supplies the id. [openTab]
+  /// false starts it where the person is: no tab, nothing selected.
   Future<ExplorerResult> startSession({
     required Repository repository,
     EnvironmentPath? existingWorktree,
     AgentInstallation? installation,
     String? title,
     String? firstMessage,
+    bool openTab = true,
   }) async {
     final launcher = _ref.read(sessionLauncherProvider);
     final environmentId = repository.path.environmentId;
@@ -457,13 +463,17 @@ class ExplorerActions {
           purpose: SessionPurpose.newSession,
           existingWorktree: existingWorktree,
           firstMessage: firstMessage,
+          openTab: openTab,
         ),
       );
       _ref
           .read(newSessionMemoryProvider)
           .remember(projectId: repository.projectId, installationId: agent.id);
-      selectNative(launched.session);
-      return const ExplorerResult(ExplorerOutcome.started);
+      if (openTab) selectNative(launched.session);
+      return ExplorerResult(
+        ExplorerOutcome.started,
+        sessionId: launched.session.id,
+      );
     } catch (error) {
       return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
     }

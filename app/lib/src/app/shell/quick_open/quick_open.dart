@@ -9,6 +9,8 @@ import 'package:karmashala_git/git.dart';
 
 import '../../../features/cli_detection/data/conversation_search.dart';
 import '../../../features/git/application/changes_providers.dart';
+import '../../../features/overview/application/overview_prefs.dart';
+import '../../../features/overview/presentation/background_launch_notice.dart';
 import '../../../features/remote/application/remote_approval_bindings.dart';
 import '../../../features/sessions/presentation/new_session_dialog.dart';
 import '../../../features/sessions/presentation/session_destination_picker.dart'
@@ -648,6 +650,16 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
                   checkout: commandDefaultCheckout(container, projectId),
                 ),
           firstPrompt: action.firstMessage,
+          keepHere: container.read(launchInBackgroundProvider),
+          onStarted: (session, {required keptHere}) {
+            if (!keptHere) return;
+            announceBackgroundLaunch(
+              container,
+              sessionId: session.id,
+              messenger: messenger,
+              started: true,
+            );
+          },
         );
         return;
       }
@@ -665,6 +677,12 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         container,
         say: (message) =>
             messenger?.showSnackBar(SnackBar(content: Text(message))),
+        announce: (sessionId, {started = false}) => announceBackgroundLaunch(
+          container,
+          sessionId: sessionId,
+          messenger: messenger,
+          started: started,
+        ),
       );
       if (plan.confirm case final confirm?) {
         unawaited(
@@ -816,6 +834,18 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       _activate(beside: true);
       return KeyEventResult.handled;
     }
+    // Shift+Enter resumes the stopped session the row names; Enter only shows
+    // it. A row with nothing to resume takes it as Enter.
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+        HardwareKeyboard.instance.isShiftPressed &&
+        _flat.isNotEmpty) {
+      if (_flat[_selected].item.onResume case final resume?) {
+        resume();
+        return KeyEventResult.handled;
+      }
+    }
     // Backspace on an empty box goes back a step. A press, not a repeat: a held
     // key that has just emptied the query must not carry on up the stack.
     if (event is KeyDownEvent &&
@@ -945,6 +975,13 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
               _pick(result.item);
             },
             besideTooltip: besideTooltip,
+            onResume: switch (result.item.onResume) {
+              final resume? => () {
+                setState(() => _selected = index);
+                resume();
+              },
+              null => null,
+            },
             onOpenBeside: besideAvailable && result.item.opensTab
                 ? () {
                     setState(() => _selected = index);

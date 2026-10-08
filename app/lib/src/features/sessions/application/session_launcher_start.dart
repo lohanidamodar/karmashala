@@ -80,10 +80,13 @@ extension SessionStartVerbs on SessionLauncher {
   /// Shows a session the server started on another request of this client's
   /// (a handoff, a fork), or that the server asked this window to show —
   /// [TabReveal.background] behind the tab in front, which keeps the keyboard.
+  /// [openTab] false shows it nowhere: the server runs it, and the lists and
+  /// the Agent dashboard learn of it as of any row.
   Future<SessionLaunchResult> showStarted(
     SessionStarted started, {
     TabReveal showing = TabReveal.front,
-  }) => _show(started, showing: showing);
+    bool openTab = true,
+  }) => _show(started, showing: showing, openTab: openTab);
 
   /// Opens [sessionId]'s conversation as a tab, or brings its tab forward.
   String _showChatTab(String sessionId, {OpenBehind? behind}) {

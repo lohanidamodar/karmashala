@@ -41,9 +41,7 @@ class HostInstaller {
     if (home == null || path == null) {
       return reading.state == HostInstallState.unknown
           ? reading
-          : reading.after(
-              'There is no session host on ${host.name} to start.',
-            );
+          : reading.after('There is no session host on ${host.name} to start.');
     }
     if (reading.running) {
       return reading.after(
@@ -74,9 +72,7 @@ class HostInstaller {
     if (home == null || !found.reading.running) {
       return found.reading.state == HostInstallState.unknown
           ? found.reading
-          : found.reading.after(
-              'No session host was running on ${host.name}.',
-            );
+          : found.reading.after('No session host was running on ${host.name}.');
     }
     final held = found.reading.sessionsHeld;
     final stopped = await deployer._stopServe(home);
@@ -225,6 +221,12 @@ class HostInstaller {
     final running = runningPath != null;
     final held = running ? await deployer._sessionsHeld(runningPath) : null;
 
+    // Which file, and from where: the folders are searched together, and a
+    // person whose box gets an unexpected version needs the path to look at.
+    final chosen = binary == null
+        ? ''
+        : ' The server would install ${binary.source}.'
+              '${binary.olderBundlesIn == null ? '' : ' Older host bundles in ${binary.olderBundlesIn} were passed over; nothing there is deleted.'}';
     if (entries.isEmpty && !running) {
       if (binary != null) {
         return (
@@ -233,12 +235,13 @@ class HostInstaller {
             observedAt: now(),
             platform: platform,
             offeredVersion: binary.version,
+            offeredSource: binary.source,
             availableTargets: targets,
             reason:
                 'Nothing of Karmashala\'s is on ${host.name} yet. Install puts '
                 'the session host under $home/$kRemoteHomeSubdirectory — no '
                 'root needed — and it is also put there the first time a pane, '
-                'a relay or a phone pairing needs it.',
+                'a relay or a phone pairing needs it.$chosen',
           ),
           home: home,
         );
@@ -282,6 +285,7 @@ class HostInstaller {
         platform: platform,
         installedVersion: version,
         offeredVersion: binary?.version,
+        offeredSource: binary?.source,
         running: running,
         sessionsHeld: held,
         remotePath: inEffect,
@@ -291,11 +295,16 @@ class HostInstaller {
                   '$where; this app carries ${binary!.version}. '
                   '${_isNewer(version, binary.version) ? 'A later build put it there. Installing this app\'s puts ${binary.version} beside it' : 'Update installs it beside the old one'} '
                   'and moves over when the running one holds no sessions.'
+                  '$chosen'
             : 'The session host ${version ?? 'unversioned'} on ${host.name} is '
                   '$where'
                   '${held == null || held == 0 ? '' : ', holding $held session(s)'}.'
-                  '${noNewer ? ' It is older than this app ($kHostVersion), and this build carries ${binary == null ? 'no host bundle' : 'no newer host'} for ${platform.targetKey}, so there is nothing to update it to. Rebuild or reinstall Karmashala with its host bundles, or put karmashala_host-$kHostVersion-${platform.targetKey}.tar.gz into $folder, then choose Check.' : ''}'
-                  '${!noNewer && binary == null ? ' This build carries no bundle for ${platform.targetKey}, so it cannot update or reinstall it.' : ''}',
+                  // Every folder was searched, so "none of them" is the claim
+                  // — never "this build", which was false while another
+                  // folder held a newer one.
+                  '${noNewer ? ' It is older than this app ($kHostVersion), and no folder the server reads host bundles from holds ${binary == null ? 'a host' : 'a newer host'} for ${platform.targetKey}, so there is nothing to update it to. Put karmashala_host-$kHostVersion-${platform.targetKey}.tar.gz into $folder, or reinstall Karmashala with its host bundles, then choose Check.' : ''}'
+                  '${!noNewer && binary == null ? ' No folder the server reads host bundles from holds one for ${platform.targetKey}, so it cannot update or reinstall it.' : ''}'
+                  '$chosen',
         noNewerHost: noNewer,
       ),
       home: home,
@@ -303,8 +312,7 @@ class HostInstaller {
   }
 
   static bool _isNewer(String? installed, String offered) =>
-      installed != null &&
-      compareHostVersions(installed, offered) > 0;
+      installed != null && compareHostVersions(installed, offered) > 0;
 
   /// `1.25.0` out of `…/karmashala_host-1.25.0-linux-x64.d/bin/karmashala_host`.
   static String? _versionOf(String? path) {

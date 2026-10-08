@@ -102,17 +102,20 @@ HostDeployExplanation explainHostDeployment(
     case HostDeploymentStatus.protocolMismatch:
       final wanted = platform?.targetKey ?? 'its platform';
       if (deployment.noNewerHost) {
-        // Update would install the very host that is stale.
+        // Update would install the very host that is stale. The server
+        // searched every folder it reads bundles from, so the claim is about
+        // all of them — never "this build", which was false while another
+        // folder held a newer one.
         return HostDeployExplanation(
           sentence: deployment.reason,
           remedy:
-              'This build of Karmashala carries no newer host for $wanted '
-              'than the ${deployment.offeredVersion ?? 'one'} on $hostName, so '
-              'there is nothing to update it to. Rebuild or reinstall '
-              'Karmashala with its host bundles, or put '
+              'No folder the Karmashala server reads host bundles from holds a '
+              'host for $wanted newer than the '
+              '${deployment.offeredVersion ?? 'one'} on $hostName, so there is '
+              'nothing to update it to. Put '
               'karmashala_host-$kHostVersion-$wanted.tar.gz into '
               '${deployment.bundleFolder ?? 'the host-bundles folder in the Karmashala server\'s data folder'}, '
-              'then try again.',
+              'or reinstall Karmashala with its host bundles, then try again.',
           action: HostDeployAction.retry,
         );
       }
@@ -165,8 +168,8 @@ String hostDeploymentInShort(
           'then Retry.';
     case HostDeploymentStatus.protocolMismatch:
       return deployment.noNewerHost
-          ? '$cannot: its Karmashala host is out of date, and this Karmashala '
-                'has no newer one. Update Karmashala, then Retry.'
+          ? '$cannot: its Karmashala host is out of date, and the server has '
+                'no newer one. Update Karmashala, then Retry.'
           : '$cannot: its Karmashala host is another version. Stop it in '
                 'Settings › Machines, then Retry.';
     case HostDeploymentStatus.unknown:

@@ -90,6 +90,12 @@ class _OverviewDoneCardState extends ConsumerState<OverviewDoneCard> {
           OverviewLatestMessage(sessionId: id),
           const SizedBox(height: Insets.xs),
           OverviewMetaLine(card: card),
+          // A ready parent's sub-sessions, as a working card draws them: one
+          // an agent just started was otherwise on no card at all.
+          if (card.children != null) ...[
+            const SizedBox(height: Insets.xs),
+            OverviewSubSessions(card: card, onOpen: widget.onOpen),
+          ],
           const SizedBox(height: Insets.sm),
           Wrap(
             alignment: WrapAlignment.end,

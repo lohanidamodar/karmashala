@@ -11,6 +11,8 @@ import '../../../features/overview/application/overview_quick_message.dart';
 import '../../../features/overview/application/overview_resume.dart';
 import '../../../features/remote/application/remote_approval_bindings.dart';
 import '../../../features/sessions/application/session_actions.dart';
+import '../../../features/sessions/presentation/queued_messages_strip.dart'
+    show ordinalWord;
 import '../../../features/sessions/presentation/approval_request_card.dart'
     show BoardApproval, answerBoardApprovalBy;
 import 'package:karmashala_git/git.dart';
@@ -53,16 +55,50 @@ Repository? commandDefaultCheckout(
   );
 }
 
+/// [sessionId] in the dashboard's peek once the board is up to take it.
+/// Quick open brings the dashboard forward before it runs this.
+void peekOnDashboard(ProviderContainer container, String sessionId) {
+  container.read(overviewPrefsProvider.notifier).setView(OverviewView.board);
+  var tries = 0;
+  void peekWhenUp(Duration _) {
+    // The board's focus lives only while the dashboard is built.
+    if (!container.exists(overviewFocusProvider)) {
+      if (++tries < 4) {
+        WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
+      }
+      return;
+    }
+    container.read(overviewFocusProvider.notifier).peek(sessionId);
+  }
+
+  WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
+}
+
 /// Runs a [CommandAction] through the action that already owns it; nothing
 /// here decides anything those actions do not. Reads through a container, so
 /// it keeps working after the palette that started it has closed.
 class TypedCommandRunner {
-  TypedCommandRunner(this._container, {required this.say});
+  TypedCommandRunner(this._container, {required this.say, this.announce});
 
   final ProviderContainer _container;
 
   /// Tells the user what happened when the screen alone would not.
   final void Function(String message) say;
+
+  /// Points at a session resumed or started with no tab: its card peeked
+  /// when the dashboard shows, else a notice with Open. Null says it in
+  /// words instead.
+  final void Function(String sessionId, {bool started})? announce;
+
+  /// The "Resume and start sessions in the background" setting.
+  bool get _inBackground => _container.read(launchInBackgroundProvider);
+
+  /// [sessionId], resumed or started with no tab, pointed at.
+  void _announce(String sessionId, {bool started = false}) {
+    final announce = this.announce;
+    if (announce != null) return announce(sessionId, started: started);
+    say('${started ? 'Started' : 'Resuming'} "${_title(sessionId)}".');
+  }
 
   Future<void> run(CommandAction action) => switch (action) {
     StartCommand() => _start(action),
@@ -87,24 +123,7 @@ class TypedCommandRunner {
       _container.read(sessionsDataProvider).getById(sessionId)?.title ??
       'that session';
 
-  /// [sessionId] in the dashboard's peek once the board is up to take it.
-  /// Quick open brings the dashboard forward before it runs this.
-  void _peek(String sessionId) {
-    _container.read(overviewPrefsProvider.notifier).setView(OverviewView.board);
-    var tries = 0;
-    void peekWhenUp(Duration _) {
-      // The board's focus lives only while the dashboard is built.
-      if (!_container.exists(overviewFocusProvider)) {
-        if (++tries < 4) {
-          WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
-        }
-        return;
-      }
-      _container.read(overviewFocusProvider.notifier).peek(sessionId);
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
-  }
+  void _peek(String sessionId) => peekOnDashboard(_container, sessionId);
 
   Future<void> _answerQuestion(AnswerQuestionCommand command) async {
     try {
@@ -144,11 +163,15 @@ class TypedCommandRunner {
   Future<void> _message(MessageCommand command) async {
     final quick = _container.read(overviewQuickMessageProvider);
     var queued = 0;
+    int? place;
     final failed = <String>[];
     for (final id in command.sessionIds) {
       try {
-        if (await quick.send(id, command.text) == QuickMessageOutcome.queued) {
+        // Queued as the server answered for it, never guessed beforehand.
+        final sent = await quick.send(id, command.text);
+        if (sent.queued) {
           queued++;
+          place = sent.position;
         }
       } on Object catch (error) {
         failed.add(
@@ -163,8 +186,9 @@ class TypedCommandRunner {
         if (sent > 0)
           one
               ? queued > 0
-                    ? 'Queued for "${_title(command.sessionIds.single)}" — '
-                          'it goes when the turn ends.'
+                    ? 'Queued for "${_title(command.sessionIds.single)}"'
+                          '${place == null ? '' : ' (${ordinalWord(place)})'}'
+                          ' — it goes when the turn ends.'
                     : 'Sent to "${_title(command.sessionIds.single)}".'
               : 'Sent to $sent${queued > 0 ? ' ($queued queued behind a '
                           'turn)' : ''}.',
@@ -179,17 +203,39 @@ class TypedCommandRunner {
     }
   }
 
-  /// Round 43's Resume from the dashboard: at the server, with no tab.
+  /// Round 43's Resume from the dashboard: at the server, with no tab — or,
+  /// with the background setting off, into its tab.
   Future<void> _resume(BackgroundResumeCommand command) async {
+    final id = command.sessionId;
+    if (!_inBackground) {
+      final message = command.message;
+      if (message != null) {
+        try {
+          await _container
+              .read(sessionActionsProvider)
+              .continueSession(id, message);
+        } on Object catch (error) {
+          say(
+            'Could not resume: ${error is StateError ? error.message : error}',
+          );
+        }
+        return;
+      }
+      final result = await _container
+          .read(explorerActionsProvider)
+          .openNative(id);
+      if (result.message case final message?) say(message);
+      return;
+    }
     final result = await _container
         .read(overviewResumerProvider)
-        .resume(command.sessionId, message: command.message);
-    say(
-      result.message ??
-          (result.isFailure
-              ? 'Could not resume "${_title(command.sessionId)}".'
-              : 'Resuming "${_title(command.sessionId)}".'),
-    );
+        .resume(id, message: command.message);
+    if (result.isFailure) {
+      say(result.message ?? 'Could not resume "${_title(id)}".');
+      return;
+    }
+    if (result.message case final message?) say(message);
+    _announce(id);
   }
 
   /// The row's Archive, keeping any worktree: deleting one is asked for
@@ -269,8 +315,11 @@ class TypedCommandRunner {
       say('That agent is no longer installed where this project runs.');
       return;
     }
-    // The card the session appears on has to be on screen, as the `+` does.
-    if (_container.read(selectedProjectIdProvider) != projectId) {
+    final background = _inBackground;
+    // The card the session appears on has to be on screen, as the `+` does —
+    // unless it starts where the person is, which moves nothing.
+    if (!background &&
+        _container.read(selectedProjectIdProvider) != projectId) {
       _container.read(selectedProjectIdProvider.notifier).select(projectId);
     }
     final explorer = _container.read(explorerActionsProvider);
@@ -279,8 +328,9 @@ class TypedCommandRunner {
         repository: repository,
         installation: installation,
         firstMessage: command.firstMessage,
+        openTab: !background,
       );
-      if (result.message case final message?) say(message);
+      _said(result, background: background);
       return;
     }
     // The dialog's worktree path: the same launcher, asked the same way, after
@@ -305,12 +355,17 @@ class TypedCommandRunner {
           purpose: SessionPurpose.newSession,
           useWorktree: true,
           firstMessage: command.firstMessage,
+          openTab: !background,
         ),
       );
       _container
           .read(newSessionMemoryProvider)
           .remember(projectId: projectId, installationId: installation.id);
-      explorer.selectNative(launched.session);
+      if (background) {
+        _announce(launched.session.id, started: true);
+      } else {
+        explorer.selectNative(launched.session);
+      }
     } on WorktreeCreationCancelled catch (error) {
       say('Cancelled. ${error.cleanup}');
     } catch (error) {
@@ -340,7 +395,9 @@ class TypedCommandRunner {
       say('Could not make a scratch folder: $error');
       return;
     }
-    if (_container.read(selectedProjectIdProvider) != repository.projectId) {
+    final background = _inBackground;
+    if (!background &&
+        _container.read(selectedProjectIdProvider) != repository.projectId) {
       _container
           .read(selectedProjectIdProvider.notifier)
           .select(repository.projectId);
@@ -351,8 +408,18 @@ class TypedCommandRunner {
           repository: repository,
           installation: installation,
           firstMessage: command.firstMessage,
+          openTab: !background,
         );
+    _said(result, background: background);
+  }
+
+  /// A start's result: its words, and a session started with no tab pointed
+  /// at.
+  void _said(ExplorerResult result, {required bool background}) {
     if (result.message case final message?) say(message);
+    if (background && !result.isFailure) {
+      if (result.sessionId case final id?) _announce(id, started: true);
+    }
   }
 
   /// The terminal controller the tab bar and the Explorer's "Open terminal"

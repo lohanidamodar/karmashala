@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:karmashala_host/src/ssh/deploy/host_bundles.dart';
+import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 import 'package:karmashala_ssh_host/host.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -57,6 +58,33 @@ void main() {
     expect(said, contains(p.join(temp.path, 'data', 'host-bundles')));
     expect(said, contains(p.join(temp.path, 'app', 'host')));
     expect(said, contains(p.join(temp.path, 'app')));
+  });
+
+  test('an old release left in the data folder never shadows the install '
+      'folder\'s own host', () async {
+    // The owner's box: `<data dir>/host-bundles` kept 1.29.0 and 1.26.3 from
+    // an earlier install, searched before the install folder holding the
+    // server's own version — and every reinstall deployed 1.29.0.
+    bundle('data/host-bundles', 'karmashala_host-1.29.0-linux-x64.tar.gz');
+    bundle('data/host-bundles', 'karmashala_host-1.26.3-linux-x64.tar.gz');
+    bundle('app', 'karmashala_host-$kHostVersion-linux-x64.tar.gz');
+    final source = serverHostBundles(
+      dataDirectory: p.join(temp.path, 'data'),
+      environment: const {},
+      executable: p.join(temp.path, 'app', 'host', 'bin', 'karmashala_host'),
+      workingDirectory: temp.path,
+    );
+
+    final binary = (await source.binaryFor(linux('x64')))!;
+
+    expect(binary.version, kHostVersion);
+    expect(binary.source, startsWith(p.join(temp.path, 'app')));
+    expect(binary.olderBundlesIn, p.join(temp.path, 'data', 'host-bundles'));
+    expect(
+      Directory(p.join(temp.path, 'data', 'host-bundles')).listSync(),
+      hasLength(2),
+      reason: 'nothing is deleted',
+    );
   });
 
   test('a debug run finds the repository\'s server/build', () async {

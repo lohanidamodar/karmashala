@@ -795,6 +795,12 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['chat', 'terminal', 'phone', 'default'],
   ),
   SettingsEntry(
+    'Resume and start sessions in the background',
+    anchor: SettingsAnchor.sessionView,
+    description: 'No tab opens when you resume or start a session.',
+    keywords: ['resume', 'start', 'background', 'tab', 'palette', 'dashboard'],
+  ),
+  SettingsEntry(
     'Launcher hotkey',
     anchor: SettingsAnchor.launcherHotkey,
     description: 'A global shortcut that brings Karmashala forward.',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -79,6 +80,40 @@ class OverviewCardFrame extends ConsumerWidget {
 
 bool _touch(BuildContext context) => UiDensity.of(context).isTouch;
 
+/// [child], [card]'s own widget, tied to its parent's when the parent is in
+/// [among] — drawn just before it: indented, with a thin line down its side.
+/// Anything else is [child] as it is.
+Widget overviewTied(OverviewCard card, List<OverviewCard> among, Widget child) {
+  final parent = card.parentId;
+  if (parent == null || !among.any((c) => c.id == parent)) return child;
+  return OverviewChildLink(card: card, child: child);
+}
+
+/// A sub-session drawn as a card of its own, tied to its parent's just
+/// before it.
+class OverviewChildLink extends StatelessWidget {
+  const OverviewChildLink({required this.card, required this.child, super.key});
+
+  final OverviewCard card;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: ValueKey('overview-child-link:${card.id}'),
+    margin: const EdgeInsets.only(left: Insets.sm),
+    padding: const EdgeInsets.only(left: Insets.sm),
+    decoration: BoxDecoration(
+      border: Border(
+        left: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: StateLayers.focusRingWidth,
+        ),
+      ),
+    ),
+    child: child,
+  );
+}
+
 /// Title, where it runs, and the state chip.
 class OverviewCardHeader extends ConsumerWidget {
   const OverviewCardHeader({required this.card, this.chip, super.key});
@@ -127,7 +162,13 @@ class OverviewCardHeader extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  parent != null ? '↳ from $parent' : place,
+                  parent == null
+                      ? place
+                      // Drawn after its parent, the line names it; drawn
+                      // apart from it, it says where it came from.
+                      : card.parentId != null
+                      ? '↳ $parent'
+                      : '↳ from $parent',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -171,7 +212,10 @@ class OverviewWorkCard extends ConsumerWidget {
       children: [
         OverviewCardHeader(card: card),
         const SizedBox(height: Insets.sm),
-        OverviewActivityLine(card: card),
+        if (card.waitingOn != null)
+          OverviewWaitingOnLine(card: card)
+        else
+          OverviewActivityLine(card: card),
         const SizedBox(height: Insets.xs),
         OverviewLatestMessage(sessionId: card.id),
         const SizedBox(height: Insets.xs),
@@ -199,7 +243,7 @@ class OverviewDoneRow extends ConsumerWidget {
     final muted = theme.colorScheme.onSurfaceVariant;
     final now = ref.read(clockProvider).nowUtc();
     final place = watchOverviewPlace(ref, card);
-    return InkWell(
+    final row = InkWell(
       key: ValueKey('overview-done:${card.id}'),
       borderRadius: BorderRadius.circular(Radii.sm),
       onTap: () => onOpen(card),
@@ -236,6 +280,81 @@ class OverviewDoneRow extends ConsumerWidget {
             OverviewCardMenu(card: card),
           ],
         ),
+      ),
+    );
+    final children = card.children;
+    if (children == null) return row;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        row,
+        _DoneRowSubSessions(card: card, total: children.total, onOpen: onOpen),
+      ],
+    );
+  }
+}
+
+/// "↳ 2 sub-sessions" under a done row, opening in place to the rows a
+/// working card shows: a done session's children seen without the peek.
+class _DoneRowSubSessions extends StatefulWidget {
+  const _DoneRowSubSessions({
+    required this.card,
+    required this.total,
+    required this.onOpen,
+  });
+
+  final OverviewCard card;
+  final int total;
+  final ValueChanged<OverviewCard> onOpen;
+
+  @override
+  State<_DoneRowSubSessions> createState() => _DoneRowSubSessionsState();
+}
+
+class _DoneRowSubSessionsState extends State<_DoneRowSubSessions> {
+  var _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final n = widget.total;
+    return Padding(
+      padding: const EdgeInsets.only(left: Insets.xl + Insets.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            key: ValueKey('overview-done-subs:${widget.card.id}'),
+            borderRadius: BorderRadius.circular(Radii.sm),
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      '↳ $n ${n == 1 ? 'sub-session' : 'sub-sessions'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _open ? AppIcons.caretUp : AppIcons.caretDown,
+                    size: UiDensity.of(context).iconSmall,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_open)
+            OverviewSubSessions(card: widget.card, onOpen: widget.onOpen),
+        ],
       ),
     );
   }

@@ -11,7 +11,10 @@ const String kHostBundlesVariable = 'KARMASHALA_HOST_BUNDLES';
 /// **Where the server finds the host bundles it deploys to SSH boxes**
 /// (slice 5d) — `karmashala_host-<version>-<os>-<arch>.tar.gz`, one per box
 /// platform (linux-x64, linux-arm64, and a Mac's own). Never the client's
-/// app bundle: the server deploys, so the server looks, in order:
+/// app bundle: the server deploys, so the server looks in all of these, and
+/// takes the best match across them (`DirectoryHostBinaries.binaryFor`: a
+/// bundle over a bare file, then its own version, then the newest). Their
+/// order breaks a tie between equal versions:
 ///
 /// 1. every folder in `KARMASHALA_HOST_BUNDLES`;
 /// 2. `<data dir>/host-bundles` — where a standalone server's operator puts

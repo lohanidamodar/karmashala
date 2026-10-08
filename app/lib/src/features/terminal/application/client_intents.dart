@@ -9,6 +9,8 @@ import '../../../core/data/data_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../notes/application/composer_draft.dart';
+import '../../overview/application/overview_prefs.dart'
+    show launchInBackgroundProvider;
 import '../../sessions/application/acp_session_providers.dart'
     show installationSpeaksAcp;
 import '../../sessions/application/session_actions.dart';
@@ -48,7 +50,13 @@ class ClientIntents extends Notifier<void> {
           :final launch,
           :final reveal,
         ):
-          await _openSession(sessionId, title, launch, _honoured(reveal));
+          await _openSession(
+            sessionId,
+            title,
+            launch,
+            _honoured(reveal),
+            openTab: !_keptOff(reveal),
+          );
         case OpenTerminalTab(:final paneId, :final title):
           ref
               .read(terminalSessionsControllerProvider.notifier)
@@ -85,13 +93,37 @@ class ClientIntents extends Notifier<void> {
       ? TabReveal.front
       : reveal;
 
+  /// Whether a session another session started is shown nowhere: asked for
+  /// behind ([TabReveal.background] — what the server asks for an agent's),
+  /// with "Resume and start sessions in the background" on and "Bring
+  /// sessions agents start to the front" off. It runs at the server, and the
+  /// Agent dashboard and the lists show it; no tab opens to steal the view.
+  bool _keptOff(TabReveal reveal) =>
+      reveal == TabReveal.background &&
+      !ref.read(settingsControllerProvider).bringAgentSessionsToFront &&
+      ref.read(launchInBackgroundProvider);
+
   Future<void> _openSession(
     String sessionId,
     String title,
     AgentPaneLaunch? launch,
-    TabReveal showing,
-  ) async {
+    TabReveal showing, {
+    bool openTab = true,
+  }) async {
     final launcher = ref.read(sessionLauncherProvider);
+    if (!openTab) {
+      final row = ref.read(sessionsDataProvider).getById(sessionId);
+      if (row == null) {
+        _log.info('Kept $sessionId off screen before its row arrived.');
+        return;
+      }
+      await launcher.showStarted(
+        SessionStarted(session: row, launch: launch),
+        showing: showing,
+        openTab: false,
+      );
+      return;
+    }
     if (showing == TabReveal.background) {
       // Already on screen somewhere: nothing to add, and nothing to move.
       if (launcher.livePaneFor(sessionId) != null) return;

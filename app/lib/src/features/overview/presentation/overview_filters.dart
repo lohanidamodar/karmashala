@@ -142,6 +142,27 @@ class OverviewFilterPanel extends ConsumerWidget {
               ),
             ),
           ),
+          section(
+            'Sub-sessions',
+            Align(
+              alignment: Alignment.centerLeft,
+              child: CompactSegmented<OverviewSubSessionMode>(
+                key: const ValueKey('overview-filter-subs'),
+                segments: [
+                  for (final mode in OverviewSubSessionMode.values)
+                    ButtonSegment(
+                      value: mode,
+                      label: Text(
+                        mode.label,
+                        key: ValueKey('sub-sessions:${mode.name}'),
+                      ),
+                    ),
+                ],
+                selected: ref.watch(overviewSubSessionsProvider),
+                onChanged: controller.setSubSessions,
+              ),
+            ),
+          ),
           if (facts.projects.isNotEmpty)
             section(
               'Projects',

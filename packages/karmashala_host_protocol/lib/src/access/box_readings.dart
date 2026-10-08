@@ -47,6 +47,7 @@ class HostInstallReading {
     this.platform,
     this.installedVersion,
     this.offeredVersion,
+    this.offeredSource,
     this.running = false,
     this.sessionsHeld,
     this.remotePath,
@@ -70,6 +71,10 @@ class HostInstallReading {
   /// The version the server would install, or null when it has no bundle for
   /// the machine.
   final String? offeredVersion;
+
+  /// The bundle file behind [offeredVersion], on the server's computer —
+  /// which of the folders it searched the version came from.
+  final String? offeredSource;
 
   final bool running;
 
@@ -127,6 +132,7 @@ class HostInstallReading {
         platform: platform,
         installedVersion: installedVersion,
         offeredVersion: offeredVersion,
+        offeredSource: offeredSource,
         running: running,
         sessionsHeld: sessionsHeld,
         remotePath: remotePath,
@@ -142,6 +148,7 @@ class HostInstallReading {
     'platform': ?platform?.toJson(),
     'installedVersion': ?installedVersion,
     'offeredVersion': ?offeredVersion,
+    'offeredSource': ?offeredSource,
     if (running) 'running': true,
     'sessionsHeld': ?sessionsHeld,
     'remotePath': ?remotePath,
@@ -163,6 +170,7 @@ class HostInstallReading {
         },
         installedVersion: json['installedVersion'] as String?,
         offeredVersion: json['offeredVersion'] as String?,
+        offeredSource: json['offeredSource'] as String?,
         running: json['running'] == true,
         sessionsHeld: json['sessionsHeld'] as int?,
         remotePath: json['remotePath'] as String?,
@@ -260,21 +268,20 @@ class SshRelayReading {
     'runningPath': ?runningPath,
   };
 
-  static SshRelayReading fromJson(Map<String, Object?> json) =>
-      SshRelayReading(
-        status: SshRelayStatus.values.byName(json['status']! as String),
-        observedAt: _time(json['observedAt']),
-        reason: json['reason']! as String,
-        port: json['port']! as int,
-        command: json['command'] as String?,
-        privileged: _step(json['privileged']),
-        outsideTheMachine: json['outsideTheMachine'] == true,
-        url: switch (json['url']) {
-          final String url => Uri.tryParse(url),
-          _ => null,
-        },
-        runningPath: json['runningPath'] as String?,
-      );
+  static SshRelayReading fromJson(Map<String, Object?> json) => SshRelayReading(
+    status: SshRelayStatus.values.byName(json['status']! as String),
+    observedAt: _time(json['observedAt']),
+    reason: json['reason']! as String,
+    port: json['port']! as int,
+    command: json['command'] as String?,
+    privileged: _step(json['privileged']),
+    outsideTheMachine: json['outsideTheMachine'] == true,
+    url: switch (json['url']) {
+      final String url => Uri.tryParse(url),
+      _ => null,
+    },
+    runningPath: json['runningPath'] as String?,
+  );
 
   @override
   String toString() =>

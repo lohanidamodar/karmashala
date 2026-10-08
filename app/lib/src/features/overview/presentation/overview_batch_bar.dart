@@ -260,8 +260,8 @@ class OverviewBatchBar extends ConsumerWidget {
     var queued = 0;
     for (final card in cards) {
       try {
-        if (await quick.send(card.id, text.trim()) ==
-            QuickMessageOutcome.queued) {
+        // Queued as the server answered for it, never guessed beforehand.
+        if ((await quick.send(card.id, text.trim())).queued) {
           queued++;
         }
       } on Object catch (error) {

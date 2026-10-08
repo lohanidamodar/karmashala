@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:karmashala_host_protocol/host_access.dart';
+import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
 import 'host_deployment.dart';
 
@@ -30,11 +31,19 @@ abstract class HostBinarySource {
 /// host from before the store and is still accepted, so an installation that
 /// has not been rebuilt keeps working.
 class DirectoryHostBinaries implements HostBinarySource {
-  DirectoryHostBinaries(this.directories, {this.dropFolder});
+  DirectoryHostBinaries(
+    this.directories, {
+    this.dropFolder,
+    this.preferredVersion = kHostVersion,
+  });
 
-  /// Searched in order; the first directory holding a match wins, and within it
-  /// the highest version does.
+  /// Every one is searched, and the best match across all of them wins: see
+  /// [binaryFor]. Their order only breaks a tie between equal versions.
   final List<Directory> directories;
+
+  /// The version a match is preferred at over any newer one: the server's own
+  /// host, which speaks its protocol.
+  final String preferredVersion;
 
   @override
   final String? dropFolder;
@@ -50,45 +59,71 @@ class DirectoryHostBinaries implements HostBinarySource {
 
   @override
   Future<HostBinary?> binaryFor(HostPlatform platform) async {
-    for (final directory in directories) {
+    // **Every folder, then one ranking.** Taking the first folder with any
+    // match let an operator's drop folder holding an earlier release's bundle
+    // shadow the install folder's current one, and every reinstall put the old
+    // host back.
+    final candidates = <_Candidate>[];
+    for (final (index, directory) in directories.indexed) {
       if (!directory.existsSync()) continue;
-      final candidates = <(String?, bool, File)>[];
       for (final entity in directory.listSync().whereType<File>()) {
         final match = _name.firstMatch(entity.uri.pathSegments.last);
         if (match == null) continue;
         if ('${match.group(2)}-${match.group(3)}' != platform.targetKey) {
           continue;
         }
-        candidates.add((match.group(1), match.group(4) != null, entity));
+        candidates.add(
+          _Candidate(match.group(1), match.group(4) != null, entity, index),
+        );
       }
-      if (candidates.isEmpty) continue;
-      // **Shape first, then version.** Every version ever installed accumulates
-      // here — the installer deletes nothing — so a release whose Linux bundles
-      // were not published yet leaves only a *bare* file from an older install,
-      // and ranking by version would deploy a pre-store host that answers
-      // `hello` and reads as `ready`. A bundle at any version can hold a store
-      // and a bare file at any version cannot, so the bundle wins outright; the
-      // newest of the same shape wins after that.
-      candidates.sort((a, b) {
-        final byShape = (b.$2 ? 1 : 0) - (a.$2 ? 1 : 0);
-        if (byShape != 0) return byShape;
-        return compareHostVersions(b.$1, a.$1);
-      });
-      final (version, isArchive, file) = candidates.first;
-      return HostBinary(
-        // The size, not the bytes: the deployer compares it against the remote
-        // `wc -c` and returns without uploading when they match, which is the
-        // steady state. Reading tens of megabytes to discard them is the cost
-        // of every deploy and every reconnect.
-        length: file.lengthSync(),
-        readBytes: file.readAsBytes,
-        version: version ?? 'unversioned',
-        source: file.path,
-        isBundleArchive: isArchive,
-        candidates: candidates.length,
-      );
     }
-    return null;
+    if (candidates.isEmpty) return null;
+    // **Shape first.** Every version ever installed accumulates — the installer
+    // deletes nothing — so a release whose Linux bundles were not published
+    // yet leaves only a *bare* file from an older install, and ranking by
+    // version would deploy a pre-store host that answers `hello` and reads as
+    // `ready`. A bundle at any version can hold a store and a bare file at any
+    // version cannot, so the bundle wins outright. Then the server's own
+    // version, which speaks its protocol; then the newest; then folder order,
+    // so an operator's folder wins between equal versions.
+    candidates.sort((a, b) {
+      final byShape = (b.isArchive ? 1 : 0) - (a.isArchive ? 1 : 0);
+      if (byShape != 0) return byShape;
+      final byPreference =
+          (b.version == preferredVersion ? 1 : 0) -
+          (a.version == preferredVersion ? 1 : 0);
+      if (byPreference != 0) return byPreference;
+      final byVersion = compareHostVersions(b.version, a.version);
+      if (byVersion != 0) return byVersion;
+      return a.folder - b.folder;
+    });
+    final chosen = candidates.first;
+    final file = chosen.file;
+    // A folder searched first whose every match is older than the one taken.
+    String? olderIn;
+    for (var index = 0; index < chosen.folder && olderIn == null; index++) {
+      final here = candidates.where((c) => c.folder == index);
+      if (here.isNotEmpty &&
+          here.every(
+            (c) => compareHostVersions(c.version, chosen.version) < 0,
+          )) {
+        olderIn = directories[index].path;
+      }
+    }
+    return HostBinary(
+      // The size, not the bytes: the deployer compares it against the remote
+      // `wc -c` and returns without uploading when they match, which is the
+      // steady state. Reading tens of megabytes to discard them is the cost
+      // of every deploy and every reconnect.
+      length: file.lengthSync(),
+      readBytes: file.readAsBytes,
+      version: chosen.version ?? 'unversioned',
+      source: file.path,
+      isBundleArchive: chosen.isArchive,
+      candidates: candidates.length,
+      folder: directories[chosen.folder].path,
+      olderBundlesIn: olderIn,
+    );
   }
 
   @override
@@ -103,4 +138,14 @@ class DirectoryHostBinaries implements HostBinarySource {
     }
     return found.toList()..sort();
   }
+}
+
+/// One matching file, and the index of the folder it was found in.
+class _Candidate {
+  _Candidate(this.version, this.isArchive, this.file, this.folder);
+
+  final String? version;
+  final bool isArchive;
+  final File file;
+  final int folder;
 }

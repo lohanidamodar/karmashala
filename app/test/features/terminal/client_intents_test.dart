@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/terminal/application/client_intents.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -52,17 +53,23 @@ void main() {
     });
   });
 
-  Future<(ProviderContainer, FakeDataServer)> start() async {
+  /// [background] is "Resume and start sessions in the background": off by
+  /// default here, which is the tab-behind behaviour most of these are about.
+  Future<(ProviderContainer, FakeDataServer)> start({
+    bool background = false,
+  }) async {
     final server = FakeDataServer();
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
     server.installationRows.insert(agentInstallation());
+    final prefs = home.createTempSync('prefs');
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(
           data: await server.override(),
           realHostedPanes: true,
         ),
+        overviewPrefsDirectoryProvider.overrideWithValue(() async => prefs),
         localHostSessionAccessProvider.overrideWithValue(
           LocalHostSessionAccess(
             paths: paths,
@@ -74,6 +81,9 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
+    container
+        .read(overviewPrefsProvider.notifier)
+        .setLaunchInBackground(background);
     container.read(clientIntentsProvider);
     return (container, server);
   }
@@ -230,8 +240,8 @@ void main() {
     /// A parent running in a tab, then a shell the person moved on to: the
     /// parent's tab is not the one in front.
     Future<(ProviderContainer, FakeDataServer, String, String)>
-    withParentBehind() async {
-      final (container, server) = await start();
+    withParentBehind({bool background = false}) async {
+      final (container, server) = await start(background: background);
       server.sessionRows.insert(session(id: 'p1', title: 'Parent'));
       server.sessionWork.running.add('p1');
       runOnHost('karmashala_p1');
@@ -383,9 +393,62 @@ void main() {
       expect(state.unseenTabIds, isEmpty);
     });
 
+    test(
+      'with "Resume and start sessions in the background" on — the '
+      'default — no tab opens and nothing moves: the dashboard shows it',
+      () async {
+        // The owner: "it started, a tab opened, but the dashboard isn't
+        // showing it". A session an agent starts runs at the server; with the
+        // owner on the dashboard, a tab is only something to steal the view.
+        final (container, server, parentTab, shellTab) = await withParentBehind(
+          background: true,
+        );
+        final tabsBefore = container
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .length;
+        insertChild(server, 'c6');
+        runOnHost('karmashala_c6');
+
+        await told(server, {
+          'change': 'openSessionTab',
+          'sessionId': 'c6',
+          'title': 'Child',
+          'reveal': 'background',
+        });
+
+        final state = container.read(terminalSessionsControllerProvider);
+        expect(state.tabs, hasLength(tabsBefore));
+        expect(state.activeTabId, shellTab);
+        expect(state.unseenTabIds, isEmpty);
+        expect(container.read(selectedSessionIdProvider), 'p1');
+        expect(container.read(sessionsDataProvider).getById('c6'), isNotNull);
+        expect(parentTab, isNot(shellTab));
+      },
+    );
+
+    test('a session asked for in front still comes to the front, whatever '
+        'the background setting', () async {
+      final (container, server) = await start(background: true);
+      server.sessionRows.insert(session(id: 'f1', title: 'Front'));
+      server.sessionWork.running.add('f1');
+      runOnHost('karmashala_f1');
+      server.sessionWork.tellIntent(
+        const OpenSessionTab(sessionId: 'f1', title: 'Front'),
+      );
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      final paneId = container.read(sessionsDataProvider).getById('f1')!.paneId;
+      expect(paneId, isNotNull);
+      expect(tabsWith(container, paneId!), 1);
+    });
+
     test('with "bring sessions agents start to the front" on, it comes to '
-        'the front as it used to', () async {
-      final (container, server, _, _) = await withParentBehind();
+        'the front as it used to, background setting or not', () async {
+      final (container, server, _, _) = await withParentBehind(
+        background: true,
+      );
       container
           .read(settingsControllerProvider.notifier)
           .setBringAgentSessionsToFront(true);

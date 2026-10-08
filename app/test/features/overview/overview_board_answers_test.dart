@@ -10,6 +10,13 @@ import 'package:karmashala/src/features/overview/application/overview_providers.
 import 'package:karmashala/src/features/overview/presentation/overview_queue_card.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
+import 'package:karmashala/src/features/sessions/application/session_input.dart'
+    show sessionSendRepliesProvider;
+import 'package:karmashala/src/features/sessions/application/session_queue_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionSent;
+import 'package:karmashala_session/session.dart'
+    show QueuedMessage, QueuedMessageOrigin, QueuedMessageState;
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
@@ -17,18 +24,39 @@ import 'package:karmashala_remote/remote.dart';
 
 import 'mission_fixture.dart';
 
-/// Records what the board sends, and sends nothing.
+/// Records what the board sends, and sends nothing — answering, when given
+/// [reply], as the server would through the one send path.
 class _SpyActions extends SessionActions {
-  _SpyActions(super.ref, this.sent);
+  _SpyActions(super.ref, this.sent) : _r = ref;
 
+  final Ref _r;
   final List<(String, String)> sent;
+
+  /// The key each send carried, in order.
+  static final requestIds = <String?>[];
+
+  /// Thrown by the next send, once.
+  static String? failNext;
+
+  /// What the server answers the next send.
+  static SessionSent? reply;
 
   @override
   Future<void> continueSession(
     String sessionId,
     String text, {
     String? requestId,
-  }) async => sent.add((sessionId, text));
+  }) async {
+    requestIds.add(requestId);
+    if (failNext case final words?) {
+      failNext = null;
+      throw StateError(words);
+    }
+    sent.add((sessionId, text));
+    if ((reply, requestId) case (final answer?, final key?)) {
+      _r.read(sessionSendRepliesProvider.notifier).record(key, answer);
+    }
+  }
 }
 
 class _Recorder implements PromptAnswering {
@@ -58,10 +86,18 @@ void main() {
   late Directory dir;
   final sent = <(String, String)>[];
   final questions = <RemoteQuestionAnswerRequest>[];
+  // The server's queue for each session, as `sessionQueueChanged` keeps it.
+  final queues = <String, List<QueuedMessage>>{};
+  final delivered = <String, List<QueuedMessage>>{};
 
   setUp(() async {
     sent.clear();
     questions.clear();
+    queues.clear();
+    delivered.clear();
+    _SpyActions.requestIds.clear();
+    _SpyActions.failNext = null;
+    _SpyActions.reply = null;
     dir = await Directory.systemTemp.createTemp('ks-board-answers');
   });
   tearDown(() async {
@@ -163,6 +199,10 @@ void main() {
       phone: phone,
       overrides: [
         sessionActionsProvider.overrideWith((ref) => _SpyActions(ref, sent)),
+        sessionQueueProvider.overrideWith((ref, id) => queues[id] ?? const []),
+        recentlyDeliveredProvider.overrideWith(
+          (ref, id) => delivered[id] ?? const [],
+        ),
         sessionAnswerableProvider.overrideWithValue((_) => true),
         sessionPromptAnswersProvider.overrideWithValue(recorder),
         chatOpenQuestionProvider.overrideWith(
@@ -248,6 +288,81 @@ void main() {
       expect(sent, [('ask-q', 'Merge it into feat/acp')]);
       expect(find.text('Sent'), findsOneWidget);
       expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+      await unmountMission(tester);
+    });
+
+    testWidgets('a send carries a request id, and a retry of the same words '
+        'carries the same one', (tester) async {
+      final field = await composer(tester);
+      _SpyActions.failNext = 'the link dropped';
+      await tester.enterText(field, 'Merge it into feat/acp');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(find.textContaining('Not sent'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+
+      expect(_SpyActions.requestIds, hasLength(2));
+      expect(_SpyActions.requestIds.first, isNotNull);
+      expect(_SpyActions.requestIds.last, _SpyActions.requestIds.first);
+      expect(sent, [('ask-q', 'Merge it into feat/acp')]);
+      await unmountMission(tester);
+    });
+
+    testWidgets("what it says is the server's word for that message: "
+        'Queued (2nd), then Sending…, then Delivered', (tester) async {
+      QueuedMessage message(String id, QueuedMessageState state, int seq) =>
+          QueuedMessage(
+            id: id,
+            sessionId: 'ask-q',
+            seq: seq,
+            text: id,
+            state: state,
+            origin: QueuedMessageOrigin.app,
+            createdAt: MissionFixture.now,
+            updatedAt: MissionFixture.now,
+          );
+      final (c, _) = await pump(tester);
+      await tester.ensureVisible(queueCard('ask-q'));
+      await settleMission(tester);
+      await tester.tap(find.byKey(const ValueKey('question-reply-in-words')));
+      await settleMission(tester);
+      final field = find.byKey(const ValueKey('overview-composer:ask-q'));
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await settleMission(tester);
+
+      queues['ask-q'] = [
+        message('q1', QueuedMessageState.queued, 1),
+        message('q2', QueuedMessageState.queued, 2),
+      ];
+      _SpyActions.reply = const SessionSent(
+        sent: true,
+        via: SessionSent.queuedVia,
+        queuedId: 'q2',
+        position: 2,
+        messageId: 'q2',
+      );
+      await tester.enterText(field, 'and the docs');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(find.text('Queued (2nd)'), findsOneWidget);
+      // Never the old guess.
+      expect(find.textContaining('goes when this turn ends'), findsNothing);
+
+      queues['ask-q'] = [message('q2', QueuedMessageState.delivering, 2)];
+      c.invalidate(sessionQueueProvider('ask-q'));
+      await settleMission(tester);
+      expect(find.text('Sending…'), findsOneWidget);
+
+      queues['ask-q'] = const [];
+      delivered['ask-q'] = [message('q2', QueuedMessageState.delivered, 2)];
+      c
+        ..invalidate(sessionQueueProvider('ask-q'))
+        ..invalidate(recentlyDeliveredProvider('ask-q'));
+      await settleMission(tester);
+      expect(find.text('Delivered'), findsOneWidget);
       await unmountMission(tester);
     });
 

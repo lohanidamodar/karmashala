@@ -6,6 +6,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/theme.dart';
+import '../../overview/application/overview_prefs.dart';
 import '../../system/launcher_hotkey.dart';
 import '../../system/native_status.dart';
 import '../application/settings_controller.dart';
@@ -262,8 +263,9 @@ class StartupSection extends ConsumerWidget {
   }
 }
 
-/// Settings → General → Session view: which face an agent session opens on.
-/// Shown on every client — a phone is where the answer differs.
+/// Settings → General → Session view: which face an agent session opens on,
+/// and whether resuming or starting one moves you. Shown on every client — a
+/// phone is where the first answer differs.
 class SessionViewSection extends ConsumerWidget {
   const SessionViewSection({super.key});
 
@@ -271,15 +273,33 @@ class SessionViewSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return SettingsSection(
       title: SettingsAnchor.sessionView.heading,
-      child: SettingsSwitchRow(
-        label: 'Open agent sessions in chat view',
-        help:
-            'Terminal sessions show their chat first; the Terminal '
-            'toggle is still one click away.',
-        value: ref.watch(sessionsOpenInChatProvider),
-        onChanged: ref
-            .read(settingsControllerProvider.notifier)
-            .setOpenSessionsInChat,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSwitchRow(
+            label: 'Open agent sessions in chat view',
+            help:
+                'Terminal sessions show their chat first; the Terminal '
+                'toggle is still one click away.',
+            value: ref.watch(sessionsOpenInChatProvider),
+            onChanged: ref
+                .read(settingsControllerProvider.notifier)
+                .setOpenSessionsInChat,
+          ),
+          // Kept on this device, in the Agent dashboard's own file.
+          SettingsSwitchRow(
+            key: const ValueKey('settings-launch-in-background'),
+            label: 'Resume and start sessions in the background',
+            help:
+                'From the command palette, the Agent dashboard or a '
+                "session's menu, no tab opens and you stay where you are. "
+                'Open and Open tab still open one. On this device.',
+            value: ref.watch(launchInBackgroundProvider),
+            onChanged: ref
+                .read(overviewPrefsProvider.notifier)
+                .setLaunchInBackground,
+          ),
+        ],
       ),
     );
   }

@@ -57,7 +57,8 @@ class HostDeployer {
     if (binary == null) return _noBinary(platform);
     _logger.debug(
       'host binary for ${platform.targetKey}: ${binary.source} (version ${binary.version}, '
-      '${binary.candidates == 1 ? 'the only candidate' : 'newest of ${binary.candidates} candidates'}).',
+      '${binary.candidates == 1 ? 'the only candidate' : 'chosen from ${binary.candidates} candidates'}'
+      '${binary.olderBundlesIn == null ? '' : '; older bundles in ${binary.olderBundlesIn} passed over'}).',
     );
 
     // One reading, before any path is spelled. Everything below is built from
@@ -153,7 +154,8 @@ class HostDeployer {
             ? 'The host on ${target.address} speaks protocol '
                   '${greeting.protocolVersion}; this app speaks '
                   '$kProtocolVersion. It is ${binary.version}, the newest '
-                  'host this build carries for ${platform.targetKey}.'
+                  'host in any folder the server reads bundles from for '
+                  '${platform.targetKey} (${binary.source}).'
             : 'The host on ${target.address} speaks protocol '
                   '${greeting.protocolVersion}; this app speaks '
                   '$kProtocolVersion. $why',

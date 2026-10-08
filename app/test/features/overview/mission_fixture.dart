@@ -72,7 +72,11 @@ class MissionFixture {
     this.activity = const [],
     this.contexts = const [],
     this.contextOfProject = const {},
+    this.starting = const {},
   }) : sessions = sessions ?? realisticSessions();
+
+  /// Sessions whose row is still `created`: started, with nothing reported.
+  final Set<String> starting;
 
   /// The contexts the owner created, and which project each one holds.
   final List<OverviewLaneKey> contexts;
@@ -608,7 +612,9 @@ class MissionFixture {
         agentInstallationId: 'a1',
         title: s.title,
         useWorktree: false,
-        status: s.state == AgentState.ended
+        status: starting.contains(s.id)
+            ? SessionStatus.created
+            : s.state == AgentState.ended
             ? SessionStatus.completed
             : SessionStatus.running,
         createdAt: at.subtract(const Duration(minutes: 30)),

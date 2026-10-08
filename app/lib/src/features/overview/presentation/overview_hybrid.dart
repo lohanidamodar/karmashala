@@ -34,7 +34,7 @@ List<(OverviewLane, List<OverviewCard>)> overviewWorkGroupsOf(
 ) => [
   for (final lane in board.lanes)
     if (lane.cards(BoardColumn.working) case final cards when cards.isNotEmpty)
-      (lane, byUrgency(cards)),
+      (lane, nestUnderParents(byUrgency(cards))),
 ];
 
 /// [board]'s cards as the Overview lays them out: what waits on you, asks
@@ -56,14 +56,19 @@ OverviewSections overviewSectionsOf(
     final byWait = since(a).compareTo(since(b));
     return byWait != 0 ? byWait : a.id.compareTo(b.id);
   });
-  final done = [for (final lane in board.lanes) ...lane.doneToday]
-    ..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt));
+  int newestFirst(OverviewCard a, OverviewCard b) =>
+      b.entry.activityAt.compareTo(a.entry.activityAt);
   return (
     queue: queue,
     work: [for (final (_, cards) in overviewWorkGroupsOf(board)) ...cards],
-    ready: [for (final lane in board.lanes) ...lane.cards(BoardColumn.ready)]
-      ..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt)),
-    done: done,
+    // A sub-session drawn as a card stays just after its parent.
+    ready: nestUnderParents(
+      [for (final lane in board.lanes) ...lane.cards(BoardColumn.ready)]
+        ..sort(newestFirst),
+    ),
+    done: nestUnderParents(
+      [for (final lane in board.lanes) ...lane.doneToday]..sort(newestFirst),
+    ),
   );
 }
 
@@ -212,14 +217,22 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 ),
                 if (phone)
                   for (final card in cards)
-                    OverviewPhoneRow(card: card, onOpen: onOpen)
+                    overviewTied(
+                      card,
+                      cards,
+                      OverviewPhoneRow(card: card, onOpen: onOpen),
+                    )
                 else
                   ..._grid([
                     for (final card in cards)
-                      OverviewWorkCard(
-                        key: ValueKey('overview-work-card:${card.id}'),
-                        card: card,
-                        onOpen: onOpen,
+                      overviewTied(
+                        card,
+                        cards,
+                        OverviewWorkCard(
+                          key: ValueKey('overview-work-card:${card.id}'),
+                          card: card,
+                          onOpen: onOpen,
+                        ),
                       ),
                   ], across),
               ],
@@ -234,14 +247,22 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
               ),
               if (phone)
                 for (final card in sections.ready)
-                  OverviewPhoneRow(card: card, onOpen: onOpen)
+                  overviewTied(
+                    card,
+                    sections.ready,
+                    OverviewPhoneRow(card: card, onOpen: onOpen),
+                  )
               else
                 ..._grid([
                   for (final card in sections.ready)
-                    OverviewDoneCard(
-                      key: ValueKey('overview-ready-card:${card.id}'),
-                      card: card,
-                      onOpen: onOpen,
+                    overviewTied(
+                      card,
+                      sections.ready,
+                      OverviewDoneCard(
+                        key: ValueKey('overview-ready-card:${card.id}'),
+                        card: card,
+                        onOpen: onOpen,
+                      ),
                     ),
                 ], across),
             ],
@@ -289,7 +310,11 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
               ),
               if (_doneOpen)
                 for (final card in done)
-                  OverviewDoneRow(card: card, onOpen: onOpen),
+                  overviewTied(
+                    card,
+                    done,
+                    OverviewDoneRow(card: card, onOpen: onOpen),
+                  ),
             ],
           ],
         );

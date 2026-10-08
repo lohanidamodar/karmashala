@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_resume.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open_list.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
@@ -28,6 +33,13 @@ void main() {
   late TestMachine db;
   late FakeDataServer server;
   late Override data;
+  late _SpyResumer resumer;
+
+  /// The session a pick showed: in the dashboard's peek with the background
+  /// setting on, selected in the lists with it off.
+  String? shown(ProviderContainer container) =>
+      container.read(overviewFocusProvider).peeked ??
+      container.read(selectedSessionIdProvider);
 
   setUp(() async {
     db = TestMachine();
@@ -54,16 +66,32 @@ void main() {
     // type here, which is the same reason `fakeTerminalOverrides` leaves its
     // own return type inferred.
     ExplorerActions Function(Ref ref)? explorerActions,
+    bool background = true,
   }) async {
+    final prefs = Directory.systemTemp.createTempSync('ks-quick-open');
+    addTearDown(() => prefs.deleteSync(recursive: true));
     final container = ProviderContainer(
       overrides: [
         data,
         ...fakeTerminalOverrides(machine: db),
+        overviewPrefsDirectoryProvider.overrideWithValue(() async => prefs),
+        overviewResumerProvider.overrideWith(_SpyResumer.new),
         if (explorerActions != null)
           explorerActionsProvider.overrideWith(explorerActions),
       ],
     );
     addTearDown(container.dispose);
+    container
+        .read(overviewPrefsProvider.notifier)
+        .setLaunchInBackground(background);
+    resumer = container.read(overviewResumerProvider) as _SpyResumer;
+    // Built now, so a test holding the spy has it even when nothing opens.
+    if (explorerActions != null) container.read(explorerActionsProvider);
+    // The dashboard's peek lives while the dashboard is built; held here so
+    // a session shown there can be read back.
+    // Disposed with the container: closing it after the scope has gone is
+    // refused.
+    container.listen(overviewFocusProvider, (_, _) {});
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -163,7 +191,7 @@ void main() {
     await type(tester, 'login');
     await press(tester, LogicalKeyboardKey.enter);
 
-    expect(container.read(selectedSessionIdProvider), 's1');
+    expect(shown(container), 's1');
     expect(container.read(selectedRepositoryIdProvider), 'r1');
     // It closed behind itself.
     expect(find.byType(QuickOpen), findsNothing);
@@ -183,7 +211,7 @@ void main() {
     await type(tester, '#');
     await drive();
     await press(tester, LogicalKeyboardKey.enter);
-    return container.read(selectedSessionIdProvider);
+    return shown(container);
   }
 
   testWidgets('Down moves the selection off the first result', (tester) async {
@@ -322,7 +350,7 @@ void main() {
     await type(tester, '#login');
     await press(tester, LogicalKeyboardKey.enter);
 
-    expect(container.read(selectedSessionIdProvider), 's1');
+    expect(shown(container), 's1');
   });
 
   testWidgets('Escape closes it without opening anything', (tester) async {
@@ -390,9 +418,8 @@ void main() {
     expect(container.read(terminalVisibleProvider), isTrue);
   });
 
-  testWidgets('picking a session opens it, not just selects it', (
-    tester,
-  ) async {
+  testWidgets('with the background setting off, picking a session opens it, '
+      'not just selects it', (tester) async {
     // The owner: "quick menu bataa session resume garda kina yesto aaucha?
     // kina sidhai resume hunna?" — picking a session by name landed on the
     // workbench's "No terminal of ours is running this session" screen with a
@@ -401,6 +428,7 @@ void main() {
     late _SpyActions actions;
     final container = await open(
       tester,
+      background: false,
       explorerActions: (ref) => actions = _SpyActions(ref),
     );
     await type(tester, '#');
@@ -412,6 +440,76 @@ void main() {
       reason: 'the pick reached the same action the Explorer click runs',
     );
     expect(actions.opened.single, container.read(selectedSessionIdProvider));
+    expect(container.read(overviewFocusProvider).peeked, isNull);
+  });
+
+  group('a stopped session: shown, and resumed only when asked', () {
+    // A resume sends the conversation back as context, which costs tokens;
+    // picking a row is usually a look.
+    testWidgets('setting on: Enter shows it in the dashboard\'s peek — no '
+        'tab, no resume', (tester) async {
+      late _SpyActions actions;
+      final container = await open(
+        tester,
+        explorerActions: (ref) => actions = _SpyActions(ref),
+      );
+      await type(tester, 'login');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(container.read(overviewFocusProvider).peeked, 's1');
+      expect(resumer.resumed, isEmpty);
+      expect(actions.opened, isEmpty);
+      expect(container.read(selectedSessionIdProvider), isNull);
+    });
+
+    testWidgets('setting on: Shift+Enter resumes it in the background', (
+      tester,
+    ) async {
+      late _SpyActions actions;
+      final container = await open(
+        tester,
+        explorerActions: (ref) => actions = _SpyActions(ref),
+      );
+      await type(tester, 'login');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+
+      expect(resumer.resumed, ['s1']);
+      expect(actions.opened, isEmpty);
+      expect(container.read(overviewFocusProvider).peeked, 's1');
+    });
+
+    testWidgets("setting on: the row's Resume button resumes it", (
+      tester,
+    ) async {
+      await open(tester);
+      await type(tester, 'login');
+      await tester.tap(find.byKey(const ValueKey('quick-open-resume')));
+      await tester.pumpAndSettle();
+
+      expect(resumer.resumed, ['s1']);
+    });
+
+    testWidgets('setting off: Shift+Enter resumes it into its tab', (
+      tester,
+    ) async {
+      late _SpyActions actions;
+      await open(
+        tester,
+        background: false,
+        explorerActions: (ref) => actions = _SpyActions(ref),
+      );
+      await type(tester, 'login');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+
+      expect(actions.opened, ['s1']);
+      expect(resumer.resumed, isEmpty);
+    });
   });
 
   testWidgets('a tab running one of our sessions is not listed twice', (
@@ -778,6 +876,19 @@ void main() {
 
 /// Records what quick open asked to open, standing in for the real actions so
 /// the test never starts a process.
+/// Records an explicit resume instead of resuming.
+class _SpyResumer extends OverviewResumer {
+  _SpyResumer(super.ref);
+
+  final resumed = <String>[];
+
+  @override
+  Future<ExplorerResult> resume(String sessionId, {String? message}) async {
+    resumed.add(sessionId);
+    return const ExplorerResult(ExplorerOutcome.resumed);
+  }
+}
+
 class _SpyActions extends ExplorerActions {
   _SpyActions(super.ref);
 

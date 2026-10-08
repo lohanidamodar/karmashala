@@ -387,6 +387,7 @@ class QuickOpenRow extends StatefulWidget {
     this.detailIsShortcut = false,
     this.onOpenBeside,
     this.besideTooltip = 'Open to the side',
+    this.onResume,
     this.leading,
     super.key,
   });
@@ -428,6 +429,10 @@ class QuickOpenRow extends StatefulWidget {
   /// What the [onOpenBeside] button says, with the chord that does the same.
   final String besideTooltip;
 
+  /// Resumes the stopped session the row names — Shift+Enter does the same —
+  /// where a tap only shows it. Drawn like [onOpenBeside]'s button.
+  final VoidCallback? onResume;
+
   /// The most of the row a [detail] may take.
   static const _detailShare = 0.4;
 
@@ -452,10 +457,20 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
       :enabled,
       :detailIsShortcut,
       :onOpenBeside,
+      :onResume,
     ) = widget;
-    final beside = onOpenBeside == null || !(_hovered || selected)
+    final shown = _hovered || selected;
+    final beside = onOpenBeside == null || !shown
         ? null
         : _BesideButton(tooltip: widget.besideTooltip, onPressed: onOpenBeside);
+    final resume = onResume == null || !shown
+        ? null
+        : _BesideButton(
+            key: const ValueKey('quick-open-resume'),
+            tooltip: 'Resume (Shift+Enter)',
+            icon: AppIcons.play,
+            onPressed: onResume,
+          );
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
@@ -504,7 +519,7 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
               ),
               padding: EdgeInsets.only(
                 left: Insets.sm,
-                right: trailing == null && beside == null
+                right: trailing == null && beside == null && resume == null
                     ? Insets.sm
                     : Insets.xs,
               ),
@@ -559,6 +574,10 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
                       const SizedBox(width: Insets.xs),
                       trailing,
                     ],
+                    if (resume != null) ...[
+                      const SizedBox(width: Insets.xs),
+                      resume,
+                    ],
                     if (beside != null) ...[
                       const SizedBox(width: Insets.xs),
                       beside,
@@ -577,10 +596,16 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
 /// [QuickOpenRow.onOpenBeside] as a glyph at the row's end. Never focusable:
 /// the keyboard stays in the box, where Ctrl+Enter already does the same.
 class _BesideButton extends StatelessWidget {
-  const _BesideButton({required this.tooltip, required this.onPressed});
+  const _BesideButton({
+    required this.tooltip,
+    required this.onPressed,
+    this.icon = AppIcons.squareSplitHorizontal,
+    super.key,
+  });
 
   final String tooltip;
   final VoidCallback onPressed;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -599,7 +624,7 @@ class _BesideButton extends StatelessWidget {
             height: Chrome.control,
           ),
           color: Theme.of(context).colorScheme.onSurfaceVariant,
-          icon: const Icon(AppIcons.squareSplitHorizontal),
+          icon: Icon(icon),
           onPressed: onPressed,
         ),
       ),

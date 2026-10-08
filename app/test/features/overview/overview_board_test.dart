@@ -17,6 +17,7 @@ void main() {
     Duration age = Duration.zero,
     String env = 'windows',
     String repo = 'r1',
+    SessionStatus status = SessionStatus.running,
   }) => WorkspaceSessionEntry(
     id: id,
     title: 'T $id',
@@ -29,7 +30,7 @@ void main() {
       agentInstallationId: 'a1',
       title: 'T $id',
       useWorktree: false,
-      status: SessionStatus.running,
+      status: status,
       createdAt: now.subtract(age),
       parentSessionId: parent,
     ),
@@ -63,6 +64,7 @@ void main() {
     OverviewFilter filter = const OverviewFilter(),
     OverviewGroupBy groupBy = OverviewGroupBy.project,
     BoardOrderMemo? memo,
+    OverviewSubSessionMode subSessions = OverviewSubSessionMode.inside,
   }) => buildOverviewBoard(
     g,
     facts: with_ ?? facts(),
@@ -70,6 +72,7 @@ void main() {
     groupBy: groupBy,
     startOfToday: startOfToday,
     memo: memo ?? BoardOrderMemo(),
+    subSessions: subSessions,
   );
 
   List<String> ids(OverviewLane lane, BoardColumn column) => [
@@ -146,7 +149,8 @@ void main() {
       expect(needs.firstWhere((c) => c.entry.id == 'g').breadcrumb, 'T c');
     });
 
-    test('a live child of an ended parent keeps a card of its own', () {
+    test('an ended parent whose child works stays at work, carrying it', () {
+      // Round 56: a parent is not done while its sub-sessions work.
       final board = build(
         groups({
           AgentState.ended: [entry('p')],
@@ -154,8 +158,185 @@ void main() {
         }),
       );
       final working = board.lanes.single.cards(BoardColumn.working).single;
-      expect(working.entry.id, 'c');
-      expect(working.breadcrumb, 'T p');
+      expect(working.entry.id, 'p');
+      expect(working.waitingOn, 1);
+      expect(working.children!.working, 1);
+    });
+  });
+
+  group('a parent while its sub-sessions work', () {
+    for (final mode in OverviewSubSessionMode.values) {
+      group(mode.label, () {
+        OverviewBoard of(Map<AgentState, List<WorkspaceSessionEntry>> by) =>
+            build(groups(by), subSessions: mode);
+
+        test('a ready parent with a working child is at work, waiting on '
+            'it', () {
+          final lane = of({
+            AgentState.ready: [entry('p')],
+            AgentState.working: [entry('c', parent: 'p')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.working).first, 'p');
+          expect(ids(lane, BoardColumn.ready), isEmpty);
+          final parent = lane.cards(BoardColumn.working).first;
+          expect(parent.waitingOn, 1);
+        });
+
+        test('a child that needs you puts its parent in the waiting state '
+            'too', () {
+          final lane = of({
+            AgentState.ready: [entry('p')],
+            AgentState.needsYou: [entry('c', parent: 'p')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.needsYou), contains('p'));
+          expect(ids(lane, BoardColumn.ready), isEmpty);
+        });
+
+        test('a grandchild at work holds the top parent too', () {
+          final lane = of({
+            AgentState.ended: [entry('p'), entry('c', parent: 'p')],
+            AgentState.working: [entry('g', parent: 'c')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.working).first, 'p');
+          expect(ids(lane, BoardColumn.done), isNot(contains('p')));
+        });
+
+        test('only once every child is done or ended does it go to Done', () {
+          final lane = of({
+            AgentState.ended: [entry('p'), entry('c1', parent: 'p')],
+            AgentState.ready: [entry('c2', parent: 'p')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.done), contains('p'));
+          expect(ids(lane, BoardColumn.working), isEmpty);
+          final parent = lane
+              .cards(BoardColumn.done)
+              .firstWhere((c) => c.id == 'p');
+          expect(parent.waitingOn, isNull);
+        });
+
+        test('a parent at work on its own is not said to wait', () {
+          final lane = of({
+            AgentState.working: [entry('p'), entry('c', parent: 'p')],
+          }).lanes.single;
+          expect(lane.cards(BoardColumn.working).first.waitingOn, isNull);
+        });
+      });
+    }
+  });
+
+  group('a sub-session an agent just started', () {
+    // Its row says `created` and nothing has reported a status yet, which
+    // the lens reads as ready: it sat in "Done · ready to close", or folded
+    // into a ready parent's card that drew no sub-sessions.
+    List<AgentStateGroup> justStarted() => groups({
+      AgentState.working: [entry('p')],
+      AgentState.ready: [
+        entry('c', parent: 'p', status: SessionStatus.created),
+      ],
+    });
+
+    test('as cards: an "At work" card, starting', () {
+      final board = build(
+        justStarted(),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      final lane = board.lanes.single;
+      expect(ids(lane, BoardColumn.working), ['p', 'c']);
+      expect(ids(lane, BoardColumn.ready), isEmpty);
+      final child = lane.cards(BoardColumn.working).last;
+      expect(overviewIsStarting(child), isTrue);
+      expect(
+        overviewIsStarting(lane.cards(BoardColumn.working).first),
+        isFalse,
+      );
+    });
+
+    test('inside: on its parent\'s card, counted as working', () {
+      final board = build(justStarted());
+      final parent = board.lanes.single.cards(BoardColumn.working).single;
+      expect(parent.children!.working, 1);
+      expect(board.children['p']!.single.state, AgentState.working);
+    });
+
+    test('once it reports, its own state stands', () {
+      final board = build(
+        groups({
+          AgentState.working: [entry('p')],
+          AgentState.ready: [entry('c', parent: 'p')],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      expect(ids(board.lanes.single, BoardColumn.ready), ['c']);
+    });
+  });
+
+  group('sub-sessions as cards', () {
+    test('each child is a card of its own, right after its parent, which '
+        'it names', () {
+      final board = build(
+        groups({
+          AgentState.working: [
+            entry('p', age: const Duration(minutes: 10)),
+            entry('x', age: const Duration(minutes: 5)),
+            entry('c1', parent: 'p'),
+            entry('g', parent: 'c1', age: const Duration(minutes: 1)),
+          ],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      final working = board.lanes.single.cards(BoardColumn.working);
+      // Newest first is c1, g, x, p; each child follows its parent instead.
+      expect([for (final c in working) c.id], ['x', 'p', 'c1', 'g']);
+      final c1 = working.firstWhere((c) => c.id == 'c1');
+      expect(c1.parentId, 'p');
+      expect(c1.breadcrumb, 'T p');
+      expect(working.firstWhere((c) => c.id == 'g').parentId, 'c1');
+      expect(working.firstWhere((c) => c.id == 'p').children, isNull);
+    });
+
+    test('a child in another state keeps its own column, once', () {
+      final board = build(
+        groups({
+          AgentState.working: [entry('p')],
+          AgentState.needsYou: [entry('c', parent: 'p')],
+          AgentState.ready: [entry('r', parent: 'p')],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      final lane = board.lanes.single;
+      expect(ids(lane, BoardColumn.needsYou), ['c']);
+      expect(ids(lane, BoardColumn.ready), ['r']);
+      expect(ids(lane, BoardColumn.working), ['p']);
+    });
+
+    test('the dashboard\'s own order keeps a child after its parent', () {
+      final cards = build(
+        groups({
+          AgentState.working: [
+            entry('p', age: const Duration(minutes: 10)),
+            entry('c', parent: 'p'),
+            entry('q', age: const Duration(minutes: 3)),
+          ],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      ).lanes.single.cards(BoardColumn.working);
+      final reordered = byUrgency(cards.reversed.toList());
+      expect(
+        [for (final c in nestUnderParents(reordered)) c.id].join(),
+        anyOf('pcq', 'qpc'),
+      );
+    });
+
+    test('inside their parent, the default, children stack as before', () {
+      final board = build(
+        groups({
+          AgentState.working: [entry('p'), entry('c', parent: 'p')],
+        }),
+      );
+      final working = board.lanes.single.cards(BoardColumn.working);
+      expect([for (final c in working) c.id], ['p']);
+      expect(working.single.children!.total, 1);
+      expect(board.children['p']!.single.id, 'c');
     });
   });
 
@@ -206,12 +387,13 @@ void main() {
       const contextOfProject = {'p1': 'c-apps', 'p2': 'c-web', 'p4': 'c-gone'};
       final byContext = OverviewFacts(
         projectOf: (e) => {'a': 'p1', 'b': 'p2', 'c': 'p3', 'd': 'p4'}[e.id],
-        contextOf: (e) => contextOfProject[{
-          'a': 'p1',
-          'b': 'p2',
-          'c': 'p3',
-          'd': 'p4',
-        }[e.id]],
+        contextOf: (e) =>
+            contextOfProject[{
+              'a': 'p1',
+              'b': 'p2',
+              'c': 'p3',
+              'd': 'p4',
+            }[e.id]],
         machineOf: (e) => e.directory?.environmentId,
         agentOf: (_) => 'claude-code',
         projects: const [],

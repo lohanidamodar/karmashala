@@ -29,6 +29,8 @@ import '../../../features/sessions/presentation/approval_request_card.dart'
     show BoardApproval, ProviderReader, boardApprovalOffersBy;
 import '../../../features/terminal/application/terminal_profiles.dart';
 import 'package:karmashala_remote/remote.dart' show RemoteQuestion;
+import '../../../features/overview/application/overview_prefs.dart'
+    show launchInBackgroundProvider;
 import 'quick_open_cache.dart';
 import 'typed_command.dart';
 
@@ -284,6 +286,7 @@ CommandCatalog readCommandCatalog(
     read(settingsControllerProvider),
   );
   return CommandCatalog(
+    launchInBackground: read(launchInBackgroundProvider),
     scratchInstallation: scratch == null
         ? null
         : CommandInstallation(id: scratch.id, agentId: scratch.agentId),

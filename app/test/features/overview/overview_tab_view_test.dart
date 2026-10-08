@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -526,7 +528,7 @@ void main() {
       expect(byKey('overview-resume-picker'), findsNothing);
       expect(c.read(overviewFocusProvider).peeked, 'parked');
       expect(byKey('overview-peek:parked'), findsOneWidget);
-      expect(c.read(overviewPrefsProvider).resumeKeepsHere, isTrue);
+      expect(c.read(overviewPrefsProvider).launchInBackground, isTrue);
       expectStayedPut(c);
     });
 
@@ -578,7 +580,7 @@ void main() {
       expectStayedPut(c);
     });
 
-    testBoard('unticked, it opens a tab and remembers that', (tester) async {
+    testBoard('unticked, it opens a tab, this once', (tester) async {
       final c = await pump(tester, const Size(1440, 900));
       await openPicker(tester);
       await tester.tap(row('parked'));
@@ -589,7 +591,22 @@ void main() {
       await settle(tester);
 
       expect(actions.opened, ['parked']);
-      expect(c.read(overviewPrefsProvider).resumeKeepsHere, isFalse);
+      expect(c.read(overviewPrefsProvider).launchInBackground, isTrue);
+    });
+
+    testBoard('with the setting off, it starts unticked', (tester) async {
+      final c = await pump(tester, const Size(1440, 900));
+      c.read(overviewPrefsProvider.notifier).setLaunchInBackground(false);
+      await openPicker(tester);
+      await tester.tap(row('parked'));
+      await settle(tester);
+
+      expect(
+        tester
+            .widget<CheckboxListTile>(byKey('overview-resume-keep-here'))
+            .value,
+        isFalse,
+      );
     });
 
     testBoard('on a phone it is a full-screen sheet, and resuming keeps you '
@@ -716,6 +733,29 @@ void main() {
         expectStayedPut(c);
       });
 
+      testBoard("with the setting off, the peek's Resume opens its tab", (
+        tester,
+      ) async {
+        final c = await pump(tester, const Size(1440, 900));
+        c.read(overviewPrefsProvider.notifier).setLaunchInBackground(false);
+        await peekPaused(tester);
+        await tester.tap(byKey('overview-peek-resume'));
+        await settle(tester);
+
+        expect(actions.opened, ['paused']);
+        expect(starts(), isEmpty);
+      });
+
+      testBoard("Open tab opens it whatever the setting", (tester) async {
+        final c = await pump(tester, const Size(1440, 900));
+        expect(c.read(overviewPrefsProvider).launchInBackground, isTrue);
+        await peekPaused(tester);
+        await tester.tap(byKey('overview-peek-open'));
+        await settle(tester);
+
+        expect(actions.opened, ['paused']);
+      });
+
       testBoard('a card\'s ⋯ offers Resume', (tester) async {
         final c = await pump(tester, const Size(1440, 900));
         await tester.scrollUntilVisible(
@@ -751,6 +791,67 @@ void main() {
         expect(spec.prompt, 'and the docs');
         expectStayedPut(c);
       });
+
+      // The box is disabled while a message goes, and a disabled field gives
+      // the keys up; after the send they have to come back to it, while the
+      // card moves on — at work, then waiting.
+      for (final how in ['Enter', 'the send button']) {
+        testBoard('after a send by $how the peek keeps the keys in its box, '
+            'as the card moves group', (tester) async {
+          await pump(tester, const Size(1440, 900));
+          await peekPaused(tester);
+          Finder box() => find
+              .descendant(
+                of: byKey('overview-peek:paused'),
+                matching: find.byType(EditableText),
+              )
+              .last;
+          await tester.tap(box());
+          await settle(tester);
+          await tester.enterText(box(), 'and the docs');
+          // A server that takes a moment, as a real one does: the box draws
+          // disabled while it waits.
+          final slow = server.hold = Completer<void>();
+          if (how == 'Enter') {
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          } else {
+            await tester.tap(
+              find
+                  .descendant(
+                    of: byKey('overview-peek:paused'),
+                    matching: find.byTooltip(
+                      'Send (Enter) · Shift + Enter for a new line',
+                    ),
+                  )
+                  .last,
+            );
+          }
+          for (var i = 0; i < 3; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          server.hold = null;
+          slow.complete();
+          await settle(tester);
+          expect(starts().single.prompt, 'and the docs');
+
+          bool boxHasKeys() =>
+              tester.widget<EditableText>(box()).focusNode.hasFocus;
+          expect(boxHasKeys(), isTrue, reason: 'right after the send');
+
+          server.attention.statusOf('paused', AgentActivityStatus.working);
+          await settle(tester);
+          expect(boxHasKeys(), isTrue, reason: 'at work');
+
+          server.attention.statusOf(
+            'paused',
+            AgentActivityStatus.idle,
+            waiting: AgentWaitKind.input,
+          );
+          await settle(tester);
+          expect(boxHasKeys(), isTrue, reason: 'waiting');
+          expect(byKey('overview-peek:paused'), findsOneWidget);
+        });
+      }
 
       testBoard('"Resuming…" shows while it comes back', (tester) async {
         final c = await pump(tester, const Size(1440, 900));
@@ -795,6 +896,106 @@ void main() {
           expect(saysResuming(key), findsNothing, reason: key);
         }
       });
+    });
+  });
+
+  group('a click outside the peek closes it, as Esc does', () {
+    Finder byKey(String key) => find.byKey(ValueKey(key));
+
+    Future<ProviderContainer> peekBusy(
+      WidgetTester tester, {
+      Size size = const Size(1440, 900),
+    }) async {
+      final c = await pump(tester, size);
+      await tester.tap(find.text('Chat busy').first);
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+      return c;
+    }
+
+    /// The board's empty space: the foot of its list, under the last card.
+    Future<void> tapBoardSpace(WidgetTester tester) async {
+      final list = tester.getRect(hybridList.first);
+      await tester.tapAt(Offset(list.left + 8, list.bottom - 8));
+      await settle(tester);
+    }
+
+    testBoard('docked: the board\'s space closes it', (tester) async {
+      final c = await peekBusy(tester);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(byKey('overview-peek:busy'), findsNothing);
+    });
+
+    testBoard('overlay, below 1280 px: the board beside it closes it', (
+      tester,
+    ) async {
+      final c = await peekBusy(tester, size: const Size(1100, 900));
+      expect(byKey('overview-peek-overlay'), findsOneWidget);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+    });
+
+    testBoard('another card switches it instead', (tester) async {
+      final c = await peekBusy(tester);
+      await tester.tap(find.text('Chat idle').first);
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'idle');
+    });
+
+    testBoard('the peek itself, the header and the filters never close it', (
+      tester,
+    ) async {
+      final c = await peekBusy(tester);
+      await tester.tap(
+        find
+            .descendant(
+              of: byKey('overview-peek:busy'),
+              matching: find.text('Chat busy'),
+            )
+            .first,
+      );
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+
+      await tester.tap(byKey('overview-filter-button'));
+      await settle(tester);
+      expect(byKey('overview-filter-panel'), findsOneWidget);
+      await tester.tap(byKey('overview-filter-archived'));
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+    });
+
+    testBoard('side by side, both close', (tester) async {
+      final c = await pump(tester, const Size(1900, 1000));
+      c.read(overviewFocusProvider.notifier).peekSideBySide('busy', 'idle');
+      await settle(tester);
+      expect(byKey('overview-side-by-side-peeks'), findsOneWidget);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(c.read(overviewFocusProvider).beside, isNull);
+    });
+
+    testBoard('not while its box holds an unsent message, which is kept', (
+      tester,
+    ) async {
+      final c = await peekBusy(tester);
+      final box = find
+          .descendant(
+            of: byKey('overview-peek:busy'),
+            matching: find.byType(EditableText),
+          )
+          .last;
+      await tester.enterText(box, 'half a thought');
+      await settle(tester);
+
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+
+      await tester.enterText(box, '');
+      await settle(tester);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
     });
   });
 }

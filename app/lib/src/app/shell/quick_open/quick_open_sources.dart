@@ -37,6 +37,11 @@ import '../../../features/explorer/application/checkout_picker.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/explorer/application/worktree_choices.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
+import '../../../features/overview/application/overview_prefs.dart';
+import '../../../features/overview/application/overview_resume.dart';
+import '../../../features/overview/presentation/background_launch_notice.dart';
+import '../../../features/sessions/application/session_engine_provider.dart';
+import '../../../features/sessions/application/session_launcher.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
 import '../../../features/sessions/application/session_list_prefs.dart';
 import '../../../features/sessions/application/session_providers.dart';
@@ -99,7 +104,7 @@ import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
 import 'quick_open_step.dart';
 import 'repo_file_index.dart';
-import 'typed_command_runner.dart' show commandDefaultCheckout;
+import 'typed_command_runner.dart' show commandDefaultCheckout, peekOnDashboard;
 
 /// Per-group priors, added to every match in that group. Small on purpose: a
 /// large one would let a weak session match outrank an exact command match.
@@ -439,7 +444,7 @@ class QuickOpenSources {
         'New session…',
         icon: AppIcons.chatCircleDots,
         shortcut: shellCommandLabel('session.new'),
-        onSelect: () => NewSessionDialog.show(context),
+        onSelect: _newSessionDialog,
       ),
       if (ref.read(selectedRepositoryIdProvider) != null)
         // A step, not a dismissal: git is asked only once it is picked.
@@ -1196,7 +1201,7 @@ class QuickOpenSources {
     keywords: const ['start', 'agent'],
     onSelect: () {
       final where = destination();
-      dismiss(() => NewSessionDialog.show(context, destination: where));
+      dismiss(() => _newSessionDialog(destination: where));
     },
   );
 
@@ -1260,6 +1265,7 @@ class QuickOpenSources {
   /// narrows them to one [projectId] or one [repositoryId]; the rows are the
   /// full list's own, so picking one does exactly what it does there.
   List<QuickOpenItem> _sessions({String? projectId, String? repositoryId}) {
+    final container = ProviderScope.containerOf(context, listen: false);
     final sessionDao = ref.read(sessionsDataProvider);
     final importedDao = ref.read(importedSessionsProvider);
     final workspace = ref.read(workspaceDataProvider);
@@ -1315,8 +1321,10 @@ class QuickOpenSources {
               ],
               weight: _sessionWeight + here + recency,
               opensTab: true,
-              onSelect: () =>
-                  dismiss(() => focusSession(session.id, imported: false)),
+              onSelect: () => dismiss(pickSession(session.id)),
+              onResume: _stopped(container, session.id)
+                  ? () => dismiss(resumeSession(session.id))
+                  : null,
             ),
           ));
         }
@@ -1373,6 +1381,84 @@ class QuickOpenSources {
       return 'opened in an external terminal';
     }
     return null;
+  }
+
+  /// A native session picked by name: shown, never resumed — a resume sends
+  /// the conversation back as context, which costs tokens, and a pick is
+  /// usually a look. With "Resume and start sessions in the background" on,
+  /// one nothing runs is shown in the Agent dashboard's peek, with no tab;
+  /// anything else opens as [focusSession] does.
+  void Function() pickSession(String sessionId) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    return () {
+      if (!container.read(launchInBackgroundProvider) ||
+          !_stopped(container, sessionId)) {
+        unawaited(focusSession(sessionId, imported: false));
+        return;
+      }
+      openOverviewTab(ref);
+      peekOnDashboard(container, sessionId);
+    };
+  }
+
+  /// A stopped session's explicit Resume — Shift+Enter or the row's button:
+  /// where the person is while the background setting is on (its card
+  /// peeked, or a notice with Open), into its tab while it is off.
+  void Function() resumeSession(String sessionId) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    return () {
+      if (!container.read(launchInBackgroundProvider)) {
+        unawaited(focusSession(sessionId, imported: false));
+        return;
+      }
+      unawaited(() async {
+        final result = await container
+            .read(overviewResumerProvider)
+            .resume(sessionId);
+        if (result.message case final message?) {
+          messenger?.showSnackBar(SnackBar(content: Text(message)));
+        }
+        if (result.isFailure) return;
+        announceBackgroundLaunch(
+          container,
+          sessionId: sessionId,
+          messenger: messenger,
+        );
+      }());
+    };
+  }
+
+  /// Whether nothing runs [sessionId]: what a Resume would bring back.
+  static bool _stopped(ProviderContainer container, String sessionId) {
+    final session = container.read(sessionsDataProvider).getById(sessionId);
+    if (session == null) return false;
+    final launcher = container.read(sessionLauncherProvider);
+    return launcher.livePaneFor(sessionId) == null &&
+        !launcher.heldByHostOnly(sessionId) &&
+        !session.status.claimsLive &&
+        !container.read(sessionEngineProvider).isActive(sessionId);
+  }
+
+  /// The New-session dialog, its "Keep working here" starting as the
+  /// background setting says; a session started there is pointed at.
+  Future<void> _newSessionDialog({SessionDestination? destination}) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    return NewSessionDialog.show(
+      context,
+      destination: destination,
+      keepHere: container.read(launchInBackgroundProvider),
+      onStarted: (session, {required keptHere}) {
+        if (!keptHere) return;
+        announceBackgroundLaunch(
+          container,
+          sessionId: session.id,
+          messenger: messenger,
+          started: true,
+        );
+      },
+    );
   }
 
   /// Selects a session and everything above it, through the one walk that

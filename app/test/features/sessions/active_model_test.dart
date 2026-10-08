@@ -87,12 +87,14 @@ void main() {
       expect(nothing.label, isNot('default'));
     });
 
-    test('a model its catalogue does not know is named by its id', () {
+    test('a model its catalogue does not know is named from its id', () {
+      // Read as a name — never the raw id on the chip (round 56) — while the
+      // id it reported is kept as it came.
       final view = modelChipViewFor(
         state(inherited: true),
         active: reported('claude-fable-5-1'),
       );
-      expect(view.label, 'claude-fable-5-1');
+      expect(view.label, 'Fable 5.1');
       expect(view.activeModelId, 'claude-fable-5-1');
     });
   });
@@ -119,6 +121,20 @@ void main() {
         label: kModelNotRecorded,
         qualifier: null,
       ));
+    });
+
+    test('a Claude id no list names still reads as a model, never raw', () {
+      // The dashboard showed "claude-opus-5-5": Claude Code's own list leaves
+      // its `default` row out, and that row is what resolves to the model a
+      // session on the default runs — so nothing in the list names it.
+      expect(modelLabelIn('claude-opus-5-5'), 'Opus 5.5');
+      expect(modelLabelIn('claude-sonnet-5-5-20260901'), 'Sonnet 5.5');
+      expect(modelLabelIn('claude-haiku-4-5-20251001'), 'Haiku 4.5');
+      expect(modelLabelIn('claude-opus-5-5[1m]'), 'Opus 5.5 (1M context)');
+      expect(modelLabelIn('claude-fable-5-1'), 'Fable 5.1');
+      // Anything else is left as its agent wrote it.
+      expect(modelLabelIn('gpt-6-astra'), 'gpt-6-astra');
+      expect(modelLabelIn('claude-mystery-9'), 'claude-mystery-9');
     });
 
     test('a model it was put on is named by its choice', () {

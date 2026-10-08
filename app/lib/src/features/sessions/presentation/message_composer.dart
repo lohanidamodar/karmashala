@@ -1002,6 +1002,13 @@ class _MessageComposerState extends State<MessageComposer> {
 
     final messenger = ScaffoldMessenger.of(context);
     final touch = _touch;
+    // The box is disabled while it sends, and a disabled field gives up the
+    // keys — on a phone that closes the keyboard, which reads as the session
+    // ending; on a desktop the next message has to be clicked into, and on
+    // the Agent dashboard the board takes the keys. Whoever had them gets
+    // them back, after the frame that enables it again: a disabled field
+    // takes no focus.
+    final hadKeys = touch || _focusNode.hasFocus;
     setState(() {
       _busy = true;
       _sendError = null;
@@ -1016,15 +1023,6 @@ class _MessageComposerState extends State<MessageComposer> {
           selection: TextSelection.collapsed(offset: left.length),
         );
         setState(_attachments.clear);
-        // The box was disabled while it sent, which closed the keyboard; a
-        // keyboard that shuts after each message reads as the session ending.
-        // After the frame that enables it again: a disabled field takes no
-        // focus.
-        if (touch) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _focusNode.requestFocus();
-          });
-        }
       }
     } on Object catch (e, stack) {
       // Keep the text/attachments so the user can retry.
@@ -1035,6 +1033,11 @@ class _MessageComposerState extends State<MessageComposer> {
     } finally {
       if (mounted) {
         setState(() => _busy = false);
+        if (hadKeys) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _focusNode.requestFocus();
+          });
+        }
         // A server file offered while the message was sending waited in its
         // queue; it lands in the now-empty box for the next message.
         _scheduleDrain();

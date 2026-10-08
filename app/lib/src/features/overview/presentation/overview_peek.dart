@@ -7,6 +7,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart';
+import '../../../app/shell/session_more_button.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/presentation/imported_session_view.dart';
 import '../../explorer/application/explorer_actions.dart';
@@ -21,7 +22,10 @@ import '../../sessions/application/session_chat_source.dart'
     show ChatsShownOutsideGroups, chatsShownOutsideGroupsProvider;
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/archive_session_action.dart';
+import '../../sessions/presentation/delivery_strip.dart';
 import '../../sessions/presentation/end_session_action.dart';
+import '../../sessions/presentation/operator_chip.dart';
+import '../../sessions/presentation/session_agent_chip.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -30,6 +34,7 @@ import '../../terminal/presentation/pane_frame.dart';
 import '../../terminal/presentation/terminal_actions.dart';
 import '../../terminal/presentation/terminal_theme_colors.dart';
 import '../application/overview_board.dart';
+import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
@@ -75,11 +80,17 @@ class OverviewPeek extends ConsumerStatefulWidget {
     this.onPrevious,
     this.onNext,
     this.beside = false,
+    this.compact = false,
     super.key,
   });
 
   final OverviewCard card;
   final VoidCallback onClose;
+
+  /// A phone's page: a slim bar — back, the agent, one line of title, the
+  /// state, Stop or Resume and Open tab — with the rest in ⋯, and the chat
+  /// given the screen.
+  final bool compact;
 
   /// The second of two peeks side by side: its tab is its own.
   final bool beside;
@@ -173,6 +184,8 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
               child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
             ),
           ),
+          // Where the session's own tab has them: under the conversation.
+          if (entry.native != null) OverviewPeekControls(sessionId: id),
         ],
       ),
       OverviewPeekTab.terminal => _PeekTerminal(paneId: pane!),
@@ -201,13 +214,22 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _PeekHeader(
-              card: card,
-              onClose: widget.onClose,
-              onPeek: widget.onPeek,
-              onPrevious: widget.onPrevious,
-              onNext: widget.onNext,
-            ),
+            if (widget.compact)
+              _PeekBar(
+                card: card,
+                onClose: widget.onClose,
+                onPeek: widget.onPeek,
+                onPrevious: widget.onPrevious,
+                onNext: widget.onNext,
+              )
+            else
+              _PeekHeader(
+                card: card,
+                onClose: widget.onClose,
+                onPeek: widget.onPeek,
+                onPrevious: widget.onPrevious,
+                onNext: widget.onNext,
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 Insets.md,
@@ -215,8 +237,8 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
                 Insets.md,
                 Insets.sm,
               ),
-              child: SizedBox(
-                width: double.infinity,
+              child: _PeekTabRow(
+                scrolls: widget.compact,
                 child: CompactSegmented<OverviewPeekTab>(
                   key: const ValueKey('overview-peek-tabs'),
                   segments: [
@@ -239,7 +261,12 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
               ),
             ),
             const Divider(height: 1),
-            Expanded(child: body),
+            Expanded(
+              child: KeyedSubtree(
+                key: const ValueKey('overview-peek-body'),
+                child: body,
+              ),
+            ),
           ],
         ),
       ),
@@ -389,7 +416,7 @@ class _PeekHeader extends ConsumerWidget {
                 if (resumable)
                   FilledButton.tonalIcon(
                     key: const ValueKey('overview-peek-resume'),
-                    onPressed: () => resumeOnDashboard(context, ref, id),
+                    onPressed: () => resumeFromDashboard(context, ref, entry),
                     icon: const Icon(AppIcons.play),
                     label: const Text('Resume'),
                   ),
@@ -429,6 +456,248 @@ class _PeekHeader extends ConsumerWidget {
               child: OverviewPlanLine(plan: plan),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The peek's tabs: the full width beside a board; on a phone a row that
+/// scrolls, so no label is ever cut short.
+class _PeekTabRow extends StatelessWidget {
+  const _PeekTabRow({required this.scrolls, required this.child});
+
+  final bool scrolls;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => scrolls
+      ? SingleChildScrollView(scrollDirection: Axis.horizontal, child: child)
+      : SizedBox(width: double.infinity, child: child);
+}
+
+/// **The session's own controls in the peek**: the bar's widgets, not
+/// copies — the permission, mode and model chips, the operator badge, the
+/// delivery step and ⋯ (which holds the operator grant) — so what is set
+/// here is what the session's tab shows. In one run that scrolls rather than
+/// squeezes, ⋯ pinned outside it, as the bar's narrow row has them.
+class OverviewPeekControls extends StatelessWidget {
+  const OverviewPeekControls({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('overview-peek-controls'),
+    padding: const EdgeInsets.fromLTRB(
+      Insets.sm,
+      Insets.xxs,
+      Insets.xxs,
+      Insets.xxs,
+    ),
+    decoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SessionAgentChip(sessionId: sessionId, maxLabelWidth: 160),
+                const SizedBox(width: Insets.xs),
+                OperatorChip(sessionId: sessionId, onlyWhenOn: true),
+                const SizedBox(width: Insets.xs),
+                DeliveryStrip(
+                  sessionId: sessionId,
+                  hostedOnTerminal: true,
+                  compact: true,
+                  folded: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+        SessionMoreButton(sessionId: sessionId),
+      ],
+    ),
+  );
+}
+
+/// **The peek on a phone**: a slim bar instead of the header. Back, the
+/// agent, the title on one line, Resume or Stop and Open tab; under the
+/// title the state and one muted line of agent · model · place. Pin, ↑ ↓,
+/// the parent, Archive and the usage are in ⋯.
+class _PeekBar extends ConsumerWidget {
+  const _PeekBar({
+    required this.card,
+    required this.onClose,
+    this.onPeek,
+    this.onPrevious,
+    this.onNext,
+  });
+
+  final OverviewCard card;
+  final VoidCallback onClose;
+  final ValueChanged<OverviewCard>? onPeek;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final entry = card.entry;
+    final id = entry.id;
+    final theme = Theme.of(context);
+    final density = UiDensity.of(context);
+    final muted = density.muted(theme);
+    final agent = watchOverviewAgentName(ref, card);
+    final model = ref.watch(sessionActiveModelProvider(id))?.label;
+    final place = watchOverviewPlace(ref, card);
+    final native = entry.native;
+    final live = native != null && sessionHasLiveProcess(ref, id);
+    final archivable =
+        native != null && !native.isArchived && !sessionIsLive(ref, native);
+    final resumable = watchOverviewResumable(ref, card);
+    final pinned = ref.watch(
+      overviewPrefsProvider.select((p) => p.pinned.contains(id)),
+    );
+    final parentId = native?.parentSessionId;
+    final parent = parentId == null
+        ? null
+        : overviewCardOf(ref.watch(overviewBoardProvider), parentId);
+    Widget action(
+      String key,
+      String tooltip,
+      IconData icon,
+      VoidCallback onPressed,
+    ) => IconButton(
+      key: ValueKey(key),
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      onPressed: onPressed,
+      icon: Icon(icon),
+    );
+    PopupMenuItem<VoidCallback> item(
+      String key,
+      String label,
+      IconData icon,
+      VoidCallback? run,
+    ) => PopupMenuItem<VoidCallback>(
+      key: ValueKey('overview-peek-menu:$key'),
+      value: run,
+      enabled: run != null,
+      child: Row(
+        children: [
+          Icon(icon, size: density.iconSmall),
+          const SizedBox(width: Insets.sm),
+          Flexible(child: Text(label)),
+        ],
+      ),
+    );
+    final bar = Row(
+      children: [
+        action('overview-peek-close', 'Back', AppIcons.arrowLeft, onClose),
+        OverviewAgentRing(card: card),
+        const SizedBox(width: Insets.sm),
+        Expanded(
+          child: Text(
+            entry.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        if (resumable)
+          action(
+            'overview-peek-resume',
+            'Resume',
+            AppIcons.play,
+            () => resumeFromDashboard(context, ref, entry),
+          )
+        else if (live)
+          action(
+            'overview-peek-stop',
+            'Stop',
+            AppIcons.stop,
+            () => endSessionFromRow(context, ref, id, title: entry.title),
+          ),
+        action(
+          'overview-peek-open',
+          'Open tab',
+          AppIcons.arrowSquareOut,
+          () => openOverviewSession(context, ref, entry),
+        ),
+        PopupMenuButton<VoidCallback>(
+          key: const ValueKey('overview-peek-more'),
+          tooltip: 'More',
+          icon: const Icon(AppIcons.dotsThreeVertical),
+          onSelected: (run) => run(),
+          itemBuilder: (_) => [
+            item(
+              'pin',
+              pinned ? 'Unpin' : 'Pin to the top',
+              AppIcons.pushPin,
+              () => toggleOverviewPin(context, ref, id),
+            ),
+            item('previous', 'Previous session', AppIcons.caretUp, onPrevious),
+            item('next', 'Next session', AppIcons.caretDown, onNext),
+            if (parent != null)
+              item(
+                'parent',
+                'Sub-session of ${parent.entry.title}',
+                AppIcons.caretUp,
+                onPeek == null ? null : () => onPeek!(parent),
+              ),
+            if (archivable)
+              item(
+                'archive',
+                'Archive',
+                AppIcons.tray,
+                () => archiveSessionsFromUi(context, ref, [native]),
+              ),
+            PopupMenuItem<VoidCallback>(
+              key: const ValueKey('overview-peek-menu:usage'),
+              enabled: false,
+              child: OverviewUsageLine(sessionId: id),
+            ),
+          ],
+        ),
+      ],
+    );
+    // The state and one muted line of meta, the full width under the bar: in
+    // the title's column a large text's chip pushed the line off the edge.
+    return Padding(
+      key: const ValueKey('overview-peek-bar'),
+      padding: const EdgeInsets.fromLTRB(0, Insets.xxs, Insets.xs, Insets.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          bar,
+          Padding(
+            padding: const EdgeInsets.only(left: Insets.md),
+            child: Row(
+              children: [
+                OverviewStatePill(card: card),
+                const SizedBox(width: Insets.sm),
+                Expanded(
+                  child: Text(
+                    [?agent, ?model, if (place.isNotEmpty) place].join(' · '),
+                    key: const ValueKey('overview-peek-place'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

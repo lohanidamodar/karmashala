@@ -566,12 +566,17 @@ extension _SessionVerbs on _Parser {
             : null,
       );
     }
+    final background = catalog.launchInBackground;
     return CommandPlan(
       preview: [
-        'Resume "${session.title}" in the background',
+        'Resume "${session.title}"${background ? ' in the background' : ''}',
         ...about,
       ].join(' · '),
-      note: said.isEmpty ? 'No tab opens' : 'says "$said"',
+      note: said.isNotEmpty
+          ? 'says "$said"'
+          : background
+          ? 'No tab opens'
+          : 'Opens its tab',
       canonical: 'resume ${session.token}',
       action: BackgroundResumeCommand(
         session.id,

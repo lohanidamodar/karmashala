@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
+import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 import 'package:karmashala_ssh_host/host.dart';
 
 /// Real files in a real directory, because what is under test is a directory
@@ -198,7 +199,7 @@ void main() {
     );
 
     test(
-      'the first directory holding a match wins, and the newest within it',
+      'every directory is searched: a later one with a newer host wins',
       () async {
         give(release, 'karmashala_host-1.19.0-linux-x64');
         give(release, 'karmashala_host-1.20.1-linux-x64');
@@ -207,9 +208,10 @@ void main() {
         final binary = await DirectoryHostBinaries([
           release,
           build,
-        ]).binaryFor(machine('linux-x64'));
+        ], preferredVersion: '9.9.9').binaryFor(machine('linux-x64'));
 
-        expect(binary!.version, '1.20.1');
+        expect(binary!.version, '2.0.0');
+        expect(binary.candidates, 3);
       },
     );
 
@@ -228,6 +230,80 @@ void main() {
         ]).binaryFor(machine('linux-x64')),
         isNull,
       );
+    });
+  });
+
+  group('across folders', () {
+    // The owner's drop folder held 1.29.0 from an earlier install, searched
+    // before the install folder holding 1.34.1, and every reinstall put
+    // 1.29.0 back: the first folder with any match won outright.
+    test('two folders, the older one first: the newer one wins', () async {
+      give(release, 'karmashala_host-1.29.0-linux-x64.tar.gz', bytes: 10);
+      give(release, 'karmashala_host-1.26.3-linux-x64.tar.gz', bytes: 11);
+      give(build, 'karmashala_host-1.34.1-linux-x64.tar.gz', bytes: 20);
+
+      final binary = await DirectoryHostBinaries([
+        release,
+        build,
+      ], preferredVersion: '9.9.9').binaryFor(machine('linux-x64'));
+
+      expect(binary!.version, '1.34.1');
+      expect(binary.source, startsWith(build.path));
+      expect(binary.folder, build.path);
+      expect(binary.candidates, 3);
+      // Nothing is deleted, and the folder whose bundles were passed over is
+      // named for a person to tidy.
+      expect(release.listSync(), hasLength(2));
+      expect(binary.olderBundlesIn, release.path);
+    });
+
+    test('the same version in both: the first folder wins', () async {
+      give(release, 'karmashala_host-1.34.1-linux-x64.tar.gz', bytes: 10);
+      give(build, 'karmashala_host-1.34.1-linux-x64.tar.gz', bytes: 20);
+
+      final binary = await DirectoryHostBinaries([
+        release,
+        build,
+      ], preferredVersion: '9.9.9').binaryFor(machine('linux-x64'));
+
+      expect(binary!.source, startsWith(release.path));
+      expect(binary.length, 10);
+      expect(binary.olderBundlesIn, isNull);
+    });
+
+    test(
+      'an exact match for the server\'s version beats a newer one',
+      () async {
+        give(build, 'karmashala_host-99.0.0-linux-x64.tar.gz', bytes: 20);
+        give(release, 'karmashala_host-98.0.0-linux-x64.tar.gz', bytes: 30);
+        give(
+          release,
+          'karmashala_host-$kHostVersion-linux-x64.tar.gz',
+          bytes: 10,
+        );
+
+        final binary = await DirectoryHostBinaries([
+          build,
+          release,
+        ]).binaryFor(machine('linux-x64'));
+
+        expect(binary!.version, kHostVersion);
+        expect(binary.source, startsWith(release.path));
+      },
+    );
+
+    test('a bare binary never beats an archive, from any folder', () async {
+      give(release, 'karmashala_host-$kHostVersion-linux-x64', bytes: 10);
+      give(release, 'karmashala_host-99.0.0-linux-x64', bytes: 11);
+      give(build, 'karmashala_host-1.0.0-linux-x64.tar.gz', bytes: 20);
+
+      final binary = await DirectoryHostBinaries([
+        release,
+        build,
+      ]).binaryFor(machine('linux-x64'));
+
+      expect(binary!.isBundleArchive, isTrue);
+      expect(binary.version, '1.0.0');
     });
   });
 

@@ -45,9 +45,10 @@ Future<void> showOverviewResume(BuildContext context, WidgetRef ref) async {
     title: 'Resume a session',
     heightFactor: compact ? 1 : 0.8,
     width: DialogWidth.regular,
-    builder: (_) => OverviewResumePicker(
-      keepHere: ref.read(overviewPrefsProvider).resumeKeepsHere,
-    ),
+    // Ticked as the background setting says; unticking is for this resume
+    // only.
+    builder: (_) =>
+        OverviewResumePicker(keepHere: ref.read(launchInBackgroundProvider)),
   );
   if (choice == null || !context.mounted) return;
   await runResumeChoice(context, ref, choice);
@@ -61,8 +62,7 @@ Future<void> runResumeChoice(
   ResumeChoice choice,
 ) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
-  final prefs = ref.read(overviewPrefsProvider.notifier)
-    ..setResumeKeepsHere(choice.keepHere);
+  final prefs = ref.read(overviewPrefsProvider.notifier);
   final id = choice.sessionId;
   final message = choice.message?.trim();
   void say(String? text) {
