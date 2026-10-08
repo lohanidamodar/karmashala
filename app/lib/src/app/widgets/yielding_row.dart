@@ -16,6 +16,7 @@ class YieldingRow extends StatefulWidget {
     this.yieldFromStart = true,
     this.onHiddenChanged,
     this.spacing = 0,
+    this.keepsOne = true,
     super.key,
   });
 
@@ -32,6 +33,10 @@ class YieldingRow extends StatefulWidget {
   /// The gap between two children drawn side by side. A child with no width
   /// gets none, so one that says nothing leaves no hole.
   final double spacing;
+
+  /// Whether the last child standing stays, given the row's width, rather
+  /// than folding too: false for a row of controls a menu offers instead.
+  final bool keepsOne;
 
   @override
   State<YieldingRow> createState() => _YieldingRowState();
@@ -58,6 +63,7 @@ class _YieldingRowState extends State<YieldingRow> {
     return _YieldingRowLayout(
       yieldFromStart: widget.yieldFromStart,
       spacing: widget.spacing,
+      keepsOne: widget.keepsOne,
       onLaidOut: _laidOut,
       children: [
         for (var i = 0; i < children.length; i++)
@@ -76,16 +82,19 @@ class _YieldingRowLayout extends MultiChildRenderObjectWidget {
     required super.children,
     required this.yieldFromStart,
     required this.spacing,
+    required this.keepsOne,
     required this.onLaidOut,
   });
 
   final bool yieldFromStart;
   final double spacing;
+  final bool keepsOne;
   final ValueChanged<List<bool>> onLaidOut;
 
   @override
   RenderYieldingRow createRenderObject(BuildContext context) =>
-      RenderYieldingRow(yieldFromStart, spacing)..onLaidOut = onLaidOut;
+      RenderYieldingRow(yieldFromStart, spacing, keepsOne)
+        ..onLaidOut = onLaidOut;
 
   @override
   void updateRenderObject(
@@ -94,6 +103,7 @@ class _YieldingRowLayout extends MultiChildRenderObjectWidget {
   ) => renderObject
     ..yieldFromStart = yieldFromStart
     ..spacing = spacing
+    ..keepsOne = keepsOne
     ..onLaidOut = onLaidOut;
 }
 
@@ -105,7 +115,11 @@ class RenderYieldingRow extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _YieldingParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _YieldingParentData> {
-  RenderYieldingRow(this._yieldFromStart, [this._spacing = 0]);
+  RenderYieldingRow(
+    this._yieldFromStart, [
+    this._spacing = 0,
+    this._keepsOne = true,
+  ]);
 
   /// Told, after each layout, which children were left out.
   ValueChanged<List<bool>>? onLaidOut;
@@ -121,6 +135,13 @@ class RenderYieldingRow extends RenderBox
   set spacing(double value) {
     if (value == _spacing) return;
     _spacing = value;
+    markNeedsLayout();
+  }
+
+  bool _keepsOne;
+  set keepsOne(bool value) {
+    if (value == _keepsOne) return;
+    _keepsOne = value;
     markNeedsLayout();
   }
 
@@ -163,12 +184,12 @@ class RenderYieldingRow extends RenderBox
     var total = width();
     var shown = order.length;
     for (final child in order) {
-      if (total <= constraints.maxWidth || shown <= 1) break;
+      if (total <= constraints.maxWidth || (_keepsOne && shown <= 1)) break;
       _data(child).shown = false;
       shown--;
       total = width();
     }
-    if (total > constraints.maxWidth) {
+    if (total > constraints.maxWidth && shown > 0) {
       final last = order.firstWhere((c) => _data(c).shown);
       last.layout(
         natural.copyWith(maxWidth: constraints.maxWidth),

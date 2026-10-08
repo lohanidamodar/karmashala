@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 
+import '../widgets/truncated_text.dart';
 import 'tab_strip_metrics.dart';
 
 /// The shared chip shape for everything in the workbench tab strip, so a
@@ -60,7 +61,9 @@ class WorkbenchTabChip extends StatelessWidget {
   /// session. `InkWell` has no tertiary callback, hence the wrapper; it fires up.
   final VoidCallback? onClose;
 
-  /// Shown over the title: its full text, which the chip cuts to fit.
+  /// Shown over the title: the title alone when null, and then only once the
+  /// chip cuts it. One that says more — a session's agent and machine — shows
+  /// whether or not the title fits.
   final String? tooltip;
 
   @override
@@ -113,41 +116,44 @@ class WorkbenchTabChip extends StatelessWidget {
                 children: [
                   ?leading,
                   Expanded(
-                    child: _titleTooltip(
-                      Row(
-                        children: [
-                          if (mark case final mark?
-                              when constraints.maxWidth >= kMinTabWidth)
-                            Padding(
-                              padding: const EdgeInsets.only(right: Insets.xs),
-                              child: mark,
-                            ),
-                          Expanded(
-                            child: Text(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
-                                  .copyWith(
-                                    // Full ink only where the keyboard is: a
-                                    // strip nobody types in must not compete
-                                    // with the one that is.
-                                    color:
-                                        needsYou ||
-                                            (selected && (accented ?? true))
-                                        ? scheme.onSurface
-                                        : scheme.onSurfaceVariant,
-                                  ),
-                            ),
+                    child: Row(
+                      children: [
+                        if (mark case final mark?
+                            when constraints.maxWidth >= kMinTabWidth)
+                          Padding(
+                            padding: const EdgeInsets.only(right: Insets.xs),
+                            child: mark,
                           ),
-                          if (badge case final badge?
-                              when constraints.maxWidth >= kMinTabWidth)
-                            Padding(
-                              padding: const EdgeInsets.only(left: Insets.xs),
-                              child: badge,
-                            ),
-                        ],
-                      ),
+                        Expanded(
+                          // Over the title only, and only once it is cut:
+                          // the status glyph and the close button have their
+                          // own.
+                          child: TruncatedText(
+                            label,
+                            tooltip: tooltip,
+                            // A tooltip that says more than the title — the
+                            // agent, the machine — is worth a hover always.
+                            always: tooltip != null && tooltip != label,
+                            style: (dense ? Chrome.paneLabel : Chrome.tabLabel)
+                                .copyWith(
+                                  // Full ink only where the keyboard is: a
+                                  // strip nobody types in must not compete
+                                  // with the one that is.
+                                  color:
+                                      needsYou ||
+                                          (selected && (accented ?? true))
+                                      ? scheme.onSurface
+                                      : scheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ),
+                        if (badge case final badge?
+                            when constraints.maxWidth >= kMinTabWidth)
+                          Padding(
+                            padding: const EdgeInsets.only(left: Insets.xs),
+                            child: badge,
+                          ),
+                      ],
                     ),
                   ),
                   if (trailing != null) ...[
@@ -162,13 +168,9 @@ class WorkbenchTabChip extends StatelessWidget {
       ),
     );
   }
-
-  // Over the title only: the status glyph and the close button have their own.
-  Widget _titleTooltip(Widget title) =>
-      tooltip == null ? title : Tooltip(message: tooltip!, child: title);
 }
 
-/// What hovering a tab's title says: the title in full, which the chip cuts to
-/// fit, and the agent and where it runs when the tab holds a session.
+/// What hovering a cut tab title says: the title in full, and the agent and
+/// where it runs when the tab holds a session.
 String tabTitleTooltip(String title, String? agentName, {String? where}) =>
     [title, ?agentName, ?where].join(' · ');

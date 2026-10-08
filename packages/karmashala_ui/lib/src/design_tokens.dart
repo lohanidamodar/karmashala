@@ -355,10 +355,14 @@ class Elevations {
   static const dialog = 12.0;
 }
 
-/// A dialog body's design width, for `BoundedDialogContent`. Three steps
+/// A dialog body's design width, for `BoundedDialogContent`. A few steps
 /// rather than the nine hand-picked widths the dialogs had drifted to.
 class DialogWidth {
   const DialogWidth._();
+
+  /// A popover list of facts and choices hung from its control: wide enough
+  /// for a label and its picker side by side, narrow enough to read as a menu.
+  static const popover = 340.0;
 
   /// A confirmation or a short form. Was 340, 380, 400 and 420.
   static const narrow = 420.0;

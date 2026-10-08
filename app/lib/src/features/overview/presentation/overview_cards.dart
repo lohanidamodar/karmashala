@@ -4,6 +4,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/widgets/truncated_text.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_states.dart';
 import '../application/overview_board.dart';
@@ -74,6 +75,13 @@ class OverviewCardFrame extends ConsumerWidget {
                 }
               },
         onLongPress: () => overviewPickSelects(ref, card, long: true),
+        // A right-click opens the card's ⋯ where the pointer is.
+        onSecondaryTapUp: (details) => showOverviewCardMenu(
+          context,
+          ref,
+          card,
+          at: details.globalPosition,
+        ),
         // Hovered or holding the keys, the card shows its End.
         child: OverviewHoverScope(
           child: Padding(
@@ -166,11 +174,11 @@ class OverviewCardHeader extends ConsumerWidget {
                 if (parent != null) 'from $parent',
               ].join(', '),
               excludeSemantics: true,
-              child: Text(
+              // A long press selects the card; hover names it whole.
+              child: TruncatedText(
                 card.entry.title,
-                key: ValueKey('overview-card-title:${card.id}'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                textKey: ValueKey('overview-card-title:${card.id}'),
+                triggerMode: TooltipTriggerMode.manual,
                 style: titleStyle,
               ),
             ),
@@ -284,7 +292,7 @@ class OverviewDoneRow extends ConsumerWidget {
                   card.entry.title,
                   theme.textTheme.bodySmall,
                 ),
-                title: Text.rich(
+                title: TruncatedText.rich(
                   TextSpan(
                     children: [
                       TextSpan(text: card.entry.title),
@@ -295,9 +303,7 @@ class OverviewDoneRow extends ConsumerWidget {
                         ),
                     ],
                   ),
-                  key: ValueKey('overview-card-title:${card.id}'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  textKey: ValueKey('overview-card-title:${card.id}'),
                   style: theme.textTheme.bodySmall,
                 ),
                 trailing: Row(

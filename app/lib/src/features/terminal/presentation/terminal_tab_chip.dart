@@ -67,6 +67,7 @@ class TerminalTabChip extends StatelessWidget {
     required this.onBulkClose,
     this.onSavePreset,
     this.onArchive,
+    this.sessionMenu,
     this.agentStatus,
     this.icon,
     this.progress,
@@ -86,6 +87,17 @@ class TerminalTabChip extends StatelessWidget {
 
   /// Archives the session this tab holds; null for a tab holding none.
   final VoidCallback? onArchive;
+
+  /// The session menu every place has, for a tab holding a session: [items]
+  /// puts the tab's own verbs first, as its group; [run] runs a session verb.
+  /// In it, End and Archive are the session menu's, so the tab's are not
+  /// offered twice.
+  final ({
+    List<PopupMenuEntry<String>> Function(List<PopupMenuEntry<String>> tab)
+    items,
+    Future<void> Function(BuildContext context, String action) run,
+  })?
+  sessionMenu;
 
   final String title;
   final PaneLiveness liveness;
@@ -213,6 +225,30 @@ class TerminalTabChip extends StatelessWidget {
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (overlay == null) return;
+    // The tab's own verbs: one group, ahead of the session's.
+    final tabItems = <PopupMenuEntry<String>>[
+      // Closing one tab is silent — a view action: the server keeps the
+      // session and Sessions opens it again. The four below clear the deck,
+      // so they ask first ([confirmBulkTabClose]).
+      DesktopMenuItem(value: 'close', label: 'Close tab', icon: AppIcons.x),
+      for (final scope in TabCloseScope.values)
+        DesktopMenuItem(
+          value: scope.name,
+          label: scope.label,
+          icon: scope.icon,
+          enabled: scope.closesAnything(index, tabCount),
+        ),
+      // Not about *this* tab, and here anyway: this is the menu a person
+      // opens when thinking about the shape of their tabs.
+      if (onSavePreset != null) ...[
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'save-preset',
+          label: 'Save this layout as a preset…',
+          icon: AppIcons.terminalWindow,
+        ),
+      ],
+    ];
     final choice = await showMenu<String>(
       context: context,
       // `ContextMenuRegion._show`'s anchor. The chip keeps `showMenu`: the
@@ -222,44 +258,35 @@ class TerminalTabChip extends StatelessWidget {
         Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
-      items: [
-        // Closing one tab is silent — a view action: the server keeps the
-        // session and Sessions opens it again. The four below clear the
-        // deck, so they ask first ([confirmBulkTabClose]).
-        DesktopMenuItem(value: 'close', label: 'Close tab', icon: AppIcons.x),
-        for (final scope in TabCloseScope.values)
-          DesktopMenuItem(
-            value: scope.name,
-            label: scope.label,
-            icon: scope.icon,
-            enabled: scope.closesAnything(index, tabCount),
-          ),
-        // Not about *this* tab, and here anyway: this is the menu a person
-        // opens when thinking about the shape of their tabs.
-        if (onSavePreset != null) ...[
-          const DesktopMenuDivider(),
-          DesktopMenuItem(
-            value: 'save-preset',
-            label: 'Save this layout as a preset…',
-            icon: AppIcons.terminalWindow,
-          ),
-        ],
-        const DesktopMenuDivider(),
-        if (onArchive != null)
-          DesktopMenuItem(
-            value: 'archive',
-            label: 'Archive session',
-            icon: AppIcons.tray,
-          ),
-        DesktopMenuItem(
-          value: 'end',
-          label: 'End session',
-          icon: AppIcons.power,
-          destructive: true,
-        ),
-      ],
+      items:
+          sessionMenu?.items(tabItems) ??
+          [
+            ...tabItems,
+            const DesktopMenuDivider(),
+            if (onArchive != null)
+              DesktopMenuItem(
+                value: 'archive',
+                label: 'Archive session',
+                icon: AppIcons.tray,
+              ),
+            DesktopMenuItem(
+              value: 'end',
+              label: 'End session',
+              icon: AppIcons.power,
+              destructive: true,
+            ),
+          ],
     );
     if (choice == null) return;
+    final session = sessionMenu;
+    final tabOwn =
+        choice == 'close' ||
+        choice == 'save-preset' ||
+        TabCloseScope.values.any((s) => s.name == choice);
+    if (session != null && !tabOwn) {
+      if (context.mounted) await session.run(context, choice);
+      return;
+    }
     switch (choice) {
       case 'close':
         onClose();

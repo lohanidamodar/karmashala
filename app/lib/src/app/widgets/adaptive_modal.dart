@@ -94,7 +94,8 @@ Future<T?> showAdaptiveModal<T>({
 }
 
 /// A bottom sheet on a compact window, elsewhere a popover under the control
-/// [context] belongs to, its end edge on the control's. For a panel of
+/// [context] belongs to — over it, when the control is in the window's
+/// bottom half — its end edge on the control's. For a panel of
 /// choices that apply as they are made: no barrier tint, and Esc or a click
 /// outside closes it. [builder] draws a body that scrolls if it must.
 Future<T?> showAdaptivePopover<T>({
@@ -124,7 +125,14 @@ Future<T?> showAdaptivePopover<T>({
       final screen = MediaQuery.sizeOf(context);
       final tones = SurfaceTones.of(context);
       final panelWidth = math.min(width, screen.width - Insets.sm * 2);
+      // Under a control in the window's top half; over one in its bottom
+      // half — a status line's — where under it there is no room.
+      final below = anchor.center.dy < screen.height / 2;
       final top = anchor.bottom + Insets.xs;
+      final bottom = screen.height - anchor.top + Insets.xs;
+      final room = below
+          ? screen.height - top - Insets.sm
+          : anchor.top - Insets.xs - Insets.sm;
       final double left = (anchor.right - panelWidth).clamp(
         Insets.sm,
         math.max(Insets.sm, screen.width - panelWidth - Insets.sm),
@@ -132,7 +140,8 @@ Future<T?> showAdaptivePopover<T>({
       return Stack(
         children: [
           Positioned(
-            top: top,
+            top: below ? top : null,
+            bottom: below ? null : bottom,
             left: left,
             width: panelWidth,
             child: Semantics(
@@ -149,9 +158,7 @@ Future<T?> showAdaptivePopover<T>({
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: math.max(0, screen.height - top - Insets.sm),
-                  ),
+                  constraints: BoxConstraints(maxHeight: math.max(0, room)),
                   child: builder(context),
                 ),
               ),

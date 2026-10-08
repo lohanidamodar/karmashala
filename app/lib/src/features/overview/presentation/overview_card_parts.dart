@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agent_cli/usage.dart' show kUsageCriticalPercent;
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
-import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/widgets/truncated_text.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/usage_chip.dart' show formatUsageDuration;
 
 import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/session_diff_stat.dart';
-import '../../sessions/presentation/detach_session_action.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
@@ -21,6 +19,7 @@ import 'overview_batch_bar.dart';
 import 'overview_cards.dart' show overviewCardEdge;
 import 'overview_end_button.dart';
 import 'overview_resume_actions.dart';
+import 'overview_session_menu.dart';
 import 'overview_session_parts.dart';
 import 'overview_title_block.dart';
 
@@ -244,7 +243,8 @@ class OverviewSubSessions extends ConsumerWidget {
 
 /// One sub-session as a line: its state, its title and its chip, and the
 /// latest thing it said under them. One that needs you is edged as a waiting
-/// card is. A right-click or a long press offers Open and Detach.
+/// card is. A right-click or a long press opens the session menu every other
+/// place has.
 class OverviewSubSessionRow extends ConsumerWidget {
   const OverviewSubSessionRow({
     required this.card,
@@ -255,41 +255,21 @@ class OverviewSubSessionRow extends ConsumerWidget {
   final OverviewCard card;
   final ValueChanged<OverviewCard> onOpen;
 
-  Future<void> _menu(BuildContext context, WidgetRef ref) async {
-    final picked = await showDesktopMenuUnder<String>(context, [
-      DesktopMenuItem(
-        value: 'open',
-        label: 'Open',
-        icon: AppIcons.arrowSquareOut,
-      ),
-      DesktopMenuItem(
-        value: 'detach',
-        label: kDetachLabel,
-        icon: AppIcons.linkBreak,
-      ),
-    ]);
-    if (!context.mounted) return;
-    switch (picked) {
-      case 'open':
-        onOpen(card);
-      case 'detach':
-        await detachSessionFromUi(context, ref, card.id);
-    }
-  }
+  Future<void> _menu(BuildContext context, WidgetRef ref, {Offset? at}) =>
+      showOverviewSessionMenu(context, ref, card.entry, at: at);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final glyph = density.iconSmall + Insets.hair;
-    final detachable =
-        card.entry.native != null && watchCanDetach(ref, card.id);
     final row = InkWell(
       key: ValueKey('overview-sub:${card.id}'),
       borderRadius: BorderRadius.circular(Radii.sm),
       onTap: () => onOpen(card),
-      onSecondaryTap: detachable ? () => _menu(context, ref) : null,
-      onLongPress: detachable ? () => _menu(context, ref) : null,
+      onSecondaryTapUp: (details) =>
+          _menu(context, ref, at: details.globalPosition),
+      onLongPress: () => _menu(context, ref),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: Insets.xxs,
@@ -421,6 +401,12 @@ class OverviewPhoneRow extends ConsumerWidget {
             if (!overviewPickSelects(ref, card, touch: true)) onOpen(card);
           },
           onLongPress: () => overviewPickSelects(ref, card, long: true),
+          onSecondaryTapUp: (details) => showOverviewCardMenu(
+            context,
+            ref,
+            card,
+            at: details.globalPosition,
+          ),
           child: Container(
             constraints: const BoxConstraints(minHeight: Touch.target),
             padding: const EdgeInsets.symmetric(
@@ -447,11 +433,11 @@ class OverviewPhoneRow extends ConsumerWidget {
                       card.entry.title,
                       titleStyle,
                     ),
-                    title: Text(
+                    // A long press selects the row; hover names it whole.
+                    title: TruncatedText(
                       card.entry.title,
-                      key: ValueKey('overview-card-title:${card.id}'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      textKey: ValueKey('overview-card-title:${card.id}'),
+                      triggerMode: TooltipTriggerMode.manual,
                       style: titleStyle,
                     ),
                     meta: Text(

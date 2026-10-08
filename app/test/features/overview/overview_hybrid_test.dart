@@ -571,16 +571,19 @@ void main() {
         inPeek(find.byKey(const ValueKey('overview-peek-chat:ks-r32'))),
         findsOneWidget,
       );
-      expect(inPeek(find.text('Chat')), findsOneWidget);
-      expect(inPeek(find.text('Files · 3')), findsOneWidget);
-      expect(inPeek(find.text('Sub-sessions · 5')), findsOneWidget);
+      // The views as glyphs in the header's one row (round 66).
+      expect(inPeek(find.byTooltip('Chat')), findsOneWidget);
+      expect(inPeek(find.byTooltip('Files · 3 changed')), findsOneWidget);
+      expect(inPeek(find.byTooltip('Sub-sessions · 5')), findsOneWidget);
       // No terminal on this machine: no Terminal tab.
-      expect(inPeek(find.text('Terminal')), findsNothing);
+      expect(inPeek(find.byTooltip('Terminal')), findsNothing);
       expect(
         inPeek(find.byKey(const ValueKey('overview-peek-open'))),
         findsOneWidget,
       );
-      expect(inPeek(find.text('Open tab')), findsOneWidget);
+      // "Open", or its glyph where the peek is narrow, named in full.
+      expect(inPeek(find.byTooltip('Open in a tab')), findsOneWidget);
+      expect(inPeek(find.text('Open tab')), findsNothing);
       // The model its agent says it runs, and where, on the status strip.
       final strip = find.byKey(const ValueKey('overview-peek-controls'));
       expect(
@@ -648,11 +651,14 @@ void main() {
         find.byKey(const ValueKey('overview-peek:ks-r32-sub0')),
         findsOneWidget,
       );
+      // The way back is in ⋯, the header being one row (round 66).
+      await tester.tap(find.byKey(const ValueKey('overview-peek-more')));
+      await settleMission(tester);
       expect(
-        find.text('↑ Sub-session of Round 32 · Overview redesign'),
+        find.text('Sub-session of Round 32 · Overview redesign'),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(const ValueKey('overview-peek-parent')));
+      await tester.tap(find.byKey(const ValueKey('overview-peek-menu:parent')));
       await settleMission(tester);
       expect(
         find.byKey(const ValueKey('overview-peek:ks-r32')),
@@ -900,19 +906,15 @@ void main() {
           );
           await tester.tap(find.byKey(const ValueKey('overview-peek-more')));
           await settleMission(tester);
-          for (final item in const [
-            'open',
-            'subSessions',
-            'pin',
-            'previous',
-            'next',
-          ]) {
+          for (final item in const ['subSessions', 'pin', 'previous', 'next']) {
             expect(
               find.byKey(ValueKey('overview-peek-menu:$item')),
               findsOne,
               reason: item,
             );
           }
+          // Open is the session menu's own, as everywhere (round 66).
+          expect(find.byKey(const ValueKey('session-menu:open')), findsOne);
           expect(tester.takeException(), isNull);
           // An item does what it says, and closes the menu.
           await tester.tap(

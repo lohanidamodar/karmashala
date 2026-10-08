@@ -984,19 +984,13 @@ TerminalPaneStack
                                                                                                                                   TabLivenessDot
                                                                                                                                     SizedBox
                                                                                                                                   Expanded
-                                                                                                                                    Tooltip tooltip="PowerShell"
-                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                        OverlayPortal
-                                                                                                                                          _OverlayPortal
-                                                                                                                                            Semantics
-                                                                                                                                              _ExclusiveMouseRegion
-                                                                                                                                                Listener
-                                                                                                                                                  Semantics
-                                                                                                                                                    MouseRegion
-                                                                                                                                                      Row
-                                                                                                                                                        Expanded
-                                                                                                                                                          Text text="PowerShell"
-                                                                                                                                                            RichText
+                                                                                                                                    Row
+                                                                                                                                      Expanded
+                                                                                                                                        TruncatedText
+                                                                                                                                          _EllipsisProbe
+                                                                                                                                            Tooltip tooltip=""
+                                                                                                                                              Text text="PowerShell"
+                                                                                                                                                RichText
                                                                                                                                   SizedBox
                                                                                                                                   DenseIconButton
                                                                                                                                     IconButton
@@ -1095,19 +1089,13 @@ TerminalPaneStack
                                                                                                                                   TabLivenessDot
                                                                                                                                     SizedBox
                                                                                                                                   Expanded
-                                                                                                                                    Tooltip tooltip="Command Prompt"
-                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                        OverlayPortal
-                                                                                                                                          _OverlayPortal
-                                                                                                                                            Semantics
-                                                                                                                                              _ExclusiveMouseRegion
-                                                                                                                                                Listener
-                                                                                                                                                  Semantics
-                                                                                                                                                    MouseRegion
-                                                                                                                                                      Row
-                                                                                                                                                        Expanded
-                                                                                                                                                          Text text="Command Prompt"
-                                                                                                                                                            RichText
+                                                                                                                                    Row
+                                                                                                                                      Expanded
+                                                                                                                                        TruncatedText
+                                                                                                                                          _EllipsisProbe
+                                                                                                                                            Tooltip tooltip=""
+                                                                                                                                              Text text="Command Prompt"
+                                                                                                                                                RichText
                                                                                                                                   SizedBox
                                                                                                                                   DenseIconButton
                                                                                                                                     IconButton
@@ -2016,19 +2004,13 @@ TerminalTabChip
                                                                             Center
                                                                               RichText
                                                                     Expanded
-                                                                      Tooltip tooltip="Settings"
-                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                          OverlayPortal
-                                                                            _OverlayPortal
-                                                                              Semantics
-                                                                                _ExclusiveMouseRegion
-                                                                                  Listener
-                                                                                    Semantics
-                                                                                      MouseRegion
-                                                                                        Row
-                                                                                          Expanded
-                                                                                            Text text="Settings"
-                                                                                              RichText
+                                                                      Row
+                                                                        Expanded
+                                                                          TruncatedText
+                                                                            _EllipsisProbe
+                                                                              Tooltip tooltip=""
+                                                                                Text text="Settings"
+                                                                                  RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion
@@ -2148,19 +2130,13 @@ TerminalTabChip
                                                                                                             Center
                                                                                                               RichText
                                                                     Expanded
-                                                                      Tooltip tooltip="claude"
-                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                          OverlayPortal
-                                                                            _OverlayPortal
-                                                                              Semantics
-                                                                                _ExclusiveMouseRegion
-                                                                                  Listener
-                                                                                    Semantics
-                                                                                      MouseRegion
-                                                                                        Row
-                                                                                          Expanded
-                                                                                            Text text="claude"
-                                                                                              RichText
+                                                                      Row
+                                                                        Expanded
+                                                                          TruncatedText
+                                                                            _EllipsisProbe
+                                                                              Tooltip tooltip=""
+                                                                                Text text="claude"
+                                                                                  RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion
@@ -2275,19 +2251,13 @@ TerminalTabChip
                                                                                                   Center
                                                                                                     RichText
                                                                     Expanded
-                                                                      Tooltip tooltip="cmd"
-                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                          OverlayPortal
-                                                                            _OverlayPortal
-                                                                              Semantics
-                                                                                _ExclusiveMouseRegion
-                                                                                  Listener
-                                                                                    Semantics
-                                                                                      MouseRegion
-                                                                                        Row
-                                                                                          Expanded
-                                                                                            Text text="cmd"
-                                                                                              RichText
+                                                                      Row
+                                                                        Expanded
+                                                                          TruncatedText
+                                                                            _EllipsisProbe
+                                                                              Tooltip tooltip=""
+                                                                                Text text="cmd"
+                                                                                  RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion
@@ -2387,19 +2357,13 @@ TerminalTabChip
                                                                     TabLivenessDot
                                                                       SizedBox
                                                                     Expanded
-                                                                      Tooltip tooltip="PowerShell"
-                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                          OverlayPortal
-                                                                            _OverlayPortal
-                                                                              Semantics
-                                                                                _ExclusiveMouseRegion
-                                                                                  Listener
-                                                                                    Semantics
-                                                                                      MouseRegion
-                                                                                        Row
-                                                                                          Expanded
-                                                                                            Text text="PowerShell"
-                                                                                              RichText
+                                                                      Row
+                                                                        Expanded
+                                                                          TruncatedText
+                                                                            _EllipsisProbe
+                                                                              Tooltip tooltip=""
+                                                                                Text text="PowerShell"
+                                                                                  RichText
                                                                     SizedBox
                                                                     _TabCloseButton
                                                                       MouseRegion
@@ -4843,19 +4807,6 @@ _PopupMenu<String>
                                                                                                                                       Expanded
                                                                                                                                         Text text="Close all"
                                                                                                                                           RichText
-                                                                          _MenuItem
-                                                                            FadeTransition key=[GlobalKey#…]
-                                                                              DesktopMenuDivider
-                                                                                Divider
-                                                                                  SizedBox
-                                                                                    Center
-                                                                                      Container
-                                                                                        Padding
-                                                                                          ConstrainedBox
-                                                                                            DecoratedBox
-                                                                                              Padding
-                                                                                                LimitedBox
-                                                                                                  ConstrainedBox
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuItem<String>

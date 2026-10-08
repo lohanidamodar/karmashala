@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/session_more_button.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_peek.dart';
+import 'package:karmashala/src/features/overview/presentation/session_fact_list.dart';
+import 'package:karmashala/src/features/sessions/presentation/operator_chip.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart'
     show kPermissionCycleSettle;
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
@@ -31,6 +34,7 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(820, 600),
     double textScale = 1,
+    double? stripWidth,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -76,18 +80,24 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(textScale)),
             child: child!,
           ),
-          home: const Scaffold(
+          home: Scaffold(
             body: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                OverviewPeekControls(sessionId: 's1'),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: SizedBox(
+                    width: stripWidth ?? size.width,
+                    child: const OverviewPeekControls(sessionId: 's1'),
+                  ),
+                ),
                 // What the session's own tab draws on its bar.
-                KeyedSubtree(
+                const KeyedSubtree(
                   key: ValueKey('the-tab'),
                   child: PermissionModeChip(sessionId: 's1'),
                 ),
-                SessionNoticeLine(sessionId: 's1'),
+                const SessionNoticeLine(sessionId: 's1'),
               ],
             ),
           ),
@@ -96,6 +106,9 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  Finder inList(Finder matching) =>
+      find.descendant(of: find.byType(SessionFactList), matching: matching);
 
   Finder inPeek(Finder matching) => find.descendant(
     of: find.byKey(const ValueKey('overview-peek-controls')),
@@ -156,7 +169,144 @@ void main() {
     expect(fold.right, lessThanOrEqualTo(360));
     await tester.tap(inPeek(find.byKey(StatusStrip.foldKey)));
     await tester.pumpAndSettle();
-    expect(find.byType(SessionMoreBody), findsOneWidget);
+    expect(find.byType(SessionFactList), findsOneWidget);
+    expect(inList(find.text('Rename')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  group('the +N list (round 66)', () {
+    Future<void> openList(
+      WidgetTester tester, {
+      Size size = const Size(360, 800),
+      double textScale = 1,
+      double? stripWidth,
+    }) async {
+      await pump(
+        tester,
+        size: size,
+        textScale: textScale,
+        stripWidth: stripWidth,
+      );
+      await tester.tap(inPeek(find.byKey(StatusStrip.foldKey)));
+      await tester.pumpAndSettle();
+      expect(find.byType(SessionFactList), findsOneWidget);
+    }
+
+    /// A row with something to say has height; one without draws nothing.
+    bool drawn(WidgetTester tester, String id) {
+      final row = inList(find.byKey(ValueKey('session-list:$id')));
+      return row.evaluate().isNotEmpty && tester.getSize(row).height > 0;
+    }
+
+    testWidgets('one row per fact, under its group', (tester) async {
+      await openList(tester);
+      for (final group in const [
+        'STATUS',
+        'AGENT',
+        'CODE',
+        'WHERE',
+        'SESSION',
+      ]) {
+        expect(inList(find.text(group)), findsOneWidget, reason: group);
+      }
+      for (final id in const [
+        'model',
+        'permission',
+        'operator',
+        'place',
+        'delivery',
+        'open',
+        'rename',
+        'more',
+        'subagents',
+      ]) {
+        expect(drawn(tester, id), isTrue, reason: id);
+      }
+      // The repository, starred as the primary and saying so.
+      expect(
+        inList(find.byKey(ValueKey('session-repository:${repository().id}'))),
+        findsOneWidget,
+      );
+      expect(inList(find.text('Primary')), findsOneWidget);
+      // A fact with nothing to say draws no row: no mode, no origin here.
+      expect(drawn(tester, 'mode'), isFalse);
+      expect(drawn(tester, 'origin'), isFalse);
+    });
+
+    testWidgets('Operate Karmashala is one row, a switch', (tester) async {
+      await openList(tester);
+      expect(inList(find.textContaining('Operate')), findsOneWidget);
+      expect(inList(find.byType(OperatorChip)), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('session-list:operator')),
+          matching: find.byType(Switch),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a picker opens from its row', (tester) async {
+      await openList(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('session-list:permission')),
+          matching: find.byType(PermissionModeChip),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Follow the Settings default'), findsOneWidget);
+      expect(find.text('Build · Accept edits'), findsWidgets);
+    });
+
+    testWidgets("the session's verbs are labelled rows", (tester) async {
+      await openList(tester);
+      // The session menu every place has, as rows (round 66).
+      for (final label in const [
+        'Open in a tab',
+        'Continue with…',
+        'Rename',
+        'More…',
+        'Subagents and child sessions',
+      ]) {
+        expect(inList(find.text(label)), findsOneWidget, reason: label);
+      }
+      // The old row of bare glyphs is gone.
+      expect(find.byType(SessionMoreBody), findsNothing);
+    });
+
+    testWidgets('a bottom sheet on a phone', (tester) async {
+      await openList(tester);
+      expect(find.byType(BottomSheet), findsOneWidget);
+    });
+
+    testWidgets('a popover on a desktop, of the token width', (tester) async {
+      await openList(tester, size: const Size(1100, 800), stripWidth: 360);
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('status-strip-sheet'))).width,
+        lessThanOrEqualTo(DialogWidth.popover),
+      );
+    });
+
+    for (final (size, strip) in const [
+      (Size(360, 800), null),
+      (Size(390, 844), null),
+      (Size(1100, 800), 360.0),
+    ]) {
+      testWidgets('${size.width.round()} px at text 1.6: nothing overflows', (
+        tester,
+      ) async {
+        await openList(tester, size: size, textScale: 1.6, stripWidth: strip);
+        expect(tester.takeException(), isNull);
+        final sheet = tester.getRect(
+          find.byKey(const ValueKey('status-strip-sheet')),
+        );
+        for (final id in const ['model', 'permission', 'place']) {
+          final row = tester.getRect(find.byKey(ValueKey('session-list:$id')));
+          expect(row.right, lessThanOrEqualTo(sheet.right + 0.5), reason: id);
+        }
+      });
+    }
   });
 }
