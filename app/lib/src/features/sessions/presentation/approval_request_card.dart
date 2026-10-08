@@ -35,6 +35,7 @@ import 'prompt_cards/checklist_prompt_card.dart';
 import 'prompt_cards/menu_prompt_card.dart';
 import 'prompt_cards/question_prompt_card.dart';
 import 'chat_cards/chat_tool_ask.dart' show ChatToolAsk, chatInlineAsksProvider;
+import 'approval_refusal_text.dart';
 import 'chat_transcript.dart' show ChatViewportRoom;
 
 part 'approval_request_card/answered_elsewhere.dart';
@@ -383,7 +384,7 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
       throw GatewayException(
         answerSaid == null
             ? refusal.message
-            : _approvalRefusalText(refusal, touch: true),
+            : approvalRefusalText(refusal, touch: true),
       );
     }
     answerSaid?.say(said);
@@ -878,24 +879,11 @@ class _Answers extends ConsumerWidget {
       // Only reported when it did not land: a successful keypress needs no
       // announcement — the agent's own screen is the acknowledgement.
       messenger.showSnackBar(
-        SnackBar(content: Text(_approvalRefusalText(refusal))),
+        SnackBar(content: Text(approvalRefusalText(refusal))),
       );
     }
   }
 }
-
-/// A refused approve or deny, for a snack bar. On the phone a stale answer is
-/// said plainly: the user was not looking at the screen it would have landed on.
-String _approvalRefusalText(
-  SessionPromptRefusal refusal, {
-  bool touch = false,
-}) => touch && refusal.stale
-    ? 'That prompt changed before your answer arrived — nothing was pressed.'
-    : refusal.unconfirmed
-    ? '${refusal.message}.'
-    : refusal.noTerminal || refusal.notFound
-    ? 'That session is no longer running, so the key was not sent.'
-    : 'Nothing was sent: ${refusal.message}.';
 
 /// Reveals the pane so the user can answer anything we could not represent.
 /// Shared by both halves of the card: the terminal is the complete answer.

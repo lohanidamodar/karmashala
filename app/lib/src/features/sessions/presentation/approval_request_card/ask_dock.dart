@@ -449,7 +449,7 @@ class _DockAnswers extends ConsumerWidget {
       // acknowledgement of one that did.
       messenger.showSnackBar(
         SnackBar(
-          content: Text(_approvalRefusalText(refusal, touch: said != null)),
+          content: Text(approvalRefusalText(refusal, touch: said != null)),
         ),
       );
       return;

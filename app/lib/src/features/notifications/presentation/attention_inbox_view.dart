@@ -29,6 +29,7 @@ import '../application/notification_providers.dart'
     show focusWatchedSession, notificationSettingsControllerProvider;
 import 'package:karmashala_notifications/policy.dart' show NotifyLevel;
 import 'package:karmashala_notifications/attention.dart';
+import '../../sessions/presentation/approval_refusal_text.dart';
 
 /// The attention inbox: everything pending, newest first, each item one click
 /// from its source — the list behind the number the badges show.
@@ -712,16 +713,7 @@ class _InboxAnswersState extends ConsumerState<_InboxAnswers> {
       );
     } on SessionPromptRefusal catch (refusal) {
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            refusal.stale
-                ? 'That prompt changed before your answer arrived — nothing '
-                      'was pressed.'
-                : refusal.unconfirmed
-                ? '${refusal.message}.'
-                : 'Nothing was sent: ${refusal.message}.',
-          ),
-        ),
+        SnackBar(content: Text(approvalRefusalText(refusal, touch: true))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

@@ -11,6 +11,7 @@ import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/sessions/application/session_prompt_answers.dart';
+import '../../features/sessions/presentation/approval_refusal_text.dart';
 
 /// One ask a toast is raised for: a session that is not on screen and is
 /// waiting on an approval.
@@ -161,13 +162,7 @@ class _ShellAskToastsState extends ConsumerState<ShellAskToasts> {
           );
     } on SessionPromptRefusal catch (refusal) {
       messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            refusal.unconfirmed
-                ? '${refusal.message}.'
-                : 'Nothing was sent: ${refusal.message}.',
-          ),
-        ),
+        SnackBar(content: Text(approvalRefusalText(refusal))),
       );
     }
   }
