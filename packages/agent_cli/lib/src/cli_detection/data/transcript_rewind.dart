@@ -38,8 +38,26 @@ List<bool> rewoundRows(
   required String Function(int index) roleAt,
   required String Function(int index) textAt,
   required bool Function(int index) opensTurn,
+}) => [
+  for (final owner in rewindFolds(
+    count,
+    roleAt: roleAt,
+    textAt: textAt,
+    opensTurn: opensTurn,
+  ))
+    owner != null,
+];
+
+/// For each of [count] rows, the index of the rewind row that folded it, or
+/// null: [rewoundRows]' rule, where a later rewind that reaches back over an
+/// earlier one's rows takes them into its own fold.
+List<int?> rewindFolds(
+  int count, {
+  required String Function(int index) roleAt,
+  required String Function(int index) textAt,
+  required bool Function(int index) opensTurn,
 }) {
-  final rewound = List<bool>.filled(count, false);
+  final owners = List<int?>.filled(count, null);
   for (var m = 0; m < count; m++) {
     if (roleAt(m) != kTranscriptRewindRole) continue;
     final marker = RewindMarker.parse(textAt(m));
@@ -48,14 +66,14 @@ List<bool> rewoundRows(
     var start = m;
     for (var i = m - 1; i >= 0 && left > 0; i--) {
       if (roleAt(i) == kTranscriptRewindRole) continue;
-      if (!rewound[i] && opensTurn(i)) {
+      if (owners[i] == null && opensTurn(i)) {
         left--;
         start = i;
       }
     }
     for (var i = start; i < m; i++) {
-      if (roleAt(i) != kTranscriptRewindRole) rewound[i] = true;
+      if (roleAt(i) != kTranscriptRewindRole) owners[i] = m;
     }
   }
-  return rewound;
+  return owners;
 }

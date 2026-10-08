@@ -24,6 +24,8 @@ import 'package:karmashala_checkpoints/checkpoints.dart' show Checkpoint;
 import '../../checkpoints/application/checkpoint_providers.dart';
 import '../application/session_handoff_service.dart';
 import '../application/turn_forks.dart';
+import '../application/turn_rewinds.dart';
+import 'rewind_dialog.dart';
 import 'hunk_review.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
@@ -213,10 +215,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : null;
     final running =
         turn == TranscriptTurn.working || turn == TranscriptTurn.awaitingUser;
+    final rewindable = ref.watch(sessionRewindableProvider(widget.sessionId));
     return TranscriptTurnActions(
       onRetry: canSend ? _retry : null,
       onEdit: canSend ? _editAndResend : null,
       onFork: canFork ? _forkFrom : null,
+      onRewind: rewindable ? _rewindTo : null,
       busy: running ? 'A turn is running: wait for it to end.' : null,
       forkPoints: chain == null ? const {} : _forkPointsFor(messages, chain),
       noForkPoint: canFork
@@ -263,6 +267,43 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       await forks.fork(widget.sessionId, target);
     } on Object catch (error) {
       _say(why(error));
+    }
+  }
+
+  /// Rewind to here: the person picks what goes back, the server rewinds,
+  /// and where the conversation was cut their words go back in the box.
+  Future<void> _rewindTo(TurnRewindTarget target) async {
+    final rewinds = ref.read(turnRewindsProvider);
+    final choice = await RewindDialog.show(
+      context,
+      target: target,
+      preview: (mode) => rewinds.preview(widget.sessionId, target, mode),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      final done = await rewinds.rewind(
+        widget.sessionId,
+        target,
+        choice.mode,
+        confirm: choice.confirm,
+      );
+      if (!mounted) return;
+      if (choice.mode.cutsConversation && done.composerText.isNotEmpty) {
+        _backToComposer(done.composerText);
+        _composerFocus.value++;
+      }
+      final turns = done.turns;
+      _say(
+        [
+          'Rewound',
+          if (choice.mode.cutsConversation && turns != null)
+            '$turns turn${turns == 1 ? '' : 's'} undone',
+          if (choice.mode.restoresCode)
+            '${done.files} file${done.files == 1 ? '' : 's'} restored',
+        ].join(' · '),
+      );
+    } on Object catch (error) {
+      _say(error is StateError ? error.message : '$error');
     }
   }
 

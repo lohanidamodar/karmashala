@@ -13,13 +13,19 @@ import 'package:karmashala_ui/menus.dart'
 import '../../../app/widgets/row_menu_sheet.dart';
 import '../../agents/presentation/agent_logo.dart';
 import '../application/turn_fork_points.dart';
+import '../application/turn_rewinds.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/rows.dart'
     show compactAge, formatElapsed, kActivityTickInterval;
 import 'package:agent_cli/descriptors.dart' show AgentPlan;
 import 'package:agent_cli/read.dart'
-    show kTranscriptNoticeRole, taskNotificationLine;
+    show
+        RewindMarker,
+        kTranscriptNoticeRole,
+        kTranscriptRewindRole,
+        rewindFolds,
+        taskNotificationLine;
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_automations/automations.dart'
     show AutomationAttribution;
@@ -37,10 +43,12 @@ import 'turn_changed_files.dart';
 export 'tool_run.dart' show TranscriptTurn;
 export '../application/turn_fork_points.dart'
     show TranscriptTurnStart, TurnForkPoints, TurnForkTarget, turnForkPoints;
+export '../application/turn_rewinds.dart' show TurnRewindTarget;
 
 part 'chat_transcript/agent_switch_rows.dart';
 part 'chat_transcript/command_time.dart';
 part 'chat_transcript/message_rows.dart';
+part 'chat_transcript/rewind_fold.dart';
 part 'chat_transcript/tool_batch.dart';
 part 'chat_transcript/turn_footer.dart';
 part 'chat_transcript/turn_actions.dart';
@@ -473,6 +481,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 
   List<ChatMessage>? _placedMessages;
   var _starts = const <int?>[];
+  var _turnIndexes = const <int, int>{};
 
   /// Where the row at [ordinal] stands in its turn; the starts are walked
   /// again only when the list moved.
@@ -481,15 +490,57 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     if (!identical(messages, _placedMessages)) {
       _placedMessages = messages;
       _starts = _turnStartsOf(messages);
+      var turn = 0;
+      _turnIndexes = {
+        for (var i = 0; i < messages.length; i++)
+          if (_opensTurn(messages[i])) i: turn++,
+      };
     }
     final start = _starts[ordinal];
     if (start == null) return null;
+    _readFolds();
     return _TurnPlace(
       start: start,
       words: _personsWords(messages[start]),
       isLatest: _isLatestTurn,
+      turnIndex: _turnIndexes[start] ?? 0,
+      rewound: _folds[start] != null,
     );
   }
+
+  List<ChatMessage>? _foldedMessages;
+
+  /// Each message's rewind row, by index, where a rewind folded it.
+  var _folds = const <int?>[];
+
+  /// Each rewind row's first folded message.
+  var _foldStarts = const <int, int>{};
+
+  /// The rewinds opened to read, by their rewind row's place in the whole
+  /// conversation.
+  final _openFolds = <int>{};
+
+  void _readFolds() {
+    final messages = widget.messages;
+    if (identical(messages, _foldedMessages)) return;
+    _foldedMessages = messages;
+    _folds = rewindFolds(
+      messages.length,
+      roleAt: (i) => messages[i].role,
+      textAt: (i) => messages[i].text,
+      opensTurn: (i) => _opensTurn(messages[i]),
+    );
+    final starts = <int, int>{};
+    for (var i = 0; i < _folds.length; i++) {
+      if (_folds[i] case final owner?) starts.putIfAbsent(owner, () => i);
+    }
+    _foldStarts = starts;
+  }
+
+  void _toggleFold(int owner) => setState(() {
+    final key = widget.firstOrdinal + owner;
+    if (!_openFolds.remove(key)) _openFolds.add(key);
+  });
 
   bool _isLatestTurn(int start) => _starts.isNotEmpty && _starts.last == start;
 
@@ -665,8 +716,9 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       );
     }
 
-    Widget item(int index) {
-      final row = rows[index];
+    _readFolds();
+
+    Widget plain(int index, TranscriptRow row) {
       final drawn = !row.isBatch
           ? rowAt(row.from)
           : _ToolBatchTile(
@@ -682,6 +734,46 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [const _NewSinceLine(), drawn],
       );
+    }
+
+    // A rewound row: hidden under its fold's header, which the first of
+    // them in the window carries; dimmed when the fold is open.
+    Widget folded(int index, TranscriptRow row, int owner) {
+      final first = math.max(_foldStarts[owner] ?? owner, start);
+      final header = start + row.from <= first && first < start + row.to
+          ? _RewoundFoldHeader(
+              marker: RewindMarker.parse(widget.messages[owner].text),
+              open: _openFolds.contains(widget.firstOrdinal + owner),
+              onToggle: () => _toggleFold(owner),
+            )
+          : null;
+      if (!_openFolds.contains(widget.firstOrdinal + owner)) {
+        return header == null
+            ? SizedBox.shrink(key: keyOf(row))
+            : KeyedSubtree(key: keyOf(row), child: header);
+      }
+      return Column(
+        key: keyOf(row),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ?header,
+          Opacity(
+            opacity: StateLayers.rewoundOpacity,
+            child: plain(index, row),
+          ),
+        ],
+      );
+    }
+
+    Widget item(int index) {
+      final row = rows[index];
+      // A rewind's own row draws nothing: its fold's header says it.
+      if (visible[row.from].role == kTranscriptRewindRole) {
+        return SizedBox.shrink(key: keyOf(row));
+      }
+      final owner = _folds[start + row.from];
+      if (owner != null) return folded(index, row, owner);
+      return plain(index, row);
     }
 
     Widget list(double gutter) {
