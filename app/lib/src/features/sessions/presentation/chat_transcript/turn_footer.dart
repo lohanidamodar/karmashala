@@ -32,9 +32,14 @@ class TurnFooter {
 /// error. Timed by the record's own stamps, from the person's message to that
 /// row; a turn missing either stamp gets none. The last turn only once
 /// [lastTurnOver]: while it runs, the working line stands in its place.
+///
+/// [lastTurnStoppedAt] is a Stop pressed during the last turn, which ended
+/// since: that turn reads stopped whatever the agent wrote after, and hangs
+/// its footer on its last row when the agent wrote nothing.
 Map<int, TurnFooter> turnFooters(
   List<ChatMessage> messages, {
   required bool lastTurnOver,
+  DateTime? lastTurnStoppedAt,
 }) {
   final starts = [
     for (var i = 0; i < messages.length; i++)
@@ -46,19 +51,33 @@ Map<int, TurnFooter> turnFooters(
     if (last && !lastTurnOver) break;
     final from = starts[k];
     final to = last ? messages.length : starts[k + 1];
+    final start = messages[from].at;
+    final stoppedAt = last ? lastTurnStoppedAt : null;
+    final stopped =
+        stoppedAt != null && start != null && !stoppedAt.isBefore(start);
+    var placed = false;
     for (var i = to - 1; i > from; i--) {
       final ending = _endingOf(messages[i]);
       if (ending == null) continue;
-      final start = messages[from].at;
+      placed = true;
       final end = messages[i].at;
       if (start != null && end != null && !end.isBefore(start)) {
         out[i] = TurnFooter(
-          ending: ending,
+          ending: stopped && ending == TurnEnding.done
+              ? TurnEnding.stopped
+              : ending,
           elapsed: end.difference(start),
           endedAt: end,
         );
       }
       break;
+    }
+    if (!placed && stopped) {
+      out[to - 1] = TurnFooter(
+        ending: TurnEnding.stopped,
+        elapsed: stoppedAt.difference(start),
+        endedAt: stoppedAt,
+      );
     }
   }
   return out;

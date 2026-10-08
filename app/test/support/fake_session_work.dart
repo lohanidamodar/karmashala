@@ -36,6 +36,9 @@ class FakeSessionWork {
   /// Every `sessions.send` taken, in order.
   final sent = <SessionSend>[];
 
+  /// The session of every `sessions.interrupt` taken, in order.
+  final interrupts = <String>[];
+
   /// A send to a session it does not run resumes it first, as a server that
   /// announces `sessions.send.resumes` does; off, it is refused `notFound`.
   bool resumesOnSend = false;
@@ -228,6 +231,7 @@ class FakeSessionWork {
       sent.add(send);
       return SessionSent(sent: true, via: 'protocol', resumed: resumed);
     }
+    if (request is SessionInterrupt) interrupts.add(sessionId);
     return const DataAck();
   }
 

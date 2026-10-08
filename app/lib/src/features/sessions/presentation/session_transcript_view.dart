@@ -9,7 +9,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../snippets/application/snippet_providers.dart';
-import '../application/session_activity_providers.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/side_panel_state.dart';
 import '../../../app/shell/workbench.dart' show CompactWorkbenchScope;
@@ -65,6 +64,7 @@ import '../application/session_input.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 import '../application/session_turn_interrupt.dart';
+import '../application/session_turn_stop.dart';
 import 'package:agent_cli/descriptors.dart'
     show AgentActivityStatus, AgentStatusReport, AgentWorkingDetail;
 import '../application/session_ui_providers.dart';
@@ -91,6 +91,7 @@ import 'transcript_file_preview.dart';
 import 'transcript_image_preview.dart';
 import 'transcript_inline_images.dart';
 import 'stop_children_offer.dart';
+import 'stop_escalation_line.dart';
 import 'delegation_card.dart';
 import 'session_failed_state.dart';
 import 'background_runs_strip.dart';
@@ -991,23 +992,40 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         ],
       ),
     );
-    // Files dropped anywhere on the conversation are attached in the box.
-    return FileDropZone(
-      name: 'chat ${widget.sessionId}',
-      onFiles: _onFilesDropped,
-      builder: (context, hovering) => FileDropHighlight(
-        label: 'Drop to attach',
-        visible: hovering,
-        // Pictures the conversation names are drawn in it, read through the
-        // server wherever the session runs.
-        child: TranscriptInlineImages(
-          place: _placeImage,
-          onOpen: _openImage,
-          child: body,
+    // Kept alive while the view is: Esc reads it, and a read of a provider
+    // nobody holds would start from "loading".
+    ref.listen(sessionTurnWorkingProvider(widget.sessionId), (_, _) {});
+    // Board N2's "Stop · Esc", from anywhere in the chat: the composer, the
+    // conversation, a button. Only while the turn runs — the action is
+    // disabled otherwise, so the key falls through to whatever else Esc
+    // means there.
+    return Actions(
+      actions: {_StopTurnIntent: _stopAction},
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.escape): _StopTurnIntent(),
+        },
+        // Files dropped anywhere on the conversation are attached in the box.
+        child: FileDropZone(
+          name: 'chat ${widget.sessionId}',
+          onFiles: _onFilesDropped,
+          builder: (context, hovering) => FileDropHighlight(
+            label: 'Drop to attach',
+            visible: hovering,
+            // Pictures the conversation names are drawn in it, read through
+            // the server wherever the session runs.
+            child: TranscriptInlineImages(
+              place: _placeImage,
+              onOpen: _openImage,
+              child: body,
+            ),
+          ),
         ),
       ),
     );
   }
+
+  late final _stopAction = _StopTurnAction(this);
 
   Widget _conversation({
     required AsyncValue<List<ChatMessage>> transcript,
@@ -1080,7 +1098,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             onSaveNote: notesEnabled ? _saveNote : null,
             workingLine: WorkingLine(
               sessionId: widget.sessionId,
-              onStop: _interruptTurn,
+              onStop: _stop,
+            ),
+            // Stop was pressed and the turn has ended since: its footer says
+            // so whatever the agent wrote, as not every agent writes a line.
+            lastTurnStoppedAt: ref.watch(
+              turnStopsProvider.select((stops) {
+                final stop = stops[widget.sessionId];
+                return stop != null && stop.settled ? stop.pressedAt : null;
+              }),
             ),
             // The word the agent left on its screen as the turn ended.
             lastTurnVerb: ref.watch(
@@ -1148,25 +1174,39 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   Widget _footerFor(bool active) {
     if (_footer != null && _footerActive == active) return _footer!;
     _footerActive = active;
-    return _footer = Actions(
-      actions: {_StopTurnIntent: _StopTurnAction(this)},
-      child: Shortcuts(
-        // Board N2's "Stop · Esc": Esc in the composer stops the running turn.
-        // Only while one runs — the action is disabled otherwise, so the key
-        // falls through to whatever else Esc means there.
-        shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.escape): _StopTurnIntent(),
-        },
-        child: _footerBody(active),
-      ),
-    );
+    return _footer = _footerBody(active);
   }
 
-  /// Whether this session has a call in flight: what makes Esc a stop.
-  bool get _turnRunning => ref
-      .read(sessionOutstandingCallsProvider(widget.sessionId))
-      .calls
-      .isNotEmpty;
+  /// Whether Esc stops something now: the turn runs, by the server's status
+  /// — with or without a call in flight — or a Stop already pressed waits on
+  /// the second that ends the session.
+  bool get _stoppable {
+    final id = widget.sessionId;
+    return ref.read(sessionTurnWorkingProvider(id)) ||
+        (ref.read(turnStopsProvider)[id]?.stillWorking ?? false);
+  }
+
+  /// **The chat's Stop** — the composer's, the working line's, and Esc. Once
+  /// the turn has outlived [kStopEscalationAfter] after a press, the next
+  /// ends the session instead, asked first.
+  void _stop() {
+    final id = widget.sessionId;
+    if (ref.read(turnStopsProvider)[id]?.stillWorking ?? false) {
+      unawaited(_endSession());
+      return;
+    }
+    ref.read(turnStopsProvider.notifier).pressed(id);
+    _interruptTurn();
+  }
+
+  Future<void> _endSession() => endSessionFromRow(
+    context,
+    ref,
+    widget.sessionId,
+    title:
+        ref.read(sessionsDataProvider).getById(widget.sessionId)?.title ??
+        'this session',
+  );
 
   Future<void> _send(String text) async {
     // `/operator` first: typing it is the person letting this session operate
@@ -1246,6 +1286,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             : null;
         return MessageComposer(
           controller: _composer,
+          // Watched here, not by the view: a turn starting or ending
+          // rebuilds the box's buttons and nothing else.
+          working: ref.watch(sessionTurnWorkingProvider(widget.sessionId)),
+          onStop: _stop,
           // Mode, model and stats are on the pane's status bar (owner,
           // 2026-09-28); switching agent is the composer's (2026-10-03).
           chips: [
@@ -1282,59 +1326,74 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       },
     );
     return LayoutBuilder(
-      builder: (context, box) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // What was sent while the turn ran, waiting at the server below
-          // the transcript it will join: bounded, it scrolls within what the
-          // composer leaves, and may not push the box away.
-          Flexible(
-            child: Consumer(
-              builder: (context, ref, _) => QueuedMessagesStrip(
-                sessionId: widget.sessionId,
-                onBackToComposer: _backToComposer,
-                // One line while the agent asks: its card needs the room.
-                folded: ref.watch(_promptOpenProvider(widget.sessionId)),
+      // Watched here, where the column is built: the line takes a share of
+      // the room only while it shows, so it cannot thin the strips' at rest.
+      builder: (context, box) => Consumer(
+        builder: (context, ref, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // What was sent while the turn ran, waiting at the server below
+            // the transcript it will join: bounded, it scrolls within what the
+            // composer leaves, and may not push the box away.
+            Flexible(
+              child: Consumer(
+                builder: (context, ref, _) => QueuedMessagesStrip(
+                  sessionId: widget.sessionId,
+                  onBackToComposer: _backToComposer,
+                  // One line while the agent asks: its card needs the room.
+                  folded: ref.watch(_promptOpenProvider(widget.sessionId)),
+                ),
               ),
             ),
-          ),
-          // Directly above the box and outside the scroll, so a long queue
-          // never hides the running turn or its Stop.
-          PinnedPlanStrip(sessionId: widget.sessionId),
-          // Flexible like the queue: with the keyboard up it gives way, and
-          // the box stays in sight.
-          Flexible(child: BackgroundRunsStrip(sessionId: widget.sessionId)),
-          ConstrainedBox(
-            // A long draft may not crowd an approval out of sight.
-            constraints: BoxConstraints(
-              maxHeight: box.maxHeight * _composerShare,
-            ),
-            child: !widget.holdForPrompt
-                ? composer(prompted: false)
-                : Consumer(
-                    builder: (context, ref, _) {
-                      // Watched here: the footer is built once.
-                      final prompted = ref.watch(
-                        _promptOpenProvider(widget.sessionId),
-                      );
-                      final box = composer(prompted: prompted);
-                      if (!prompted) return box;
-                      // The held box is the way to what holds it.
-                      return Semantics(
-                        button: true,
-                        label: 'Show the prompt to answer',
-                        child: GestureDetector(
-                          key: const ValueKey('answer-prompt-above'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _showAsk,
-                          child: box,
-                        ),
-                      );
-                    },
+            // Directly above the box and outside the scroll, so a long queue
+            // never hides the running turn or its Stop.
+            PinnedPlanStrip(sessionId: widget.sessionId),
+            // Flexible like the queue: with the keyboard up it gives way, and
+            // the box stays in sight.
+            Flexible(child: BackgroundRunsStrip(sessionId: widget.sessionId)),
+            // Gives way like the strips: at a large text size it scrolls
+            // rather than push the box away.
+            if (ref.watch(stopEscalatedProvider(widget.sessionId)))
+              Flexible(
+                child: SingleChildScrollView(
+                  primary: false,
+                  child: StopEscalationLine(
+                    onEndSession: () => unawaited(_endSession()),
                   ),
-          ),
-        ],
+                ),
+              ),
+            ConstrainedBox(
+              // A long draft may not crowd an approval out of sight.
+              constraints: BoxConstraints(
+                maxHeight: box.maxHeight * _composerShare,
+              ),
+              child: !widget.holdForPrompt
+                  ? composer(prompted: false)
+                  : Consumer(
+                      builder: (context, ref, _) {
+                        // Watched here: the footer is built once.
+                        final prompted = ref.watch(
+                          _promptOpenProvider(widget.sessionId),
+                        );
+                        final box = composer(prompted: prompted);
+                        if (!prompted) return box;
+                        // The held box is the way to what holds it.
+                        return Semantics(
+                          button: true,
+                          label: 'Show the prompt to answer',
+                          child: GestureDetector(
+                            key: const ValueKey('answer-prompt-above'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _showAsk,
+                            child: box,
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1485,19 +1544,19 @@ class _StopTurnIntent extends Intent {
   const _StopTurnIntent();
 }
 
-/// Enabled only while a call is in flight, so an idle Esc is not consumed —
-/// and never reaches the agent, where a stray one clears or rewinds its input.
+/// Enabled only while the turn runs, so an idle Esc is not consumed — and
+/// never reaches the agent, where a stray one clears or rewinds its input.
 class _StopTurnAction extends Action<_StopTurnIntent> {
   _StopTurnAction(this._view);
 
   final _SessionTranscriptViewState _view;
 
   @override
-  bool isEnabled(_StopTurnIntent intent) => _view.mounted && _view._turnRunning;
+  bool isEnabled(_StopTurnIntent intent) => _view.mounted && _view._stoppable;
 
   @override
   Object? invoke(_StopTurnIntent intent) {
-    _view._interruptTurn();
+    _view._stop();
     return null;
   }
 }
