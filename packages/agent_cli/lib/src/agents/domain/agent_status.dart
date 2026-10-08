@@ -934,32 +934,73 @@ class AgentMissingConversationRules {
 class AgentFirstRunPromptRules {
   const AgentFirstRunPromptRules({
     this.markers = const [],
+    this.others = const [],
     this.scanLines = 40,
   });
 
-  /// Any one of them on screen is the question. Each is the agent's own words,
-  /// read off a captured screen.
+  /// Any one of them on screen is the folder-trust question. Each is the
+  /// agent's own words, read off a captured screen.
   final List<GridMatcher> markers;
+
+  /// The other screens it can stop at before any work — which MCP servers to
+  /// enable, a sign-in, a warning to accept — read the same way.
+  final List<AgentStartupPrompt> others;
 
   /// How many rows up from the bottom to read: the whole modal, which is taller
   /// than a footer.
   final int scanLines;
 
-  bool get isEmpty => markers.isEmpty;
+  bool get isEmpty => markers.isEmpty && others.isEmpty;
 
-  /// Whether [tailLines] show the question. False for an agent that declares
-  /// no marker: an undeclared prompt is one nobody has seen, not a guess.
-  bool matchedBy(List<String> tailLines) {
-    if (markers.isEmpty || tailLines.isEmpty) return false;
+  /// Whether [tailLines] show the trust question. False for an agent that
+  /// declares no marker: an undeclared prompt is one nobody has seen, not a
+  /// guess.
+  bool matchedBy(List<String> tailLines) => _shows(markers, _screen(tailLines));
+
+  /// The other startup prompt [tailLines] show, or null.
+  AgentStartupPrompt? otherOn(List<String> tailLines) {
+    final screen = _screen(tailLines);
+    for (final prompt in others) {
+      if (_shows(prompt.markers, screen)) return prompt;
+    }
+    return null;
+  }
+
+  String _screen(List<String> tailLines) {
     final lines = tailLines.length > scanLines
         ? tailLines.sublist(tailLines.length - scanLines)
         : tailLines;
-    final screen = _squeezed(lines.join(' '));
+    return _squeezed(lines.join(' '));
+  }
+
+  static bool _shows(List<GridMatcher> markers, String screen) {
+    if (screen.isEmpty) return false;
     for (final marker in markers) {
       if (screen.contains(_squeezed(marker.contains))) return true;
     }
     return false;
   }
+}
+
+/// A screen other than folder trust that an agent stops at before any work,
+/// waiting on a person.
+class AgentStartupPrompt {
+  const AgentStartupPrompt({
+    required this.asks,
+    required this.markers,
+    required this.evidence,
+  });
+
+  /// What it asks, to finish "Claude Code is asking …": `which of this project's
+  /// MCP servers to enable`.
+  final String asks;
+
+  /// Any one of them on screen is this prompt, matched as
+  /// [AgentFirstRunPromptRules.markers] are.
+  final List<GridMatcher> markers;
+
+  /// Where the words were read.
+  final String evidence;
 }
 
 /// One flag value an installed CLI refused, and what it offered instead.

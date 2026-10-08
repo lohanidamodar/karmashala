@@ -85,6 +85,48 @@ void main() {
       );
     });
 
+    test("Codex 0.160's reworded trust question", () {
+      expect(
+        rulesOf(AgentIds.codex).matchedBy(const [
+          '  Trust this folder? Codex can read, edit, and run files here,',
+          '  subject to your permission settings.',
+          '› 1. Trust and continue',
+        ]),
+        isTrue,
+      );
+    });
+
+    test('the other startup prompts each agent declares', () {
+      String? asks(String id, List<String> screen) =>
+          rulesOf(id).otherOn(screen)?.asks;
+      expect(
+        asks(AgentIds.claudeCode, const [
+          'WARNING: Claude Code running in Bypass Permissions mode',
+        ]),
+        'you to accept the risks of Bypass Permissions mode',
+      );
+      expect(
+        asks(AgentIds.claudeCode, const [
+          'Detected a custom API key in your environment',
+        ]),
+        'whether to use the API key it found in the environment',
+      );
+      expect(
+        asks(AgentIds.claudeCode, const ['Select login method:']),
+        'you to sign in',
+      );
+      expect(
+        asks(AgentIds.codex, const ['  Hooks need review']),
+        'whether to trust its new or changed hooks',
+      );
+      expect(
+        asks(AgentIds.codex, const ['  3. Skip until next version']),
+        'whether to update first',
+      );
+      // The trust question is not one of them.
+      expect(asks(AgentIds.claudeCode, _claudeTrust), isNull);
+    });
+
     test('an agent that declares no question never matches', () {
       const rules = AgentFirstRunPromptRules();
       expect(rules.isEmpty, isTrue);

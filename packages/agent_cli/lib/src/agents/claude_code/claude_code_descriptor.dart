@@ -324,6 +324,57 @@ const claudeCodeDescriptor = AgentDescriptor(
         GridMatcher('Is this a project you created or one you trust'),
         GridMatcher('Yes, I trust this folder'),
       ],
+      others: [
+        AgentStartupPrompt(
+          asks: "which of this project's MCP servers to enable",
+          markers: [
+            GridMatcher('new MCP servers found in this project'),
+            GridMatcher('New MCP server found in this project'),
+          ],
+          evidence:
+              'claude 2.1.287, ConPTY probe 2026-10-08 with a .mcp.json: two '
+              'servers draw "2 new MCP servers found in this project" (a '
+              'checklist, "Space to select · Esc to reject all"); one draws '
+              '"New MCP server found in this project: alpha" (a menu). The '
+              'binary has no other wording: the count is `\${n} new MCP '
+              'servers`, plural even for one, but one server takes the menu.',
+        ),
+        AgentStartupPrompt(
+          asks: 'you to accept the risks of Bypass Permissions mode',
+          markers: [
+            GridMatcher('Claude Code running in Bypass Permissions mode'),
+          ],
+          evidence:
+              'claude.exe 2.1.287 strings: "WARNING: Claude Code running in '
+              'Bypass Permissions mode", "Yes, I accept" / "No, exit"',
+        ),
+        AgentStartupPrompt(
+          asks: 'whether to use the API key it found in the environment',
+          markers: [
+            GridMatcher('Detected a custom API key in your environment'),
+          ],
+          evidence:
+              'claude.exe 2.1.287 strings: "Detected a custom API key in your '
+              'environment", "Do you want to use this API key?"',
+        ),
+        AgentStartupPrompt(
+          asks: 'you to sign in',
+          markers: [GridMatcher('Select login method')],
+          evidence: 'claude.exe 2.1.287 strings: "Select login method:"',
+        ),
+        AgentStartupPrompt(
+          asks: 'you to finish its first-run setup',
+          markers: [
+            GridMatcher(
+              'Choose the text style that looks best with your terminal',
+            ),
+          ],
+          evidence:
+              'claude.exe 2.1.287 strings: the onboarding theme step, "Let\'s '
+              'get started." / "Choose the text style that looks best with '
+              'your terminal"',
+        ),
+      ],
     ),
     // `--fork-session` is a *modifier on a resume*, not a mode of its own, so
     // the arguments are `--resume <id> --fork-session`. The forked process
@@ -797,6 +848,9 @@ const claudeCodeDescriptor = AgentDescriptor(
       // The plan prompt, whose 2.1.287 footer names neither key ("ctrl+g to
       // edit in Notepad · <plan file>"; probe, 2026-10-04).
       GridMatcher('Would you like to proceed?'),
+      // The project-MCP checklist at startup, whose 2.1.287 footer is
+      // `Space to select · Esc to reject all` (probe, 2026-10-08).
+      GridMatcher('Esc to reject all'),
     ],
     working: [GridMatcher('esc to interrupt')],
     // `✻ Sautéing… (2s · ↓ 7 tokens)` and `· Skedaddling… (3s · ↓ 50 tokens ·
@@ -868,7 +922,9 @@ const claudeCodeDescriptor = AgentDescriptor(
     markers: ['❯'],
     affirmative: [r'^Yes\b', r'^Use this MCP server$'],
     negative: [r'^No\b', r'^Continue without using this MCP server\b'],
-    cancelDeclines: ['Do you want to'],
+    // Esc on the project-MCP checklist rejects every server and leaves
+    // Claude running (2.1.287, probe 2026-10-08).
+    cancelDeclines: ['Do you want to', 'new MCP servers found in this project'],
   ),
   // Claude Code reads a picture off a path a prompt names — measured in this
   // repo rather than read off `--help`: `SessionMediaOrigin.read` exists
