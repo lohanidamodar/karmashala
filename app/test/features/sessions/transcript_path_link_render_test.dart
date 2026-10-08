@@ -125,8 +125,29 @@ void main() {
       expect(links(tester), isEmpty);
     });
 
-    testWidgets('an inline code span is not touched', (tester) async {
-      await pumpProse(tester, 'The file is `lib/main.dart` today.');
+    // The owner (2026-10-08): a path an agent puts in backticks must open on
+    // click, as it does in the terminal — agents nearly always quote paths.
+    testWidgets('an inline code span that is a path is a link', (tester) async {
+      await pumpProse(
+        tester,
+        r'Run `app\windows\installer\Output\Karmashala-Setup-1.34.2.exe` now.',
+      );
+
+      expect(links(tester), [
+        r'app\windows\installer\Output\Karmashala-Setup-1.34.2.exe',
+      ]);
+    });
+
+    testWidgets('a quoted path keeps its line suffix', (tester) async {
+      await pumpProse(tester, 'Failing at `lib/main.dart:12` today.');
+
+      expect(links(tester), ['lib/main.dart:12']);
+    });
+
+    testWidgets('a code span with more than a path in it is untouched', (
+      tester,
+    ) async {
+      await pumpProse(tester, 'Run `cat lib/main.dart` and `a/b`.');
 
       expect(links(tester), isEmpty);
     });

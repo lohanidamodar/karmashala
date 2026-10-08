@@ -224,13 +224,15 @@ class _FoldedMarkdownState extends State<_FoldedMarkdown> {
 /// The one instance, built once for the life of the process: a syntax allocated
 /// per message would recompile [kTranscriptPathPattern] on every row.
 final List<md.InlineSyntax> kPathLinkSyntaxes = <md.InlineSyntax>[
+  _QuotedPathLinkSyntax(),
   _PathLinkSyntax(),
 ];
 
 /// Turns a path-shaped token into an ordinary markdown link. It runs **before**
 /// markdown's own syntaxes, which is what leaves fences and code spans alone.
 class _PathLinkSyntax extends md.InlineSyntax {
-  _PathLinkSyntax() : super(kTranscriptPathPattern.pattern);
+  _PathLinkSyntax([String? pattern])
+    : super(pattern ?? kTranscriptPathPattern.pattern);
 
   /// Reimplemented rather than delegated because [onMatch] cannot decline:
   /// `tryMatch` reports a match whatever it answers, and refusing would stall.
@@ -250,6 +252,25 @@ class _PathLinkSyntax extends md.InlineSyntax {
     final text = match[0]!;
     parser.addNode(
       md.Element.text('a', text)
+        ..attributes['href'] = text
+        ..attributes['title'] = kPathLinkTitle,
+    );
+    return true;
+  }
+}
+
+/// A code span that is a path and nothing else — `` `lib/main.dart:12` `` —
+/// as a link that keeps its code look. Agents quote nearly every path they
+/// name, so leaving code spans alone left most paths dead. A span holding
+/// more than the path (`` `cat lib/main.dart` ``) is still a code span.
+class _QuotedPathLinkSyntax extends _PathLinkSyntax {
+  _QuotedPathLinkSyntax() : super('`(${kTranscriptPathPattern.pattern})`');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final text = match[1]!;
+    parser.addNode(
+      md.Element('a', [md.Element.text('code', text)])
         ..attributes['href'] = text
         ..attributes['title'] = kPathLinkTitle,
     );
