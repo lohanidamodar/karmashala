@@ -58,6 +58,13 @@ class SessionsClient {
 
   Future<SessionStarted> fork(SessionFork request) => _send(request);
 
+  /// Forks a session and puts its files back to a checkpoint, answered as
+  /// `session_fork_from_checkpoint` answers: per repository, and, unless
+  /// [SessionForkFromCheckpoint.preview], the new session's id.
+  Future<Map<String, Object?>> forkFromCheckpoint(
+    SessionForkFromCheckpoint request,
+  ) => _send(request);
+
   Future<SessionStarted> switchAgent(SessionSwitchAgent request) =>
       _send(request);
 }

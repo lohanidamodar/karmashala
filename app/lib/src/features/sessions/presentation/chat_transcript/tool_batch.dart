@@ -131,6 +131,12 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
                               ),
                             ),
                           ],
+                          if (row.live)
+                            _CommandTime(
+                              message: run.last,
+                              lead: ' · ',
+                              style: muted,
+                            ),
                           if (earlier != null) ...[
                             const SizedBox(width: Insets.sm),
                             Flexible(
@@ -285,6 +291,10 @@ class _ToolCallLineState extends State<_ToolCallLine> {
       failure: semantic.failure,
       passed: semantic.idle,
     );
+    final took = commandDuration(message);
+    final resultStyle = theme.textTheme.bodySmall?.copyWith(
+      color: resultColour ?? scheme.onSurfaceVariant,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -293,7 +303,11 @@ class _ToolCallLineState extends State<_ToolCallLine> {
           child: Semantics(
             button: true,
             expanded: _open,
-            label: '$what, $result',
+            label: [
+              what,
+              result,
+              if (took != null) 'took ${formatCommandDuration(took)}',
+            ].join(', '),
             excludeSemantics: true,
             child: InkWell(
               onTap: () => setState(() => _open = !_open),
@@ -322,11 +336,12 @@ class _ToolCallLineState extends State<_ToolCallLine> {
                         ),
                       ),
                       const SizedBox(width: Insets.sm),
-                      Text(
-                        result,
-                        maxLines: 1,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: resultColour ?? scheme.onSurfaceVariant,
+                      Text(result, maxLines: 1, style: resultStyle),
+                      _CommandTime(
+                        message: message,
+                        lead: ' · ',
+                        style: resultStyle?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
                       ),
                     ],

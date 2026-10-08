@@ -19,7 +19,14 @@ class _MessageRow extends StatefulWidget {
     this.onPreview,
     this.onClosePreview,
     this.previewBuilder,
+    this.turnActions,
+    this.place,
   });
+
+  /// What this row's turn may do, and where the row stands in it; either
+  /// null offers none of the turn's actions.
+  final TranscriptTurnActions? turnActions;
+  final _TurnPlace? place;
 
   /// The path whose preview hangs under this row, as it was written.
   final String? preview;
@@ -66,7 +73,9 @@ class _MessageRowState extends State<_MessageRow> {
         old.preview != widget.preview ||
         old.onPreview != widget.onPreview ||
         old.onClosePreview != widget.onClosePreview ||
-        old.previewBuilder != widget.previewBuilder) {
+        old.previewBuilder != widget.previewBuilder ||
+        old.turnActions != widget.turnActions ||
+        old.place != widget.place) {
       _tile = null;
     }
   }
@@ -102,8 +111,21 @@ class _MessageRowState extends State<_MessageRow> {
         detail: widget.detailBuilder?.call(message, ordinal),
         onSaveNote: save == null ? null : () => save(message, ordinal),
         onCopyTurn: turn == null ? null : () => turn(ordinal),
+        turn: _turnHere(message, ordinal),
       ),
     );
+  }
+
+  /// The turn's actions this row offers: the person's message that opened
+  /// the turn, and each of the agent's messages in it.
+  List<_TurnAction> _turnHere(ChatMessage message, int ordinal) {
+    final actions = widget.turnActions;
+    final place = widget.place;
+    if (actions == null || place == null) return const [];
+    final user = message.role == 'user';
+    if (user && place.start != ordinal) return const [];
+    if (!user && message.role != 'agent') return const [];
+    return _turnActionsFor(actions: actions, place: place, user: user);
   }
 }
 
@@ -118,9 +140,13 @@ class _ChatMessageTile extends StatelessWidget {
     this.onLinkTap,
     this.detail,
     this.preview,
+    this.turn = const [],
   });
   final ChatMessage message;
   final AgentPlan? previousPlan;
+
+  /// The turn's actions this row offers.
+  final List<_TurnAction> turn;
 
   /// A file the reader opened from this message, under its body.
   final Widget? preview;
@@ -186,9 +212,11 @@ class _ChatMessageTile extends StatelessWidget {
     'user' => _UserMessageCard(
       message: message,
       onSaveNote: onSaveNote,
+      onCopyTurn: turn.isEmpty ? null : onCopyTurn,
       onPathTap: onPathTap,
       onLinkTap: onLinkTap,
       resolveHostPath: resolveHostPath,
+      turn: turn,
     ),
     'agent' => _AgentMessageBlock(
       message: message,
@@ -197,6 +225,7 @@ class _ChatMessageTile extends StatelessWidget {
       onPathTap: onPathTap,
       onLinkTap: onLinkTap,
       detail: detail,
+      turn: turn,
     ),
     kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),
     kTranscriptNoticeRole => _TranscriptNote(text: message.text),
@@ -218,13 +247,17 @@ class _UserMessageCard extends StatelessWidget {
     required this.onPathTap,
     required this.onLinkTap,
     required this.resolveHostPath,
+    this.onCopyTurn,
+    this.turn = const [],
   });
 
   final ChatMessage message;
   final VoidCallback? onSaveNote;
+  final String Function()? onCopyTurn;
   final PathLinkCallback? onPathTap;
   final ValueChanged<String>? onLinkTap;
   final String? Function(String path)? resolveHostPath;
+  final List<_TurnAction> turn;
 
   /// The accent's share of the bubble's fill. Board N2 draws `#1c2230` on the
   /// `#0c0c0e` terminal tone with a `#7aa2f7` accent: 15% of the accent, in
@@ -258,7 +291,12 @@ class _UserMessageCard extends StatelessWidget {
       builder: (context, constraints) => _TurnWithMeta(
         alignEnd: true,
         at: message.at,
-        actions: _messageActions(onSaveNote, message.text),
+        actions: _messageActions(
+          onSaveNote,
+          message.text,
+          copyTurn: onCopyTurn,
+          turn: turn,
+        ),
         body: ConstrainedBox(
           // A share of the pane rather than the board's 560px: the column is
           // the pane's whole width now, and the gutter says whose turn it is.
@@ -388,6 +426,7 @@ class _AgentMessageBlock extends StatelessWidget {
     required this.onLinkTap,
     required this.detail,
     this.onCopyTurn,
+    this.turn = const [],
   });
 
   final ChatMessage message;
@@ -396,6 +435,7 @@ class _AgentMessageBlock extends StatelessWidget {
   final ValueChanged<String>? onLinkTap;
   final Widget? detail;
   final String Function()? onCopyTurn;
+  final List<_TurnAction> turn;
 
   @override
   Widget build(BuildContext context) {
@@ -407,7 +447,12 @@ class _AgentMessageBlock extends StatelessWidget {
     // the page, and the user's tinted bubbles are what mark the turns.
     return _TurnWithMeta(
       at: message.at,
-      actions: _messageActions(onSaveNote, cleanText, copyTurn: onCopyTurn),
+      actions: _messageActions(
+        onSaveNote,
+        cleanText,
+        copyTurn: onCopyTurn,
+        turn: turn,
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -813,7 +858,23 @@ class _ToolMessageCardState extends State<_ToolMessageCard> {
             label: shown,
             fullLabel: activity == null ? null : eyebrow,
             color: accent,
-            badge: isToolError ? _FailedBadge(color: failure) : null,
+            badge: !isCommandCall(message)
+                ? (isToolError ? _FailedBadge(color: failure) : null)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isToolError) ...[
+                        _FailedBadge(color: failure),
+                        const SizedBox(width: Insets.xs),
+                      ],
+                      _CommandTime(
+                        message: message,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
             actions: _messageActions(
               widget.onSaveNote,
               activity?.output ?? message.text,

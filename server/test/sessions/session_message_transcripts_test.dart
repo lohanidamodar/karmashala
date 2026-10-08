@@ -166,6 +166,35 @@ void main() {
       expect(tool.isError, isFalse);
     });
 
+    test('a closed call ends when its row last changed; an open one has no '
+        'end', () {
+      final ran = SessionMessage(
+        id: 'c',
+        sessionId: 'acp',
+        role: SessionMessageRole.tool,
+        text: '',
+        toolJson: jsonEncode({
+          'toolCallId': 'call-9',
+          'kind': 'execute',
+          'status': 'completed',
+        }),
+        createdAt: at,
+        updatedAt: at.add(const Duration(milliseconds: 2400)),
+      );
+      final closed = SessionMessageTranscriptSource.project(ran);
+      expect(closed.at, at);
+      expect(closed.tool!.endedAt, at.add(const Duration(milliseconds: 2400)));
+
+      final open = SessionMessageTranscriptSource.project(
+        row(
+          'o',
+          role: SessionMessageRole.tool,
+          tool: {'toolCallId': 'call-10', 'status': 'in_progress'},
+        ),
+      );
+      expect(open.tool!.endedAt, isNull);
+    });
+
     test('a finished call carries its content; a failed one is an error', () {
       final done = SessionMessageTranscriptSource.project(
         row(
