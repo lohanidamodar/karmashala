@@ -17,6 +17,12 @@ class CompactWorkbenchScope extends InheritedWidget {
 /// cancel, leaving the delivery line its words.
 const double _compactResumeChipWidth = 180;
 
+/// The most of the model's name the phone's bar row shows: "Opus 5.5" whole.
+const double _compactModelLabelWidth = 96;
+
+/// The most of the phone's bar row the model takes.
+const double _compactModelShare = 0.35;
+
 /// **Chat / Terminal** in the phone's app bar: the bar's [_ViewToggle], moved
 /// up for the focused group, which is the only one a phone shows.
 class WorkbenchFaceToggle extends ConsumerWidget {
@@ -49,8 +55,8 @@ class WorkbenchFaceToggle extends ConsumerWidget {
   }
 }
 
-/// The status bar folded to one row: the delivery facts, the permission mode
-/// and **Session ▾**, whose sheet is the row's overflow. The same row in the
+/// The status bar folded to one row: the delivery facts, the model and
+/// **Session ▾**, whose sheet is the row's overflow. The same row in the
 /// chat and the terminal; the toggle is in the app bar.
 class _CompactSessionBar extends StatelessWidget {
   const _CompactSessionBar({
@@ -100,61 +106,78 @@ class _CompactSessionBar extends StatelessWidget {
               children: [
                 ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: Touch.target),
-                  child: Row(
-                    children: [
-                      SessionAgentMark(
-                        key: SessionAgentMark.barKey,
-                        sessionId: sessionId,
-                      ),
-                      // The glyph alone: the delivery line needs the words.
-                      SessionEnvironmentMark(
-                        key: SessionEnvironmentMark.barKey,
-                        sessionId: sessionId,
-                        labelled: false,
-                      ),
-                      Expanded(
-                        child: DeliveryStateLine(
+                  child: LayoutBuilder(
+                    builder: (context, row) => Row(
+                      children: [
+                        SessionAgentMark(
+                          key: SessionAgentMark.barKey,
                           sessionId: sessionId,
-                          singleLine: true,
                         ),
-                      ),
-                      // The badges, each only when it says something (the
-                      // desktop bar's rule): most of the room when they want
-                      // it, scrolled rather than overflowing when several are
-                      // up at once. The mode chip is in the sheet.
-                      Flexible(
-                        flex: 9,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // A waiting resume's countdown and cancel stay
-                              // in view.
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: _compactResumeChipWidth,
-                                ),
-                                child: ScheduledResumeChip(
-                                  sessionId: sessionId,
-                                ),
-                              ),
-                              // The phone's only way into the messages waiting
-                              // for this session, chat or terminal.
-                              QueuedCountChip(sessionId: sessionId),
-                              SessionSubagentsBadge(sessionId: sessionId),
-                              OperatorChip(
-                                sessionId: sessionId,
-                                onlyWhenOn: true,
-                              ),
-                              SessionPortsBadge(sessionId: sessionId),
-                            ],
+                        // The glyph alone: the delivery line needs the words.
+                        SessionEnvironmentMark(
+                          key: SessionEnvironmentMark.barKey,
+                          sessionId: sessionId,
+                          labelled: false,
+                        ),
+                        Expanded(
+                          child: DeliveryStateLine(
+                            sessionId: sessionId,
+                            singleLine: true,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: Insets.xs),
-                      _SessionSheetButton(sessionId: sessionId),
-                    ],
+                        // The model at a glance, by its name alone (owner,
+                        // 2026-10-08); its picker as on the wide bar. Capped
+                        // at a share of the row, so at large text its name
+                        // ends rather than pushing the row over.
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: row.maxWidth * _compactModelShare,
+                          ),
+                          child: SessionModelChip(
+                            key: const ValueKey('compact-session-model'),
+                            sessionId: sessionId,
+                            short: true,
+                            maxLabelWidth: _compactModelLabelWidth,
+                          ),
+                        ),
+                        // The badges, each only when it says something (the
+                        // desktop bar's rule): most of the room when they want
+                        // it, scrolled rather than overflowing when several are
+                        // up at once. The mode chip is in the sheet.
+                        Flexible(
+                          flex: 9,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // A waiting resume's countdown and cancel stay
+                                // in view.
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: _compactResumeChipWidth,
+                                  ),
+                                  child: ScheduledResumeChip(
+                                    sessionId: sessionId,
+                                  ),
+                                ),
+                                // The phone's only way into the messages waiting
+                                // for this session, chat or terminal.
+                                QueuedCountChip(sessionId: sessionId),
+                                SessionSubagentsBadge(sessionId: sessionId),
+                                OperatorChip(
+                                  sessionId: sessionId,
+                                  onlyWhenOn: true,
+                                ),
+                                SessionPortsBadge(sessionId: sessionId),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: Insets.xs),
+                        _SessionSheetButton(sessionId: sessionId),
+                      ],
+                    ),
                   ),
                 ),
                 SessionNoticeLine(sessionId: sessionId),
