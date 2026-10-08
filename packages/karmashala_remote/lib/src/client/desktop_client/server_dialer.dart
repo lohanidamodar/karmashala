@@ -25,6 +25,7 @@ class DesktopServerDialer {
     this.scout,
     this.onLog,
     this.acceptRelayMove = true,
+    this.resumeAfterProof = kDesktopResumeAfterProof,
     KnownRelays? knownRelays,
     DateTime Function()? now,
   }) : knownRelays = knownRelays ?? KnownRelays.popupBits,
@@ -51,6 +52,9 @@ class DesktopServerDialer {
   /// Whether this end says it knows `link.relay.move` and saves the moves a
   /// server asks for. False only to stand in for a build that predates it.
   final bool acceptRelayMove;
+
+  /// [DesktopLinkResume.afterProof] for every link this dialer opens.
+  final Duration resumeAfterProof;
 
   /// Which relays are retired: a saved one is dropped once a move is saved.
   final KnownRelays knownRelays;
@@ -160,6 +164,7 @@ class DesktopServerDialer {
             onLog: onLog,
             onHeld: onHeld,
             proofs: _proofs.stream,
+            afterProof: resumeAfterProof,
             promoteOffered: promoteOffered,
             keepaliveOffered: keepaliveOffered,
             lanRoutes: promoteOffered == null
@@ -353,7 +358,9 @@ class DesktopServerDialer {
   /// store, so relays and a LAN address learned since the dial are in it.
   ///
   /// For a [promotion] (Stage 0 step 18): the same routes minus every relay,
-  /// and none at all under a relay pin — a pin is "only".
+  /// and none at all under a relay pin — a pin is "only". Only a promotion
+  /// heeds or feeds the LAN cooldown; a resume tries the announced address
+  /// on every pass.
   Future<List<DesktopResumeRoute>> _resumeRoutes(
     CompanionPairing pairing,
     int generation, {
@@ -411,12 +418,15 @@ class DesktopServerDialer {
       open: () async => scout != null
           ? scout.dial(host)
           : _lanDialer(host.address.address, host.port),
+      // A resume that fails here cools nothing down: the first pass runs as
+      // a phone thaws, before its network is back, and a cooled address
+      // would leave a link held on this network no way back for the grace.
       noted: scout == null
           ? null
           : (answered) {
               if (answered) {
                 scout.noteSuccess(host);
-              } else {
+              } else if (promotion) {
                 scout.noteFailure(host);
               }
             },
@@ -430,7 +440,7 @@ class DesktopServerDialer {
     final hinted = _lanHintHost(saved);
     if (hinted != null &&
         tried.add('${hinted.address.address}:${hinted.port}') &&
-        (pinnedLan || scout == null || !scout.inCooldown(hinted))) {
+        (!promotion || scout == null || !scout.inCooldown(hinted))) {
       routes.add(lanRoute(hinted));
     }
     if (pinnedLan || promotion) return routes;
