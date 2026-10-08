@@ -4809,6 +4809,19 @@ _PopupMenu<String>
                                                                                                                                           RichText
                                                                           _MenuItem
                                                                             FadeTransition key=[GlobalKey#…]
+                                                                              DesktopMenuDivider
+                                                                                Divider
+                                                                                  SizedBox
+                                                                                    Center
+                                                                                      Container
+                                                                                        Padding
+                                                                                          ConstrainedBox
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                LimitedBox
+                                                                                                  ConstrainedBox
+                                                                          _MenuItem
+                                                                            FadeTransition key=[GlobalKey#…]
                                                                               DesktopMenuItem<String>
                                                                                 MergeSemantics
                                                                                   Semantics
