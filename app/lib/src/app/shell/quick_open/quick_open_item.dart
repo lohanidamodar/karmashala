@@ -92,6 +92,7 @@ class QuickOpenItem {
     this.opensTab = false,
     this.onlyWhenSearched = false,
     this.leading,
+    this.onResume,
   });
 
   /// Stable across rebuilds, so the selected row survives a refresh in place.
@@ -131,6 +132,11 @@ class QuickOpenItem {
   final bool onlyWhenSearched;
 
   final VoidCallback onSelect;
+
+  /// A stopped session's explicit resume — Shift+Enter, or the row's Resume
+  /// button — where [onSelect] only shows it. A resume sends the conversation
+  /// back as context, which costs tokens, so picking a row never does.
+  final VoidCallback? onResume;
 }
 
 /// A scored item, with the characters the query matched in its title.

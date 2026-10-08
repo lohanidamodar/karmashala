@@ -53,6 +53,25 @@ Repository? commandDefaultCheckout(
   );
 }
 
+/// [sessionId] in the dashboard's peek once the board is up to take it.
+/// Quick open brings the dashboard forward before it runs this.
+void peekOnDashboard(ProviderContainer container, String sessionId) {
+  container.read(overviewPrefsProvider.notifier).setView(OverviewView.board);
+  var tries = 0;
+  void peekWhenUp(Duration _) {
+    // The board's focus lives only while the dashboard is built.
+    if (!container.exists(overviewFocusProvider)) {
+      if (++tries < 4) {
+        WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
+      }
+      return;
+    }
+    container.read(overviewFocusProvider.notifier).peek(sessionId);
+  }
+
+  WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
+}
+
 /// Runs a [CommandAction] through the action that already owns it; nothing
 /// here decides anything those actions do not. Reads through a container, so
 /// it keeps working after the palette that started it has closed.
@@ -102,24 +121,7 @@ class TypedCommandRunner {
       _container.read(sessionsDataProvider).getById(sessionId)?.title ??
       'that session';
 
-  /// [sessionId] in the dashboard's peek once the board is up to take it.
-  /// Quick open brings the dashboard forward before it runs this.
-  void _peek(String sessionId) {
-    _container.read(overviewPrefsProvider.notifier).setView(OverviewView.board);
-    var tries = 0;
-    void peekWhenUp(Duration _) {
-      // The board's focus lives only while the dashboard is built.
-      if (!_container.exists(overviewFocusProvider)) {
-        if (++tries < 4) {
-          WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
-        }
-        return;
-      }
-      _container.read(overviewFocusProvider.notifier).peek(sessionId);
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
-  }
+  void _peek(String sessionId) => peekOnDashboard(_container, sessionId);
 
   Future<void> _answerQuestion(AnswerQuestionCommand command) async {
     try {

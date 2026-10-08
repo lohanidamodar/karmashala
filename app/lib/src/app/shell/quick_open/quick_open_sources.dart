@@ -104,7 +104,7 @@ import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
 import 'quick_open_step.dart';
 import 'repo_file_index.dart';
-import 'typed_command_runner.dart' show commandDefaultCheckout;
+import 'typed_command_runner.dart' show commandDefaultCheckout, peekOnDashboard;
 
 /// Per-group priors, added to every match in that group. Small on purpose: a
 /// large one would let a weak session match outrank an exact command match.
@@ -1265,6 +1265,7 @@ class QuickOpenSources {
   /// narrows them to one [projectId] or one [repositoryId]; the rows are the
   /// full list's own, so picking one does exactly what it does there.
   List<QuickOpenItem> _sessions({String? projectId, String? repositoryId}) {
+    final container = ProviderScope.containerOf(context, listen: false);
     final sessionDao = ref.read(sessionsDataProvider);
     final importedDao = ref.read(importedSessionsProvider);
     final workspace = ref.read(workspaceDataProvider);
@@ -1321,6 +1322,9 @@ class QuickOpenSources {
               weight: _sessionWeight + here + recency,
               opensTab: true,
               onSelect: () => dismiss(pickSession(session.id)),
+              onResume: _stopped(container, session.id)
+                  ? () => dismiss(resumeSession(session.id))
+                  : null,
             ),
           ));
         }
@@ -1379,15 +1383,32 @@ class QuickOpenSources {
     return null;
   }
 
-  /// A native session picked by name. One that nothing runs is resumed where
-  /// the person is when the "Resume and start sessions in the background"
-  /// setting is on — no tab, nothing selected, its card peeked or a notice
-  /// with Open; anything else is opened, as [focusSession] does.
+  /// A native session picked by name: shown, never resumed — a resume sends
+  /// the conversation back as context, which costs tokens, and a pick is
+  /// usually a look. With "Resume and start sessions in the background" on,
+  /// one nothing runs is shown in the Agent dashboard's peek, with no tab;
+  /// anything else opens as [focusSession] does.
   void Function() pickSession(String sessionId) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    return () {
+      if (!container.read(launchInBackgroundProvider) ||
+          !_stopped(container, sessionId)) {
+        unawaited(focusSession(sessionId, imported: false));
+        return;
+      }
+      openOverviewTab(ref);
+      peekOnDashboard(container, sessionId);
+    };
+  }
+
+  /// A stopped session's explicit Resume — Shift+Enter or the row's button:
+  /// where the person is while the background setting is on (its card
+  /// peeked, or a notice with Open), into its tab while it is off.
+  void Function() resumeSession(String sessionId) {
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = ScaffoldMessenger.maybeOf(context);
     return () {
-      if (!_resumesHere(container, sessionId)) {
+      if (!container.read(launchInBackgroundProvider)) {
         unawaited(focusSession(sessionId, imported: false));
         return;
       }
@@ -1408,10 +1429,10 @@ class QuickOpenSources {
     };
   }
 
-  static bool _resumesHere(ProviderContainer container, String sessionId) {
-    if (!container.read(launchInBackgroundProvider)) return false;
+  /// Whether nothing runs [sessionId]: what a Resume would bring back.
+  static bool _stopped(ProviderContainer container, String sessionId) {
     final session = container.read(sessionsDataProvider).getById(sessionId);
-    if (session == null || session.isArchived) return false;
+    if (session == null) return false;
     final launcher = container.read(sessionLauncherProvider);
     return launcher.livePaneFor(sessionId) == null &&
         !launcher.heldByHostOnly(sessionId) &&

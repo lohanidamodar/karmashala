@@ -297,17 +297,16 @@ void main() {
       expect(explorer.opened, ['s1']);
     });
 
-    testWidgets('on, picking a stopped session by name resumes it in the '
-        'background, and nothing is selected', (tester) async {
+    testWidgets('on, picking a stopped session by name shows it and never '
+        'resumes it: a resume costs tokens', (tester) async {
       final container = await open(tester);
 
       await type(tester, 'login');
       await press(tester, LogicalKeyboardKey.enter);
 
-      expect(resumer.resumed, [('s1', null)]);
+      expect(resumer.resumed, isEmpty);
       expect(explorer.opened, isEmpty);
       expect(container.read(selectedSessionIdProvider), isNull);
-      expect(find.text('Resumed "Fix login redirect"'), findsOneWidget);
     });
 
     testWidgets('off, picking a stopped session by name opens it', (
@@ -396,9 +395,9 @@ void main() {
 
     await type(tester, 'login');
     await press(tester, LogicalKeyboardKey.enter);
-    // The same first result. Stopped, it is resumed where the person is
-    // (the setting's default) rather than selected.
-    expect(resumer.resumed, [('s1', null)]);
+    // The same first result. Stopped, it is shown on the dashboard (the
+    // setting's default) rather than selected, and never resumed.
+    expect(resumer.resumed, isEmpty);
     expect(container.read(selectedSessionIdProvider), isNull);
     expect(explorer.starts, isEmpty);
   });
