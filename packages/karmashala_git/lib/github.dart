@@ -2,11 +2,14 @@
 /// a review strip is drawn from, the merge strategies a repository allows and
 /// the branch-protection rule behind a blocked merge.
 ///
-/// `GitHubService` is the `gh` client that fills them: every call goes through
-/// a `CommandRunner`, so one code path works locally, in WSL and over SSH, and
-/// the parsers it feeds are pure functions over `gh --json` output.
+/// `GitHubService` fills them over GitHub's API (`GithubClient`), as the token
+/// `GithubCredentials` picks for the repository's host: one saved in Settings,
+/// then the server's environment, then gh's login.
 library;
 
+export 'src/github/api/github_client.dart';
+export 'src/github/api/github_credentials.dart';
+export 'src/github/api/github_hosts.dart';
 export 'src/github/data/github_service.dart';
 export 'src/github/domain/branch_protection.dart';
 export 'src/github/domain/github_repo.dart';

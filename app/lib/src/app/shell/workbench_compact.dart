@@ -75,6 +75,10 @@ class _CompactSessionBar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        ColoredBox(
+          color: tones.term,
+          child: SecretRequestCard(sessionId: sessionId, touch: true),
+        ),
         if (!onTerminal)
           ColoredBox(
             color: tones.term,

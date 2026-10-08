@@ -24,6 +24,7 @@ class WebhookToolSet extends ServerToolSet {
     required String Function() newId,
     String Function(String? sessionId)? proposerOf,
     void Function(Automation proposal)? proposed,
+    Future<String?> Function(String reference)? redeemSecret,
   }) : _save = save,
        _webhooks = webhooks,
        _work = work,
@@ -31,7 +32,8 @@ class WebhookToolSet extends ServerToolSet {
        _now = now,
        _newId = newId,
        _proposerOf = proposerOf ?? _anAgent,
-       _proposed = proposed;
+       _proposed = proposed,
+       _redeemSecret = redeemSecret ?? _noSecrets;
 
   final Automation Function(Automation automation) _save;
   final List<Automation> Function() _webhooks;
@@ -41,6 +43,15 @@ class WebhookToolSet extends ServerToolSet {
   final String Function() _newId;
   final String Function(String? sessionId) _proposerOf;
   final void Function(Automation proposal)? _proposed;
+  final Future<String?> Function(String reference) _redeemSecret;
+
+  static Future<String?> _noSecrets(String _) async => null;
+
+  static String? _secretReferenceOf(Map<String, dynamic> arguments) {
+    final trigger = arguments['trigger'];
+    final value = trigger is Map ? trigger['signingRef'] : null;
+    return value is String && value.trim().isNotEmpty ? value.trim() : null;
+  }
 
   static String _anAgent(String? _) => 'An agent';
 
@@ -61,6 +72,7 @@ class WebhookToolSet extends ServerToolSet {
         'trigger': {
           'type': 'webhook',
           'signatureRequired': arguments['signatureRequired'],
+          'signingRef': arguments['signingRef'],
           'callsPerHour': arguments['callsPerHour'],
         },
       }, callerSessionId),
@@ -231,9 +243,30 @@ class WebhookToolSet extends ServerToolSet {
       );
       if (proposal.prompt.isEmpty) throw ArgumentError('prompt is needed.');
     }
+    final reference = _secretReferenceOf(arguments);
+    if (reference != null && !proposal.isWebhook) {
+      throw ArgumentError('signingRef is for a webhook trigger.');
+    }
+    // Checked before the reference is used up: it is single-use.
+    final work = reference == null ? null : _webhooksWork;
+    final secret = reference == null ? null : await _redeemSecret(reference);
+    if (reference != null && secret == null) {
+      throw ArgumentError(
+        'signingRef is not a reference this server holds, or it '
+        'was already used. Ask again with request_secret.',
+      );
+    }
     // Saved off whatever was asked: only a person turns it on.
     final saved = _save(proposal.copyWith(enabled: false));
+    if (work != null && secret != null) {
+      await work.adoptSecret(saved.id, secret);
+    }
     _proposed?.call(saved);
+    final told = !saved.isWebhook
+        ? ''
+        : secret != null
+        ? ' Its URL goes to them then; it signs with the secret they entered.'
+        : ' Its URL and secret go to them then.';
     return {
       'id': saved.id,
       'name': saved.name,
@@ -243,7 +276,7 @@ class WebhookToolSet extends ServerToolSet {
       'note':
           'Proposed, not armed: it does nothing until the owner reviews it '
           'and turns it on in Automations.'
-          '${saved.isWebhook ? ' Its URL and secret go to them then.' : ''}',
+          '$told',
     };
   }
 }
@@ -304,6 +337,12 @@ const List<Map<String, Object?>> webhookToolSchemas = [
           'description': 'Require an HMAC signature (default true).',
         },
         'callsPerHour': {'type': 'integer', 'minimum': 1},
+        'signingRef': {
+          'type': 'string',
+          'description':
+              'A reference request_secret gave you: the webhook is signed '
+              'with the secret the owner entered. Used up by this call.',
+        },
       },
       'required': ['name', 'repositoryId', 'agentInstallationId', 'template'],
     },
@@ -350,7 +389,9 @@ const List<Map<String, Object?>> webhookToolSchemas = [
               'start_session, message_session or notify_only), github '
               '(github: {kind, repository, action, branch, authors, logins, '
               'label, assignee, pollSeconds}) or webhook '
-              '(signatureRequired, callsPerHour).',
+              '(signatureRequired, callsPerHour, signingRef: a '
+              'reference request_secret gave you, to sign with the secret '
+              'the owner entered).',
           'properties': {
             'type': {
               'type': 'string',

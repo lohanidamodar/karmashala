@@ -35,6 +35,8 @@ import 'filing_lookup.dart';
 import 'env_work.dart';
 import 'files_work.dart';
 import 'git_work.dart';
+import '../github/server_github.dart' show GithubWork;
+import '../github/server_secret_requests.dart' show SecretWork;
 import 'hosts_handler.dart';
 import 'notes_handler.dart';
 import 'pairings_handler.dart';
@@ -146,6 +148,12 @@ class DataService {
   /// The server's environment vault (slice 5a, write-only), set by `serve`;
   /// without it that work is refused `unavailable`.
   EnvVault? envVault;
+
+  /// The server's GitHub access (tokens, hosts), set by `serve`.
+  GithubWork? githubWork;
+
+  /// Agents' requests for a secret, set by `serve`.
+  SecretWork? secretWork;
 
   /// The app stores this server reads, set by `serve`; without it that work
   /// is refused `unavailable`.
@@ -598,6 +606,8 @@ class DataService {
         SessionSetMode() ||
         SessionSetConfigOption() ||
         EnvVaultRequest() ||
+        GithubAccessRequest() ||
+        SecretRequestWork() ||
         StoreRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
@@ -822,6 +832,8 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is SessionSetMode ||
       request is SessionSetConfigOption ||
       request is EnvVaultRequest ||
+      request is GithubAccessRequest ||
+      request is SecretRequestWork ||
       request is StoreRequest;
 
   /// Answers any request: at once, or when its work is done. What agent work
@@ -999,6 +1011,24 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       final result = await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }
+    if (request case final GithubAccessRequest<Object?> asked) {
+      final work =
+          _service.githubWork ??
+          (throw const DataRefused.unavailable(
+            'this server keeps no GitHub access',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
+    if (request case final SecretRequestWork<Object?> asked) {
+      final work =
+          _service.secretWork ??
+          (throw const DataRefused.unavailable(
+            'this server takes no secret requests',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
+    }
     if (request case final StoreRequest<Object?> asked) {
       final work =
           _service.storeWork ??
@@ -1154,6 +1184,12 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     ClaudeAccountDelete() || CodexAccountDelete() =>
       'a phone may not delete this server\'s agent accounts; use a desktop '
           'paired with it',
+    GithubTokenSave() || GithubTokenClear() || GithubHostChoose() =>
+      'a phone may not change this server\'s GitHub access; use a desktop '
+          'paired with it',
+    SecretProvide() =>
+      'a phone may not save a secret on this server; use a desktop paired '
+          'with it, or decline',
     WebhookRotate() =>
       'a phone may not make a webhook\'s signing secret; use a desktop '
           'paired with this server',

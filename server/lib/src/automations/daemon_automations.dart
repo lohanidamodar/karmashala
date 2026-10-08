@@ -40,6 +40,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_git/github.dart' show GithubClient;
 import 'package:karmashala_git/worktrees.dart' show WorktreeService;
 import 'package:path/path.dart' as p;
 
@@ -108,6 +109,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     StepCommandRunner? stepCommands,
     StepWebhookPoster? stepWebhooks,
     GithubApi? Function(Automation automation)? githubApi,
+    GithubClient? githubClient,
     Future<String?> Function(EnvironmentPath directory)? branchOf,
     Duration? githubSweepEvery,
   }) : _db = database,
@@ -328,6 +330,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       newId: ids,
       branchOf: branchOf,
       apiFor: githubApi,
+      github: githubClient,
       local: remote,
       sweepEvery: githubSweepEvery,
       log: _log,

@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused, SecretRequest;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show remoteMenuOf;
 import 'package:karmashala_remote/client.dart' show GatewayException;
@@ -26,6 +28,7 @@ import '../../explorer/application/agent_state_providers.dart';
 import '../application/ask_resolutions.dart';
 import '../application/session_actions.dart';
 import '../application/session_input.dart';
+import '../application/secret_requests.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_status_providers.dart';
 import 'prompt_cards/menu_prompt_card.dart';
@@ -39,6 +42,7 @@ part 'approval_request_card/board_answers.dart';
 part 'approval_request_card/dock_buttons.dart';
 part 'approval_request_card/permission_options.dart';
 part 'approval_request_card/tool_ask_answers.dart';
+part 'approval_request_card/secret_request_dock.dart';
 
 const _noLiveTerminal =
     'This session has no live terminal here, so it cannot be answered from '

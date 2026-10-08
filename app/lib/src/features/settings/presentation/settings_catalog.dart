@@ -158,6 +158,13 @@ enum SettingsSectionId {
     'Pair a phone to follow and answer sessions from anywhere.',
     ['remote access', 'remote'],
   ),
+  sourceControl(
+    'Source control',
+    AppIcons.gitBranch,
+    SettingsGroup.connections,
+    'GitHub access: a token, or which gh account each host uses.',
+    ['git', 'github'],
+  ),
   environmentVariables(
     'Variables and secrets',
     AppIcons.clipboardText,
@@ -448,6 +455,15 @@ enum SettingsAnchor {
     'commands',
     'saved command',
     'library',
+  ]),
+  github(SettingsSectionId.sourceControl, 'GitHub', [
+    'github',
+    'gh',
+    'token',
+    'personal access token',
+    'enterprise',
+    'pull request',
+    'account',
   ]),
   variables(SettingsSectionId.environmentVariables, 'Environment variables', [
     'env',
@@ -1066,6 +1082,14 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.snippets,
     description: 'Saved commands to insert into a terminal.',
     keywords: ['snippet', 'saved command', 'library'],
+  ),
+  SettingsEntry(
+    'GitHub token',
+    anchor: SettingsAnchor.github,
+    description:
+        'The token GitHub features use, saved on the server, and which gh '
+        'account each host uses.',
+    keywords: ['github', 'token', 'gh auth', 'enterprise', 'account'],
   ),
   SettingsEntry(
     'Load these in new terminals',

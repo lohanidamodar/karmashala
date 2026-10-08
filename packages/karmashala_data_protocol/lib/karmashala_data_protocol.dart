@@ -20,6 +20,7 @@ export 'src/env_values.dart';
 export 'src/environment_values.dart';
 export 'src/files_values.dart';
 export 'src/git_values.dart';
+export 'src/github_values.dart';
 export 'src/listening_port_values.dart';
 export 'src/running_values.dart';
 export 'src/flutter_values.dart';

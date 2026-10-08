@@ -411,12 +411,12 @@ Future<Object?> _viaGitUnguarded(
     GitDelivery(:final repository) => _deliveryVia(git, at, repository),
     WorktreesOf() => git.listWorktrees(at),
     GitHubPullRequest(:final branch) => _pullRequestVia(
-      GitHubService(git.runner),
+      _ScriptedGh(git.runner),
       at,
       branch,
     ),
     GitHubOverviewOf() => () async {
-      final gh = GitHubService(git.runner);
+      final gh = _ScriptedGh(git.runner);
       return GitHubOverview(
         repository: await gh.getRepository(at),
         pullRequests: await gh.listPullRequests(at),
@@ -424,7 +424,7 @@ Future<Object?> _viaGitUnguarded(
       );
     }(),
     GitHubMarkReady(:final number) => ack(
-      GitHubService(git.runner).markPullRequestReady(at, number: number),
+      _ScriptedGh(git.runner).markPullRequestReady(at, number: number),
     ),
     GitStage(:final paths) => ack(
       paths.isEmpty ? git.stageAll(at) : git.stage(at, paths),
@@ -453,7 +453,7 @@ Future<Object?> _viaGitUnguarded(
 /// could not tell is no pull request; the policy only for an open one, the
 /// protection only when a merge reads `BLOCKED`.
 Future<PullRequestReading> _pullRequestVia(
-  GitHubService gh,
+  _ScriptedGh gh,
   EnvironmentPath at,
   String branch,
 ) async {
@@ -543,4 +543,87 @@ Future<SessionDelivery> _deliveryVia(
 
 final class _Unhandled {
   const _Unhandled();
+}
+
+/// GitHub as the app's tests script it: `gh` answers through the fake
+/// runner, read with the package's parsers. The server asks GitHub's API
+/// itself; these tests are about what the app does with the answers.
+class _ScriptedGh {
+  _ScriptedGh(this.runner);
+
+  final CommandRunner runner;
+
+  Future<CommandResult> _gh(EnvironmentPath at, List<String> args) =>
+      runner.run(
+        CommandRequest(executable: 'gh', arguments: args, workingDirectory: at),
+      );
+
+  Future<String> _ok(EnvironmentPath at, List<String> args) async {
+    final result = await _gh(at, args);
+    if (!result.ok) throw GitHubException(result.stderr.trim());
+    return result.stdout;
+  }
+
+  Future<GitHubRepo?> getRepository(EnvironmentPath at) async => parseGhRepo(
+    await _ok(at, [
+      'repo',
+      'view',
+      '--json',
+      'nameWithOwner,description,url,isPrivate,stargazerCount,defaultBranchRef',
+    ]),
+  );
+
+  Future<List<PullRequest>> listPullRequests(EnvironmentPath at) async =>
+      parseGhPullRequests(
+        await _ok(at, [
+          'pr',
+          'list',
+          '--json',
+          'number,title,state,author,url',
+        ]),
+      );
+
+  Future<List<Issue>> listIssues(EnvironmentPath at) async => parseGhIssues(
+    await _ok(at, ['issue', 'list', '--json', 'number,title,state']),
+  );
+
+  Future<PullRequestSnapshot?> pullRequestFor(
+    EnvironmentPath at, {
+    required String branch,
+  }) async {
+    final result = await _gh(at, ['pr', 'view', branch, '--json', 'all']);
+    if (!result.ok) {
+      if (mentionsNoPullRequest(result.stderr)) return null;
+      throw GitHubException(result.stderr.trim());
+    }
+    return parseGhPullRequestView(result.stdout);
+  }
+
+  Future<ForgePolicy> forgePolicyFor(
+    EnvironmentPath at, {
+    required int number,
+  }) async => parseForgePolicy(
+    (await _gh(at, ['api', 'graphql', '-F', 'number=$number'])).stdout,
+  );
+
+  Future<BranchProtection> branchProtectionFor(
+    EnvironmentPath at, {
+    required String branch,
+  }) async {
+    final result = await _gh(at, [
+      'api',
+      'repos/{owner}/{repo}/branches/$branch/protection',
+    ]);
+    if (!result.ok) {
+      return mentionsForbidden('${result.stdout}\n${result.stderr}')
+          ? BranchProtection.forbidden
+          : BranchProtection.unknown;
+    }
+    return parseBranchProtection(result.stdout, branch: branch);
+  }
+
+  Future<void> markPullRequestReady(
+    EnvironmentPath at, {
+    required int number,
+  }) => _ok(at, ['pr', 'ready', '$number']);
 }

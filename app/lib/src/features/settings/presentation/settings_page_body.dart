@@ -10,6 +10,7 @@ import '../../automations/presentation/automations_settings_link.dart';
 import '../../automations/presentation/automations_tab_state.dart';
 import '../../checkpoints/presentation/checkpoint_settings_section.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
+import '../../github_access/presentation/github_access_page.dart';
 import '../../environments/presentation/environments_section.dart';
 import '../../environments/presentation/toolchains_section.dart';
 import '../../flutter_apps/presentation/flutter_sdk_section.dart';
@@ -167,6 +168,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.iosSimulators => const IosSimulatorsSection(),
   SettingsAnchor.snippets => const SnippetsSettingsPage(),
   SettingsAnchor.variables => const EnvSecretsPage(),
+  SettingsAnchor.github => const GithubAccessPage(),
   SettingsAnchor.automations => const AutomationsSettingsLink(
     anchor: SettingsAnchor.automations,
     section: AutomationsSection.automations,

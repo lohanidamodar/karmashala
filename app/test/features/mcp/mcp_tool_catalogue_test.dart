@@ -123,6 +123,8 @@ void main() {
       'checks_run',
       // Puts the running app into widget-select mode and waits on a person.
       'flutter_pick_widget',
+      // A card in the asking session's own thread, waiting on the owner.
+      'request_secret',
       // Each can end up launching a visible Chrome; `browser_tabs` opens a
       // foreground tab in it, and `browser_pick` fronts it and blocks.
       'browser_connect',

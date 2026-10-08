@@ -10,6 +10,7 @@ import 'package:agent_cli/process.dart'
         ExecutionEnvironment,
         localHostEnvironment;
 import 'package:agent_cli/read.dart' show CliStoreLocator;
+import 'package:karmashala_git/github.dart' show GhCommandLogin, GithubClient;
 import 'package:karmashala_git/worktrees.dart' show WorktreeService;
 import 'package:karmashala_environments/store.dart'
     show AcpAuthChoiceDao, ExecutionEnvironmentDao;
@@ -130,6 +131,9 @@ import '../hooks/hook_spools.dart';
 import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/tools/webhook_tool_set.dart';
+import '../mcp/tools/secret_tool_set.dart';
+import '../github/server_github.dart';
+import '../github/server_secret_requests.dart';
 import '../mcp/tools/inbox_tool_set.dart';
 import '../activity/activity_backfill.dart';
 import '../activity/server_activity.dart';
@@ -534,6 +538,38 @@ Future<int> _serve(
   // Usage, accounts, detection and the CLI import: the work done for the
   // agents on this machine, whichever client asks, and on its own.
   final hostEnvironment = environment ?? Platform.environment;
+  // GitHub straight to its API: a token saved in Settings, then this
+  // environment's, then gh's login — gh on this machine first, then in WSL,
+  // where a Windows machine's gh often lives.
+  final github = ServerGithub(
+    dataDirectory: dataDirectory,
+    environment: hostEnvironment,
+    gh:
+        hostEnvironment[kAgentWorkVariable] == 'off' ||
+            hostEnvironment[kGithubGhVariable] == 'off'
+        ? null
+        : GhCommandLogin(() {
+            final environments = ExecutionEnvironmentDao(database).getAll();
+            return [
+              for (final kind in [
+                Platform.isWindows
+                    ? EnvironmentKind.windowsNative
+                    : EnvironmentKind.localPosix,
+                if (Platform.isWindows) EnvironmentKind.wsl,
+              ])
+                for (final place in environments)
+                  if (place.kind == kind) ssh.runners.forEnvironment(place),
+            ];
+          }),
+  );
+  final secretRequests = ServerSecretRequests(
+    dataDirectory: dataDirectory,
+    tell: data.announce,
+  );
+  data
+    ..githubWork = github
+    ..secretWork = secretRequests
+    ..greeters.add(secretRequests.greeting);
   // Every local and WSL terminal (slice 5a): built here on this machine's OS
   // with the vault above, run in the registry, attached to by id.
   final terminals = ServerTerminals(
@@ -652,7 +688,11 @@ Future<int> _serve(
     dataDirectory: dataDirectory,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   )..activeModels = activeModels;
-  final reach = CheckoutReach(database, runners: ssh.runners);
+  final reach = CheckoutReach(
+    database,
+    runners: ssh.runners,
+    github: github.client,
+  );
   // A project an agent adds imports the CLI history of its new checkouts.
   final folders = ProjectFolders(
     tools,
@@ -764,6 +804,7 @@ Future<int> _serve(
         liveness: liveness,
       ),
       GitHubRunToolSet(tools, reach: reach),
+      SecretToolSet(secretRequests),
       ProjectToolSet(tools, reach: reach, folders: folders),
       worktreeTools,
       // An agent attaches the checkouts its session spans — any of them,
@@ -1051,12 +1092,13 @@ Future<int> _serve(
     // A resume of an ACP session that ended starts it again over ACP.
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
-    // GitHub automations poll as the checkout's own `gh` login.
+    // GitHub automations poll through the server's GitHub access.
     githubSweepEvery:
         hostEnvironment[kGithubPollVariable] != 'off' &&
             hostEnvironment[kAgentWorkVariable] != 'off'
         ? kGithubSweepEvery
         : null,
+    githubClient: github.client,
     worktrees: worktrees,
   );
   // Webhooks reach this server through the relay it pairs through.
@@ -1659,6 +1701,8 @@ Future<int> _serve(
           return session == null ? agent : '$agent in "${session.title}"';
         },
         proposed: (proposal) => automations?.fileProposal(proposal),
+        // A reference request_secret handed an agent, spent here.
+        redeemSecret: secretRequests.redeem,
       ),
     )
     // Every session is operated here: every agent runs in this server.

@@ -31,6 +31,8 @@ const Set<String> kMcpUngatedWrites = {
   'session_unarchive',
   // Reaches only the session that started the caller, which asked for it.
   'report_to_parent',
+  // A card in the caller's own thread: the owner saves a secret or declines.
+  'request_secret',
 };
 
 /// Whether calling [tool] from a session needs the person's operator grant
@@ -525,6 +527,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'webhook_list': McpToolAnnotations.read,
   'webhook_create': McpToolAnnotations(movesAttention: false),
   'automation_propose': McpToolAnnotations(movesAttention: false),
+  // A card in the caller's own thread; nothing is saved unless the owner does.
+  'request_secret': McpToolAnnotations(movesAttention: true),
   'verification_list': McpToolAnnotations.read,
   'verification_get': McpToolAnnotations.read,
   // A `url` run connects a browser before it records anything, which lands
@@ -967,6 +971,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'automation_propose': McpToolListing(
     McpToolCategory.sessions,
     'Propose an automation, saved off, for the owner to review and turn on.',
+  ),
+  'request_secret': McpToolListing(
+    McpToolCategory.sessions,
+    'Ask the owner for a secret; get a single-use reference, never the value.',
   ),
   'verification_start': McpToolListing(
     McpToolCategory.verification,

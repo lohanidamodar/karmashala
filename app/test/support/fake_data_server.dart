@@ -47,7 +47,20 @@ import 'package:karmashala_git/git.dart'
 import 'package:karmashala_git/github.dart'
     show
         BranchProtection,
-        GitHubService,
+        ForgePolicy,
+        GitHubException,
+        GitHubRepo,
+        Issue,
+        PullRequest,
+        PullRequestSnapshot,
+        mentionsForbidden,
+        mentionsNoPullRequest,
+        parseBranchProtection,
+        parseForgePolicy,
+        parseGhIssues,
+        parseGhPullRequestView,
+        parseGhPullRequests,
+        parseGhRepo,
         MergeStateStatus,
         WorkflowRun,
         boundRunLog,
@@ -112,6 +125,7 @@ part 'fake_git_work.dart';
 part 'fake_runs_work.dart';
 part 'fake_files_work.dart';
 part 'fake_env_vault.dart';
+part 'fake_github_access.dart';
 part 'fake_stores.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
@@ -297,6 +311,8 @@ class FakeDataServer {
 
   /// The server's environment vault, write-only, in memory.
   late final envVault = FakeEnvVault._(this);
+  late final github = FakeGithubAccess._(this);
+  late final secrets = FakeSecretRequests._(this);
 
   /// The server's app stores: credential summaries and what was read, in
   /// memory; no store is reached.
@@ -553,6 +569,9 @@ class FakeDataServer {
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
           break;
+        case SecretRequestsChanged():
+          // Told, never kept: [secrets] holds them.
+          break;
         case QuickAccessChanged(:final pins):
           quickAccessPins = [...pins];
         case StoresChanged() || StoresProgress() || StoreAppChanged():
@@ -737,6 +756,12 @@ class FakeDataServer {
     }
     if (request case final SshWorkRequest<Object?> work) {
       return DataReply(sshWork._handle(work) as R, revision, const []);
+    }
+    if (request case final GithubAccessRequest<Object?> work) {
+      return DataReply(github._handle(work) as R, revision, const []);
+    }
+    if (request case final SecretRequestWork<Object?> work) {
+      return DataReply(secrets._handle(work) as R, revision, const []);
     }
     if (request case final EnvVaultRequest<Object?> work) {
       return DataReply(envVault._handle(work) as R, revision, const []);
@@ -932,7 +957,9 @@ class FakeDataServer {
       WebhooksWorkRequest() ||
       SessionWorkRequest() ||
       ClientActive() ||
-      EnvVaultRequest() => throw StateError('answered above'),
+      EnvVaultRequest() ||
+      GithubAccessRequest() ||
+      SecretRequestWork() => throw StateError('answered above'),
       GitWorkRequest() ||
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
       SessionTranscriptRequest() => throw const DataRefused.unavailable(

@@ -117,6 +117,13 @@ class _SessionBar extends ConsumerWidget {
         // on the terminal's tone with a margin all round, in Zen as well.
         // Nothing at all while it is not waiting. Chat only (owner,
         // 2026-09-30): on the terminal the prompt is on screen to answer.
+        // An agent asking for a secret: answered here in either view, since
+        // a terminal has nowhere to type one.
+        if (sessionId != null)
+          ColoredBox(
+            color: tones.term,
+            child: SecretRequestCard(sessionId: sessionId),
+          ),
         if (sessionId != null && !onTerminal)
           ColoredBox(
             color: tones.term,

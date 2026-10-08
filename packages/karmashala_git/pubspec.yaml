@@ -26,6 +26,8 @@ dependencies:
   # `ListEquality` for `BranchProtection`'s required-checks list, which used
   # `listEquals` from `package:flutter/foundation.dart` in the app.
   collection: ^1.19.1
+  # The hash a GitHub token is keyed by in a cache, so no map holds the token.
+  crypto: ^3.0.0
   # The clock a worktree setup's verdict is stamped with.
   karmashala_core:
     path: ../karmashala_core
