@@ -802,6 +802,37 @@ void main() {
       expect(automationDao().getById('auto-r1')!.consecutiveFailures, 1);
     });
 
+    test('the project-MCP checklist stops the run too, and is not '
+        'answered', () async {
+      nightly();
+      await startDaemon();
+      final agent = launcher.handles.single;
+      agent.emit(
+        _utf8(
+          '  2 new MCP servers found in this project\r\n'
+          '  Select any you wish to enable.\r\n\r\n'
+          '  ❯ [✔] dart\r\n    [✔] marionette\r\n'
+          '       Enable selected\r\n'
+          ' Space to select · Esc to reject all\r\n',
+        ),
+      );
+
+      await waitFor(() => runs().single.state != AutomationRunState.running);
+
+      final run = runs().single;
+      expect(run.state, AutomationRunState.failed);
+      expect(
+        run.reason,
+        startsWith(
+          "Claude Code is asking which of this project's MCP servers to "
+          'enable before it starts, in /src/r1, and nobody is there to '
+          'answer.',
+        ),
+      );
+      expect(agent.writes, isEmpty);
+      expect(agent.signals, isEmpty);
+    });
+
     test('an agent getting on with it is left running', () async {
       nightly();
       await startDaemon();

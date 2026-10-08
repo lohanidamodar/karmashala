@@ -76,6 +76,8 @@ class CompanionPrompts {
           sessionId: request.sessionId,
           menuId: request.menuId,
           option: request.option,
+          ticks: request.ticks,
+          dismiss: request.dismiss,
         ),
       ),
     );
@@ -148,6 +150,7 @@ RemoteMenu remoteMenuOf(AgentScreenMenu menu) => RemoteMenu(
   prompt: menu.prompt,
   options: menu.options,
   highlighted: menu.highlighted,
+  checked: menu.checked,
 );
 
 RemoteWaitKind remoteWaitOf(AgentWaitKind kind) => switch (kind) {

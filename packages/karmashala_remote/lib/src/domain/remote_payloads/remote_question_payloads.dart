@@ -228,6 +228,7 @@ class RemoteMenu {
     required this.options,
     required this.highlighted,
     this.prompt = const [],
+    this.checked = const [],
   });
 
   /// Names this menu. The answer carries it, so an answer meant for one
@@ -243,11 +244,20 @@ class RemoteMenu {
   /// What Enter alone would choose — shown, never assumed to be the answer.
   final int highlighted;
 
+  /// A checklist's ticks, one per option, null on the row that submits them;
+  /// empty for a single-choice menu.
+  final List<bool?> checked;
+
+  bool get isChecklist => checked.isNotEmpty;
+
   Map<String, Object?> toJson() => {
     'menuId': menuId,
     'prompt': prompt,
     'options': options,
     'highlighted': highlighted,
+    // Additive: an older reader draws a single-choice menu and its choose is
+    // refused, since a checklist answers only with its ticks.
+    if (checked.isNotEmpty) 'checked': checked,
   };
 
   /// The menu, or null for anything not wholly readable.
@@ -257,6 +267,7 @@ class RemoteMenu {
     final options = json['options'];
     final highlighted = json['highlighted'];
     final prompt = json['prompt'];
+    final checked = json['checked'];
     if (id is! String ||
         options is! List ||
         options.length < 2 ||
@@ -264,6 +275,12 @@ class RemoteMenu {
         highlighted is! int ||
         highlighted < 0 ||
         highlighted >= options.length) {
+      return null;
+    }
+    if (checked != null &&
+        (checked is! List ||
+            checked.length != options.length ||
+            !checked.every((c) => c == null || c is bool))) {
       return null;
     }
     return RemoteMenu(
@@ -275,16 +292,20 @@ class RemoteMenu {
           for (final row in prompt)
             if (row is String) row,
       ],
+      checked: checked == null ? const [] : List<bool?>.from(checked as List),
     );
   }
 }
 
-/// What `menu.answer` carries: which option of which menu.
+/// What `menu.answer` carries: which option of which menu — or, for a
+/// checklist, the boxes ticked when it is submitted, or that it is dismissed.
 class RemoteMenuAnswerRequest {
   const RemoteMenuAnswerRequest({
     required this.sessionId,
     required this.menuId,
     required this.option,
+    this.ticks,
+    this.dismiss = false,
   });
 
   final String sessionId;
@@ -293,23 +314,37 @@ class RemoteMenuAnswerRequest {
   /// The chosen option's index, top first.
   final int option;
 
+  /// A checklist's ticks, one per box in order, when [option] submits it.
+  final List<bool>? ticks;
+
+  /// Leaves a checklist by the agent's cancel, nothing ticked.
+  final bool dismiss;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'menuId': menuId,
     'option': option,
+    'ticks': ?ticks,
+    if (dismiss) 'dismiss': true,
   };
 
   static RemoteMenuAnswerRequest fromJson(Map<String, Object?> json) {
     final sessionId = json['sessionId'];
     final menuId = json['menuId'];
     final option = json['option'];
-    if (sessionId is! String || menuId is! String || option is! int) {
+    final ticks = json['ticks'];
+    if (sessionId is! String ||
+        menuId is! String ||
+        option is! int ||
+        (ticks != null && (ticks is! List || ticks.any((t) => t is! bool)))) {
       throw const ProtocolException('bad menu answer');
     }
     return RemoteMenuAnswerRequest(
       sessionId: sessionId,
       menuId: menuId,
       option: option,
+      ticks: ticks == null ? null : List<bool>.from(ticks as List),
+      dismiss: json['dismiss'] == true,
     );
   }
 }

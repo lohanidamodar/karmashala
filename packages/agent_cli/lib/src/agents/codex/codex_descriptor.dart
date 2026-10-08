@@ -264,9 +264,37 @@ const codexDescriptor = AgentDescriptor(
     // captured in `test/features/agents/fixtures/codex-approval-prompt.raw`:
     // "Do you trust the contents of this directory? … › 1. Yes, continue
     // 2. No, quit · Press enter to continue". `Press enter to continue` alone
-    // is not it — the update offer shares that footer.
+    // is not it — the update offer shares that footer. 0.160.0 words it
+    // "Trust this folder? Codex can read, edit, and run files here, …" with
+    // "Trust and continue" (codex.exe strings, 2026-10-08).
     firstRunPrompt: AgentFirstRunPromptRules(
-      markers: [GridMatcher('Do you trust the contents of this directory')],
+      markers: [
+        GridMatcher('Do you trust the contents of this directory'),
+        GridMatcher('Trust this folder? Codex can read, edit, and run files'),
+      ],
+      others: [
+        AgentStartupPrompt(
+          asks: 'whether to trust its new or changed hooks',
+          markers: [GridMatcher('Hooks need review')],
+          evidence:
+              'codex.exe 0.160.0 strings: "Hooks need review", "Trust all and '
+              'continue" / "Continue without trusting (hooks won\'t run)"',
+        ),
+        AgentStartupPrompt(
+          asks: 'whether to switch to a new model',
+          markers: [GridMatcher('Codex just got an upgrade')],
+          evidence:
+              'codex.exe 0.160.0 strings: "Codex just got an upgrade. '
+              'Introducing …", "Try new model" / "Use existing model"',
+        ),
+        AgentStartupPrompt(
+          asks: 'whether to update first',
+          markers: [GridMatcher('Skip until next version')],
+          evidence:
+              'codex.exe 0.160.0 strings: "Update available", "Update now '
+              '(runs …)", "Skip", "Skip until next version"',
+        ),
+      ],
     ),
     // **The safety net for the axes above being wrong about this binary.**
     // Mode support is a property of the *installation*, and the two Codex

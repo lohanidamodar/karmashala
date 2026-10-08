@@ -116,12 +116,20 @@ class DaemonAgents {
   }) {
     final descriptor = descriptorOf(agentId);
     if (descriptor == null) return null;
-    if (!descriptor.launch.firstRunPrompt.matchedBy(screen)) return null;
+    final rules = descriptor.launch.firstRunPrompt;
     final name = descriptor.displayName;
-    return '$name is asking whether to trust $directory, and nobody is there '
-        'to answer. Open the session once and answer it, then the automation '
-        'can run unattended. Karmashala does not trust a folder on your '
-        'behalf; $name was left at that question.';
+    if (rules.matchedBy(screen)) {
+      return '$name is asking whether to trust $directory, and nobody is '
+          'there to answer. Open the session once and answer it, then the '
+          'automation can run unattended. Karmashala does not trust a folder '
+          'on your behalf; $name was left at that question.';
+    }
+    final other = rules.otherOn(screen);
+    if (other == null) return null;
+    return '$name is asking ${other.asks} before it starts, in $directory, and '
+        'nobody is there to answer. Open the session once and answer it, then '
+        'the automation can run unattended. Karmashala does not answer it on '
+        'your behalf; $name was left at that question.';
   }
 
   /// Names a launched agent must not inherit from this process: a parent

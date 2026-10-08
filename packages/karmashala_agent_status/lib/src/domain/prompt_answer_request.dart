@@ -52,10 +52,16 @@ sealed class PromptAnswerRequest {
         final menuId = json['menuId'];
         final option = json['option'];
         if (menuId is! String || option is! int) return null;
+        final ticks = json['ticks'];
+        if (ticks != null && (ticks is! List || ticks.any((t) => t is! bool))) {
+          return null;
+        }
         return MenuAnswerRequest(
           sessionId: sessionId,
           menuId: menuId,
           option: option,
+          ticks: ticks == null ? null : List<bool>.from(ticks as List),
+          dismiss: json['dismiss'] == true,
           decidedBy: decidedBy,
           decidedBySessionId: decidedBySessionId,
         );
@@ -228,18 +234,57 @@ class MenuAnswerRequest extends PromptAnswerRequest {
     required super.sessionId,
     required this.menuId,
     required this.option,
+    this.ticks,
+    this.dismiss = false,
     super.decidedBy,
     super.decidedBySessionId,
   });
 
+  /// A checklist's answer: [option] is its submit row, and [ticks] says,
+  /// box by box ([AgentScreenMenu.boxes]), which are ticked when it submits.
+  const MenuAnswerRequest.checklist({
+    required String sessionId,
+    required String menuId,
+    required int submit,
+    required List<bool> ticks,
+    String decidedBy = 'the user',
+    String? decidedBySessionId,
+  }) : this(
+         sessionId: sessionId,
+         menuId: menuId,
+         option: submit,
+         ticks: ticks,
+         decidedBy: decidedBy,
+         decidedBySessionId: decidedBySessionId,
+       );
+
+  /// A checklist left with nothing ticked, by the agent's cancel.
+  const MenuAnswerRequest.dismiss({
+    required String sessionId,
+    required String menuId,
+    String decidedBy = 'the user',
+    String? decidedBySessionId,
+  }) : this(
+         sessionId: sessionId,
+         menuId: menuId,
+         option: -1,
+         dismiss: true,
+         decidedBy: decidedBy,
+         decidedBySessionId: decidedBySessionId,
+       );
+
   final String menuId;
   final int option;
+  final List<bool>? ticks;
+  final bool dismiss;
 
   @override
   Map<String, Object?> toJson() => {
     ..._common('menu'),
     'menuId': menuId,
     'option': option,
+    'ticks': ?ticks,
+    if (dismiss) 'dismiss': true,
   };
 }
 
