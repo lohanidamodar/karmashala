@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_session/session.dart';
@@ -10,12 +11,19 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 
 import '../../../app/shell/phone_shell.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../automations/application/scheduled_resume_providers.dart';
 import '../../automations/presentation/resume_on_reset_dialog.dart';
 import '../../github/application/pull_request_context_service.dart';
 import '../../github/presentation/pull_request_context_dialog.dart';
 import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_actions.dart';
+import '../../sessions/application/session_handoff_service.dart';
+import '../../sessions/application/session_location_providers.dart';
+import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/presentation/detach_session_action.dart';
+import '../../sessions/presentation/new_session_dialog.dart';
+import '../../sessions/presentation/session_subagents_panel.dart';
 import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../sessions/presentation/end_session_action.dart';
@@ -29,65 +37,160 @@ import 'more_menu.dart';
 import 'section_membership_dialog.dart';
 import 'session_rows.dart';
 
+/// **A session's one menu** (owner, 2026-10-08: "we need consistency across
+/// the app"): the same verbs, in the same order, with the same words and
+/// glyphs, wherever a session is acted on — a sidebar row, its tab, a
+/// dashboard card, the peek, a sub-session row, the session's sheet. A
+/// place's own verbs — the sidebar's Pin and sections, the dashboard's Pin,
+/// the peek's folded controls — come first, as one group of [extras], set
+/// apart by a rule. A verb that does not apply is left out, by the same rule
+/// everywhere; Archive waits, saying why, while the session resumes.
+///
+/// Open and continue, then the session's own facts, then More…, then its
+/// lifecycle, destructive last.
+List<PopupMenuEntry<String>> sessionMenuItems(
+  WidgetRef ref,
+  Session session, {
+  required List<SystemTerminal> terminals,
+  List<PopupMenuEntry<String>> extras = const [],
+}) {
+  final id = session.id;
+  final forks = !ref
+      .read(sessionHandoffServiceProvider)
+      .forkPlanFor(id)
+      .isRefused;
+  final resuming = ref.read(sessionsStartingProvider).contains(id);
+  final detachable =
+      ref.read(capabilitiesProvider).detachSessions &&
+      session.parentSessionId != null;
+  DesktopMenuItem<String> item(
+    String value,
+    String label,
+    IconData icon, {
+    String? shortcut,
+    bool destructive = false,
+    bool enabled = true,
+  }) => DesktopMenuItem(
+    key: ValueKey('session-menu:$value'),
+    value: value,
+    label: label,
+    icon: icon,
+    shortcut: shortcut,
+    destructive: destructive,
+    enabled: enabled,
+  );
+  return [
+    ...extras,
+    if (extras.isNotEmpty) const DesktopMenuDivider(),
+    item('open', 'Open in a tab', AppIcons.arrowSquareOut),
+    item('continue-with', 'Continue with…', AppIcons.gitBranch),
+    if (forks) item('fork', 'Fork', AppIcons.copySimple),
+    if (ref.read(capabilitiesProvider).mayStart)
+      item('new-sub-session', 'New sub-session…', AppIcons.plusCircle),
+    item('subagents', 'Subagents and child sessions', AppIcons.treeStructure),
+    if (terminals.isNotEmpty)
+      item(
+        'terminal:${terminals.first.id}',
+        'Open in system terminal',
+        AppIcons.terminal,
+      ),
+    const DesktopMenuDivider(),
+    item('rename', 'Rename', AppIcons.pencilSimple, shortcut: 'F2'),
+    // Every session gets this, including one whose agent keeps no record of
+    // its own — that case is *why* the dialog exists.
+    item('changed-files', 'Files changed…', AppIcons.gitDiff),
+    item('copy-id', 'Copy session id', AppIcons.copy),
+    if (_pathOf(ref, session) != null)
+      item('copy-path', 'Copy path', AppIcons.folder),
+    item(kMoreMenuValue, 'More…', AppIcons.dotsThree),
+    const DesktopMenuDivider(),
+    if (detachable) item('detach', kDetachLabel, AppIcons.linkBreak),
+    // Only while something runs it: an ended session has nothing to end. Not
+    // red — ending stops the process and keeps the conversation.
+    if (sessionRunsNow(ref, id)) item('end', 'End session', AppIcons.power),
+    // Offered on a live one too, which says why it cannot be archived yet.
+    if (session.isArchived)
+      item('unarchive', 'Unarchive', AppIcons.tray)
+    else
+      item(
+        'archive',
+        resuming ? 'Archive — resuming…' : 'Archive',
+        AppIcons.tray,
+        enabled: !resuming,
+      ),
+    const DesktopMenuDivider(),
+    if (ownsWorktree(session))
+      item(
+        'delete-worktree',
+        'Delete worktree',
+        AppIcons.folder,
+        destructive: true,
+      ),
+    item('delete', 'Delete', AppIcons.trash, destructive: true),
+  ];
+}
+
+/// The shared verbs' values in [sessionMenuItems]' order — `terminal` for
+/// any `terminal:<id>` — which every place's menu keeps.
+const kSessionMenuOrder = [
+  'open',
+  'continue-with',
+  'fork',
+  'new-sub-session',
+  'subagents',
+  'terminal',
+  'rename',
+  'changed-files',
+  'copy-id',
+  'copy-path',
+  kMoreMenuValue,
+  'detach',
+  'end',
+  'archive',
+  'unarchive',
+  'delete-worktree',
+  'delete',
+];
+
+/// The directory [session]'s agent runs in, for Copy path; null when it is
+/// not known.
+String? _pathOf(WidgetRef ref, Session session) =>
+    ref.read(sessionLocationProvider(session.id))?.folder;
+
+/// Opens [items] — a session's menu — from [anchor]: at [at] for a
+/// right-click, else under it; a sheet titled [title] under a thumb.
+Future<String?> showSessionMenu(
+  BuildContext anchor,
+  String title,
+  List<PopupMenuEntry<String>> items, {
+  Offset? at,
+}) {
+  if (RowMenuSheetScope.touchOf(anchor) case final present?) {
+    return present(anchor, title, items);
+  }
+  return at == null
+      ? showDesktopMenuUnder(anchor, items)
+      : showDesktopMenuAt(anchor, at, items);
+}
+
 /// A native session's row menu. The project tree and the Sessions list both
-/// draw this one, so the two cannot drift apart. The frequent verbs, then
-/// "More…" ([nativeSessionMoreItems]), then the lifecycle, destructive last.
+/// draw this one: Pin, sections and Select are the sidebar's own.
 List<PopupMenuEntry<String>> nativeSessionMenuItems(
   WidgetRef ref,
   Session session, {
   required bool pinned,
   required bool hasSections,
   required List<SystemTerminal> terminals,
-}) => [
-  DesktopMenuItem(
-    value: 'continue-with',
-    label: 'Continue with…',
-    icon: AppIcons.gitBranch,
-  ),
-  if (terminals.isNotEmpty)
-    DesktopMenuItem(
-      value: 'terminal:${terminals.first.id}',
-      label: 'Open in system terminal',
-      icon: AppIcons.terminal,
-    ),
-  const DesktopMenuDivider(),
-  _renameItem(),
-  _pinItem(pinned),
-  if (hasSections) _sectionsItem(),
-  // Every session gets this, including one whose agent keeps no record of its
-  // own — that case is *why* the dialog exists.
-  DesktopMenuItem(
-    value: 'changed-files',
-    label: 'Files changed…',
-    icon: AppIcons.gitDiff,
-  ),
-  selectRowMenuItem(),
-  moreMenuItem(),
-  const DesktopMenuDivider(),
-  // Only while something runs it: an ended session has nothing to end. Not
-  // red — ending stops the process and keeps the conversation.
-  if (sessionRunsNow(ref, session.id))
-    DesktopMenuItem(value: 'end', label: 'End session', icon: AppIcons.power),
-  // Offered on a live one too, which says why it cannot be archived yet.
-  if (session.isArchived)
-    DesktopMenuItem(value: 'unarchive', label: 'Unarchive', icon: AppIcons.tray)
-  else
-    DesktopMenuItem(value: 'archive', label: 'Archive', icon: AppIcons.tray),
-  const DesktopMenuDivider(),
-  if (ownsWorktree(session))
-    DesktopMenuItem(
-      value: 'delete-worktree',
-      label: 'Delete worktree',
-      icon: AppIcons.folder,
-      destructive: true,
-    ),
-  DesktopMenuItem(
-    value: 'delete',
-    label: 'Delete',
-    icon: AppIcons.trash,
-    destructive: true,
-  ),
-];
+}) => sessionMenuItems(
+  ref,
+  session,
+  terminals: terminals,
+  extras: [
+    _pinItem(pinned),
+    if (hasSections) _sectionsItem(),
+    selectRowMenuItem(),
+  ],
+);
 
 /// A native session's "More…": the verbs reached for rarely.
 List<PopupMenuEntry<String>> nativeSessionMoreItems(
@@ -167,6 +270,21 @@ Future<void> runNativeSessionMenuAction(
     return;
   }
   switch (action) {
+    case 'open':
+      await _openNative(context, ref, session.id);
+    case 'fork':
+      await _fork(context, ref, session.id);
+    case 'new-sub-session':
+      await NewSessionDialog.show(context, parentSessionId: session.id);
+    case 'subagents':
+      await showSessionSubagents(context, session.id);
+    case 'copy-id':
+      await _copy(context, session.id, 'Session id copied');
+    case 'copy-path':
+      final path = _pathOf(ref, session);
+      if (path != null) await _copy(context, path, 'Path copied');
+    case 'detach':
+      await detachSessionFromUi(context, ref, session.id);
     case 'recap':
       await requestSessionRecap(context, ref, session.id);
     case 'continue-with':
@@ -294,6 +412,57 @@ Future<void> runImportedSessionMenuAction(
         await actions.deleteImported(session, deleteFromCli: deleteFromCli);
       }
   }
+}
+
+/// Opens [sessionId] in its tab, raising the workbench on a phone; a refusal
+/// in words.
+Future<void> _openNative(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final showWorkbench = phoneWorkbenchOpener(context, ref);
+  final result = await ref.read(explorerActionsProvider).openNative(sessionId);
+  if (!result.isFailure) showWorkbench?.call();
+  final message = result.message;
+  if (message != null) {
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+/// Fork: a new session from this one's conversation, as `session_fork` does —
+/// the plan first, and its refusal in its own words.
+Future<void> _fork(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final service = ref.read(sessionHandoffServiceProvider);
+  final plan = service.forkPlanFor(sessionId);
+  if (plan.isRefused) {
+    messenger.showSnackBar(SnackBar(content: Text(plan.explanation)));
+    return;
+  }
+  try {
+    final launched = await service.forkSession(sessionId: sessionId);
+    ref.read(explorerActionsProvider).selectNative(launched.session);
+  } catch (error) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          error is StateError ? error.message : 'Could not fork: $error',
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _copy(BuildContext context, String text, String said) async {
+  final messenger = ScaffoldMessenger.of(context);
+  await Clipboard.setData(ClipboardData(text: text));
+  messenger.showSnackBar(SnackBar(content: Text(said)));
 }
 
 /// Opens an imported conversation, saying a refusal in words.

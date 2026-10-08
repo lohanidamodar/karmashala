@@ -32,6 +32,7 @@ class _TabChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final title = ref.watch(terminalTabTitleProvider(tab.id));
     final agentId = _agentId(ref);
+    final sessionId = _sessionId(ref);
     final chip = TerminalTabChip(
       title: title,
       liveness: _liveness(ref),
@@ -66,9 +67,8 @@ class _TabChip extends ConsumerWidget {
       onEnd: () => _close(context, ref, detach: false),
       onBulkClose: (scope) => _bulkClose(context, ref, scope),
       onSavePreset: () => _savePreset(context, ref),
-      onArchive: _sessionId(ref) == null
-          ? null
-          : () => _archive(context, ref),
+      onArchive: sessionId == null ? null : () => _archive(context, ref),
+      sessionMenu: sessionId == null ? null : _sessionMenu(ref, sessionId),
     );
 
     // Dropping a tab on a region of a split moves it there. The payload says
@@ -258,6 +258,47 @@ class _TabChip extends ConsumerWidget {
 
   /// Archives this tab's session — refused, with why, while it runs — and
   /// closes the tab once it is archived.
+  /// The session menu every place has, with the tab's own verbs as its first
+  /// group. End and Archive close this tab too, as the tab's own did.
+  ({
+    List<PopupMenuEntry<String>> Function(List<PopupMenuEntry<String>> tab)
+    items,
+    Future<void> Function(BuildContext context, String action) run,
+  })
+  _sessionMenu(WidgetRef ref, String sessionId) {
+    List<SystemTerminal> terminals() =>
+        ref.read(availableSystemTerminalsProvider).asData?.value ?? const [];
+    return (
+      items: (tabItems) {
+        final session = ref.read(sessionsDataProvider).getById(sessionId);
+        if (session == null) return tabItems;
+        return sessionMenuItems(
+          ref,
+          session,
+          terminals: terminals(),
+          extras: tabItems,
+        );
+      },
+      run: (context, action) async {
+        switch (action) {
+          case 'archive':
+            return _archive(context, ref);
+          case 'end':
+            return _close(context, ref, detach: false);
+        }
+        final session = ref.read(sessionsDataProvider).getById(sessionId);
+        if (session == null) return;
+        await runNativeSessionMenuAction(
+          context,
+          ref,
+          session,
+          action,
+          terminals: terminals(),
+        );
+      },
+    );
+  }
+
   Future<void> _archive(BuildContext context, WidgetRef ref) async {
     final id = _sessionId(ref);
     final session = id == null

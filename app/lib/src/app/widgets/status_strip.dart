@@ -21,15 +21,17 @@ class StatusStripItem {
 
 /// **A session's one status line**: facts and pickers in priority order, on
 /// one line that never scrolls or clips. Labels shorten before anything goes;
-/// past that the last items fold, whole, into **+N**, whose sheet lists every
-/// item with its picker. [pinned] never fold — the state and the model.
+/// past that the last items fold, whole, into **+N**, which opens [sheet] —
+/// a list of every item with its picker, and the verbs — in a popover under
+/// it, or a bottom sheet on a phone. [pinned] never fold — the state and the
+/// model.
 class StatusStrip extends StatefulWidget {
   const StatusStrip({
     required this.pinned,
     required this.items,
     required this.sheetTitle,
+    required this.sheet,
     this.more,
-    this.sheetFooter,
     this.shortBelow = 720,
     super.key,
   });
@@ -46,12 +48,12 @@ class StatusStrip extends StatefulWidget {
   /// The sheet's title.
   final String sheetTitle;
 
-  /// The verbs (⋯) at the end of the line while nothing folds; in the sheet,
-  /// as [sheetFooter], once something does.
+  /// The verbs (⋯) at the end of the line while nothing folds; the [sheet]
+  /// holds them once something does.
   final Widget? more;
 
-  /// Under the items in the sheet.
-  final WidgetBuilder? sheetFooter;
+  /// What +N opens: every item, then the verbs. It scrolls itself.
+  final WidgetBuilder sheet;
 
   /// The width, at 1x text, below which the items draw their short labels.
   final double shortBelow;
@@ -74,31 +76,14 @@ class _StatusStripState extends State<StatusStrip> {
         child: item.builder(context, short),
       );
 
-  void _openSheet(BuildContext context) => showAdaptiveModal<void>(
+  /// [context] is +N's own: the popover hangs from it.
+  void _openSheet(BuildContext context) => showAdaptivePopover<void>(
     context: context,
     title: widget.sheetTitle,
-    builder: (sheet) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
-      child: Column(
-        key: const ValueKey('status-strip-sheet'),
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            spacing: Insets.sm,
-            runSpacing: Insets.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final item in [...widget.pinned, ...widget.items])
-                _item(sheet, item, false),
-            ],
-          ),
-          if (widget.sheetFooter case final footer?) ...[
-            const SizedBox(height: Insets.sm),
-            footer(sheet),
-          ],
-        ],
-      ),
+    width: DialogWidth.popover,
+    builder: (sheet) => KeyedSubtree(
+      key: const ValueKey('status-strip-sheet'),
+      child: widget.sheet(sheet),
     ),
   );
 
@@ -121,16 +106,18 @@ class _StatusStripState extends State<StatusStrip> {
           child: _folded > 0
               ? Tooltip(
                   message: '$_folded more, and the session\'s verbs',
-                  child: TextButton(
-                    key: StatusStrip.foldKey,
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(Touch.target, Touch.target),
-                      padding: EdgeInsets.zero,
-                      foregroundColor: theme.colorScheme.onSurface,
-                      textStyle: theme.textTheme.labelMedium,
+                  child: Builder(
+                    builder: (button) => TextButton(
+                      key: StatusStrip.foldKey,
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(Touch.target, Touch.target),
+                        padding: EdgeInsets.zero,
+                        foregroundColor: theme.colorScheme.onSurface,
+                        textStyle: theme.textTheme.labelMedium,
+                      ),
+                      onPressed: () => _openSheet(button),
+                      child: Text('+$_folded', maxLines: 1, softWrap: false),
                     ),
-                    onPressed: () => _openSheet(context),
-                    child: Text('+$_folded', maxLines: 1, softWrap: false),
                   ),
                 )
               : Center(child: widget.more ?? const SizedBox.shrink()),

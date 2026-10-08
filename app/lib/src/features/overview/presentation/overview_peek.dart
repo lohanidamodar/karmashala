@@ -1,16 +1,21 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_git/git.dart' show FileDiffStat;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart';
 import '../../../app/shell/session_more_button.dart';
 import '../../../app/widgets/status_strip.dart';
+import '../../../app/widgets/truncated_text.dart';
 import '../../../app/widgets/view_switch.dart';
-import '../../../core/capabilities/capabilities.dart';
+import '../../../app/widgets/yielding_row.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
@@ -22,24 +27,15 @@ import '../../git/application/diff_tab_actions.dart' show diffForTargetProvider;
 import '../../git/presentation/diff_view.dart';
 import '../../sessions/presentation/hunk_review.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../sessions/application/session_active_model_providers.dart';
 import '../../sessions/application/session_chat_source.dart'
     show ChatsShownOutsideGroups, chatsShownOutsideGroupsProvider;
 import '../../sessions/presentation/approval_request_card.dart';
-import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/delivery_strip.dart';
-import '../../sessions/presentation/detach_session_action.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/operator_chip.dart';
-import '../../sessions/application/acp_session_providers.dart';
-import '../../sessions/application/session_agent_providers.dart';
-import '../../sessions/application/session_launcher.dart';
-import '../../sessions/application/session_signals.dart';
-import '../../sessions/presentation/model_chip.dart';
 import '../../sessions/presentation/permission_mode_chip.dart';
 import '../../sessions/presentation/session_environment_mark.dart';
 import '../../sessions/presentation/session_mode_picker.dart';
-import '../../sessions/presentation/session_stats_dialog.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -56,7 +52,10 @@ import '../application/overview_tiles.dart';
 import 'overview_card_parts.dart';
 import 'overview_pins.dart';
 import 'overview_resume_actions.dart';
+import 'overview_session_menu.dart';
 import 'overview_session_parts.dart';
+import 'overview_title_block.dart';
+import 'session_fact_list.dart';
 
 /// The session's own conversation, as its tab draws it: streaming, with its
 /// asks and its composer — which, for a session nothing runs, resumes it
@@ -85,7 +84,7 @@ final overviewSessionPaneProvider = Provider.autoDispose
 
 /// **The peek**: the session's real, live chat — its asks and composer as
 /// its own tab has them — with its terminal, its files and its sub-sessions
-/// beside it, under a header with Stop, Archive and Open tab.
+/// beside it, under one row with the views, Stop and Open.
 class OverviewPeek extends ConsumerStatefulWidget {
   const OverviewPeek({
     required this.card,
@@ -178,13 +177,6 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
     final ValueChanged<OverviewPeekTab> showTab = widget.beside
         ? (t) => setState(() => _besideTab = t)
         : focus.showTab;
-    String label(OverviewPeekTab t) => switch (t) {
-      OverviewPeekTab.chat => 'Chat',
-      OverviewPeekTab.terminal => 'Terminal',
-      OverviewPeekTab.files =>
-        files == null || files.isEmpty ? 'Files' : 'Files · ${files.length}',
-      OverviewPeekTab.subSessions => 'Sub-sessions · ${children.length}',
-    };
 
     final Widget body = switch (tab) {
       OverviewPeekTab.chat => Column(
@@ -228,69 +220,34 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.compact)
-              _PeekBar(
-                card: card,
-                // The views as glyphs in the bar (owner, 2026-10-08): a row
-                // of words under it took a phone's line for a choice of
-                // three. Sub-sessions are in ⋯.
-                views: _PeekViewSwitch(
-                  tabs: [
-                    for (final t in tabs)
-                      if (t != OverviewPeekTab.subSessions) t,
-                  ],
-                  selected: tab,
-                  files: files?.length ?? 0,
-                  onChanged: showTab,
-                ),
-                subSessions: children.isEmpty
-                    ? null
-                    : (
-                        label: label(OverviewPeekTab.subSessions),
-                        open: () => showTab(OverviewPeekTab.subSessions),
-                      ),
-                onClose: widget.onClose,
-                onPeek: widget.onPeek,
-                onPrevious: widget.onPrevious,
-                onNext: widget.onNext,
-              )
-            else ...[
-              _PeekHeader(
-                card: card,
-                onClose: widget.onClose,
-                onPeek: widget.onPeek,
-                onPrevious: widget.onPrevious,
-                onNext: widget.onNext,
+            _PeekHeader(
+              card: card,
+              compact: widget.compact,
+              // The views as glyphs in the row (owner, 2026-10-08), the
+              // phone's form on a desktop too. A phone keeps the
+              // sub-sessions in ⋯.
+              views: _PeekViewSwitch(
+                tabs: [
+                  for (final t in tabs)
+                    if (!widget.compact || t != OverviewPeekTab.subSessions) t,
+                ],
+                selected: tab,
+                files: files?.length ?? 0,
+                subSessions: children.length,
+                touch: widget.compact,
+                onChanged: showTab,
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Insets.md,
-                  0,
-                  Insets.md,
-                  Insets.sm,
-                ),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: CompactSegmented<OverviewPeekTab>(
-                    key: const ValueKey('overview-peek-tabs'),
-                    segments: [
-                      for (final t in tabs)
-                        ButtonSegment(
-                          value: t,
-                          label: Text(
-                            label(t),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            key: ValueKey('overview-peek-tab:${t.name}'),
-                          ),
-                        ),
-                    ],
-                    selected: tab,
-                    onChanged: showTab,
-                  ),
-                ),
-              ),
-            ],
+              subSessions: !widget.compact || children.isEmpty
+                  ? null
+                  : (
+                      label: 'Sub-sessions · ${children.length}',
+                      open: () => showTab(OverviewPeekTab.subSessions),
+                    ),
+              onClose: widget.onClose,
+              onPeek: widget.onPeek,
+              onPrevious: widget.onPrevious,
+              onNext: widget.onNext,
+            ),
             const Divider(height: 1),
             Expanded(
               child: KeyedSubtree(
@@ -308,190 +265,446 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
   }
 }
 
-/// Title, ↑ ↓ ✕, Stop / Archive / Open tab, and the plan. The state, the
-/// agent, the model and where it runs are on the status strip under the
-/// views (owner, 2026-10-08): one place for a session's facts.
-class _PeekHeader extends ConsumerWidget {
+/// **The peek's one row** (owner, 2026-10-08), at every width: the agent, the
+/// title — whole on hover or a long press once it is cut — then the views,
+/// Stop or Resume, Open, ↑ ↓ and Pin, then ⋯ and ✕. On a phone, back leads
+/// and ✕ goes. What the row has no room for folds into ⋯, Pin first, then
+/// ↑ ↓, then Open, then Stop; the views, ⋯ and ✕ never fold. Archive,
+/// Detach, the parent and — on a phone — the sub-sessions are always in ⋯.
+/// The plan, when there is one, is under the row on a desktop.
+class _PeekHeader extends ConsumerStatefulWidget {
   const _PeekHeader({
     required this.card,
+    required this.views,
+    required this.compact,
     required this.onClose,
+    this.subSessions,
     this.onPeek,
     this.onPrevious,
     this.onNext,
   });
 
   final OverviewCard card;
+  final Widget views;
+  final bool compact;
+  final ({String label, VoidCallback open})? subSessions;
   final VoidCallback onClose;
   final ValueChanged<OverviewCard>? onPeek;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PeekHeader> createState() => _PeekHeaderState();
+}
+
+/// The row's controls that fold, in the row's order; the last folds first.
+enum _PeekControl { stop, open, move, pin }
+
+class _PeekHeaderState extends ConsumerState<_PeekHeader> {
+  /// The controls the row last left out, offered in ⋯ instead.
+  var _folded = const <_PeekControl>{};
+
+  void _hiddenChanged(List<bool> hidden) {
+    final folded = {
+      for (var i = 0; i < hidden.length; i++)
+        if (hidden[i]) _PeekControl.values[i],
+    };
+    if (!setEquals(folded, _folded)) setState(() => _folded = folded);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final card = widget.card;
     final entry = card.entry;
     final id = entry.id;
     final theme = Theme.of(context);
+    final density = UiDensity.of(context);
     final native = entry.native;
     final live = native != null && sessionHasLiveProcess(ref, id);
-    final archivable =
-        native != null && !native.isArchived && !sessionIsLive(ref, native);
     final resumable = watchOverviewResumable(ref, card);
-    final plan = ref.watch(overviewGlanceProvider(id)).asData?.value?.plan;
+    final pinned = ref.watch(
+      overviewPrefsProvider.select((p) => p.pinned.contains(id)),
+    );
+    final plan = widget.compact
+        ? null
+        : ref.watch(overviewGlanceProvider(id)).asData?.value?.plan;
     final parentId = native?.parentSessionId;
     final parent = parentId == null
         ? null
         : overviewCardOf(ref.watch(overviewBoardProvider), parentId);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.md,
-        Insets.sm,
-        Insets.xs,
-        Insets.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (parent != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                key: const ValueKey('overview-peek-parent'),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-                ),
-                onPressed: onPeek == null ? null : () => onPeek!(parent),
-                child: Text(
-                  '↑ Sub-session of ${parent.entry.title}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.xxs),
-                child: OverviewAgentRing(card: card),
-              ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: Insets.xs),
-                  child: Text(
-                    entry.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              OverviewPinButton(sessionId: id),
-              IconButton(
-                key: const ValueKey('overview-peek-previous'),
-                tooltip: 'Previous session (↑)',
-                visualDensity: VisualDensity.compact,
-                onPressed: onPrevious,
-                icon: const Icon(AppIcons.caretUp),
-              ),
-              IconButton(
-                key: const ValueKey('overview-peek-next'),
-                tooltip: 'Next session (↓)',
-                visualDensity: VisualDensity.compact,
-                onPressed: onNext,
-                icon: const Icon(AppIcons.caretDown),
-              ),
-              IconButton(
-                key: const ValueKey('overview-peek-close'),
-                tooltip: 'Close peek (Esc)',
-                visualDensity: VisualDensity.compact,
-                onPressed: onClose,
-                icon: const Icon(AppIcons.x),
-              ),
-            ],
+    final subSessions = widget.subSessions;
+    final onPeek = widget.onPeek;
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+
+    void stop() => endSessionFromRow(context, ref, id, title: entry.title);
+    void resume() => resumeFromDashboard(context, ref, entry);
+    void open() => openOverviewSession(context, ref, entry);
+    void pin() => toggleOverviewPin(context, ref, id);
+
+    // The peek's own verbs, ahead of the session menu every place has: what
+    // folded off the row that the menu does not already hold (it has Open
+    // and End), the sub-sessions on a phone, and the way to the parent.
+    final extras = <String, (String, IconData, VoidCallback?)>{
+      if (_folded.contains(_PeekControl.stop) && resumable)
+        'resume': ('Resume', AppIcons.play, resume),
+      if (subSessions != null)
+        'subSessions': (
+          subSessions.label,
+          AppIcons.treeStructure,
+          subSessions.open,
+        ),
+      if (_folded.contains(_PeekControl.pin))
+        'pin': (pinned ? 'Unpin' : 'Pin to the top', AppIcons.pushPin, pin),
+      if (_folded.contains(_PeekControl.move)) ...{
+        'previous': ('Previous session', AppIcons.caretUp, widget.onPrevious),
+        'next': ('Next session', AppIcons.caretDown, widget.onNext),
+      },
+      if (parent != null)
+        'parent': (
+          'Sub-session of ${parent.entry.title}',
+          AppIcons.caretUp,
+          onPeek == null ? null : () => onPeek(parent),
+        ),
+    };
+    Future<void> more(BuildContext button) => showOverviewSessionMenu(
+      button,
+      ref,
+      entry,
+      extras: [
+        for (final MapEntry(key: value, value: (label, icon, run))
+            in extras.entries)
+          DesktopMenuItem(
+            key: ValueKey('overview-peek-menu:$value'),
+            value: 'peek:$value',
+            label: label,
+            icon: icon,
+            enabled: run != null,
           ),
-          const SizedBox(height: Insets.xs),
-          Padding(
-            padding: const EdgeInsets.only(right: Insets.sm),
-            child: Wrap(
-              spacing: Insets.xs,
-              runSpacing: Insets.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
+      ],
+      onExtra: (picked) async {
+        if (!picked.startsWith('peek:')) return false;
+        extras[picked.substring('peek:'.length)]?.$3?.call();
+        return true;
+      },
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Words beside Stop and Open while the peek is wide enough to spare
+        // them; glyphs, each with its tooltip, below that.
+        final labelled =
+            !widget.compact &&
+            constraints.maxWidth >=
+                WidthClass.scaleBreakpoint(
+                  _peekLabelsFrom,
+                  MediaQuery.textScalerOf(context),
+                );
+        Widget verb({
+          required Key key,
+          required String label,
+          required String tooltip,
+          required IconData icon,
+          required VoidCallback onPressed,
+          bool tonal = false,
+        }) {
+          if (!labelled) {
+            return IconButton(
+              key: key,
+              tooltip: tooltip,
+              visualDensity: density.controlDensity,
+              onPressed: onPressed,
+              icon: Icon(icon),
+            );
+          }
+          final style = TextButton.styleFrom(
+            visualDensity: density.controlDensity,
+            padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+          );
+          return Tooltip(
+            message: tooltip,
+            child: tonal
+                ? FilledButton.tonalIcon(
+                    key: key,
+                    style: style,
+                    onPressed: onPressed,
+                    icon: Icon(icon, size: Chrome.iconSmall),
+                    label: Text(label),
+                  )
+                : TextButton.icon(
+                    key: key,
+                    style: style,
+                    onPressed: onPressed,
+                    icon: Icon(icon, size: Chrome.iconSmall),
+                    label: Text(label),
+                  ),
+          );
+        }
+
+        final controls = YieldingRow(
+          yieldFromStart: false,
+          keepsOne: false,
+          onHiddenChanged: _hiddenChanged,
+          children: [
+            Row(
+              key: const ValueKey('overview-peek-control:stop'),
+              mainAxisSize: MainAxisSize.min,
               children: [
                 OverviewResumingLabel(sessionId: id),
                 if (resumable)
-                  FilledButton.tonalIcon(
+                  verb(
                     key: const ValueKey('overview-peek-resume'),
-                    onPressed: () => resumeFromDashboard(context, ref, entry),
-                    icon: const Icon(AppIcons.play),
-                    label: const Text('Resume'),
-                  ),
-                if (live)
-                  TextButton.icon(
+                    label: 'Resume',
+                    tooltip: 'Resume this session',
+                    icon: AppIcons.play,
+                    onPressed: resume,
+                    tonal: true,
+                  )
+                else if (live)
+                  verb(
                     key: const ValueKey('overview-peek-stop'),
-                    onPressed: () =>
-                        endSessionFromRow(context, ref, id, title: entry.title),
-                    icon: const Icon(AppIcons.stop),
-                    label: const Text('Stop'),
+                    label: 'Stop',
+                    tooltip: 'Stop the session',
+                    icon: AppIcons.stop,
+                    onPressed: stop,
                   ),
-                if (archivable)
-                  OverviewArchiveGate(
-                    sessionId: id,
-                    builder: (resuming) => TextButton.icon(
-                      key: const ValueKey('overview-peek-archive'),
-                      onPressed: resuming
-                          ? null
-                          : () => archiveSessionsFromUi(context, ref, [native]),
-                      icon: const Icon(AppIcons.tray),
-                      label: const Text('Archive'),
-                    ),
-                  ),
-                OutlinedButton.icon(
-                  key: const ValueKey('overview-peek-open'),
-                  onPressed: () => openOverviewSession(context, ref, entry),
-                  icon: const Icon(AppIcons.arrowSquareOut),
-                  label: const Text('Open tab'),
+              ],
+            ),
+            KeyedSubtree(
+              key: const ValueKey('overview-peek-control:open'),
+              child: verb(
+                key: const ValueKey('overview-peek-open'),
+                label: 'Open',
+                tooltip: 'Open in a tab',
+                icon: AppIcons.arrowSquareOut,
+                onPressed: open,
+              ),
+            ),
+            Row(
+              key: const ValueKey('overview-peek-control:move'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: const ValueKey('overview-peek-previous'),
+                  tooltip: 'Previous session (↑)',
+                  visualDensity: density.controlDensity,
+                  onPressed: widget.onPrevious,
+                  icon: const Icon(AppIcons.caretUp),
+                ),
+                IconButton(
+                  key: const ValueKey('overview-peek-next'),
+                  tooltip: 'Next session (↓)',
+                  visualDensity: density.controlDensity,
+                  onPressed: widget.onNext,
+                  icon: const Icon(AppIcons.caretDown),
                 ),
               ],
             ),
-          ),
-          if (plan != null && plan.total > 0) ...[
-            const SizedBox(height: Insets.sm),
-            Padding(
-              padding: const EdgeInsets.only(right: Insets.sm),
-              child: OverviewPlanLine(plan: plan),
+            KeyedSubtree(
+              key: const ValueKey('overview-peek-control:pin'),
+              child: OverviewPinButton(sessionId: id),
             ),
           ],
-        ],
-      ),
+        );
+
+        final row = Row(
+          children: [
+            if (widget.compact)
+              IconButton(
+                key: const ValueKey('overview-peek-close'),
+                tooltip: 'Back',
+                visualDensity: VisualDensity.compact,
+                onPressed: widget.onClose,
+                icon: const Icon(AppIcons.arrowLeft),
+              ),
+            OverviewAgentRing(card: card),
+            const SizedBox(width: Insets.sm),
+            Expanded(
+              child: _PeekLine(
+                titleFloor: overviewTitleFloor(
+                  context,
+                  entry.title,
+                  titleStyle,
+                ),
+                children: [
+                  TruncatedText(
+                    entry.title,
+                    key: const ValueKey('overview-peek-title'),
+                    style: titleStyle,
+                  ),
+                  widget.views,
+                  controls,
+                ],
+              ),
+            ),
+            Builder(
+              builder: (button) => IconButton(
+                key: const ValueKey('overview-peek-more'),
+                tooltip: 'More',
+                visualDensity: density.controlDensity,
+                onPressed: () => more(button),
+                icon: const Icon(AppIcons.dotsThreeVertical),
+              ),
+            ),
+            if (!widget.compact)
+              IconButton(
+                key: const ValueKey('overview-peek-close'),
+                tooltip: 'Close peek (Esc)',
+                visualDensity: density.controlDensity,
+                onPressed: widget.onClose,
+                icon: const Icon(AppIcons.x),
+              ),
+          ],
+        );
+        return Padding(
+          key: widget.compact ? const ValueKey('overview-peek-bar') : null,
+          padding: widget.compact
+              ? const EdgeInsets.symmetric(vertical: Insets.xxs)
+              : const EdgeInsets.fromLTRB(
+                  Insets.md,
+                  Insets.xs,
+                  Insets.xs,
+                  Insets.xs,
+                ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              row,
+              if (plan != null && plan.total > 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    0,
+                    Insets.xs,
+                    Insets.sm,
+                    Insets.xs,
+                  ),
+                  child: OverviewPlanLine(plan: plan),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
-/// **Chat / Terminal / Files on a phone**: glyphs in the peek's bar, the
-/// changed files counted on the folder. Each keeps its name as tooltip and
-/// semantics label. A view the session lacks is not offered.
+/// The width, at 1x text, from which Stop and Open carry their words.
+const double _peekLabelsFrom = 560;
+
+/// The title, the views and the controls on one line: the title keeps
+/// [titleFloor] — or its whole width, when shorter — before the controls
+/// take the rest; the views are never left out, and the title gives up what
+/// they need below that. The title is left; the views and the controls end
+/// the line.
+class _PeekLine extends MultiChildRenderObjectWidget {
+  const _PeekLine({required this.titleFloor, required super.children});
+
+  final double titleFloor;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderPeekLine(titleFloor);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderPeekLine renderObject) =>
+      renderObject.titleFloor = titleFloor;
+}
+
+class _PeekLineParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RenderPeekLine extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _PeekLineParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _PeekLineParentData> {
+  _RenderPeekLine(this._titleFloor);
+
+  double _titleFloor;
+  set titleFloor(double value) {
+    if (value == _titleFloor) return;
+    _titleFloor = value;
+    markNeedsLayout();
+  }
+
+  static const _gap = Insets.sm;
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _PeekLineParentData) {
+      child.parentData = _PeekLineParentData();
+    }
+  }
+
+  RenderBox get _title => firstChild!;
+  RenderBox get _views => childAfter(_title)!;
+  RenderBox get _controls => lastChild!;
+
+  @override
+  void performLayout() {
+    final width = constraints.maxWidth;
+    _views.layout(BoxConstraints(maxWidth: width), parentUsesSize: true);
+    final views = _views.size.width;
+    final keep = math.min(
+      _title.getMaxIntrinsicWidth(double.infinity),
+      _titleFloor,
+    );
+    final room = math.max(0.0, width - views - _gap);
+    final budget = math.max(0.0, room - keep - _gap);
+    _controls.layout(BoxConstraints(maxWidth: budget), parentUsesSize: true);
+    final controls = _controls.size.width;
+    final ends = views + (controls > 0 ? _gap + controls : 0);
+    final titleWidth = math.max(0.0, width - ends - _gap);
+    _title.layout(BoxConstraints(maxWidth: titleWidth), parentUsesSize: true);
+    final height = math.max(
+      _title.size.height,
+      math.max(_views.size.height, _controls.size.height),
+    );
+    void place(RenderBox child, double x) =>
+        (child.parentData! as _PeekLineParentData).offset = Offset(
+          x,
+          (height - child.size.height) / 2,
+        );
+    place(_title, 0);
+    place(_views, width - ends);
+    place(_controls, width - controls);
+    size = constraints.constrain(Size(width, height));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
+}
+
+/// **Chat / Terminal / Files** — and, on a desktop, the sub-sessions — as
+/// round 59's compact switch: glyphs, the changed files and the sub-sessions
+/// counted beside theirs. Each keeps its name as tooltip and semantics label.
+/// A view the session lacks is not offered.
 class _PeekViewSwitch extends StatelessWidget {
   const _PeekViewSwitch({
     required this.tabs,
     required this.selected,
     required this.files,
+    required this.subSessions,
+    required this.touch,
     required this.onChanged,
   });
 
   final List<OverviewPeekTab> tabs;
   final OverviewPeekTab selected;
   final int files;
+  final int subSessions;
+  final bool touch;
   final ValueChanged<OverviewPeekTab> onChanged;
 
   @override
   Widget build(BuildContext context) => ViewSwitch<OverviewPeekTab>(
     key: const ValueKey('overview-peek-tabs'),
-    touch: true,
+    touch: touch,
     selected: selected,
     onChanged: onChanged,
     segments: [
@@ -519,12 +732,13 @@ class _PeekViewSwitch extends StatelessWidget {
             tooltip: files == 0 ? 'Files' : 'Files · $files changed',
             badge: files == 0 ? null : '$files',
           ),
-          OverviewPeekTab.subSessions => const ViewSwitchSegment(
-            key: ValueKey('overview-peek-tab:subSessions'),
+          OverviewPeekTab.subSessions => ViewSwitchSegment(
+            key: const ValueKey('overview-peek-tab:subSessions'),
             value: OverviewPeekTab.subSessions,
             icon: AppIcons.treeStructure,
             label: 'Sub-sessions',
-            tooltip: 'Sub-sessions',
+            tooltip: 'Sub-sessions · $subSessions',
+            badge: subSessions == 0 ? null : '$subSessions',
           ),
         },
     ],
@@ -536,7 +750,7 @@ class _PeekViewSwitch extends StatelessWidget {
 /// the permission, where it runs, the operator grant, the usage and the next
 /// delivery step. The pickers are the bar's own widgets, not copies, so what
 /// is set here is what the session's tab shows. What does not fit folds into
-/// +N, whose sheet lists everything with the session's ⋯ verbs.
+/// +N, which opens the session's [SessionFactList].
 ///
 /// The agent is not on it while the composer can switch it: that picker is
 /// the one place the agent is set. [card] is null outside a dashboard.
@@ -560,6 +774,7 @@ class OverviewPeekControls extends ConsumerWidget {
       ),
       child: StatusStrip(
         sheetTitle: 'Session',
+        sheet: (_) => SessionFactList(sessionId: sessionId, card: card),
         pinned: [
           if (card != null)
             StatusStripItem(
@@ -568,8 +783,12 @@ class OverviewPeekControls extends ConsumerWidget {
             ),
           StatusStripItem(
             id: 'model',
-            builder: (_, short) =>
-                _PeekModel(sessionId: sessionId, short: short, native: native),
+            builder: (_, short) => SessionModelValue(
+              sessionId: sessionId,
+              short: short,
+              native: native,
+              bare: false,
+            ),
           ),
         ],
         items: [
@@ -626,123 +845,12 @@ class OverviewPeekControls extends ConsumerWidget {
             ),
         ],
         more: native ? SessionMoreButton(sessionId: sessionId) : null,
-        sheetFooter: native
-            ? (_) => Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    spacing: Insets.sm,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      SessionStatsButton(sessionId: sessionId),
-                      OperatorChip(sessionId: sessionId),
-                    ],
-                  ),
-                  const SizedBox(height: Insets.sm),
-                  SessionMoreBody(sessionId: sessionId),
-                ],
-              )
-            : null,
       ),
     );
   }
 }
 
-/// A fact on the strip that is not a picker: a glyph and its words, named
-/// whole on hover.
-class _PeekFact extends StatelessWidget {
-  const _PeekFact({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    this.leading,
-    super.key,
-  });
-
-  final IconData icon;
-  final Widget? leading;
-  final String label;
-  final String tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    return Tooltip(
-      message: tooltip,
-      child: Semantics(
-        label: tooltip,
-        excludeSemantics: true,
-        child: TouchTarget(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              leading ?? Icon(icon, size: Chrome.iconSmall, color: muted),
-              const SizedBox(width: Insets.xs),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(color: muted),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The model: its picker where the session has one to set, else what its
-/// agent says it runs, as a fact. Nothing until either is known.
-class _PeekModel extends ConsumerWidget {
-  const _PeekModel({
-    required this.sessionId,
-    required this.short,
-    required this.native,
-  });
-
-  final String sessionId;
-  final bool short;
-  final bool native;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (native) {
-      ref.watchSession(sessionId);
-      // The bar's own test for a session with agent controls.
-      final controls =
-          ref.watch(isAcpSessionProvider(sessionId)) ||
-          ref.read(sessionLauncherProvider).effectivePermissionFor(sessionId) !=
-              null;
-      if (controls) {
-        return SessionModelChip(
-          sessionId: sessionId,
-          short: short,
-          maxLabelWidth: _peekModelLabelWidth,
-        );
-      }
-    }
-    final model = ref.watch(sessionActiveModelProvider(sessionId))?.label;
-    if (model == null) return const SizedBox.shrink();
-    return _PeekFact(
-      key: const ValueKey('overview-peek-model'),
-      icon: AppIcons.robot,
-      label: model,
-      tooltip: 'Model: $model',
-    );
-  }
-}
-
-/// The most of the model's name the strip shows before it ends.
-const double _peekModelLabelWidth = 160;
-
-/// The agent, by name, while nothing else on screen names it: the composer's
-/// switch does, wherever the server can switch agents.
+/// The agent, by name, while nothing else on screen names it.
 class _PeekAgentFact extends ConsumerWidget {
   const _PeekAgentFact({required this.sessionId, required this.card});
 
@@ -751,17 +859,10 @@ class _PeekAgentFact extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final card = this.card;
-    final composerSwitches =
-        (card == null || card.entry.native != null) &&
-        ref.watch(capabilitiesProvider.select((c) => c.switchAgent));
-    if (composerSwitches) return const SizedBox.shrink();
-    final agentId = card != null
-        ? ref.watch(overviewFactsProvider).agentOf(card.entry)
-        : ref.watch(sessionAgentIdProvider(sessionId));
+    final agentId = watchSessionAgentShown(ref, sessionId, card);
     if (agentId == null) return const SizedBox.shrink();
     final name = ref.watch(agentRegistryProvider).displayNameFor(agentId);
-    return _PeekFact(
+    return SessionStripFact(
       key: const ValueKey('overview-peek-agent'),
       icon: AppIcons.robot,
       leading: AgentLogo(agentId: agentId, size: Chrome.iconSmall),
@@ -784,7 +885,7 @@ class _PeekBranchFact extends ConsumerWidget {
         ? null
         : ref.watch(overviewKnownBranchProvider(directory));
     if (branch == null) return const SizedBox.shrink();
-    return _PeekFact(
+    return SessionStripFact(
       key: const ValueKey('overview-peek-branch'),
       icon: AppIcons.gitBranch,
       label: branch,
@@ -803,172 +904,11 @@ class _PeekPlaceFact extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final place = watchOverviewPlace(ref, card);
     if (place.isEmpty) return const SizedBox.shrink();
-    return _PeekFact(
+    return SessionStripFact(
       key: const ValueKey('overview-peek-place'),
       icon: AppIcons.folder,
       label: place,
       tooltip: 'Runs in $place',
-    );
-  }
-}
-
-/// **The peek on a phone**: one slim row — back, the agent, the title, the
-/// views as glyphs and ⋯. Stop or Resume, Open tab, the sub-sessions, Pin,
-/// ↑ ↓, the parent and Archive are in ⋯; the state, the model and the rest
-/// of the session's facts are on the status strip under the chat.
-class _PeekBar extends ConsumerWidget {
-  const _PeekBar({
-    required this.card,
-    required this.views,
-    required this.subSessions,
-    required this.onClose,
-    this.onPeek,
-    this.onPrevious,
-    this.onNext,
-  });
-
-  final OverviewCard card;
-  final Widget views;
-  final ({String label, VoidCallback open})? subSessions;
-  final VoidCallback onClose;
-  final ValueChanged<OverviewCard>? onPeek;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entry = card.entry;
-    final id = entry.id;
-    final theme = Theme.of(context);
-    final density = UiDensity.of(context);
-    final native = entry.native;
-    final live = native != null && sessionHasLiveProcess(ref, id);
-    final archivable =
-        native != null && !native.isArchived && !sessionIsLive(ref, native);
-    final resumable = watchOverviewResumable(ref, card);
-    final pinned = ref.watch(
-      overviewPrefsProvider.select((p) => p.pinned.contains(id)),
-    );
-    final parentId = native?.parentSessionId;
-    final parent = parentId == null
-        ? null
-        : overviewCardOf(ref.watch(overviewBoardProvider), parentId);
-    final subSessions = this.subSessions;
-    final detachable = native != null && watchCanDetach(ref, id);
-    PopupMenuItem<VoidCallback> item(
-      String key,
-      String label,
-      IconData icon,
-      VoidCallback? run,
-    ) => PopupMenuItem<VoidCallback>(
-      key: ValueKey('overview-peek-menu:$key'),
-      value: run,
-      enabled: run != null,
-      child: Row(
-        children: [
-          Icon(icon, size: density.iconSmall),
-          const SizedBox(width: Insets.sm),
-          Flexible(child: Text(label)),
-        ],
-      ),
-    );
-    return Padding(
-      key: const ValueKey('overview-peek-bar'),
-      padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
-      child: Row(
-        children: [
-          IconButton(
-            key: const ValueKey('overview-peek-close'),
-            tooltip: 'Back',
-            visualDensity: VisualDensity.compact,
-            onPressed: onClose,
-            icon: const Icon(AppIcons.arrowLeft),
-          ),
-          OverviewAgentRing(card: card),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Text(
-              entry.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: Insets.xs),
-          views,
-          PopupMenuButton<VoidCallback>(
-            key: const ValueKey('overview-peek-more'),
-            tooltip: 'More',
-            icon: const Icon(AppIcons.dotsThreeVertical),
-            onSelected: (run) => run(),
-            itemBuilder: (_) => [
-              if (resumable)
-                item(
-                  'resume',
-                  'Resume',
-                  AppIcons.play,
-                  () => resumeFromDashboard(context, ref, entry),
-                )
-              else if (live)
-                item(
-                  'stop',
-                  'Stop',
-                  AppIcons.stop,
-                  () => endSessionFromRow(context, ref, id, title: entry.title),
-                ),
-              item(
-                'open',
-                'Open tab',
-                AppIcons.arrowSquareOut,
-                () => openOverviewSession(context, ref, entry),
-              ),
-              if (subSessions != null)
-                item(
-                  'subSessions',
-                  subSessions.label,
-                  AppIcons.treeStructure,
-                  subSessions.open,
-                ),
-              item(
-                'pin',
-                pinned ? 'Unpin' : 'Pin to the top',
-                AppIcons.pushPin,
-                () => toggleOverviewPin(context, ref, id),
-              ),
-              item(
-                'previous',
-                'Previous session',
-                AppIcons.caretUp,
-                onPrevious,
-              ),
-              item('next', 'Next session', AppIcons.caretDown, onNext),
-              if (parent != null)
-                item(
-                  'parent',
-                  'Sub-session of ${parent.entry.title}',
-                  AppIcons.caretUp,
-                  onPeek == null ? null : () => onPeek!(parent),
-                ),
-              if (detachable)
-                item(
-                  'detach',
-                  kDetachLabel,
-                  AppIcons.linkBreak,
-                  () => detachSessionFromUi(context, ref, id),
-                ),
-              if (archivable)
-                item(
-                  'archive',
-                  'Archive',
-                  AppIcons.tray,
-                  () => archiveSessionsFromUi(context, ref, [native]),
-                ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

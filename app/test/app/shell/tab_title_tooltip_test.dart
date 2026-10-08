@@ -2,11 +2,14 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart' show TranscriptMessage;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/features/explorer/presentation/session_row_menu.dart'
+    show kSessionMenuOrder;
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
@@ -157,7 +160,10 @@ void main() {
     },
   );
 
-  testWidgets("a plain shell tab's tooltip is its title", (tester) async {
+  // A plain tab's title names itself only once it is cut (round 66).
+  testWidgets("a plain shell tab's title that fits has no tooltip", (
+    tester,
+  ) async {
     container
         .read(terminalSessionsControllerProvider.notifier)
         .openTab(TerminalProfile.powerShell);
@@ -170,7 +176,7 @@ void main() {
     final before = drawn(title);
     await hover(tester, tester.getCenter(chipTitle(title)));
 
-    expect(drawn(title), before + 1);
+    expect(drawn(title), before);
   });
 
   testWidgets("over the close button only the button's tooltip shows", (
@@ -209,6 +215,38 @@ void main() {
     // The drag's feedback draws the title alone; only the tooltip adds the agent.
     expect(find.textContaining('$longTitle · '), findsNothing);
     await mouse.up();
+    await tester.pumpAndSettle();
+  });
+  // Round 66: a session's tab right-clicks to the session menu every place
+  // has — the tab's own verbs first, then the shared ones in their order.
+  testWidgets("a session tab's menu is the session menu, after the tab's own", (
+    tester,
+  ) async {
+    seedChatSession();
+    container.read(selectedSessionIdProvider.notifier).select('acp-1');
+    await pump(tester);
+    await tester.tap(chipTitle(longTitle), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    double top(String key) => tester.getTopLeft(find.byKey(ValueKey(key))).dy;
+    final shared = [
+      for (final value in kSessionMenuOrder)
+        if (find.byKey(ValueKey('session-menu:$value')).evaluate().isNotEmpty)
+          value,
+    ];
+    final tops = [for (final v in shared) top('session-menu:$v')];
+    expect(tops, [...tops]..sort(), reason: '$shared out of order');
+    for (final always in const ['open', 'rename', 'more', 'delete']) {
+      expect(shared, contains(always));
+    }
+    // The tab's own group comes first.
+    expect(
+      tester.getTopLeft(find.text('Close tab')).dy,
+      lessThan(top('session-menu:open')),
+    );
+    // Archive and End are offered once, as the session menu's.
+    expect(find.text('Archive session'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
   });
 }

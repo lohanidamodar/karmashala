@@ -1702,31 +1702,49 @@ class OpenSessionInSystemTerminalButton extends ConsumerWidget {
           : PopupMenuButton<SystemTerminal>(
               tooltip: 'Open in system terminal',
               icon: const Icon(AppIcons.arrowSquareOut),
-              onSelected: (terminal) async {
-                final messenger = ScaffoldMessenger.of(context);
-                try {
-                  await ref
-                      .read(sessionActionsProvider)
-                      .openSessionInSystemTerminal(sessionId, terminal);
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Opening in ${terminal.label}…')),
-                  );
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(e is StateError ? e.message : '$e')),
-                  );
-                }
-              },
-              itemBuilder: (context) => [
-                for (final t in list)
-                  DesktopMenuItem(
-                    value: t,
-                    label: 'Open in ${t.label}',
-                    icon: AppIcons.terminal,
-                  ),
-              ],
+              onSelected: (terminal) => openSessionInSystemTerminal(
+                context,
+                ref,
+                sessionId,
+                terminal,
+              ),
+              itemBuilder: (_) => systemTerminalMenuItems(list),
             ),
       orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// One row per installed external terminal, for a menu of where to open.
+List<PopupMenuEntry<SystemTerminal>> systemTerminalMenuItems(
+  List<SystemTerminal> terminals,
+) => [
+  for (final t in terminals)
+    DesktopMenuItem(
+      value: t,
+      label: 'Open in ${t.label}',
+      icon: AppIcons.terminal,
+    ),
+];
+
+/// Opens [sessionId] in [terminal], saying so — or why not — in words.
+Future<void> openSessionInSystemTerminal(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+  SystemTerminal terminal,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await ref
+        .read(sessionActionsProvider)
+        .openSessionInSystemTerminal(sessionId, terminal);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Opening in ${terminal.label}…')),
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(e is StateError ? e.message : '$e')),
     );
   }
 }

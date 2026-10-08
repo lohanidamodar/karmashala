@@ -393,14 +393,17 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('overview-done:done')));
     await settle(tester);
 
-    // Resume keeps it here (below); Open tab is the lists' own open.
+    // Resume keeps it here (below); Open is the lists' own open.
     expect(find.byKey(const ValueKey('overview-peek-resume')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('overview-peek-open')));
     await settle(tester);
     expect(actions.opened, ['done']);
-    expect(find.text('Open tab'), findsOneWidget);
+    expect(find.byTooltip('Open in a tab'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('overview-peek-archive')));
+    // Archive is in ⋯, the header being one row (round 66).
+    await tester.tap(find.byKey(const ValueKey('overview-peek-more')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('session-menu:archive')));
     await settle(tester);
     expect(
       server.requests.where((k) => k == SessionsArchive.name),
@@ -876,32 +879,43 @@ void main() {
           'why', (tester) async {
         final c = await pump(tester, const Size(1440, 900));
         await peekPaused(tester);
-        const archives = ['overview-peek-archive'];
-        bool enabled(String key) =>
-            tester.widget<ButtonStyleButton>(byKey(key)).onPressed != null;
-        Finder saysResuming(String key) => find.ancestor(
-          of: byKey(key),
-          matching: find.byWidgetPredicate(
-            (w) => w is Tooltip && w.message == 'Resuming…',
-          ),
-        );
-        for (final key in archives) {
-          expect(enabled(key), isTrue, reason: key);
+        // In ⋯ since the header is one row (round 66).
+        const key = 'session-menu:archive';
+        Future<bool> enabled() async {
+          await tester.tap(byKey('overview-peek-more'));
+          await settle(tester);
+          final on = tester.widget<PopupMenuItem<Object?>>(byKey(key)).enabled;
+          await tester.tapAt(const Offset(4, 4));
+          await settle(tester);
+          return on;
         }
+
+        Future<bool> saysResuming() async {
+          await tester.tap(byKey('overview-peek-more'));
+          await settle(tester);
+          final says = find
+              .descendant(
+                of: byKey(key),
+                matching: find.textContaining('resuming'),
+              )
+              .evaluate()
+              .isNotEmpty;
+          await tester.tapAt(const Offset(4, 4));
+          await settle(tester);
+          return says;
+        }
+
+        expect(await enabled(), isTrue);
 
         c.read(sessionsStartingProvider.notifier).add('paused');
         await settle(tester);
-        for (final key in archives) {
-          expect(enabled(key), isFalse, reason: key);
-          expect(saysResuming(key), findsOneWidget, reason: key);
-        }
+        expect(await enabled(), isFalse);
+        expect(await saysResuming(), isTrue);
 
         c.read(sessionsStartingProvider.notifier).remove('paused');
         await settle(tester);
-        for (final key in archives) {
-          expect(enabled(key), isTrue, reason: key);
-          expect(saysResuming(key), findsNothing, reason: key);
-        }
+        expect(await enabled(), isTrue);
+        expect(await saysResuming(), isFalse);
       });
     });
   });

@@ -91,16 +91,17 @@ void main() {
     if (folded.isEmpty) return;
     await tester.tap(inStrip(find.byKey(StatusStrip.foldKey)));
     await tester.pumpAndSettle();
+    // The sheet is a list now (round 66): each fact one row of it.
     final sheet = find.byKey(const ValueKey('status-strip-sheet'));
     for (final id in folded) {
-      expect(
-        find.descendant(
-          of: sheet,
-          matching: find.byKey(ValueKey('status-strip:$id')),
-        ),
-        findsOneWidget,
-        reason: id,
+      final row = find.descendant(
+        of: sheet,
+        matching: find.byKey(ValueKey('session-list:$id')),
       );
+      expect(row, findsOneWidget, reason: id);
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      expect(row.hitTestable(), findsOneWidget, reason: id);
     }
     await tester.tapAt(const Offset(4, 4));
     await tester.pumpAndSettle();
@@ -231,12 +232,12 @@ void main() {
         expect(inHeader(find.byType(OverviewStatePill)), findsNothing);
         expect(inHeader(find.textContaining('Opus 5.5')), findsNothing);
         expect(inHeader(find.textContaining('Usage')), findsNothing);
-        // The desktop keeps its labelled views.
-        expect(
-          find.byKey(const ValueKey('overview-peek-tab:files')),
-          findsOneWidget,
-        );
-        expect(find.text('Files · 3'), findsOneWidget);
+        // The views are the phone's compact switch on a desktop too
+        // (round 66), in the header's one row.
+        final views = find.byKey(const ValueKey('overview-peek-tabs'));
+        expect(inHeader(views), findsOneWidget);
+        expect(tester.widget<ViewSwitch<Object?>>(views).labelled, isFalse);
+        expect(find.byTooltip('Files · 3 changed'), findsOneWidget);
 
         final peek = tester.getRect(
           find.byKey(const ValueKey('overview-peek')),

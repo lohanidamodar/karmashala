@@ -8,7 +8,6 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/workspace_session_entry.dart';
 import '../../sessions/application/session_ui_providers.dart';
-import '../../sessions/presentation/detach_session_action.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
@@ -16,6 +15,7 @@ import '../application/overview_providers.dart';
 import '../application/overview_resume.dart';
 import 'overview_peek.dart';
 import 'overview_pins.dart';
+import 'overview_session_menu.dart';
 
 /// Whether [card]'s session can be resumed from here: one of ours that
 /// nothing runs — stopped, ended, or done with its agent gone.
@@ -31,6 +31,18 @@ bool watchOverviewResumable(WidgetRef ref, OverviewCard card) {
   return !sessionHasLiveProcess(ref, card.id) &&
       !ref.watch(sessionsStartingProvider.select((s) => s.contains(card.id)));
 }
+
+/// [watchOverviewResumable], read rather than watched: for a menu deciding
+/// what to offer as it opens.
+bool overviewResumable(WidgetRef ref, OverviewCard card) =>
+    card.entry.native != null &&
+    const {
+      AgentState.ended,
+      AgentState.ready,
+      AgentState.failed,
+    }.contains(card.state) &&
+    !sessionRunsNow(ref, card.id) &&
+    !ref.read(sessionsStartingProvider).contains(card.id);
 
 /// Resumes [sessionId] where the person is — at the server, no tab, no focus
 /// moved — idle or with [message], and peeks it.
@@ -118,8 +130,57 @@ class OverviewArchiveGate extends ConsumerWidget {
   }
 }
 
-/// A card's ⋯: Pin or Unpin, and — where the session can be resumed —
-/// Resume, kept here, and Open tab.
+/// A card's own verbs, ahead of the shared session menu: Pin or Unpin, and
+/// Resume where the session can be resumed.
+List<PopupMenuEntry<String>> overviewCardExtras(
+  WidgetRef ref,
+  OverviewCard card,
+) {
+  final pinned = ref.read(overviewPrefsProvider).pinned.contains(card.id);
+  return [
+    DesktopMenuItem(
+      key: const ValueKey('overview-card-menu:pin'),
+      value: 'board-pin',
+      label: pinned ? 'Unpin' : 'Pin to the top',
+      icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
+    ),
+    if (overviewResumable(ref, card))
+      DesktopMenuItem(
+        key: const ValueKey('overview-card-menu:resume'),
+        value: 'board-resume',
+        label: 'Resume',
+        icon: AppIcons.play,
+      ),
+  ];
+}
+
+/// Opens [card]'s menu — the card's own verbs, then the session menu every
+/// other place has — from [anchor], at [at] for a right-click.
+Future<void> showOverviewCardMenu(
+  BuildContext anchor,
+  WidgetRef ref,
+  OverviewCard card, {
+  Offset? at,
+}) => showOverviewSessionMenu(
+  anchor,
+  ref,
+  card.entry,
+  at: at,
+  extras: overviewCardExtras(ref, card),
+  onExtra: (value) async {
+    switch (value) {
+      case 'board-pin':
+        toggleOverviewPin(anchor, ref, card.id);
+      case 'board-resume':
+        await resumeFromDashboard(anchor, ref, card.entry);
+      default:
+        return false;
+    }
+    return true;
+  },
+);
+
+/// A card's ⋯: [showOverviewCardMenu].
 class OverviewCardMenu extends ConsumerWidget {
   const OverviewCardMenu({required this.card, super.key});
 
@@ -127,12 +188,6 @@ class OverviewCardMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final resumable = watchOverviewResumable(ref, card);
-    final pinned = ref.watch(
-      overviewPrefsProvider.select((p) => p.pinned.contains(card.id)),
-    );
-    final detachable =
-        card.entry.native != null && watchCanDetach(ref, card.id);
     final density = UiDensity.of(context);
     return Builder(
       builder: (button) => IconButton(
@@ -143,44 +198,7 @@ class OverviewCardMenu extends ConsumerWidget {
         constraints: density.iconConstraints(Chrome.control),
         iconSize: density.iconSize(Chrome.iconSmall),
         icon: const Icon(AppIcons.dotsThree),
-        onPressed: () async {
-          final picked = await showDesktopMenuUnder<String>(button, [
-            DesktopMenuItem(
-              value: 'pin',
-              label: pinned ? 'Unpin' : 'Pin to the top',
-              icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-            ),
-            if (resumable) ...[
-              DesktopMenuItem(
-                value: 'resume',
-                label: 'Resume',
-                icon: AppIcons.play,
-              ),
-              DesktopMenuItem(
-                value: 'open',
-                label: 'Open tab',
-                icon: AppIcons.arrowSquareOut,
-              ),
-            ],
-            if (detachable)
-              DesktopMenuItem(
-                value: 'detach',
-                label: kDetachLabel,
-                icon: AppIcons.linkBreak,
-              ),
-          ]);
-          if (!button.mounted) return;
-          switch (picked) {
-            case 'pin':
-              toggleOverviewPin(button, ref, card.id);
-            case 'resume':
-              await resumeFromDashboard(button, ref, card.entry);
-            case 'open':
-              await openOverviewSession(button, ref, card.entry);
-            case 'detach':
-              await detachSessionFromUi(button, ref, card.id);
-          }
-        },
+        onPressed: () => showOverviewCardMenu(button, ref, card),
       ),
     );
   }

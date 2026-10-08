@@ -45,10 +45,7 @@ import '../../features/sessions/presentation/session_environment_mark.dart';
 import '../../features/sessions/presentation/session_notice_line.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/model_chip.dart';
-import '../../features/sessions/presentation/permission_mode_chip.dart';
-import '../../features/sessions/presentation/session_mode_picker.dart';
 import '../../features/sessions/presentation/operator_chip.dart';
-import '../../features/sessions/presentation/session_stats_dialog.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/browser_document_pane.dart';
 import '../../features/terminal/application/terminal_presets.dart';
@@ -86,6 +83,11 @@ export 'workbench_tabs.dart';
 // `part`s rather than libraries of their own because privacy in Dart is per
 // library: every widget below is private and the tree golden records its name.
 import 'session_more_button.dart';
+import '../../features/explorer/presentation/session_row_menu.dart'
+    show runNativeSessionMenuAction, sessionMenuItems;
+import '../../features/terminal/application/system_terminal_providers.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
+import '../../features/overview/presentation/session_fact_list.dart';
 import 'session_ports_badge.dart';
 import '../widgets/view_switch.dart';
 import '../widgets/yielding_row.dart';

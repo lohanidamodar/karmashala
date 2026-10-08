@@ -190,7 +190,8 @@ class _CompactSessionBar extends StatelessWidget {
   }
 }
 
-/// **Session ▾**: opens [_SessionSheet].
+/// **Session ▾**: opens the session's [SessionFactList] — what the wide
+/// status line holds beyond the phone's row, and ⋯'s verbs, as one list.
 class _SessionSheetButton extends StatelessWidget {
   const _SessionSheetButton({required this.sessionId});
 
@@ -210,7 +211,7 @@ class _SessionSheetButton extends StatelessWidget {
       onPressed: () => showAdaptiveModal<void>(
         context: context,
         title: 'Session',
-        builder: (_) => _SessionSheet(sessionId: sessionId),
+        builder: (_) => SessionFactList(sessionId: sessionId),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -222,54 +223,6 @@ class _SessionSheetButton extends StatelessWidget {
             size: Chrome.iconSmall,
             color: scheme.onSurfaceVariant,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// What the wide status line holds beyond the phone's row: the model, the
-/// stats, every delivery step, and ⋯'s verbs.
-class _SessionSheet extends StatelessWidget {
-  const _SessionSheet({required this.sessionId});
-
-  final String sessionId;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final label = theme.textTheme.labelSmall
-        ?.merge(Chrome.groupLabel)
-        .copyWith(color: theme.colorScheme.onSurfaceVariant);
-    Widget row(Widget child) => ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: Touch.target),
-      child: Align(alignment: AlignmentDirectional.centerStart, child: child),
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('MODEL AND MODE', style: label),
-          row(
-            Wrap(
-              spacing: Insets.sm,
-              runSpacing: Insets.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SessionModelChip(sessionId: sessionId),
-                PermissionModeChip(sessionId: sessionId),
-                SessionModePicker(sessionId: sessionId, leadingGap: false),
-                OperatorChip(sessionId: sessionId),
-                SessionStatsButton(sessionId: sessionId),
-              ],
-            ),
-          ),
-          const SizedBox(height: Insets.sm),
-          row(DeliveryStrip(sessionId: sessionId, hostedOnTerminal: true)),
-          const SizedBox(height: Insets.sm),
-          SessionMoreBody(sessionId: sessionId),
         ],
       ),
     );

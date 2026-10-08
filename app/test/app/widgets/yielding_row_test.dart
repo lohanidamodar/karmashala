@@ -125,4 +125,38 @@ void main() {
     await pumpSpaced(209);
     expect(hidden, [false, true, false]);
   });
+
+  testWidgets('keepsOne: false lets the last one fold too', (tester) async {
+    var hidden = <bool>[];
+    Future<void> pumpAt(double width, {required bool keepsOne}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: width),
+                child: YieldingRow(
+                  keepsOne: keepsOne,
+                  onHiddenChanged: (h) => hidden = h,
+                  children: [button('First'), button('Last')],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    // Kept, the last one standing is given the row.
+    await pumpAt(60, keepsOne: true);
+    expect(hidden, [true, false]);
+
+    // Not kept, it goes too, and the row takes no width.
+    await pumpAt(60, keepsOne: false);
+    expect(hidden, [true, true]);
+    expect(tester.getSize(find.byType(YieldingRow)).width, 0);
+    expect(find.text('Last').hitTestable(), findsNothing);
+  });
 }

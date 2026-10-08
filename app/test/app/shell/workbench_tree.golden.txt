@@ -90,19 +90,13 @@ WorkbenchView
                                                                                                                                                                         TabLivenessDot
                                                                                                                                                                           SizedBox
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="PowerShell"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip=""
+                                                                                                                                                                                    Text text="PowerShell"
+                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -491,19 +485,13 @@ WorkbenchView
                                                                                                                                                                         TabLivenessDot
                                                                                                                                                                           SizedBox
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="PowerShell"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip=""
+                                                                                                                                                                                    Text text="PowerShell"
+                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -614,19 +602,21 @@ WorkbenchView
                                                                                                                                                                         TabLivenessDot
                                                                                                                                                                           SizedBox
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="Command Prompt"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="Command Prompt"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip="Command Prompt"
+                                                                                                                                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                      OverlayPortal
+                                                                                                                                                                                        _OverlayPortal
+                                                                                                                                                                                          Semantics
+                                                                                                                                                                                            _ExclusiveMouseRegion
+                                                                                                                                                                                              Listener
+                                                                                                                                                                                                Semantics
+                                                                                                                                                                                                  MouseRegion
+                                                                                                                                                                                                    Text text="Command Prompt"
+                                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -1092,19 +1082,21 @@ WorkbenchView
                                                                                                                                                                             TabLivenessDot
                                                                                                                                                                               SizedBox
                                                                                                                                                                             Expanded
-                                                                                                                                                                              Tooltip tooltip="Command Prompt"
-                                                                                                                                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                  OverlayPortal
-                                                                                                                                                                                    _OverlayPortal
-                                                                                                                                                                                      Semantics
-                                                                                                                                                                                        _ExclusiveMouseRegion
-                                                                                                                                                                                          Listener
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              MouseRegion
-                                                                                                                                                                                                Row
-                                                                                                                                                                                                  Expanded
-                                                                                                                                                                                                    Text text="Command Prompt"
-                                                                                                                                                                                                      RichText
+                                                                                                                                                                              Row
+                                                                                                                                                                                Expanded
+                                                                                                                                                                                  TruncatedText
+                                                                                                                                                                                    _EllipsisProbe
+                                                                                                                                                                                      Tooltip tooltip="Command Prompt"
+                                                                                                                                                                                        RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                          OverlayPortal
+                                                                                                                                                                                            _OverlayPortal
+                                                                                                                                                                                              Semantics
+                                                                                                                                                                                                _ExclusiveMouseRegion
+                                                                                                                                                                                                  Listener
+                                                                                                                                                                                                    Semantics
+                                                                                                                                                                                                      MouseRegion
+                                                                                                                                                                                                        Text text="Command Prompt"
+                                                                                                                                                                                                          RichText
                                                                                                                                                                             SizedBox
                                                                                                                                                                             _TabCloseButton
                                                                                                                                                                               MouseRegion
@@ -1503,19 +1495,13 @@ WorkbenchView
                                                                                                                                                                             TabLivenessDot
                                                                                                                                                                               SizedBox
                                                                                                                                                                             Expanded
-                                                                                                                                                                              Tooltip tooltip="PowerShell"
-                                                                                                                                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                  OverlayPortal
-                                                                                                                                                                                    _OverlayPortal
-                                                                                                                                                                                      Semantics
-                                                                                                                                                                                        _ExclusiveMouseRegion
-                                                                                                                                                                                          Listener
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              MouseRegion
-                                                                                                                                                                                                Row
-                                                                                                                                                                                                  Expanded
-                                                                                                                                                                                                    Text text="PowerShell"
-                                                                                                                                                                                                      RichText
+                                                                                                                                                                              Row
+                                                                                                                                                                                Expanded
+                                                                                                                                                                                  TruncatedText
+                                                                                                                                                                                    _EllipsisProbe
+                                                                                                                                                                                      Tooltip tooltip=""
+                                                                                                                                                                                        Text text="PowerShell"
+                                                                                                                                                                                          RichText
                                                                                                                                                                             SizedBox
                                                                                                                                                                             _TabCloseButton
                                                                                                                                                                               MouseRegion
@@ -1906,19 +1892,13 @@ WorkbenchView
                                                                                                                                                                             TabLivenessDot
                                                                                                                                                                               SizedBox
                                                                                                                                                                             Expanded
-                                                                                                                                                                              Tooltip tooltip="PowerShell"
-                                                                                                                                                                                RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                  OverlayPortal
-                                                                                                                                                                                    _OverlayPortal
-                                                                                                                                                                                      Semantics
-                                                                                                                                                                                        _ExclusiveMouseRegion
-                                                                                                                                                                                          Listener
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              MouseRegion
-                                                                                                                                                                                                Row
-                                                                                                                                                                                                  Expanded
-                                                                                                                                                                                                    Text text="PowerShell"
-                                                                                                                                                                                                      RichText
+                                                                                                                                                                              Row
+                                                                                                                                                                                Expanded
+                                                                                                                                                                                  TruncatedText
+                                                                                                                                                                                    _EllipsisProbe
+                                                                                                                                                                                      Tooltip tooltip=""
+                                                                                                                                                                                        Text text="PowerShell"
+                                                                                                                                                                                          RichText
                                                                                                                                                                             SizedBox
                                                                                                                                                                             _TabCloseButton
                                                                                                                                                                               MouseRegion
@@ -2683,23 +2663,25 @@ WorkbenchView
                                                                                                                                                                                                         Center
                                                                                                                                                                                                           RichText
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code · Windows"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Padding
-                                                                                                                                                                                                AgentLogo
-                                                                                                                                                                                                  Image
-                                                                                                                                                                                                    RawImage
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="PowerShell"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Padding
+                                                                                                                                                                              AgentLogo
+                                                                                                                                                                                Image
+                                                                                                                                                                                  RawImage
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip="PowerShell · Claude Code · Windows"
+                                                                                                                                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                      OverlayPortal
+                                                                                                                                                                                        _OverlayPortal
+                                                                                                                                                                                          Semantics
+                                                                                                                                                                                            _ExclusiveMouseRegion
+                                                                                                                                                                                              Listener
+                                                                                                                                                                                                Semantics
+                                                                                                                                                                                                  MouseRegion
+                                                                                                                                                                                                    Text text="PowerShell"
+                                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -3578,23 +3560,25 @@ WorkbenchView
                                                                                                                                                                                                         Center
                                                                                                                                                                                                           RichText
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code · Windows"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Padding
-                                                                                                                                                                                                AgentLogo
-                                                                                                                                                                                                  Image
-                                                                                                                                                                                                    RawImage
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="PowerShell"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Padding
+                                                                                                                                                                              AgentLogo
+                                                                                                                                                                                Image
+                                                                                                                                                                                  RawImage
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip="PowerShell · Claude Code · Windows"
+                                                                                                                                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                      OverlayPortal
+                                                                                                                                                                                        _OverlayPortal
+                                                                                                                                                                                          Semantics
+                                                                                                                                                                                            _ExclusiveMouseRegion
+                                                                                                                                                                                              Listener
+                                                                                                                                                                                                Semantics
+                                                                                                                                                                                                  MouseRegion
+                                                                                                                                                                                                    Text text="PowerShell"
+                                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -4822,19 +4806,13 @@ WorkbenchView
                                                                                                                                                                         TabLivenessDot
                                                                                                                                                                           SizedBox
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="PowerShell"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip=""
+                                                                                                                                                                                    Text text="PowerShell"
+                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -5685,23 +5663,25 @@ WorkbenchView
                                                                                                                                                                                                         Center
                                                                                                                                                                                                           RichText
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell · Claude Code · Windows"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Padding
-                                                                                                                                                                                                AgentLogo
-                                                                                                                                                                                                  Image
-                                                                                                                                                                                                    RawImage
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="PowerShell"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Padding
+                                                                                                                                                                              AgentLogo
+                                                                                                                                                                                Image
+                                                                                                                                                                                  RawImage
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip="PowerShell · Claude Code · Windows"
+                                                                                                                                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                      OverlayPortal
+                                                                                                                                                                                        _OverlayPortal
+                                                                                                                                                                                          Semantics
+                                                                                                                                                                                            _ExclusiveMouseRegion
+                                                                                                                                                                                              Listener
+                                                                                                                                                                                                Semantics
+                                                                                                                                                                                                  MouseRegion
+                                                                                                                                                                                                    Text text="PowerShell"
+                                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -6571,19 +6551,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -6694,19 +6676,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -6817,19 +6801,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -6940,19 +6926,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -7063,19 +7051,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -7186,19 +7176,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -7309,19 +7301,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -7432,19 +7426,21 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip="PowerShell"
+                                                                                                                                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                                                                                                                                        OverlayPortal
+                                                                                                                                                                                          _OverlayPortal
+                                                                                                                                                                                            Semantics
+                                                                                                                                                                                              _ExclusiveMouseRegion
+                                                                                                                                                                                                Listener
+                                                                                                                                                                                                  Semantics
+                                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -8447,38 +8443,13 @@ WorkbenchView
                                                                                                                                                                           TabLivenessDot
                                                                                                                                                                             SizedBox
                                                                                                                                                                           Expanded
-                                                                                                                                                                            Tooltip tooltip="PowerShell"
-                                                                                                                                                                              RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                                OverlayPortal
-                                                                                                                                                                                  _OverlayPortal
-                                                                                                                                                                                    Semantics
-                                                                                                                                                                                      _ExclusiveMouseRegion
-                                                                                                                                                                                        Listener
-                                                                                                                                                                                          Semantics
-                                                                                                                                                                                            MouseRegion
-                                                                                                                                                                                              Row
-                                                                                                                                                                                                Expanded
-                                                                                                                                                                                                  Text text="PowerShell"
-                                                                                                                                                                                                    RichText
-                                                                                                                                                                                    _DeferredLayout
-                                                                                                                                                                                      MediaQuery
-                                                                                                                                                                                        Builder
-                                                                                                                                                                                          _OverlayChildLayoutBuilder
-                                                                                                                                                                                            Positioned
-                                                                                                                                                                                              CustomSingleChildLayout
-                                                                                                                                                                                                IgnorePointer
-                                                                                                                                                                                                  _ExclusiveMouseRegion
-                                                                                                                                                                                                    FadeTransition
-                                                                                                                                                                                                      _TooltipBox
-                                                                                                                                                                                                        ConstrainedBox
-                                                                                                                                                                                                          DefaultTextStyle
-                                                                                                                                                                                                            Container
-                                                                                                                                                                                                              Padding
-                                                                                                                                                                                                                DecoratedBox
-                                                                                                                                                                                                                  Padding
-                                                                                                                                                                                                                    Center
-                                                                                                                                                                                                                      Text
-                                                                                                                                                                                                                        RichText
+                                                                                                                                                                            Row
+                                                                                                                                                                              Expanded
+                                                                                                                                                                                TruncatedText
+                                                                                                                                                                                  _EllipsisProbe
+                                                                                                                                                                                    Tooltip tooltip=""
+                                                                                                                                                                                      Text text="PowerShell"
+                                                                                                                                                                                        RichText
                                                                                                                                                                           SizedBox
                                                                                                                                                                           _TabCloseButton
                                                                                                                                                                             MouseRegion
@@ -8539,6 +8510,25 @@ WorkbenchView
                                                                                                                                                                                                                                                                                           SizedBox
                                                                                                                                                                                                                                                                                             Center
                                                                                                                                                                                                                                                                                               RichText
+                                                                                                                                                                                                                      _DeferredLayout
+                                                                                                                                                                                                                        MediaQuery
+                                                                                                                                                                                                                          Builder
+                                                                                                                                                                                                                            _OverlayChildLayoutBuilder
+                                                                                                                                                                                                                              Positioned
+                                                                                                                                                                                                                                CustomSingleChildLayout
+                                                                                                                                                                                                                                  IgnorePointer
+                                                                                                                                                                                                                                    _ExclusiveMouseRegion
+                                                                                                                                                                                                                                      FadeTransition
+                                                                                                                                                                                                                                        _TooltipBox
+                                                                                                                                                                                                                                          ConstrainedBox
+                                                                                                                                                                                                                                            DefaultTextStyle
+                                                                                                                                                                                                                                              Container
+                                                                                                                                                                                                                                                Padding
+                                                                                                                                                                                                                                                  DecoratedBox
+                                                                                                                                                                                                                                                    Padding
+                                                                                                                                                                                                                                                      Center
+                                                                                                                                                                                                                                                        Text
+                                                                                                                                                                                                                                                          RichText
                                                                                                       Positioned key=[<'tab-strip/drop-marker'>]
                                                                                                         IgnorePointer
                                                                                                           ColoredBox
@@ -8592,12 +8582,14 @@ WorkbenchView
                                                                                                                                                                         TabLivenessDot
                                                                                                                                                                           SizedBox
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="Command Prompt"
-                                                                                                                                                                            MouseRegion
-                                                                                                                                                                              Row
-                                                                                                                                                                                Expanded
-                                                                                                                                                                                  Text text="Command Prompt"
-                                                                                                                                                                                    RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip="Command Prompt"
+                                                                                                                                                                                    MouseRegion
+                                                                                                                                                                                      Text text="Command Prompt"
+                                                                                                                                                                                        RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -9054,19 +9046,13 @@ WorkbenchView
                                                                                                                                                                         TabLivenessDot
                                                                                                                                                                           SizedBox
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="PowerShell"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="PowerShell"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip=""
+                                                                                                                                                                                    Text text="PowerShell"
+                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
@@ -9181,19 +9167,13 @@ WorkbenchView
                                                                                                                                                                                 Center
                                                                                                                                                                                   RichText
                                                                                                                                                                         Expanded
-                                                                                                                                                                          Tooltip tooltip="Settings"
-                                                                                                                                                                            RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                                                                                                                              OverlayPortal
-                                                                                                                                                                                _OverlayPortal
-                                                                                                                                                                                  Semantics
-                                                                                                                                                                                    _ExclusiveMouseRegion
-                                                                                                                                                                                      Listener
-                                                                                                                                                                                        Semantics
-                                                                                                                                                                                          MouseRegion
-                                                                                                                                                                                            Row
-                                                                                                                                                                                              Expanded
-                                                                                                                                                                                                Text text="Settings"
-                                                                                                                                                                                                  RichText
+                                                                                                                                                                          Row
+                                                                                                                                                                            Expanded
+                                                                                                                                                                              TruncatedText
+                                                                                                                                                                                _EllipsisProbe
+                                                                                                                                                                                  Tooltip tooltip=""
+                                                                                                                                                                                    Text text="Settings"
+                                                                                                                                                                                      RichText
                                                                                                                                                                         SizedBox
                                                                                                                                                                         _TabCloseButton
                                                                                                                                                                           MouseRegion
