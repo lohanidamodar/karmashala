@@ -17,6 +17,54 @@ installs claim the same version name.
 
 ---
 
+## 1.34.2 — 2026-10-08 (build 69)
+
+- **The phone reconnects within seconds after the background.**
+  - It was stuck on "Reconnecting…" for two minutes after a short switch to
+    another app.
+  - The phone now redials within 10 s when a held link can't resume.
+  - The server tells it to redial at once instead of going silent.
+- **A message you send is never overridden.**
+  - Every message has an id and a place in the session's queue, and nothing
+    replaces one.
+  - Auto-continue never jumps ahead of you.
+  - Terminal deliveries never type over text already in the agent's input.
+  - The chat shows Sending…, Queued and Delivered.
+- **The Agent dashboard.**
+  - Resuming and starting stay in the background (a new setting, on by
+    default). Picking a stopped session only shows it.
+  - The peek carries the session's own controls: permission, model,
+    Operate Karmashala, branch and Commit/Ship.
+  - The message box keeps focus after a send. Clicking outside the peek
+    closes it.
+  - Sub-sessions:
+    - show inside their parent or as cards;
+    - appear at once when an agent starts one;
+    - keep their parent "waiting" until they finish.
+  - On a phone the peek is a full page with room for the chat.
+- **Automations, simpler.**
+  - Checks are an optional step with their own command; the per-project
+    checks list is gone.
+  - A responsive grid.
+  - Pull requests from forks work.
+  - "Tell the agent" reaches chat sessions.
+  - Turning an automation on asks first.
+- **GitHub without the gh CLI.**
+  - Paste a token in Settings → Source control, or choose gh's account per
+    host.
+  - Agents ask for secrets through a private card.
+- **In the chat:**
+  - images show inline;
+  - file previews open without asking;
+  - web links open on click;
+  - commands show how long they took;
+  - per-turn Retry, Edit and resend, Fork and Copy;
+  - Keep or Revert per hunk.
+- **A visualize tool** lets agents put charts, tables, diagrams, metrics and
+  progress into the thread, updated in place.
+- **SSH hosts get the right version:** the server picks the newest host
+  bundle across every folder, not the first folder it finds.
+
 ## 1.34.1 — 2026-10-08 (build 68)
 
 - **A sturdier, richer chat.**
