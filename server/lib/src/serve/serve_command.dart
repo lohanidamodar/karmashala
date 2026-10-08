@@ -470,16 +470,11 @@ Future<int> _serve(
   // Every client's notes, todos, preferences, workspace and sessions: the
   // desktop app reads and writes them here, a phone's new project is written
   // here, and every row this server writes itself is told through it. The
-  // lifecycle status of a session it runs is its own to record.
-  final data = DataService(
-    database,
-    runsSession: (sessionId) {
-      final id = hostSessionIdOf(sessionId);
-      if (registry.findProcess(id) != null) return true;
-      final onBox = boxSessions?.byId(id);
-      return onBox != null && !onBox.lifecycle.hasEnded;
-    },
-  )..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
+  // lifecycle status of a session it runs is its own to record. Whether it
+  // runs is the answer `session_end` reads too: the registry keeps an ended
+  // process a while, and that is no agent running.
+  final data = DataService(database, runsSession: status.holds)
+    ..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
   // The model each session's agent last said it runs: what every client
   // and every agent tool shows, never a setting.
   final activeModels = SessionActiveModels(
@@ -719,9 +714,7 @@ Future<int> _serve(
     reach,
     onRecorded: agentWork.imports.checkoutsRecorded,
   );
-  final liveness = SessionLiveness(
-    (id) => registry.findProcess(hostSessionIdOf(id)) != null,
-  );
+  final liveness = SessionLiveness(status.holds);
   final worktrees = daemonWorktrees(
     database: database,
     registry: registry,
@@ -953,7 +946,7 @@ Future<int> _serve(
     // A project added or rescanned by a client imports the CLI history of
     // its new checkouts, as an agent's does.
     folders: folders,
-    hostsSession: (id) => registry.findProcess(hostSessionIdOf(id)) != null,
+    hostsSession: status.holds,
     livePaneDirectories: () => [
       for (final pane in sessionSync.panes.all)
         if (pane.live) ?pane.workingDirectory,
