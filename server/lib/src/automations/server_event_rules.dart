@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_automations/automations.dart';
@@ -9,11 +8,13 @@ import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionStatusEntry;
+    show DataRefused, SessionSent, SessionStatusEntry;
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/session.dart';
 
-import '../domain/host_session.dart';
+/// Sends [String] text to row [String] the way every other sender does.
+typedef SessionMessageSender =
+    Future<SessionSent> Function(String sessionId, String text);
 
 /// **Automations that answer events, answered by the server** (slice 5c) —
 /// the app's `AutomationEventRouter`, moved: every status move the server
@@ -21,19 +22,18 @@ import '../domain/host_session.dart';
 /// ([automationEventOf]), planned against every enabled rule (the origin
 /// chain, the per-rule rate limit — [planAutomationEvent]) and acted on:
 /// a new session queued behind its checkout (the scheduler starts it), or the
-/// rule's prompt typed into the session the server runs. With every app
-/// closed.
+/// rule's prompt sent to the session the server runs. With every app closed.
 class ServerEventRules {
   ServerEventRules({
     required this.automations,
     required this.scheduler,
     required this.preflight,
     required this.sessionOf,
-    required this.runningOf,
+    required this.isLive,
     required this.now,
     required this.newId,
     this.statusOf,
-    this.enterDelay = const Duration(milliseconds: 150),
+    this.send,
     this.log,
     this.afterRun,
     AutomationRateLimiter? limiter,
@@ -44,14 +44,18 @@ class ServerEventRules {
   final UnattendedPreflight preflight;
   final Session? Function(String sessionId) sessionOf;
 
-  /// The running host session of row [String], or null.
-  final HostSession? Function(String sessionId) runningOf;
+  /// Whether this server runs row [String] now, over a PTY or ACP.
+  final bool Function(String sessionId) isLive;
 
   /// What the server's reading says row [String]'s agent is doing.
   final AgentStatusReport? Function(String sessionId)? statusOf;
   final DateTime Function() now;
   final String Function() newId;
-  final Duration enterDelay;
+
+  /// The server's one send path — the dashboard's and `session_send`'s, which
+  /// reaches chat and terminal sessions alike and queues while a turn runs.
+  /// Set once the server has built it; null sends nothing.
+  SessionMessageSender? send;
   final void Function(String message)? log;
 
   /// The steps after a run that started nothing: a notify-only rule's.
@@ -168,7 +172,7 @@ class ServerEventRules {
         scheduler.queueEventRun(rule, run);
         await scheduler.drain(rule.repositoryId);
       case AutomationEventAction.messageSession:
-        _message(rule, run, session);
+        await _message(rule, run, session);
       case AutomationEventAction.notifyOnly:
         final done = run.copyWith(
           state: AutomationRunState.finished,
@@ -188,7 +192,7 @@ class ServerEventRules {
         reason: 'The session was archived, so nothing was sent.',
       );
     }
-    if (runningOf(session.id) == null) {
+    if (!isLive(session.id)) {
       return (
         state: AutomationRunState.missed,
         reason:
@@ -200,13 +204,8 @@ class ServerEventRules {
     if (gate != null) {
       return (state: AutomationRunState.failed, reason: gate.reason);
     }
+    // A turn that runs again is no refusal: the send path queues behind it.
     final report = statusOf?.call(session.id);
-    if (report?.status == AgentActivityStatus.working) {
-      return (
-        state: AutomationRunState.missed,
-        reason: 'The session was working again by then, so nothing was sent.',
-      );
-    }
     if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
       return (
         state: AutomationRunState.missed,
@@ -218,9 +217,13 @@ class ServerEventRules {
     return null;
   }
 
-  /// Types the rule's prompt into [session], then Enter. The chain is
-  /// recorded first so the turn it causes carries it.
-  void _message(Automation rule, AutomationRun run, Session session) {
+  /// Sends the rule's prompt, under its "Sent by automation" line, to
+  /// [session]. The chain is recorded first so the turn it causes carries it.
+  Future<void> _message(
+    Automation rule,
+    AutomationRun run,
+    Session session,
+  ) async {
     final at = now();
     final refusal = messageRefusal(session);
     if (refusal != null) {
@@ -233,29 +236,38 @@ class ServerEventRules {
       );
       return;
     }
-    automations.markMessaged(session.id, run.origin, at);
-    final running = runningOf(session.id);
-    final sent =
-        running != null &&
-        running.typeAsHost(utf8.encode(automationMessage(rule)));
-    if (sent) {
-      unawaited(
-        Future<void>.delayed(enterDelay, () {
-          runningOf(session.id)?.typeAsHost(utf8.encode('\r'));
-        }),
+    final send = this.send;
+    if (send == null) {
+      automations.insertRun(
+        run.copyWith(
+          state: AutomationRunState.failed,
+          reason:
+              '${run.reason} This server has no way to send messages yet, '
+              'so nothing was sent.',
+          finishedAt: at,
+        ),
       );
-    } else {
+      return;
+    }
+    automations.markMessaged(session.id, run.origin, at);
+    String reason;
+    var state = AutomationRunState.finished;
+    try {
+      final sent = await send(session.id, automationMessage(rule));
+      reason = sent.via == SessionSent.queuedVia
+          ? '${run.reason} Queued "${rule.prompt}" for "${session.title}", '
+                'which was working; it goes in when that turn ends'
+                '${sent.position == null ? '' : ' (number ${sent.position} '
+                          'in its queue)'}.'
+          : '${run.reason} Sent "${rule.prompt}" to "${session.title}".';
+    } on Object catch (error) {
       automations.clearMessaged(session.id);
+      state = AutomationRunState.failed;
+      final words = error is DataRefused ? error.message : '$error';
+      reason = '${run.reason} The send was refused: $words.';
     }
     automations.insertRun(
-      run.copyWith(
-        state: sent ? AutomationRunState.finished : AutomationRunState.failed,
-        reason: sent
-            ? '${run.reason} Sent "${rule.prompt}" to "${session.title}".'
-            : '${run.reason} The session had nothing running to type into, '
-                  'so nothing was sent.',
-        finishedAt: at,
-      ),
+      run.copyWith(state: state, reason: reason, finishedAt: now()),
     );
   }
 }

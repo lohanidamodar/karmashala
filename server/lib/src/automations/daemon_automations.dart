@@ -64,6 +64,7 @@ import 'github/daemon_github.dart';
 import 'step_runners.dart';
 import 'session_mcp_access.dart';
 import '../domain/host_session.dart';
+
 import 'package:karmashala_notifications/attention.dart'
     show InboxItem, InboxItemKind;
 import 'package:karmashala_notifications/watched.dart'
@@ -337,7 +338,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       scheduler: scheduler,
       preflight: preflight,
       sessionOf: sessions.getById,
-      runningOf: running,
+      isLive: (id) => running(id) != null || liveAcp(id) != null,
       statusOf: (id) => agentStatusOf?.call(id)?.report,
       now: now,
       newId: ids,

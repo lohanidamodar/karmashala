@@ -54,6 +54,7 @@ class HostedLaunch {
     this.worktreeBranch,
     this.worktreeBase,
     this.worktreeExistingBranch,
+    this.worktreeFetch,
     this.resuming,
     this.parentSessionId,
     this.parentLink,
@@ -106,6 +107,10 @@ class HostedLaunch {
   /// With [worktree]: an existing branch to check out in the new worktree,
   /// in place of creating [worktreeBranch] from [worktreeBase].
   final String? worktreeExistingBranch;
+
+  /// With [worktreeExistingBranch]: a ref fetched into it first — a fork's
+  /// pull request.
+  final WorktreeRefFetch? worktreeFetch;
 
   /// The row being continued: its id, its conversation, its directory, its
   /// mode and model are kept (unless named here), and it is marked running.
@@ -300,7 +305,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     Automation automation,
     Repository repository,
     AgentInstallation installation, {
-    String? branch,
+    PullRequestCheckout? pullRequest,
   }) async => (await start(
     HostedLaunch(
       repository: repository,
@@ -309,8 +314,14 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       permissionMode: automation.permissionMode?.canonical,
       prompt: automation.prompt,
       modelId: automation.modelId,
-      worktree: automation.worktree || branch != null,
-      worktreeExistingBranch: branch,
+      worktree: automation.worktree || pullRequest != null,
+      worktreeExistingBranch: pullRequest?.localBranch,
+      worktreeFetch: pullRequest == null || !pullRequest.fork
+          ? null
+          : WorktreeRefFetch(
+              ref: pullRequest.pullRef,
+              repository: pullRequest.repository,
+            ),
     ),
   )).id;
 
@@ -388,6 +399,9 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             : launch.worktreeBranch ?? sessionBranchName(id),
         baseRef: launch.worktreeBase,
         existingBranch: existingBranch != null && existingBranch.isNotEmpty,
+        fetchRef: existingBranch != null && existingBranch.isNotEmpty
+            ? launch.worktreeFetch
+            : null,
         launchesAgent: true,
       );
       directory = created.worktree.path;

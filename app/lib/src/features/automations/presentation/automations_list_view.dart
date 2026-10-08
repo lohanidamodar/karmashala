@@ -20,6 +20,7 @@ import 'automation_run_actions.dart';
 import 'automation_run_status.dart';
 import 'project_checks_section.dart';
 import 'proposal_actions.dart';
+import 'turn_on_confirm_dialog.dart' show turnOnAutomation;
 
 /// The Automations list: templates first, then every automation by checkout.
 class AutomationsListView extends ConsumerWidget {
@@ -392,9 +393,11 @@ class AutomationRow extends ConsumerWidget {
             ],
             Switch(
               value: automation.enabled,
-              onChanged: (on) => ref
-                  .read(automationControllerProvider)
-                  .setEnabled(automation.id, enabled: on),
+              onChanged: (on) => on
+                  ? turnOnAutomation(context, ref, automation)
+                  : ref
+                        .read(automationControllerProvider)
+                        .setEnabled(automation.id, enabled: false),
             ),
             _RowMenu(automation: automation),
           ],

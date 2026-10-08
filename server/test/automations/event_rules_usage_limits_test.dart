@@ -5,10 +5,17 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/usage.dart';
+import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionStatusEntry, UsageLimitNotice, UsageLimitOutcome;
+    show
+        DataRefusalCode,
+        DataRefused,
+        SessionSent,
+        SessionStatusEntry,
+        UsageLimitNotice,
+        UsageLimitOutcome;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
     show kProtocolUsageLimitReason;
@@ -20,6 +27,8 @@ import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import '../acp/acp_fixture.dart';
 
 Future<void> pump() async {
   for (var i = 0; i < 20; i++) {
@@ -187,24 +196,125 @@ void main() {
   );
 
   group('event rules', () {
-    test('a finished turn types the rule\'s prompt into the session the '
-        'server runs, and records the run', () async {
-      rule(AutomationEventAction.messageSession);
-      final pty = run();
+    const attributed =
+        '[sent by the Karmashala automation "After each turn" (rule-1)] '
+        'run the tests';
+
+    /// What went through the server's one send path, and how it answers.
+    late List<(String, String)> sends;
+    late Future<SessionSent> Function(String text) answer;
+
+    setUp(() {
+      sends = [];
+      answer = (_) async =>
+          const SessionSent(sent: true, via: SessionSent.readBack);
+      automations.eventRules.send = (sessionId, text) {
+        sends.add((sessionId, text));
+        return answer(text);
+      };
+    });
+
+    Future<void> turnEnds() async {
       automations
         ..observeStatus(entry(AgentActivityStatus.working))
         ..observeStatus(entry(AgentActivityStatus.idle));
       await pump();
+    }
 
-      expect(
-        utf8.decode(pty.writes.first),
-        '[sent by the Karmashala automation "After each turn" (rule-1)] '
-        'run the tests',
-      );
+    test('a finished turn sends the rule\'s prompt to the terminal session '
+        'through the one send path, and records the run', () async {
+      rule(AutomationEventAction.messageSession);
+      final pty = run();
+      await turnEnds();
+
+      expect(sends, [('s1', attributed)]);
+      expect(pty.writes, isEmpty, reason: 'the send path types, not the rule');
       final written = AutomationDao(db).runsFor('rule-1').single;
       expect(written.state, AutomationRunState.finished);
+      expect(written.reason, contains('Sent "run the tests" to "Fix the '));
       expect(written.eventSessionId, 's1');
       expect(AutomationDao(db).messagedOrigin('s1'), ['rule-1']);
+    });
+
+    test(
+      'a chat (ACP) session is told too, labelled as the automation\'s',
+      () async {
+        rule(AutomationEventAction.messageSession);
+        final runtime = registry.openAcp(
+          'karmashala_s1',
+          runtimeOver(
+            FakeAcpProcess(
+              FakeAcpAgent(
+                turns: [
+                  FakeTurn([FakeStep.message('done')]),
+                ],
+              ),
+            ),
+            database: db,
+            workingDirectory: data.path,
+          ),
+        );
+        await runtime.start();
+        String? prompted;
+        answer = (text) async {
+          prompted = text;
+          await runtime.send(text);
+          return const SessionSent(sent: true, via: 'protocol');
+        };
+        await turnEnds();
+        for (
+          var i = 0;
+          i < 200 && AutomationDao(db).runsFor('rule-1').isEmpty;
+          i++
+        ) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+
+        expect(launcher.handles, isEmpty, reason: 'no terminal anywhere');
+        expect(prompted, attributed);
+        final split = AutomationAttribution.split(prompted!)!;
+        expect(split.by.name, 'After each turn');
+        expect(split.rest, 'run the tests');
+        final written = AutomationDao(db).runsFor('rule-1').single;
+        expect(written.state, AutomationRunState.finished);
+        await runtime.stop();
+      },
+    );
+
+    test('a session whose turn runs again is queued behind it, and the run '
+        'says so', () async {
+      rule(AutomationEventAction.messageSession);
+      run();
+      answer = (_) async => const SessionSent(
+        sent: true,
+        via: SessionSent.queuedVia,
+        queuedId: 'q1',
+        position: 1,
+      );
+      await turnEnds();
+
+      expect(sends, [('s1', attributed)]);
+      final written = AutomationDao(db).runsFor('rule-1').single;
+      expect(written.state, AutomationRunState.finished);
+      expect(written.reason, contains('Queued "run the tests"'));
+      expect(written.reason, contains('when that turn ends'));
+      expect(AutomationDao(db).messagedOrigin('s1'), ['rule-1']);
+    });
+
+    test('a send refused is a failed run in the refusal\'s words, and the '
+        'chain is let go', () async {
+      rule(AutomationEventAction.messageSession);
+      run();
+      answer = (_) async => throw const DataRefused(
+        DataRefusalCode.conflict,
+        'the session has an approval prompt open',
+      );
+      await turnEnds();
+
+      final written = AutomationDao(db).runsFor('rule-1').single;
+      expect(written.state, AutomationRunState.failed);
+      expect(written.reason, contains('approval prompt open'));
+      expect(AutomationDao(db).messagedOrigin('s1'), isEmpty);
     });
 
     test(
