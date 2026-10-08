@@ -17,6 +17,8 @@ import 'package:karmashala/src/features/sessions/application/delivery_providers.
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_activity_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:karmashala/src/features/sessions/application/session_queue_providers.dart'
+    show kDeliveredShownFor;
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/queued_messages_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
@@ -199,7 +201,7 @@ void main() {
       await send(tester, 'then run the tests');
 
       expect(server.sessionWork.sent, isEmpty);
-      expect(find.text('Queued · next'), findsOneWidget);
+      expect(find.text('Queued (1st)'), findsOneWidget);
       expect(find.text('then run the tests'), findsOneWidget);
       expect(find.byKey(const ValueKey('queued-edit-q1')), findsOneWidget);
       expect(find.byKey(const ValueKey('queued-cancel-q1')), findsOneWidget);
@@ -208,7 +210,7 @@ void main() {
       expect(composer.enabled ?? true, isTrue);
 
       await send(tester, 'and lint');
-      expect(find.text('Queued · 2'), findsOneWidget);
+      expect(find.text('Queued (2nd)'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -261,7 +263,7 @@ void main() {
 
       final clock = formatResetClock(until, testTime.toLocal());
       expect(find.text('Held until the limit resets · $clock'), findsOneWidget);
-      expect(find.text('Queued · next'), findsOneWidget);
+      expect(find.text('Queued (1st)'), findsOneWidget);
 
       server.sessionWork.holdQueue('acp-1', null);
       await tester.pumpAndSettle();
@@ -653,7 +655,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(server.sessionWork.queues['acp-1'], isEmpty);
-    expect(find.text('Queued · next'), findsNothing);
+    expect(find.text('Queued (1st)'), findsNothing);
+    expect(find.text('Delivered'), findsNothing, reason: 'it never went');
     expect(
       server.sessionWork.queueAsked.whereType<SessionQueueCancel>(),
       hasLength(1),
@@ -671,9 +674,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(server.sessionWork.sent.map((s) => s.text), ['first']);
-    expect(find.text('first'), findsNothing);
     expect(find.text('second'), findsOneWidget);
-    expect(find.text('Queued · next'), findsOneWidget);
+    expect(find.text('Queued (1st)'), findsOneWidget);
+    // Said to have reached the agent, then gone from the strip.
+    expect(find.text('Delivered'), findsOneWidget);
+    expect(find.byKey(const ValueKey('delivered-q1')), findsOneWidget);
+    await tester.pump(kDeliveredShownFor);
+    await tester.pumpAndSettle();
+    expect(find.text('Delivered'), findsNothing);
+    expect(find.text('first'), findsNothing);
   });
 
   testWidgets('a server without sessions.queue is never asked for one', (

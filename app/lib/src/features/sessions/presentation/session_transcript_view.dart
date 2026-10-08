@@ -18,7 +18,13 @@ import '../../editor/application/editor_tab_actions.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart' show Checkpoint;
+import '../../checkpoints/application/checkpoint_providers.dart';
+import '../application/session_handoff_service.dart';
+import '../application/turn_forks.dart';
+import 'hunk_review.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/installation_labels.dart';
@@ -26,7 +32,11 @@ import '../../artifacts/application/artifact_providers.dart';
 import '../../artifacts/domain/artifact_placement.dart';
 import '../../artifacts/presentation/artifact_card.dart';
 import '../../artifacts/presentation/unplaced_artifacts_strip.dart';
-import 'package:karmashala_artifacts/karmashala_artifacts.dart' show Artifact;
+import 'package:karmashala_artifacts/karmashala_artifacts.dart'
+    show Artifact, SessionVisual;
+import '../../artifacts/application/visual_providers.dart';
+import '../../artifacts/domain/visual_placement.dart';
+import '../../artifacts/presentation/session_visual_block.dart';
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -79,10 +89,12 @@ import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
 import 'transcript_file_preview.dart';
 import 'transcript_image_preview.dart';
+import 'transcript_inline_images.dart';
 import 'stop_children_offer.dart';
 import 'delegation_card.dart';
 import 'session_failed_state.dart';
 import 'background_runs_strip.dart';
+import '../../git/application/remote_links.dart';
 
 /// Whether the agent in [String] session has a prompt or question open.
 final _promptOpenProvider = Provider.autoDispose.family<bool, String>(
@@ -155,6 +167,105 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Ticks to take the conversation to its newest message.
   final _toLatest = ValueNotifier<int>(0);
 
+  /// Ticks to hand the composer the keyboard: a message put back to edit.
+  final _composerFocus = ValueNotifier<int>(0);
+
+  List<ChatMessage>? _pointsMessages;
+  List<Checkpoint>? _pointsChain;
+  var _forkPoints = const <int, TurnForkPoints>{};
+
+  /// Each turn's fork targets, matched again only when the conversation or
+  /// the checkpoints moved.
+  Map<int, TurnForkPoints> _forkPointsFor(
+    List<ChatMessage> messages,
+    List<Checkpoint> newestFirst,
+  ) {
+    if (identical(messages, _pointsMessages) &&
+        identical(newestFirst, _pointsChain)) {
+      return _forkPoints;
+    }
+    _pointsMessages = messages;
+    _pointsChain = newestFirst;
+    return _forkPoints = turnForkPoints(
+      transcriptTurnStarts(messages),
+      newestFirst.reversed.toList(),
+    );
+  }
+
+  /// What each turn's actions may do here: Retry and Edit only where a
+  /// message can be sent, Fork only where the session can be forked; all
+  /// three wait while a turn runs.
+  TranscriptTurnActions _turnActionsFor(
+    List<ChatMessage> messages,
+    TranscriptTurn turn, {
+    required bool active,
+  }) {
+    final caps = ref.watch(capabilitiesProvider);
+    final canSend = caps.maySend && (active || caps.mayStart);
+    final canFork =
+        caps.mayStart &&
+        !ref
+            .read(sessionHandoffServiceProvider)
+            .forkPlanFor(widget.sessionId)
+            .isRefused;
+    final chain = canFork
+        ? ref.watch(sessionCheckpointsProvider(widget.sessionId)).value
+        : null;
+    final running =
+        turn == TranscriptTurn.working || turn == TranscriptTurn.awaitingUser;
+    return TranscriptTurnActions(
+      onRetry: canSend ? _retry : null,
+      onEdit: canSend ? _editAndResend : null,
+      onFork: canFork ? _forkFrom : null,
+      busy: running ? 'A turn is running: wait for it to end.' : null,
+      forkPoints: chain == null ? const {} : _forkPointsFor(messages, chain),
+      noForkPoint: canFork
+          ? ref.watch(checkpointSkipReasonProvider(widget.sessionId)) ??
+                kNoTurnCheckpoint
+          : kNoTurnCheckpoint,
+    );
+  }
+
+  /// Retry: the person's words again, as a new turn.
+  void _retry(String words) => unawaited(
+    _send(words).catchError((Object error) {
+      _say(error is StateError ? error.message : '$error');
+    }),
+  );
+
+  /// Edit and resend: the words back in the box, which takes the keyboard.
+  void _editAndResend(String words) {
+    _backToComposer(words);
+    _composerFocus.value++;
+  }
+
+  /// Fork from here: the server's preview, the person's yes, then the fork,
+  /// which opens the new session.
+  Future<void> _forkFrom(TurnForkTarget target) async {
+    final forks = ref.read(turnForksProvider);
+    String why(Object error) => error is StateError ? error.message : '$error';
+    final TurnForkPreview preview;
+    try {
+      preview = await forks.preview(widget.sessionId, target);
+    } on Object catch (error) {
+      _say(why(error));
+      return;
+    }
+    if (!mounted) return;
+    final go = await showConfirmDialog(
+      context,
+      title: 'Fork from this turn?',
+      message: forkPreviewMessage(preview),
+      confirmLabel: 'Fork',
+    );
+    if (!go || !mounted) return;
+    try {
+      await forks.fork(widget.sessionId, target);
+    } on Object catch (error) {
+      _say(why(error));
+    }
+  }
+
   /// The key of the message last sent and not yet taken, kept so a retry of
   /// the same words is the same request to the server; a new message mints
   /// its own.
@@ -178,16 +289,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   MessageDetailBuilder? _artifactsBase;
   String? _artifactsKey;
   ArtifactPlacement _placement = ArtifactPlacement.empty;
+  VisualPlacement _visualPlacement = VisualPlacement.empty;
 
   MessageDetailBuilder _detailWithArtifacts(
     List<ChatMessage> messages,
     List<Artifact> artifacts,
+    List<SessionVisual> visuals,
   ) {
     final placement = placeArtifacts(messages, artifacts);
+    final visualPlacement = placeVisuals(messages, visuals);
     final key = [
       for (final entry in placement.byOrdinal.entries)
         '${entry.key}:${entry.value.map((a) => a.id).join(',')}',
       'u:${placement.unplaced.map((a) => a.id).join(',')}',
+      'v:${visualPlacement.key}',
     ].join(';');
     if (_withArtifacts != null &&
         identical(_artifactsBase, _detailBuilder) &&
@@ -197,20 +312,27 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _artifactsBase = _detailBuilder;
     _artifactsKey = key;
     _placement = placement;
+    _visualPlacement = visualPlacement;
     final base = _detailBuilder;
     final placed = placement.byOrdinal;
-    return _withArtifacts = placed.isEmpty
+    final drawn = visualPlacement.byOrdinal;
+    final sessionId = widget.sessionId;
+    return _withArtifacts = placed.isEmpty && drawn.isEmpty
         ? base
         : (message, ordinal) {
             final lead = base(message, ordinal);
             final cards = placed[ordinal];
-            if (cards == null) return lead;
+            final visuals = drawn[ordinal];
+            if (cards == null && visuals == null) return lead;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
                 ?lead,
-                for (final artifact in cards) ArtifactCard(artifact: artifact),
+                for (final artifact in cards ?? const <Artifact>[])
+                  ArtifactCard(artifact: artifact),
+                if (visuals != null)
+                  SessionVisualBlocks(sessionId: sessionId, visualIds: visuals),
               ],
             );
           };
@@ -226,6 +348,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   /// [_drafts]' twin for files, held for the same reason.
   late final ComposerAttachments _queuedFiles;
+
+  /// Where half-typed text waits while no view of its session is open.
+  late final ParkedDrafts _parked;
+
+  /// A parked draft is looked for once, on the first frame of a session.
+  bool _restoreDue = true;
 
   /// Set before the draft is parked, because parking it notifies this widget's
   /// own listener on the same provider and `ref` is dead by then.
@@ -248,6 +376,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     super.initState();
     _drafts = ref.read(composerDraftProvider.notifier);
     _queuedFiles = ref.read(composerAttachmentsProvider.notifier);
+    _parked = ref.read(parkedDraftsProvider);
     _holding = ref.read(composersHoldingTextProvider.notifier);
     _composer.addListener(_tellHolding);
   }
@@ -274,6 +403,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     super.didUpdateWidget(old);
     if (old.holdForPrompt != widget.holdForPrompt) _footer = null;
     if (old.sessionId != widget.sessionId) {
+      // Text typed for the last session is kept for it, never sent to this.
+      _parked.park(old.sessionId, _composer.text);
+      _composer.clear();
+      _restoreDue = true;
       _footer = null;
       _resolver = null;
       _sendKey = null;
@@ -288,8 +421,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // The workbench unmounts the conversation when it moves to another session,
     // so half-typed text is parked where the next mount already looks for it.
     _leaving = true;
-    final draft = _composer.text;
-    if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
+    _parked.park(widget.sessionId, _composer.text);
     _composer.removeListener(_tellHolding);
     if (_heldFor case final id? when _held) {
       final tell = _holding;
@@ -299,6 +431,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     unawaited(_dropped.close());
     _filesQueued.dispose();
     _toLatest.dispose();
+    _composerFocus.dispose();
     super.dispose();
   }
 
@@ -328,6 +461,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _composer.text = existing.isEmpty ? queued : '$existing\n\n$queued';
     _composer.selection = TextSelection.collapsed(
       offset: _composer.text.length,
+    );
+  }
+
+  /// Puts back what this session's last closed view left typed — only into
+  /// an empty box; otherwise it stays parked for the next one.
+  void _restoreParked() {
+    if (_leaving || !_restoreDue) return;
+    _restoreDue = false;
+    if (_composer.text.trim().isNotEmpty) return;
+    final parked = _parked.take(widget.sessionId);
+    if (parked == null) return;
+    _composer.value = TextEditingValue(
+      text: parked,
+      selection: TextSelection.collapsed(offset: parked.length),
     );
   }
 
@@ -492,18 +639,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
-  /// Whether [path] is inside the session's checkout, its repository or the
-  /// tree the Files panel shows — what a preview reads without asking.
-  bool _inSessionScope(EnvironmentPath path) {
-    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
-    final roots = [
-      _workingDirectory(),
-      if (session != null)
-        ref.read(workspaceDataProvider).repository(session.repositoryId)?.path,
-      ref.read(fileTreeRootProvider),
-    ];
-    return roots.any((root) => root != null && isUnderFileTreeRoot(root, path));
-  }
+  /// A picture's path placed in the session's environment. A tear-off, so the
+  /// rows below can tell it has not changed.
+  EnvironmentPath? _placeImage(String path) => _placeToken(path)?.$1;
+
+  /// Reveals a picture's path as a click on it would.
+  void _openImage(String path) => unawaited(_openPath(path));
 
   /// The preview a tapped path opens under its message. A tear-off, so the
   /// rows it is handed to can tell it has not changed.
@@ -521,7 +662,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       key: ValueKey('preview-$token'),
       path: path,
       line: line,
-      inScope: _inSessionScope(path),
       onClose: onClose,
       onOpenInEditor: () =>
           ref.read(editorTabActionsProvider).openAt(path, line: line),
@@ -625,14 +765,21 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       _say('Only web links open from here: $href');
       return;
     }
-    final go = await showAdaptiveModal<bool>(
-      context: context,
-      title: 'Open in the browser?',
-      builder: (context) => _OpenLinkBody(uri: uri),
-    );
-    if (go != true || !mounted) return;
+    // A click is deliberate; a tap while scrolling a phone is easily not, so
+    // only touch asks first.
+    if (UiDensity.of(context).isTouch) {
+      final go = await showAdaptiveModal<bool>(
+        context: context,
+        title: 'Open in the browser?',
+        builder: (context) => _OpenLinkBody(uri: uri),
+      );
+      if (go != true || !mounted) return;
+    }
     try {
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      final opened = uri.isScheme('mailto')
+          ? await launchUrl(uri, mode: LaunchMode.externalApplication)
+          : await ref.read(openExternalUrlProvider)(uri.toString());
+      if (!opened) {
         _say('Nothing on this device could open $href.');
       }
     } on Exception {
@@ -677,6 +824,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _restoreParked();
       _takeQueuedNote();
     });
     final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
@@ -694,8 +842,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final recapShare = CompactWorkbenchScope.of(context)
         ? _recapShareCompact
         : _recapShare;
-    // Links stay inert under a pointer, as they were; on touch they ask.
-    final onLinkTap = UiDensity.of(context).isTouch ? _openLink : null;
+    // A click opens a web link in the browser; on touch it asks first.
+    final onLinkTap = _openLink;
 
     // **No header** (board N2, owner 2026-09-28): the conversation starts right
     // under the tab strip. The tab already names the session and shows its
@@ -850,7 +998,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       builder: (context, hovering) => FileDropHighlight(
         label: 'Drop to attach',
         visible: hovering,
-        child: body,
+        // Pictures the conversation names are drawn in it, read through the
+        // server wherever the session runs.
+        child: TranscriptInlineImages(
+          place: _placeImage,
+          onOpen: _openImage,
+          child: body,
+        ),
       ),
     );
   }
@@ -874,82 +1028,116 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final artifacts =
         ref.watch(sessionArtifactsProvider(widget.sessionId)).value ??
         const <Artifact>[];
+    final visuals =
+        ref.watch(sessionVisualsProvider(widget.sessionId)).value ??
+        const <SessionVisual>[];
     return transcript.when(
       loading: () =>
           const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
       error: (e, _) => Center(child: Text('$e')),
       data: (messages) {
-        final detail = _detailWithArtifacts(messages, artifacts);
+        final detail = _detailWithArtifacts(messages, artifacts, visuals);
         final unplaced = _placement.unplaced;
-        return ChatTranscriptView(
-          // Per session: this view outlives a switch within its group, and an
-          // unkeyed list kept the last session's scroll offset.
-          key: ValueKey(widget.sessionId),
-          toLatest: _toLatest,
-          messages: messages,
-          seenUntil: widget.seenUntil,
-          earlier: earlier,
-          onLoadEarlier: earlier > 0
-              ? () => unawaited(
-                  ref
-                      .read(serverTranscriptsProvider)
-                      .loadOlder(widget.sessionId),
-                )
-              : null,
-          firstOrdinal: firstOrdinal,
-          agentId: _agentId(),
-          turn: turn,
-          resolveHostPath: resolveHostPath,
-          // Paths in the conversation are clickable, and a click reveals
-          // rather than opens — see [_openPath].
-          onPathTap: _openPath,
-          filePreviewBuilder: _filePreview,
-          onLinkTap: onLinkTap,
-          // What the parent's `Task(…)` row never showed. Collapsed and
-          // unread until opened — one session's turns came to 1,485 MiB.
-          detailBuilder: detail,
-          // Null when Notes is off: the transcript never learns the
-          // feature exists, so there is nothing left behind to hide.
-          onSaveNote: notesEnabled ? _saveNote : null,
-          workingLine: WorkingLine(
-            sessionId: widget.sessionId,
-            onStop: _interruptTurn,
-          ),
-          // The word the agent left on its screen as the turn ended.
-          lastTurnVerb: ref.watch(
-            agentSessionStatusProvider(widget.sessionId).select((status) {
-              final report = status.asData?.value;
-              return report?.turnStatus == AgentActivityStatus.idle
-                  ? report?.working?.word
-                  : null;
-            }),
-          ),
-          lastTurnTokens: _turnTokens,
-          footer: unplaced.isEmpty
-              ? footer
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    UnplacedArtifactsStrip(artifacts: unplaced),
-                    footer,
-                  ],
-                ),
-          emptyBuilder: (standard) => SessionEmptyOrFailed(
-            sessionId: widget.sessionId,
-            otherwise: standard,
-          ),
-          emptyHint: _emptyHint(
-            chatAvailable: chatAvailable,
-            reading: reading,
-            fromPty: fromPty,
-            serverTooOld: serverTooOld,
-            active: active,
-            hasTerminal: hasTerminal,
+        final trailingVisuals = [
+          if (earlier == 0) ..._visualPlacement.earlier,
+          ..._visualPlacement.trailing,
+        ];
+        return HunkReviewHost(
+          key: ValueKey('hunks-${widget.sessionId}'),
+          sessionId: widget.sessionId,
+          place: _placeEditedFile,
+          openFile: _openEditedFile,
+          child: ChatTranscriptView(
+            // Per session: this view outlives a switch within its group, and an
+            // unkeyed list kept the last session's scroll offset.
+            key: ValueKey(widget.sessionId),
+            toLatest: _toLatest,
+            messages: messages,
+            seenUntil: widget.seenUntil,
+            earlier: earlier,
+            onLoadEarlier: earlier > 0
+                ? () => unawaited(
+                    ref
+                        .read(serverTranscriptsProvider)
+                        .loadOlder(widget.sessionId),
+                  )
+                : null,
+            firstOrdinal: firstOrdinal,
+            agentId: _agentId(),
+            turn: turn,
+            turnActions: _turnActionsFor(messages, turn, active: active),
+            resolveHostPath: resolveHostPath,
+            // Paths in the conversation are clickable, and a click reveals
+            // rather than opens — see [_openPath].
+            onPathTap: _openPath,
+            filePreviewBuilder: _filePreview,
+            onLinkTap: onLinkTap,
+            // What the parent's `Task(…)` row never showed. Collapsed and
+            // unread until opened — one session's turns came to 1,485 MiB.
+            detailBuilder: detail,
+            // Null when Notes is off: the transcript never learns the
+            // feature exists, so there is nothing left behind to hide.
+            onSaveNote: notesEnabled ? _saveNote : null,
+            workingLine: WorkingLine(
+              sessionId: widget.sessionId,
+              onStop: _interruptTurn,
+            ),
+            // The word the agent left on its screen as the turn ended.
+            lastTurnVerb: ref.watch(
+              agentSessionStatusProvider(widget.sessionId).select((status) {
+                final report = status.asData?.value;
+                return report?.turnStatus == AgentActivityStatus.idle
+                    ? report?.working?.word
+                    : null;
+              }),
+            ),
+            lastTurnTokens: _turnTokens,
+            trailing: trailingVisuals.isEmpty
+                ? null
+                : SessionVisualBlocks(
+                    key: const ValueKey('session-visuals-trailing'),
+                    sessionId: widget.sessionId,
+                    visualIds: trailingVisuals,
+                  ),
+            footer: unplaced.isEmpty
+                ? footer
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      UnplacedArtifactsStrip(artifacts: unplaced),
+                      footer,
+                    ],
+                  ),
+            emptyBuilder: (standard) => SessionEmptyOrFailed(
+              sessionId: widget.sessionId,
+              otherwise: standard,
+            ),
+            emptyHint: _emptyHint(
+              chatAvailable: chatAvailable,
+              reading: reading,
+              fromPty: fromPty,
+              serverTooOld: serverTooOld,
+              active: active,
+              hasTerminal: hasTerminal,
+            ),
           ),
         );
       },
     );
+  }
+
+  /// A file an agent's edit names, placed where the session runs.
+  EnvironmentPath? _placeEditedFile(String path) => _placeToken(path)?.$1;
+
+  /// Opens a file an edit names in the editor, at its place.
+  void _openEditedFile(String path) {
+    final placed = _placeToken(path);
+    if (placed == null) {
+      _say('Karmashala has no record of where this session runs.');
+      return;
+    }
+    ref.read(editorTabActionsProvider).openAt(placed.$1, line: placed.$2);
   }
 
   Widget? _footer;
@@ -1076,6 +1264,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           droppedFiles: _dropped.stream,
           takeServerFiles: _takeQueuedFiles,
           serverFilesWaiting: _filesQueued,
+          focusRequests: _composerFocus,
           attaches: caps.mayAttach,
           camera: () => devicePhotosFor(context, ref),
           enabled: !prompted && refusal == null,
@@ -1404,6 +1593,22 @@ class OpenSessionInSystemTerminalButton extends ConsumerWidget {
     );
   }
 }
+
+/// What a fork from a turn will do, as one paragraph per part: the files in
+/// each repository, the conversation, and how the agent continues.
+@visibleForTesting
+String forkPreviewMessage(TurnForkPreview preview) => [
+  for (final files in preview.repositories)
+    files.restores
+        ? 'The files in ${files.repository} go back to how they were at that '
+              'turn. Their state now stays in Checkpoints, so this can be '
+              'undone there.'
+        : 'The files in ${files.repository} stay as they are. '
+                  '${files.reason ?? ''}'
+              .trim(),
+  if (preview.conversation.isNotEmpty) preview.conversation,
+  if (preview.explanation.isNotEmpty) preview.explanation,
+].join('\n\n');
 
 /// The link in full, so the reader sees where it goes, and the two answers.
 class _OpenLinkBody extends StatelessWidget {

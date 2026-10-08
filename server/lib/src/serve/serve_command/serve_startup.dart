@@ -118,6 +118,7 @@ Future<DaemonAutomations?> _startAutomations({
   AcpRuntimeFactory? acpRuntimes,
   WorktreeService? worktrees,
   Duration? githubSweepEvery,
+  GithubClient? githubClient,
   AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
   acpAuth,
 }) async {
@@ -146,6 +147,7 @@ Future<DaemonAutomations?> _startAutomations({
     worktrees: worktrees,
     acpAuth: acpAuth,
     githubSweepEvery: githubSweepEvery,
+    githubClient: githubClient,
     onDecision: (decision) => data.applyAsServer(
       DecisionAppend(
         DecisionRecord(

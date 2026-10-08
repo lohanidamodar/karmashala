@@ -3,7 +3,6 @@ import 'package:agent_cli/discovery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_automations/automations.dart';
-import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala_core/verdicts.dart';
@@ -30,7 +29,8 @@ import 'automation_dry_run_dialog.dart';
 import 'automation_run_actions.dart';
 import 'automation_run_status.dart';
 import 'automation_editor_parts.dart';
-import 'project_checks_section.dart' show addProjectCheck;
+
+import 'turn_on_confirm_dialog.dart' show confirmTurnOn;
 import 'webhook_parts.dart';
 
 /// **The one editor** for every kind of automation: its name, what starts it,
@@ -60,6 +60,12 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   );
   late final _command = TextEditingController(
     text: _draft.steps.of(AutomationStepKind.command)?.text ?? '',
+  );
+  late final _checkCommand = TextEditingController(
+    text: _draft.steps.of(AutomationStepKind.check)?.text ?? '',
+  );
+  late final _checkName = TextEditingController(
+    text: _draft.steps.of(AutomationStepKind.check)?.name ?? '',
   );
   late final _hookUrl = TextEditingController(
     text: _draft.steps.of(AutomationStepKind.webhook)?.url ?? '',
@@ -105,6 +111,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       _tell,
       _notify,
       _command,
+      _checkCommand,
+      _checkName,
       _hookUrl,
       _hookBody,
       _ghRepo,
@@ -136,7 +144,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       AutomationStepKind.notify => _notify.text,
       AutomationStepKind.command => _command.text,
       AutomationStepKind.webhook => _hookBody.text,
-      AutomationStepKind.check => '',
+      AutomationStepKind.check => _checkCommand.text,
     };
     _update(
       _draft.copyWith(
@@ -145,6 +153,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
             kind: kind,
             when: when ?? existing?.when ?? _defaultWhen(kind),
             text: text,
+            name: kind == AutomationStepKind.check
+                ? _checkName.text.trim()
+                : '',
             url: kind == AutomationStepKind.webhook ? _hookUrl.text.trim() : '',
             allowPrivate: allowPrivate ?? existing?.allowPrivate ?? false,
             timeoutSeconds: timeoutSeconds ?? existing?.timeoutSeconds,
@@ -184,22 +195,13 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         : registry.byId(installation.agentId);
     final now = ref.watch(clockProvider).nowUtc();
     ref.watch(automationsRevisionProvider);
-    final checks = repository == null
-        ? const <ProjectCheck>[]
-        : ref.watch(projectChecksProvider(repository.id));
-    final verified =
-        repository != null &&
-        ref.watch(projectVerificationEnabledProvider(repository.id));
     final probe = _draft.probe(now: now);
     final refusal = probe == null || !probe.startsAgent
         ? null
         : ref.watch(unattendedPreflightProvider).refusalFor(probe);
     final readiness = _readiness(
-      repository: repository,
       installation: installation,
       descriptor: descriptor,
-      checks: checks,
-      verified: verified,
       refusal: refusal,
     );
     final ready = readiness.every((row) => row.ok);
@@ -232,7 +234,6 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
                 probe: probe,
                 checkout: repository?.name ?? 'its checkout',
                 agent: agentName,
-                checks: [for (final c in checks) c.name],
               ),
               if (_banner(context) case final banner?) ...[
                 const SizedBox(height: Insets.sm),
@@ -251,7 +252,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
               _starts(context, repositories, repository, now),
               const StepLink(),
               _agentStep(context, installations, descriptor, repository),
-              ..._afterSteps(context, checks, repository),
+              ..._afterSteps(context),
               const StepLink(),
               Align(
                 alignment: AlignmentDirectional.centerStart,
@@ -291,7 +292,6 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     required Automation? probe,
     required String checkout,
     required String agent,
-    required List<String> checks,
   }) {
     final theme = Theme.of(context);
     final blocked = missing ?? (ready ? null : kNotReadyTooltip);
@@ -385,7 +385,6 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
                           probe,
                           checkout: checkout,
                           agent: agent,
-                          checks: checks,
                         ))
                           step.key: step,
                       };
@@ -955,11 +954,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     );
   }
 
-  List<Widget> _afterSteps(
-    BuildContext context,
-    List<ProjectCheck> checks,
-    Repository? repository,
-  ) {
+  List<Widget> _afterSteps(BuildContext context) {
     final widgets = <Widget>[];
     for (final step in _draft.steps.after) {
       final failure =
@@ -979,7 +974,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         ),
       );
       widgets.add(switch (step.kind) {
-        AutomationStepKind.check => _checkStep(context, checks, repository),
+        AutomationStepKind.check => _checkStep(step),
         AutomationStepKind.command => _commandStep(step, rail),
         AutomationStepKind.webhook => _webhookStep(step, rail),
         AutomationStepKind.tell => _messageStep(
@@ -1015,37 +1010,43 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         _update(_draft.copyWith(steps: _draft.steps.without(kind))),
   );
 
-  Widget _checkStep(
-    BuildContext context,
-    List<ProjectCheck> checks,
-    Repository? repository,
-  ) => EditorNode(
+  Widget _checkStep(AutomationStep step) => EditorNode(
     result: _resultFor(AutomationStepKind.check.storedName),
     title: 'Check the result',
     icon: AppIcons.listChecks,
-    hint: 'Runs the checkout\'s checks on what the agent did.',
+    hint: 'Optional. Runs on what the agent did.',
     trailing: [_removeButton(AutomationStepKind.check)],
     children: [
-      if (checks.isEmpty)
-        Wrap(
-          spacing: Insets.sm,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            EditorNote(
-              '${repository?.name ?? 'This checkout'} has no checks yet.',
-            ),
-            if (repository != null)
-              OutlinedButton(
-                onPressed: () =>
-                    addProjectCheck(context, ref, repository, turnOn: true),
-                child: const Text('Add a check'),
-              ),
-          ],
-        )
+      TextField(
+        key: const ValueKey('automation-text-check'),
+        controller: _checkCommand,
+        minLines: 1,
+        maxLines: 4,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontFamily: kMonoFamily,
+          fontFamilyFallback: kMonoFallback,
+        ),
+        decoration: const InputDecoration(
+          labelText: 'Command',
+          hintText: 'flutter test',
+        ),
+        onChanged: (_) => _putStep(AutomationStepKind.check),
+      ),
+      TextField(
+        key: const ValueKey('automation-name-check'),
+        controller: _checkName,
+        decoration: const InputDecoration(
+          labelText: 'Name (optional)',
+          hintText: 'the tests',
+        ),
+        onChanged: (_) => _putStep(AutomationStepKind.check),
+      ),
+      if (step.refusal case final why?)
+        _Problem(why)
       else
-        EditorNote(
-          'Runs ${checks.map((c) => c.name).join(', ')}. The run passes only '
-          'if every check does.',
+        const EditorNote(
+          'One command a line. A non-zero exit fails the run, and the '
+          '"if it fails" steps run.',
         ),
     ],
   );
@@ -1137,7 +1138,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     result: _resultFor(step.kind.storedName),
     title: 'Run a command',
     icon: AppIcons.terminal,
-    hint: 'In the run\'s worktree or checkout, only where checks are on.',
+    hint: 'In the run\'s worktree or checkout.',
     rail: rail,
     trailing: [_removeButton(step.kind)],
     children: [
@@ -1362,11 +1363,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   );
 
   List<ReadyRow> _readiness({
-    required Repository? repository,
     required AgentInstallation? installation,
     required AgentDescriptor? descriptor,
-    required List<ProjectCheck> checks,
-    required bool verified,
     required UnattendedRefusal? refusal,
   }) {
     final draft = _draft;
@@ -1386,7 +1384,6 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         ),
       ];
     }
-    final checkout = repository?.name ?? 'This checkout';
     final rows = <ReadyRow>[];
     final support = descriptor?.launch.permission;
     final risk = support?.riskOf(
@@ -1411,49 +1408,6 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
           '${descriptor.displayName} runs as '
           '"${describeSelectionFamiliar(support!, draft.permissionMode)}", so '
           'it never stops to ask.',
-        ),
-      );
-    }
-    if (risk == PermissionRisk.readOnly) {
-      rows.add(
-        const ReadyRow(true, 'Read-only, so there is nothing to check.'),
-      );
-    } else if (checks.isEmpty) {
-      rows.add(
-        ReadyRow(
-          false,
-          '$checkout has no check yet, and nobody is there to judge the work.',
-          action: repository == null ? null : 'Add a check',
-          onAction: repository == null
-              ? null
-              : () => addProjectCheck(context, ref, repository, turnOn: true),
-        ),
-      );
-    } else if (!verified) {
-      rows.add(
-        ReadyRow(
-          false,
-          'Checks are off for $checkout.',
-          action: 'Turn them on',
-          onAction: () => ref
-              .read(automationControllerProvider)
-              .setVerificationEnabled(repository!.id, enabled: true),
-        ),
-      );
-    } else if (!draft.steps.checks) {
-      rows.add(
-        ReadyRow(
-          false,
-          'Nothing checks what the agent did.',
-          action: 'Add "Check the result"',
-          onAction: () => _putStep(AutomationStepKind.check),
-        ),
-      );
-    } else {
-      rows.add(
-        ReadyRow(
-          true,
-          'A check judges the result: ${checks.map((c) => c.name).join(', ')}.',
         ),
       );
     }
@@ -1572,6 +1526,21 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     );
     if (automation == null) return;
     final created = _draft.isNew;
+    // Asked on save, not on the switch, so it describes what is armed.
+    final before = _draft.original;
+    if (automation.enabled && before != null && !before.enabled) {
+      final confirmed = await confirmTurnOn(
+        context,
+        ref,
+        automation,
+        proposedBy: before.proposedBy,
+      );
+      if (!mounted) return;
+      if (!confirmed) {
+        _update(_draft.copyWith(enabled: false));
+        return;
+      }
+    }
     setState(() {
       _saving = true;
       _failure = null;

@@ -54,6 +54,7 @@ import 'browser_values.dart';
 import 'device_values.dart';
 import 'terminal_values.dart';
 import 'env_values.dart';
+import 'github_values.dart';
 import 'store_values.dart';
 import 'attention_values.dart';
 import 'usage_limit_values.dart';
@@ -75,6 +76,7 @@ part 'changes/files_changes.dart';
 part 'changes/devices_changes.dart';
 part 'changes/terminals_changes.dart';
 part 'changes/env_changes.dart';
+part 'changes/github_changes.dart';
 part 'changes/stores_changes.dart';
 part 'changes/attention_changes.dart';
 part 'changes/intents_changes.dart';
@@ -623,6 +625,7 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _devicesChangeFromJson(name, json) ??
     _terminalsChangeFromJson(name, json) ??
     _envChangeFromJson(name, json) ??
+    _githubChangeFromJson(name, json) ??
     _storesChangeFromJson(name, json) ??
     _attentionChangeFromJson(name, json) ??
     _intentsChangeFromJson(name, json) ??

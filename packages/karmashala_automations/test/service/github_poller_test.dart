@@ -440,4 +440,52 @@ void main() {
       },
     );
   });
+
+  group('a pull request from a fork', () {
+    Map<String, Object?> pull({required String? head}) => {
+      'number': 7,
+      'html_url': 'https://github.com/o/r/pull/7',
+      'title': 'Fix',
+      'head': {
+        'ref': 'main',
+        'repo': head == null ? null : {'full_name': head},
+      },
+      'base': {
+        'ref': 'main',
+        'repo': {'full_name': 'o/r'},
+      },
+    };
+
+    const event = GithubEvent(
+      kind: GithubTriggerKind.prMerged,
+      itemId: 'merged',
+      number: 7,
+      url: '',
+    );
+
+    test('is told by its head living on another repository', () {
+      expect(withPull(event, pull(head: 'someone/r')).fork, isTrue);
+      expect(withPull(event, pull(head: 'O/R')).fork, isFalse);
+      // A deleted fork leaves no head repository.
+      expect(withPull(event, pull(head: null)).fork, isTrue);
+      expect(
+        withPull(event, pull(head: 'someone/r')).variables['github.pr.fork'],
+        'yes',
+      );
+      expect(
+        withPull(event, pull(head: 'o/r')).variables['github.pr.fork'],
+        'no',
+      );
+    });
+
+    test('names a safe branch of its own for a hostile branch name', () {
+      const checkout = PullRequestCheckout(
+        number: 7,
+        branch: '../x y:z..w.lock',
+        repository: 'o/r',
+        fork: true,
+      );
+      expect(checkout.localBranch, 'pr/7-x-y-z-w');
+    });
+  });
 }

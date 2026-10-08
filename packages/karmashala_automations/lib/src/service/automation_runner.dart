@@ -60,9 +60,17 @@ class AutomationRunner implements AutomationFiring {
         prompt: fillAgentText(automation.prompt, values),
       );
     }
-    final branch = automation.github?.kind.isPullRequest ?? false
-        ? values['github.pr.branch']
-        : null;
+    final pullRequest = PullRequestCheckout.of(automation.github, values);
+    final pushNote = pullRequest?.pushNote;
+    if (pushNote != null) {
+      // The agent is told too, or it spends the run on a push that goes
+      // nowhere.
+      automation = automation.copyWith(
+        prompt: '${automation.prompt}\n\n$pushNote',
+      );
+    }
+    String said(String reason) =>
+        pushNote == null ? reason : [reason, pushNote].join(' ').trim();
     // The row exists before anything can fail; a drained queue entry *is*
     // this run, updated in place.
     var run = queued == null
@@ -72,7 +80,7 @@ class AutomationRunner implements AutomationFiring {
             scheduledFor: scheduledFor,
             firedAt: now,
             state: AutomationRunState.running,
-            reason: note,
+            reason: said(note),
             // A filled prompt is this run's own; keep what was sent.
             prompt: automation.isWebhook || values.isNotEmpty
                 ? automation.prompt
@@ -82,7 +90,7 @@ class AutomationRunner implements AutomationFiring {
           )
         : queued.copyWith(
             state: AutomationRunState.running,
-            reason: note.isEmpty ? queued.reason : note,
+            reason: said(note.isEmpty ? queued.reason : note),
           );
     if (queued == null) {
       _dao.insertRun(run);
@@ -136,7 +144,7 @@ class AutomationRunner implements AutomationFiring {
         automation,
         repository,
         installation,
-        branch: branch == null || branch.isEmpty ? null : branch,
+        pullRequest: pullRequest,
       );
       run = run.copyWith(sessionId: sessionId);
       _dao.updateRun(run);

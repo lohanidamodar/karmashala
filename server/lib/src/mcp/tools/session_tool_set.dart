@@ -56,7 +56,8 @@ class SessionToolSet extends ServerToolSet {
 
   /// Resumes a session that is not running with [prompt] as its opening
   /// message, and shows it in the person's window; null refuses instead.
-  final Future<void> Function(
+  /// Answers the start (`SessionStarted`): one adopted took no prompt.
+  final Future<Object?> Function(
     String sessionId,
     String prompt,
     TabReveal reveal,
@@ -422,9 +423,16 @@ class SessionToolSet extends ServerToolSet {
       }
       return true;
     }
-    final delivered = held
-        ? await typist.send(sessionId, message)
-        : await resumeWith!(sessionId, message, reveal).then((_) => true);
+    if (!held) {
+      final started = await resumeWith!(sessionId, message, reveal);
+      // Another start of it was in flight and answered this one: its own
+      // opening went, not this message, which is sent to it now.
+      if (started is SessionStarted && started.adopted) {
+        return _deliverNow(sessionId, message, held: true, reveal: reveal);
+      }
+      return true;
+    }
+    final delivered = await typist.send(sessionId, message);
     if (!delivered) {
       throw StateError(
         'That session\'s process ended before the message could be typed '

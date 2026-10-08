@@ -35,6 +35,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "Karmashala"
     }
 
     signingConfigs {
@@ -49,6 +50,12 @@ android {
     }
 
     buildTypes {
+        // A debug build installs beside the store app instead of clashing
+        // with its signature, and says which it is on the home screen.
+        debug {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appLabel"] = "Karmashala (debug)"
+        }
         release {
             // Without key.properties (any local machine) release falls back to the
             // debug key so `flutter run --release` still works; Play rejects it.

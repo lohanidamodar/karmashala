@@ -168,6 +168,8 @@ class SessionMessageTranscriptSource {
         editsTruncated: editsCut || json[kEditsTruncatedKey] == true,
         proposedPlan: proposedPlanIn(json['rawInput']),
         questions: askedQuestionsIn(json['rawInput']),
+        // A closed call's row stops changing once it closes.
+        endedAt: open ? null : row.updatedAt,
       ),
       pendingId: open ? (_string(json['toolCallId']) ?? row.id) : null,
     );

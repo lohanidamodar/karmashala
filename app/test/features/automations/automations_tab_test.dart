@@ -101,10 +101,6 @@ void main() {
   testWidgets('it fits a phone, a desktop and large text', (tester) async {
     for (final size in const [Size(390, 844), Size(1440, 900)]) {
       for (final section in AutomationsSection.values) {
-        // The old list stands in until the new one replaces it.
-        if (section == AutomationsSection.automations && size.width < 600) {
-          continue;
-        }
         container.read(automationsSectionProvider.notifier).show(section);
         await pump(tester, const AutomationsTabView(), size: size);
         expect(tester.takeException(), isNull, reason: '$size $section');

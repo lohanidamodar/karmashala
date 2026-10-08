@@ -152,4 +152,37 @@ void main() {
     expect(sessionChecksReport(result), startsWith('FAIL'));
     expect(sessionChecksReport(null), startsWith('NOTHING WAS CHECKED'));
   });
+
+  test(
+    'a check step runs its own command, not the checkout\'s checks',
+    () async {
+      final automation = dao.getById('auto1')!;
+      dao.update(
+        automation.copyWith(
+          steps: AutomationSteps(const [
+            AutomationStep(
+              kind: AutomationStepKind.check,
+              text: 'flutter test',
+              name: 'the suite',
+            ),
+          ]),
+        ),
+      );
+      commands.exits['the suite'] = const CheckExecution.ran(exitCode: 1);
+      await runner.recordRun(run());
+      final verdict = dao.checksFor('run1').single;
+      expect(verdict.name, 'the suite');
+      expect(verdict.command, ['flutter', 'test']);
+      expect(verdict.verdict, VerificationVerdict.fail);
+      expect(commands.ran, ['the suite in /src/r1']);
+    },
+  );
+
+  test('an automation with no check step runs no check', () async {
+    final automation = dao.getById('auto1')!;
+    dao.update(automation.copyWith(steps: AutomationSteps(const [])));
+    await runner.recordRun(run());
+    expect(dao.checksFor('run1'), isEmpty);
+    expect(commands.ran, isEmpty);
+  });
 }

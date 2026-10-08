@@ -1,15 +1,22 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 
+import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart'
+    show DesktopMenuDetailItem, DesktopMenuItem;
+import '../../../app/widgets/row_menu_sheet.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../application/turn_fork_points.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
-import 'package:karmashala_ui/rows.dart' show compactAge, formatElapsed;
+import 'package:karmashala_ui/rows.dart'
+    show compactAge, formatElapsed, kActivityTickInterval;
 import 'package:agent_cli/descriptors.dart' show AgentPlan;
 import 'package:agent_cli/read.dart'
     show kTranscriptNoticeRole, taskNotificationLine;
@@ -24,14 +31,19 @@ import 'tool_activity_row.dart';
 import 'tool_edit_diff_card.dart';
 import 'tool_run.dart';
 import 'transcript_image_preview.dart';
+import 'transcript_inline_images.dart';
 import 'turn_changed_files.dart';
 
 export 'tool_run.dart' show TranscriptTurn;
+export '../application/turn_fork_points.dart'
+    show TranscriptTurnStart, TurnForkPoints, TurnForkTarget, turnForkPoints;
 
 part 'chat_transcript/agent_switch_rows.dart';
+part 'chat_transcript/command_time.dart';
 part 'chat_transcript/message_rows.dart';
 part 'chat_transcript/tool_batch.dart';
 part 'chat_transcript/turn_footer.dart';
+part 'chat_transcript/turn_actions.dart';
 part 'chat_transcript/turn_meta.dart';
 
 /// The row the transcript view writes itself, saying a compaction happened
@@ -147,6 +159,7 @@ bool _sameTool(ToolActivity? a, ToolActivity? b) {
       a.plan == b.plan &&
       a.kind == b.kind &&
       a.editsTruncated == b.editsTruncated &&
+      a.endedAt == b.endedAt &&
       _sameEdits(a.edits, b.edits);
 }
 
@@ -178,6 +191,7 @@ class ChatTranscriptView extends StatefulWidget {
   const ChatTranscriptView({
     required this.messages,
     this.footer,
+    this.trailing,
     this.workingLine,
     this.lastTurnVerb,
     this.lastTurnTokens,
@@ -196,10 +210,19 @@ class ChatTranscriptView extends StatefulWidget {
     this.toLatest,
     this.filePreviewBuilder,
     this.seenUntil,
+    this.now,
+    this.turnActions,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// Retry, Edit and resend and Fork from here on each turn; null offers
+  /// none of them.
+  final TranscriptTurnActions? turnActions;
+
+  /// What a running command's time counts up to; null is the wall clock.
+  final DateTime Function()? now;
 
   /// When the reader last looked: the messages after it sit under a "New
   /// since you last looked" line, with all but a few before it folded. Null
@@ -232,6 +255,9 @@ class ChatTranscriptView extends StatefulWidget {
   /// key (and its open state) when [onLoadEarlier] puts older ones above it.
   final int firstOrdinal;
   final Widget? footer;
+
+  /// Scrolls with the conversation, after its last row.
+  final Widget? trailing;
 
   /// The live line under the last message while [turn] is working — outside
   /// the scroll, so it and its Stop stay in sight as the terminal's spinner
@@ -289,6 +315,31 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 
   /// Touch only: the turn whose actions a tap has shown.
   final _tappedTurn = ValueNotifier<Object?>(null);
+
+  DateTime _clockNow() => (widget.now ?? DateTime.now)();
+
+  late final _commandClock = _CommandClock(_clockNow());
+
+  /// The one timer every running command's time ticks on, armed only while
+  /// one runs and the list is on screen.
+  Timer? _commandTick;
+
+  void _followRunningCommands(List<ChatMessage> visible, bool onScreen) {
+    final running =
+        onScreen &&
+        widget.turn != TranscriptTurn.idle &&
+        visible.any((m) => m.pending && m.at != null && isCommandCall(m));
+    if (!running) {
+      _commandTick?.cancel();
+      _commandTick = null;
+      return;
+    }
+    _commandClock.quietly = _clockNow();
+    _commandTick ??= Timer.periodic(
+      kActivityTickInterval,
+      (_) => _commandClock.tick(_clockNow()),
+    );
+  }
 
   /// Whether the reader has left the newest message: *Jump to latest* shows.
   bool _awayFromLatest = false;
@@ -358,6 +409,8 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     FocusManager.instance.removeListener(_revealFocused);
     _scroll.dispose();
     _tappedTurn.dispose();
+    _commandTick?.cancel();
+    _commandClock.dispose();
     super.dispose();
   }
 
@@ -416,7 +469,29 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       setState(() => _previews.remove(widget.firstOrdinal + ordinal));
 
   String _turnTextAt(int ordinal) =>
-      transcriptTurnText(widget.messages, ordinal);
+      transcriptTurnMarkdown(widget.messages, ordinal);
+
+  List<ChatMessage>? _placedMessages;
+  var _starts = const <int?>[];
+
+  /// Where the row at [ordinal] stands in its turn; the starts are walked
+  /// again only when the list moved.
+  _TurnPlace? _placeOf(int ordinal) {
+    final messages = widget.messages;
+    if (!identical(messages, _placedMessages)) {
+      _placedMessages = messages;
+      _starts = _turnStartsOf(messages);
+    }
+    final start = _starts[ordinal];
+    if (start == null) return null;
+    return _TurnPlace(
+      start: start,
+      words: _personsWords(messages[start]),
+      isLatest: _isLatestTurn,
+    );
+  }
+
+  bool _isLatestTurn(int start) => _starts.isNotEmpty && _starts.last == start;
 
   void _showMoreHeld() {
     _anchorAtFirstRow();
@@ -500,10 +575,12 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 
   @override
   Widget build(BuildContext context) {
-    _followVisibility(Visibility.of(context));
+    final onScreen = Visibility.of(context);
+    _followVisibility(onScreen);
     final total = widget.messages.length;
     final start = math.max(0, total - _shown);
     final visible = widget.messages.sublist(start);
+    _followRunningCommands(visible, onScreen);
     // Only the loaded window: the window is a suffix, so its trailing run is
     // the transcript's, and a tick costs the window rather than the whole list.
     final rows = transcriptRows(visible, turn: widget.turn);
@@ -563,6 +640,8 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         onPathTap: widget.onPathTap,
         onLinkTap: widget.onLinkTap,
         detailBuilder: widget.detailBuilder,
+        turnActions: widget.turnActions,
+        place: widget.turnActions == null ? null : _placeOf(ordinal),
       );
       if (footers[ordinal] case final footer?) {
         final own = latestIsLast && ordinal == latest;
@@ -595,6 +674,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
               messages: visible,
               row: row,
               rowAt: rowAt,
+              resolveHostPath: widget.resolveHostPath,
             );
       if (index != newRow) return drawn;
       return Column(
@@ -657,6 +737,11 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
             ),
           ),
         ),
+        if (widget.trailing case final trailing?)
+          SliverPadding(
+            padding: pad,
+            sliver: SliverToBoxAdapter(child: trailing),
+          ),
         const SliverToBoxAdapter(child: SizedBox(height: Insets.xl)),
       ];
       return CustomScrollView(
@@ -698,16 +783,19 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                                         now: DateTime.now(),
                                         // One selection over every built row: a drag runs
                                         // from one message into the next.
-                                        child: TranscriptSelectionArea(
-                                          child:
-                                              NotificationListener<
-                                                ScrollMetricsNotification
-                                              >(
-                                                onNotification: _onMetrics,
-                                                // The pane's whole width (owner, 2026-09-28),
-                                                // with a gutter so no word touches its edge.
-                                                child: list(gutter),
-                                              ),
+                                        child: _CommandClockScope(
+                                          clock: _commandClock,
+                                          child: TranscriptSelectionArea(
+                                            child:
+                                                NotificationListener<
+                                                  ScrollMetricsNotification
+                                                >(
+                                                  onNotification: _onMetrics,
+                                                  // The pane's whole width (owner, 2026-09-28),
+                                                  // with a gutter so no word touches its edge.
+                                                  child: list(gutter),
+                                                ),
+                                          ),
                                         ),
                                       ),
                                     ),

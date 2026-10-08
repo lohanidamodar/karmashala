@@ -20,6 +20,12 @@ const int kHostLinkChunkBytes = 256 * 1024;
 /// blips, a network switch, a short laptop sleep. After it, today's teardown.
 const Duration kHostLinkResumeGrace = Duration(minutes: 2);
 
+/// The refusal a server answers a `link.resume` with when that link already
+/// ended while suspended — its retain window overflowed, most often. Sent as
+/// an ordinary `error` answer, so every client that resumes redials on it.
+const String kLinkEndedWhileSuspended =
+    'the link ended while it was suspended; redial';
+
 /// The retain window's caps: the frames a link keeps after sending them, so
 /// a resume can send again what the dropped socket lost. The same bounds as
 /// `ReconnectingTransport`'s outbound queue.

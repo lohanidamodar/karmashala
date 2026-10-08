@@ -236,6 +236,7 @@ class GithubEvent {
     this.assignee = '',
     this.checkName = '',
     this.checkSummary = '',
+    this.fork = false,
   });
 
   final GithubTriggerKind kind;
@@ -273,6 +274,9 @@ class GithubEvent {
   final String checkName;
   final String checkSummary;
 
+  /// Whether a pull request's branch lives on a fork, not the repository.
+  final bool fork;
+
   /// The key that makes this event fire once per automation.
   String dedupeKey(String automationId) =>
       '$automationId:${kind.storedName}:$number:$itemId';
@@ -284,6 +288,7 @@ class GithubEvent {
           'github.pr.title': title,
           'github.pr.url': url,
           'github.pr.branch': branch,
+          'github.pr.fork': fork ? 'yes' : 'no',
           'github.comment.body': body,
           'github.comment.author': author,
           'github.check.name': checkName,
@@ -314,6 +319,7 @@ const Map<String, String> kGithubVariables = {
   'github.pr.title': 'Its title',
   'github.pr.url': 'Its page',
   'github.pr.branch': 'Its branch',
+  'github.pr.fork': 'Whether its branch is on a fork: yes or no',
   'github.comment.body': 'The comment or review',
   'github.comment.author': 'Who wrote it',
   'github.check.name': 'The check that failed',
@@ -328,8 +334,68 @@ const Map<String, String> kGithubVariables = {
 const Set<String> kGithubTrustedVariables = {
   'github.pr.number',
   'github.pr.url',
+  'github.pr.fork',
   'github.issue.url',
 };
+
+/// Where a pull request's run checks out its branch: the branch itself, or —
+/// for one on a fork, which no remote of the checkout has — the base
+/// repository's `refs/pull/<n>/head`, fetched into `pr/<n>-<branch>`.
+class PullRequestCheckout {
+  const PullRequestCheckout({
+    required this.number,
+    required this.branch,
+    required this.repository,
+    this.fork = false,
+  });
+
+  /// A pull request run's checkout from its [variables], or null when they
+  /// name no branch (a Run now's sample) or [github] watches no pull requests.
+  static PullRequestCheckout? of(
+    AutomationGithubTrigger? github,
+    Map<String, String> variables,
+  ) {
+    if (github == null || !github.kind.isPullRequest) return null;
+    final branch = variables['github.pr.branch'] ?? '';
+    if (branch.isEmpty) return null;
+    final number = int.tryParse(variables['github.pr.number'] ?? '');
+    return PullRequestCheckout(
+      number: number ?? 0,
+      branch: branch,
+      repository: github.repository,
+      // Without its number there is no pull ref to fetch.
+      fork: number != null && variables['github.pr.fork'] == 'yes',
+    );
+  }
+
+  final int number;
+  final String branch;
+
+  /// The base repository, `owner/name`.
+  final String repository;
+  final bool fork;
+
+  /// The ref a fork's pull request is fetched from.
+  String get pullRef => 'refs/pull/$number/head';
+
+  /// The local branch the run works on. A fork's name is someone else's
+  /// words, so only what a ref name safely holds is kept.
+  String get localBranch {
+    if (!fork) return branch;
+    final safe = branch
+        .replaceAll(RegExp(r'[^A-Za-z0-9._/-]'), '-')
+        .replaceAll(RegExp(r'\.{2,}|/{2,}'), '-')
+        .replaceAll(RegExp(r'^[./-]+|[./-]+$|\.lock$'), '');
+    return safe.isEmpty ? 'pr/$number' : 'pr/$number-$safe';
+  }
+
+  /// What the run says about pushing, for a fork's branch.
+  String? get pushNote => fork
+      ? 'Its branch is on a fork, so it was fetched from $repository\'s '
+            '$pullRef into $localBranch, which is read-only for pushes: '
+            'nothing pushed from this run reaches the pull request.'
+      : null;
+}
 
 /// Whether [branch] passes [pattern]: equal, or a prefix before a `*`.
 bool githubBranchMatches(String pattern, String branch) {

@@ -2,6 +2,7 @@ import 'package:karmashala_browser/tools.dart' show browserToolSchemas;
 import 'package:karmashala_mcp/instructions.dart';
 
 import '../../artifacts/artifact_tool_set.dart' show artifactToolSchemas;
+import '../../artifacts/visualize_tool_set.dart' show visualizeToolSchemas;
 import '../../automations/checks_tool_set.dart';
 import '../../checkpoints/checkpoint_screenshot_tool_set.dart'
     show checkpointScreenshotToolSchemas;
@@ -23,6 +24,7 @@ import 'session_archive_tool_set.dart' show sessionArchiveToolSchemas;
 import 'session_tool_schemas.dart';
 import 'usage_tool_set.dart';
 import 'webhook_tool_set.dart' show webhookToolSchemas;
+import 'secret_tool_set.dart' show secretToolSchemas;
 import 'store_tool_set.dart' show storeToolSchemas;
 import 'inbox_tool_set.dart';
 import 'build_tool_schemas.dart';
@@ -54,6 +56,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...fanOutToolSchemas,
   ...workspaceToolSchemas,
   ...gitHubRunToolSchemas,
+  ...secretToolSchemas,
   ...projectToolSchemas,
   ...worktreeToolSchemas,
   ...sessionCheckoutToolSchemas,
@@ -61,6 +64,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...checkpointToolSchemas,
   ...checkpointScreenshotToolSchemas,
   ...artifactToolSchemas,
+  ...visualizeToolSchemas,
   ...checksToolSchemas,
   ...webhookToolSchemas,
   ...sessionControlToolSchemas,

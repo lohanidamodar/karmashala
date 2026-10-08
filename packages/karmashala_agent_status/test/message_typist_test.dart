@@ -78,6 +78,23 @@ SessionMessageTypist typistFor(
 );
 
 void main() {
+  test('two messages sent at once are typed one after the other, never '
+      'into one line', () async {
+    final composer = FakeComposer();
+    final typist = typistFor(composer);
+
+    final results = await Future.wait([
+      typist.deliver('s1', 'first message from the peek'),
+      typist.deliver('s1', 'second message from a card'),
+    ]);
+
+    expect(results, everyElement(MessageDelivery.readBack));
+    expect(composer.queued, [
+      'first message from the peek',
+      'second message from a card',
+    ]);
+  });
+
   group('SessionMessageTypist', () {
     test('types the message and presses Return once', () async {
       final composer = FakeComposer();
@@ -152,9 +169,9 @@ void main() {
     );
 
     group('a long message the composer folds into a placeholder', () {
-      final long = [for (var i = 0; i < 40; i++) 'line $i of the brief'].join(
-        '\n',
-      );
+      final long = [
+        for (var i = 0; i < 40; i++) 'line $i of the brief',
+      ].join('\n');
 
       test('is read back by its placeholder', () async {
         final composer = FakeComposer(foldsPastes: true);

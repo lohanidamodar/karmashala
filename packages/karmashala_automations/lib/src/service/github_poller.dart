@@ -245,10 +245,24 @@ int _numberFromUrl(String url) =>
     ) ??
     0;
 
+String? _repoName(Object? side) {
+  final repo = side is Map ? side['repo'] : null;
+  return repo is Map ? _string(repo['full_name']).toLowerCase() : null;
+}
+
+/// Whether [pull]'s head is on another repository than its base. A head
+/// whose repository is gone (a deleted fork) is one too.
+bool _fromFork(Map<String, Object?> pull) {
+  final base = _repoName(pull['base']);
+  if (base == null || base.isEmpty) return false;
+  return _repoName(pull['head']) != base;
+}
+
 /// [event] with its pull request's title, page, branch and labels.
 GithubEvent withPull(GithubEvent event, Object? pull) {
   if (pull is! Map<String, Object?>) return event;
   return GithubEvent(
+    fork: _fromFork(pull),
     kind: event.kind,
     itemId: event.itemId,
     number: event.number,

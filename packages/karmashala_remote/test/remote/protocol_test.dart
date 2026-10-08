@@ -485,5 +485,29 @@ void main() {
       }
       expect(ErrorCode.tryParse('teapot'), isNull);
     });
+
+    // Round 50: a server answers a resume of a link that ended while
+    // suspended with this. It is the same `error` answer a client that
+    // resumes has always taken as "redial", so an older one needs nothing new.
+    test('the ended-while-suspended refusal is an ordinary error answer', () {
+      final sent = Envelope.of(
+        FrameType.error,
+        seq: 512,
+        id: 'resume-3',
+        payload: {
+          'code': ErrorCode.notFound.wire,
+          'message': kLinkEndedWhileSuspended,
+        },
+      );
+      final got = Envelope.fromBytes(sent.toBytes(), accept: VersionRange.any);
+      expect(got.knownType, FrameType.error);
+      expect(got.id, 'resume-3');
+      expect(
+        ErrorCode.tryParse(got.payload['code'] as String),
+        ErrorCode.notFound,
+      );
+      expect(got.payload['message'], kLinkEndedWhileSuspended);
+      expect(FrameType.error.sentBy(FrameOrigin.host), isTrue);
+    });
   });
 }

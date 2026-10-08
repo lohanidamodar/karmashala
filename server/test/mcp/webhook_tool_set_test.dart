@@ -41,6 +41,12 @@ final _support = AgentPermissionSupport.axes(
 
 class _Webhooks implements WebhooksWork {
   final rotated = <String>[];
+  final adopted = <String, String>{};
+
+  @override
+  Future<void> adoptSecret(String automationId, String secret) async =>
+      adopted[automationId] = secret;
+
   @override
   Future<WebhookIssued> rotate(String automationId) async {
     rotated.add(automationId);
@@ -69,11 +75,13 @@ void main() {
   late List<Automation> filed;
   late _Webhooks webhooks;
   late WebhookToolSet tools;
+  late Map<String, String> references;
 
   setUp(() {
     saved = [];
     filed = [];
     webhooks = _Webhooks();
+    references = {'ks-secret:one': 'whsec_owner'};
     tools = WebhookToolSet(
       save: (automation) {
         final stored = automation.webhook == null
@@ -95,6 +103,7 @@ void main() {
       newId: () => 'auto-new',
       proposerOf: (sessionId) => 'Claude Code in "Fix the cart"',
       proposed: filed.add,
+      redeemSecret: (reference) async => references.remove(reference),
     );
   });
 
@@ -128,6 +137,52 @@ void main() {
     );
     expect(automation.webhook!.requireSignature, isTrue);
     expect(filed.single.id, 'auto-new', reason: 'filed in the inbox');
+  });
+
+  test('a secret reference becomes the webhook\'s signing secret, once, and '
+      'its value reaches nobody but the vault', () async {
+    final made = await call('webhook_create', {
+      'name': 'stripe',
+      'repositoryId': 'r1',
+      'agentInstallationId': 'a1',
+      'template': 'Handle {{type}}',
+      'signingRef': 'ks-secret:one',
+    });
+    expect(webhooks.adopted, {'auto-new': 'whsec_owner'});
+    expect(webhooks.rotated, isEmpty);
+    expect(jsonEncode(made), isNot(contains('whsec_owner')));
+    expect(made['note'], contains('secret they entered'));
+
+    await expectLater(
+      call('webhook_create', {
+        'name': 'again',
+        'repositoryId': 'r1',
+        'agentInstallationId': 'a1',
+        'template': 'Handle {{type}}',
+        'signingRef': 'ks-secret:one',
+      }),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(saved, hasLength(1), reason: 'a spent reference saves nothing');
+  });
+
+  test('a secret reference on a trigger that is not a webhook is refused '
+      'before it is spent', () async {
+    await expectLater(
+      call('automation_propose', {
+        'name': 'Nightly',
+        'repositoryId': 'r1',
+        'agentInstallationId': 'a1',
+        'prompt': 'run the tests',
+        'trigger': {
+          'type': 'schedule',
+          'cron': '0 3 * * *',
+          'signingRef': 'ks-secret:one',
+        },
+      }),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(references, contains('ks-secret:one'));
   });
 
   test('no argument turns a proposal on', () async {

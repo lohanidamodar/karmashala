@@ -54,6 +54,9 @@ class _DesktopLinkKeeper {
   StreamSubscription<void>? _proofs;
   Timer? _proofWindow;
 
+  /// Ends a held link a proof found, if it has not resumed by then.
+  Timer? _afterProof;
+
   /// Frames taken off the current socket, counted so a proof can tell
   /// whether anything arrived after its ping.
   var _heard = 0;
@@ -153,6 +156,7 @@ class _DesktopLinkKeeper {
     _recheck?.cancel();
     _liveness?.stop();
     _proofWindow?.cancel();
+    _afterProof?.cancel();
     final proofs = _proofs;
     _proofs = null;
     await proofs?.cancel();
@@ -283,11 +287,23 @@ class _DesktopLinkKeeper {
       } on Object {
         routes = const [];
       }
+      if (routes.isEmpty) {
+        resume.onLog?.call(
+          'link to ${resume.hostName}: no route to resume it over yet',
+        );
+      }
       for (final route in routes) {
         if (!waiting()) return;
         final outcome = await _tryRoute(current, route);
+        if (outcome != null && !outcome.refused) {
+          resume.onLog?.call(
+            'resuming the link to ${resume.hostName} over ${route.path} at '
+            '${route.label} failed: ${outcome.reason}',
+          );
+        }
         if (outcome == null) {
           _heal?.cancel();
+          _afterProof?.cancel();
           // Back over a relay (the LAN went): promotable again when the LAN
           // returns.
           relayHost = route.relayHost;
@@ -345,6 +361,7 @@ class _DesktopLinkKeeper {
     }
     if (current.suspended) {
       _wakeHeal();
+      _endUnlessResumed(current, resume);
       return;
     }
     if (_attempt != null || _promoting || _transport == null) return;
@@ -362,6 +379,25 @@ class _DesktopLinkKeeper {
         'to the app; taking its connection for dropped',
       );
       _dropped();
+      if (current.suspended) _endUnlessResumed(current, resume);
+    });
+  }
+
+  /// A held link someone is waiting on gets [DesktopLinkResume.afterProof]
+  /// to resume, then is ended so its owners redial: the routes that resume
+  /// it may not answer for the whole grace (a link held on this network
+  /// while a phone was frozen), when a fresh dial lands at once.
+  void _endUnlessResumed(SealedHostLink current, DesktopLinkResume resume) {
+    if (_afterProof?.isActive ?? false) return;
+    _afterProof = Timer(resume.afterProof, () {
+      if (_released || current.isClosed || !current.suspended) return;
+      _heal?.cancel();
+      _tell(
+        'link to ${resume.hostName} not resumed within '
+        '${resume.afterProof.inSeconds}s of a network change or a return to '
+        'the app; retired, redialling',
+      );
+      current.close('not resumed after a return');
     });
   }
 

@@ -21,8 +21,19 @@ void main() {
     expect(kMcpToolAnnotations['artifact_list']!.readOnly, isTrue);
   });
 
+  test('the instructions teach visualize, with an example', () {
+    expect(kKarmashalaMcpInstructions, contains('visualize'));
+    expect(kKarmashalaMcpInstructions, contains('"kind": "progress"'));
+    expect(mcpToolNeedsOperatorGrant('visualize'), isFalse);
+  });
+
   test('the artifact tools are listed under their own heading', () {
-    for (final tool in ['artifact_show', 'artifact_list', 'artifact_update']) {
+    for (final tool in [
+      'artifact_show',
+      'artifact_list',
+      'artifact_update',
+      'visualize',
+    ]) {
       expect(kMcpToolListings[tool]!.category, McpToolCategory.artifacts);
     }
   });

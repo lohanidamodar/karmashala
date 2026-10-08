@@ -761,4 +761,5 @@ bool _sameTool(ToolActivity? a, ToolActivity? b) => a == null
                   a.output == b.output &&
                   a.outputTruncated == b.outputTruncated &&
                   a.isError == b.isError &&
+                  a.endedAt == b.endedAt &&
                   a.plan == b.plan));

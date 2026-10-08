@@ -15,7 +15,6 @@ const Set<String> presentationPurityDebt = {
   'lib/src/app/shell/shell_shortcuts.dart',
   'lib/src/app/shell/side_panel_context.dart',
 
-  'lib/src/features/automations/presentation/project_checks_section.dart',
   'lib/src/features/browser/presentation/browser_console.dart',
   'lib/src/features/browser/presentation/browser_viewport_shot.dart',
   'lib/src/features/checkpoints/presentation/checkpoints_view.dart',

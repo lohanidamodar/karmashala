@@ -320,9 +320,14 @@ class InterruptedTurnContinuer {
     required this.resume,
     required this.now,
     this.enabled,
+    this.personWaits,
     this.report,
     this.log,
   });
+
+  /// Whether a person's message already waits in row [String]'s queue: it
+  /// goes first, so the session is reopened bare and the queue gives it that.
+  final bool Function(String sessionId)? personWaits;
 
   final OpenTurns turns;
   final Session? Function(String sessionId) sessionOf;
@@ -379,9 +384,10 @@ class InterruptedTurnContinuer {
     for (final (:sessionId, :turn) in plan.resume) {
       final session = sessionOf(sessionId);
       if (session == null) continue;
-      final told = takesOpeningMessage(session);
+      final waits = personWaits?.call(sessionId) ?? false;
+      final told = !waits && takesOpeningMessage(session);
       turns.continuing(sessionId, turn.continues + 1);
-      runs.add(_continue(sessionId, told, continued));
+      runs.add(_continue(sessionId, told, continued, personFirst: waits));
     }
     await Future.wait(runs);
     return continued;
@@ -395,11 +401,25 @@ class InterruptedTurnContinuer {
   Future<void> _continue(
     String sessionId,
     bool told,
-    List<String> continued,
-  ) async {
+    List<String> continued, {
+    bool personFirst = false,
+  }) async {
     try {
       await resume(sessionId, told ? kInterruptedTurnPrompt : null);
       continued.add(sessionId);
+      if (personFirst) {
+        log?.call(
+          'interrupted turns: $sessionId resumed bare; a message a person '
+          'queued goes first, in place of the continue',
+        );
+        report?.call(
+          sessionId,
+          '$kTurnCutOffLead Karmashala reopened the session, and the message '
+          'you had queued goes to it first, instead of asking the agent to '
+          'continue.',
+        );
+        return;
+      }
       log?.call(
         told
             ? 'interrupted turns: $sessionId resumed and told its turn was '

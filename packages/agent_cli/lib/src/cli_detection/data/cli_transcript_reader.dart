@@ -1118,6 +1118,7 @@ void _parseClaudeLine(
             edits: written == null ? null : [written],
             answers: answersIn(json['toolUseResult']),
             image: () => _claudeResultImage(part['content']),
+            at: at,
           );
           final plan = taskPlan.answered(
             id,
@@ -1848,6 +1849,7 @@ void _parseCodexLine(
         output: _codexResultText(payload['output']),
         isError: false,
         image: () => _codexResultImage(payload['output']),
+        at: at,
       );
   }
 }
@@ -1950,6 +1952,7 @@ void _attachResult(
   List<FileEditRecord>? edits,
   Map<String, String>? answers,
   String? Function()? image,
+  DateTime? at,
 }) {
   if (id is! String) return;
   final index = pending.remove(id);
@@ -1973,6 +1976,7 @@ void _attachResult(
       edits: edits,
       answers: answers,
       imagePath: imagePath,
+      endedAt: at,
     ),
     subagent: row.subagent,
     // Answered, so it is no longer outstanding — and this is the only place

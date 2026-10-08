@@ -126,6 +126,12 @@ class DaemonWebhooks implements WebhooksWork {
   }
 
   @override
+  Future<void> adoptSecret(String automationId, String secret) async {
+    await _vault.adopt(_webhook(automationId).webhook!.hookId, secret);
+    reconcile();
+  }
+
+  @override
   Future<WebhookStatus> status(String automationId, {int limit = 50}) async {
     final automation = _webhook(automationId);
     return WebhookStatus(

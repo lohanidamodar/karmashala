@@ -2,19 +2,16 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../domain/automation.dart';
-import '../domain/automation_steps.dart';
 import '../domain/unattended_gate.dart';
 
-import 'automation_records.dart';
 import 'checkout_facts.dart';
 
 /// The one place a fire is checked against the unattended rules — lookups
 /// only, so no path can refuse where another would arm.
 class UnattendedPreflight {
-  const UnattendedPreflight({required this._facts, required this._checks});
+  const UnattendedPreflight({required this._facts});
 
   final CheckoutFacts _facts;
-  final ProjectCheckRecords _checks;
 
   /// The gate's inputs for [automation], re-read on every call.
   UnattendedGateInput inputFor(Automation automation) => _input(
@@ -25,8 +22,6 @@ class UnattendedPreflight {
         support.resolveStored(automation.permissionMode?.canonical),
     missingCheckout:
         'This automation names a checkout that is no longer in the workspace',
-    hasCheckStep: automation.steps.checks,
-    hasCommandStep: automation.steps.of(AutomationStepKind.command) != null,
   );
 
   /// The gate's inputs for resuming [session] with nobody watching.
@@ -42,7 +37,6 @@ class UnattendedPreflight {
     ),
     missingCheckout:
         'This session names a checkout that is no longer in the workspace',
-    requiresChecks: false,
   );
 
   UnattendedGateInput _input({
@@ -54,9 +48,6 @@ class UnattendedPreflight {
     )
     selectionOf,
     required String missingCheckout,
-    bool requiresChecks = true,
-    bool hasCheckStep = true,
-    bool hasCommandStep = false,
   }) {
     final repository = _facts.repository(repositoryId);
     final installation = _facts.installation(agentInstallationId);
@@ -73,11 +64,6 @@ class UnattendedPreflight {
 
     return UnattendedGateInput(
       repositoryName: repository?.name ?? '',
-      verificationEnabled:
-          repository != null && _checks.isVerificationEnabled(repository.id),
-      projectCheckCount: repository == null
-          ? 0
-          : _checks.countFor(repository.id),
       agentName:
           descriptor?.displayName ??
           installation?.agentId ??
@@ -90,9 +76,6 @@ class UnattendedPreflight {
       permissionEvidence: support?.evidence ?? '',
       reach: reach.reach,
       reachReason: reach.reason,
-      requiresChecks: requiresChecks,
-      hasCheckStep: hasCheckStep,
-      hasCommandStep: hasCommandStep,
     );
   }
 

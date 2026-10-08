@@ -222,6 +222,7 @@ class MessageComposer extends StatefulWidget {
     this.droppedFiles,
     this.takeServerFiles,
     this.serverFilesWaiting,
+    this.focusRequests,
     super.key,
   });
 
@@ -286,6 +287,10 @@ class MessageComposer extends StatefulWidget {
   /// Notifies when files arrive for [takeServerFiles] to hand over.
   final Listenable? serverFilesWaiting;
 
+  /// Notifies when the box should take the keyboard, its cursor at the end:
+  /// a message put back in it to edit.
+  final Listenable? focusRequests;
+
   @override
   State<MessageComposer> createState() => _MessageComposerState();
 }
@@ -322,8 +327,15 @@ class _MessageComposerState extends State<MessageComposer> {
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     _drops = widget.droppedFiles?.listen(_attachDropped);
     widget.serverFilesWaiting?.addListener(_scheduleDrain);
+    widget.focusRequests?.addListener(_takeFocus);
     // Files queued before this box existed — while the transcript loaded.
     _scheduleDrain();
+  }
+
+  void _takeFocus() {
+    if (!mounted) return;
+    _focusNode.requestFocus();
+    _input.selection = TextSelection.collapsed(offset: _input.text.length);
   }
 
   StreamSubscription<List<String>>? _drops;
@@ -384,6 +396,10 @@ class _MessageComposerState extends State<MessageComposer> {
       oldWidget.serverFilesWaiting?.removeListener(_scheduleDrain);
       widget.serverFilesWaiting?.addListener(_scheduleDrain);
     }
+    if (oldWidget.focusRequests != widget.focusRequests) {
+      oldWidget.focusRequests?.removeListener(_takeFocus);
+      widget.focusRequests?.addListener(_takeFocus);
+    }
     // Able again, or asked of a new source: what waited is taken now.
     if ((!oldWidget.enabled && widget.enabled) ||
         (!oldWidget.attaches && widget.attaches) ||
@@ -396,6 +412,7 @@ class _MessageComposerState extends State<MessageComposer> {
   void dispose() {
     unawaited(_drops?.cancel());
     widget.serverFilesWaiting?.removeListener(_scheduleDrain);
+    widget.focusRequests?.removeListener(_takeFocus);
     for (final upload in _uploads) {
       upload.cancelled = true;
     }
@@ -954,7 +971,8 @@ class _MessageComposerState extends State<MessageComposer> {
     // A file still on its way, or one that stopped, would go missing from
     // the message.
     if (_busy || !widget.enabled || !_readyToSend) return;
-    final text = _input.text.trim();
+    final typed = _input.text;
+    final text = typed.trim();
     if (text.isEmpty && _attachments.isEmpty && _uploads.isEmpty) return;
     if (_uploads.isNotEmpty) {
       setState(() => _busy = true);
@@ -998,7 +1016,12 @@ class _MessageComposerState extends State<MessageComposer> {
     try {
       await widget.onSend(buffer.toString());
       if (mounted) {
-        _input.clear();
+        // Only what went: text a note or a draft added meanwhile stays.
+        final left = textLeftAfterSend(_input.text, typed);
+        _input.value = TextEditingValue(
+          text: left,
+          selection: TextSelection.collapsed(offset: left.length),
+        );
         setState(_attachments.clear);
       }
     } on Object catch (e, stack) {
@@ -2142,4 +2165,14 @@ class _CommandPalette extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What stays in a box that held [now] once [sent] — the box's text when Send
+/// was pressed — has gone: anything added meanwhile, never the sent words.
+String textLeftAfterSend(String now, String sent) {
+  if (now == sent) return '';
+  if (sent.isNotEmpty && now.startsWith(sent)) {
+    return now.substring(sent.length).trimLeft();
+  }
+  return now;
 }

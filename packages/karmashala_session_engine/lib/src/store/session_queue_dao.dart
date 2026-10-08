@@ -71,10 +71,11 @@ class SessionQueueDao {
   }
 
   /// The row a sender's [requestId] already queued for [sessionId], if any.
+  /// One cancelled or failed is not: a retry under the same id goes again.
   QueuedMessage? byRequest(String sessionId, String requestId) {
     final rows = _db.query(
       'SELECT * FROM session_queued_messages WHERE session_id = ? '
-      'AND request_id = ? LIMIT 1;',
+      "AND request_id = ? AND state NOT IN ('cancelled', 'failed') LIMIT 1;",
       [sessionId, requestId],
     );
     return rows.isEmpty ? null : _row(rows.first);
@@ -120,11 +121,12 @@ class SessionQueueDao {
     return rows.isEmpty ? null : _row(rows.first);
   }
 
-  /// How many of [sessionId]'s waiting messages go no later than [seq].
+  /// How many of [sessionId]'s queued messages go no later than [seq]: one
+  /// already on its way is not ahead of anything.
   int positionOf(String sessionId, int seq) =>
       _db.query(
             'SELECT COUNT(*) AS n FROM session_queued_messages '
-            'WHERE session_id = ? AND state IN $_waiting AND seq <= ?;',
+            "WHERE session_id = ? AND state = 'queued' AND seq <= ?;",
             [sessionId, seq],
           ).first['n']
           as int;

@@ -9,7 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/workbench_tabs.dart' show openAutomationsTab;
 import '../application/automation_proposals.dart';
 import '../application/automation_providers.dart';
-import 'webhook_parts.dart' show WebhookSecretDialog;
+import 'turn_on_confirm_dialog.dart' show turnOnAutomation;
 
 /// Review, Turn on and Discard for one proposed automation — the same three
 /// verbs in the inbox and in the Automations tab.
@@ -21,20 +21,16 @@ class ProposalActions extends ConsumerWidget {
   void _review(WidgetRef ref) => reviewProposal(ref, automationId);
 
   Future<void> _turnOn(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    try {
-      final issued = await ref
-          .read(automationProposalsProvider)
-          .turnOn(automationId);
-      if (issued != null && context.mounted) {
-        await WebhookSecretDialog.show(context, issued);
-      }
-    } on StateError catch (error) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text('Not turned on: ${error.message}')),
+    final proposal = ref.read(automationsDataProvider).getById(automationId);
+    if (proposal == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Not turned on: that proposal is no longer here.'),
+        ),
       );
-      _review(ref);
+      return;
     }
+    await turnOnAutomation(context, ref, proposal);
   }
 
   @override

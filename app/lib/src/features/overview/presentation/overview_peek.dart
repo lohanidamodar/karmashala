@@ -12,7 +12,10 @@ import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/presentation/imported_session_view.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../explorer/application/workspace_session_entry.dart';
+import '../../editor/application/editor_tab_actions.dart';
+import '../../git/application/diff_tab_actions.dart' show diffForTargetProvider;
 import '../../git/presentation/diff_view.dart';
+import '../../sessions/presentation/hunk_review.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_active_model_providers.dart';
 import '../../sessions/application/session_chat_source.dart'
@@ -821,7 +824,8 @@ class _PeekFilesState extends ConsumerState<_PeekFiles> {
         : ref.watch(overviewFileStatsProvider(checkout)).value ??
               const <String, FileDiffStat>{};
     final semantic = SemanticColors.of(context);
-    return ListView(
+    final sessionId = widget.card.entry.native?.id;
+    final list = ListView(
       key: const ValueKey('overview-peek-files'),
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       children: [
@@ -887,7 +891,22 @@ class _PeekFilesState extends ConsumerState<_PeekFiles> {
               ),
             );
           }(),
-          if (_open == path && checkout != null)
+          if (_open == path && checkout != null) ...[
+            if (sessionId != null)
+              Builder(
+                builder: (context) {
+                  final review = HunkReviewScope.maybeOf(context);
+                  if (review == null) return const SizedBox.shrink();
+                  return Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: RevertFileButton(
+                      path: _relative(path, stats, checkout.path),
+                      hunks: const [],
+                      review: review,
+                    ),
+                  );
+                },
+              ),
             SizedBox(
               height: _diffHeight,
               child: FileDiffView(
@@ -895,10 +914,24 @@ class _PeekFilesState extends ConsumerState<_PeekFiles> {
                 path: _relative(path, stats, checkout.path),
                 checkout: checkout,
                 repositoryId: widget.card.entry.native?.repositoryId,
+                reviewHunks: sessionId != null,
               ),
             ),
+          ],
         ],
       ],
+    );
+    if (sessionId == null || checkout == null) return list;
+    // The working tree against git, a hunk at a time; Revert file is git's.
+    return HunkReviewHost(
+      sessionId: sessionId,
+      gitCheckout: checkout,
+      place: (relative) => checkoutFile(checkout, relative),
+      openFile: (relative) => ref
+          .read(editorTabActionsProvider)
+          .openAt(checkoutFile(checkout, relative)),
+      onReverted: () => ref.invalidate(diffForTargetProvider),
+      child: list,
     );
   }
 

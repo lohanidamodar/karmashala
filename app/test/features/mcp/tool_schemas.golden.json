@@ -1419,6 +1419,40 @@
       }
     },
     {
+      "name": "request_secret",
+      "description": "Ask the owner for a secret (a webhook signing secret, an API key). They see a private card in your thread with your label and reason, and either save it on the server or decline. You get back a single-use reference, never the value: pass it to a tool that takes one (signingRef). Blocks until they answer or the wait ends.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "What the secret is: \"Stripe webhook signing secret\"."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why you need it, in a sentence the owner can judge."
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 1800,
+            "description": "How long to wait for an answer (default 600)."
+          }
+        },
+        "required": [
+          "label",
+          "reason"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
       "name": "project_add",
       "description": "Add a project to the Karmashala workspace: adopt a folder that is already there, clone a Git repository into one, or both. Every Git checkout beneath the folder is discovered and recorded, and any CLI sessions those checkouts already have are imported. Use this rather than telling the user to open the New Project dialog.",
       "inputSchema": {
@@ -2316,6 +2350,50 @@
       }
     },
     {
+      "name": "visualize",
+      "description": "Draw a visual in your own thread, mid-turn, where you call it: a chart, a table, a mermaid diagram, an image, metric tiles, a progress bar or a JSON tree. Call again with the same id to update it in place — a progress bar that moves, a chart that grows (append: true adds points or rows), a table that fills. It is kept with the session. Use it for something small and live; a full page, a report or a file the person opens goes to artifact_show instead. Data by kind — chart: {\"type\": \"bar\"|\"line\", \"unit\", \"data\": [{\"label\", \"value\"}] or [{\"x\", \"y\"}], or \"series\": [{\"name\", \"data\"}]}; table: {\"columns\": [...], \"rows\": [[...]]} or a list of objects; diagram: the mermaid text (flowchart or sequenceDiagram); image: {\"path\": absolute path on your host} or {\"url\"}; metric: [{\"label\", \"value\", \"unit\", \"delta\"}]; progress: {\"value\", \"max\", \"label\", \"steps\": [{\"label\", \"status\"}]}; tree: any JSON. A bad spec is refused with the field to fix. Caps: 5000 points, 1000 rows, 40 columns, a 5 MiB image.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "chart",
+              "table",
+              "diagram",
+              "image",
+              "metric",
+              "progress",
+              "tree"
+            ],
+            "description": "Required for a new visual; an update keeps its own."
+          },
+          "data": {
+            "description": "The visual itself, shaped by kind (see the tool description). JSON text is read too."
+          },
+          "title": {
+            "type": "string",
+            "description": "Drawn above it."
+          },
+          "id": {
+            "type": "string",
+            "description": "Your handle for it: letters, digits, \".\", \"_\", \"-\". The same id again updates that visual in place. Omit for a one-off; the answer names the id it was given."
+          },
+          "append": {
+            "type": "boolean",
+            "description": "Add data's points to a chart's series, or its rows to a table, instead of replacing. Past the caps the oldest go."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "checks_run",
       "description": "Run the project checks the user configured for a session's repository (tests, analyze, lint — whatever they added), in sessions Karmashala owns (watchable from the app) in the directory that session works in, one after another, and WAIT for them. The batch is recorded against the session as ONE verification run whose verdict is the worst of its checks — Karmashala's own reading, never your claim — readable with verification_get. Use it before saying work is done. A check that is closed by hand, or that could not start, is INCONCLUSIVE, never a pass. Answers NOTHING WAS CHECKED when the repository has none. A check whose output is analyzer diagnostics or test results (best as `dart analyze --format=machine` or `flutter test --machine`) also reports them as data, and what this session added or broke against a baseline.",
       "inputSchema": {
@@ -2413,6 +2491,10 @@
           "callsPerHour": {
             "type": "integer",
             "minimum": 1
+          },
+          "signingRef": {
+            "type": "string",
+            "description": "A reference request_secret gave you: the webhook is signed with the secret the owner entered. Used up by this call."
           }
         },
         "required": [
@@ -2463,7 +2545,7 @@
           },
           "trigger": {
             "type": "object",
-            "description": "type is schedule (cron or everyMinutes), event (event: turn_finished, turn_failed or needs_you; action: start_session, message_session or notify_only), github (github: {kind, repository, action, branch, authors, logins, label, assignee, pollSeconds}) or webhook (signatureRequired, callsPerHour).",
+            "description": "type is schedule (cron or everyMinutes), event (event: turn_finished, turn_failed or needs_you; action: start_session, message_session or notify_only), github (github: {kind, repository, action, branch, authors, logins, label, assignee, pollSeconds}) or webhook (signatureRequired, callsPerHour, signingRef: a reference request_secret gave you, to sign with the secret the owner entered).",
             "properties": {
               "type": {
                 "type": "string",
@@ -2481,7 +2563,7 @@
           },
           "steps": {
             "type": "array",
-            "description": "Steps after the agent: {kind: check|command|webhook|tell|notify, when: success|failure|always, text, url}.",
+            "description": "Steps after the agent: {kind: check|command|webhook|tell|notify, when: success|failure|always, text, url, name}. A check is optional; its text is its command, one a line, like \"flutter test\".",
             "items": {
               "type": "object"
             }
@@ -5978,6 +6060,10 @@
       "category": "workspace",
       "summary": "A failed Actions run's log: its last 300 lines and its error lines."
     },
+    "request_secret": {
+      "category": "sessions",
+      "summary": "Ask the owner for a secret; get a single-use reference, never the value."
+    },
     "project_add": {
       "category": "workspace",
       "summary": "Add a project: adopt a folder, or clone a repository into one."
@@ -6061,6 +6147,10 @@
     "artifact_update": {
       "category": "artifacts",
       "summary": "Rename, resize or revise an artifact; re-read a file you rewrote."
+    },
+    "visualize": {
+      "category": "artifacts",
+      "summary": "Draw a chart, table, diagram, image or progress in your thread; by id."
     },
     "checks_run": {
       "category": "verification",

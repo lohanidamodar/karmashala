@@ -234,6 +234,32 @@ void main() {
     expect(dao.getById('q1')!.state, QueuedMessageState.queued);
   });
 
+  test('a resume answered by one already starting does not count the head '
+      'as delivered: it waits and goes once idle', () async {
+    queued('old', 'earlier');
+    final queue = queueOver();
+
+    // A boot's automatic continue is starting the session with its own
+    // opening prompt when the person's send arrives.
+    final continuing = launches.resume('s1', prompt: 'continue please');
+    queue.admit('s1', 'later', origin: QueuedMessageOrigin.app);
+    await continuing;
+    await pumpEventQueue();
+
+    expect(pty.started, hasLength(1));
+    expect(pty.started.single.argv.join(' '), contains('continue please'));
+    expect(pty.started.single.argv.join(' '), isNot(contains('earlier')));
+    expect(
+      dao.getById('old')!.state,
+      QueuedMessageState.queued,
+      reason: 'the opening prompt that went was not this message',
+    );
+
+    await showsIdle();
+    expect(delivered, ['earlier']);
+    expect(dao.getById('old')!.state, QueuedMessageState.delivered);
+  });
+
   test('a resume that is refused fails the head in words rather than '
       'holding it forever', () async {
     queued('old', 'earlier');

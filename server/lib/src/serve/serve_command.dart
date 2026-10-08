@@ -10,6 +10,7 @@ import 'package:agent_cli/process.dart'
         ExecutionEnvironment,
         localHostEnvironment;
 import 'package:agent_cli/read.dart' show CliStoreLocator;
+import 'package:karmashala_git/github.dart' show GhCommandLogin, GithubClient;
 import 'package:karmashala_git/worktrees.dart' show WorktreeService;
 import 'package:karmashala_environments/store.dart'
     show AcpAuthChoiceDao, ExecutionEnvironmentDao;
@@ -33,6 +34,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionNoticed,
         SessionQueueChanged,
         SessionSend,
+        SessionSent,
         TabReveal,
         TerminalOpen,
         UsageLimitNotice,
@@ -68,6 +70,7 @@ import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../artifacts/artifact_tool_set.dart';
+import '../artifacts/visualize_tool_set.dart';
 import '../artifacts/server_artifact_markers.dart';
 import '../artifacts/server_artifacts.dart';
 import '../automations/github/daemon_github.dart'
@@ -130,6 +133,9 @@ import '../hooks/hook_spools.dart';
 import '../mcp/tools/store_tool_set.dart';
 import '../mcp/tools/usage_tool_set.dart';
 import '../mcp/tools/webhook_tool_set.dart';
+import '../mcp/tools/secret_tool_set.dart';
+import '../github/server_github.dart';
+import '../github/server_secret_requests.dart';
 import '../mcp/tools/inbox_tool_set.dart';
 import '../activity/activity_backfill.dart';
 import '../activity/server_activity.dart';
@@ -534,6 +540,38 @@ Future<int> _serve(
   // Usage, accounts, detection and the CLI import: the work done for the
   // agents on this machine, whichever client asks, and on its own.
   final hostEnvironment = environment ?? Platform.environment;
+  // GitHub straight to its API: a token saved in Settings, then this
+  // environment's, then gh's login — gh on this machine first, then in WSL,
+  // where a Windows machine's gh often lives.
+  final github = ServerGithub(
+    dataDirectory: dataDirectory,
+    environment: hostEnvironment,
+    gh:
+        hostEnvironment[kAgentWorkVariable] == 'off' ||
+            hostEnvironment[kGithubGhVariable] == 'off'
+        ? null
+        : GhCommandLogin(() {
+            final environments = ExecutionEnvironmentDao(database).getAll();
+            return [
+              for (final kind in [
+                Platform.isWindows
+                    ? EnvironmentKind.windowsNative
+                    : EnvironmentKind.localPosix,
+                if (Platform.isWindows) EnvironmentKind.wsl,
+              ])
+                for (final place in environments)
+                  if (place.kind == kind) ssh.runners.forEnvironment(place),
+            ];
+          }),
+  );
+  final secretRequests = ServerSecretRequests(
+    dataDirectory: dataDirectory,
+    tell: data.announce,
+  );
+  data
+    ..githubWork = github
+    ..secretWork = secretRequests
+    ..greeters.add(secretRequests.greeting);
   // Every local and WSL terminal (slice 5a): built here on this machine's OS
   // with the vault above, run in the registry, attached to by id.
   final terminals = ServerTerminals(
@@ -652,7 +690,11 @@ Future<int> _serve(
     dataDirectory: dataDirectory,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   )..activeModels = activeModels;
-  final reach = CheckoutReach(database, runners: ssh.runners);
+  final reach = CheckoutReach(
+    database,
+    runners: ssh.runners,
+    github: github.client,
+  );
   // A project an agent adds imports the CLI history of its new checkouts.
   final folders = ProjectFolders(
     tools,
@@ -764,6 +806,7 @@ Future<int> _serve(
         liveness: liveness,
       ),
       GitHubRunToolSet(tools, reach: reach),
+      SecretToolSet(secretRequests),
       ProjectToolSet(tools, reach: reach, folders: folders),
       worktreeTools,
       // An agent attaches the checkouts its session spans — any of them,
@@ -818,6 +861,7 @@ Future<int> _serve(
   // What an agent shows in its thread, after the checkpoint families as
   // serverToolSchemas lists them.
   mcpTools.tools.add(ArtifactToolSet(artifacts, database: database));
+  mcpTools.tools.add(VisualizeToolSet(artifacts.visuals, database: database));
   // Folders of checkpoints dropped without their files, by any path.
   unawaited(
     sweepCheckpointScreenshotFolders(
@@ -1051,12 +1095,13 @@ Future<int> _serve(
     // A resume of an ACP session that ended starts it again over ACP.
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
-    // GitHub automations poll as the checkout's own `gh` login.
+    // GitHub automations poll through the server's GitHub access.
     githubSweepEvery:
         hostEnvironment[kGithubPollVariable] != 'off' &&
             hostEnvironment[kAgentWorkVariable] != 'off'
         ? kGithubSweepEvery
         : null,
+    githubClient: github.client,
     worktrees: worktrees,
   );
   // Webhooks reach this server through the relay it pairs through.
@@ -1263,7 +1308,18 @@ Future<int> _serve(
   // The one decision whether a turn still runs: the queue, a switch and the
   // open-turn record all read it.
   final turnSettlement = TurnSettlement(status: prompts.status)..start();
-  final sessionQueue = SessionQueue(
+  String? inputHeld(String sessionId) {
+    final own = prompts.status.runningSessionOf(sessionId);
+    if (own == null) return null;
+    return heldTypedInput(
+      own.input.unsent,
+      rows: typist.readScreen(sessionId),
+      markers: typist.markersFor(sessionId),
+    );
+  }
+
+  late final SessionQueue sessionQueue;
+  sessionQueue = SessionQueue(
     dao: SessionQueueDao(database),
     status: prompts.status,
     turns: turnSettlement,
@@ -1298,6 +1354,8 @@ Future<int> _serve(
     // A message is not typed over what a person is typing in the pane.
     personTypedAt: (sessionId) =>
         prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,
+    // Nor is one typed on top of text left unsent in the agent's input.
+    inputHeld: inputHeld,
     // A limit holds the queue until its resume, which sends the head.
     limitHold: (sessionId) {
       final session = sessionRows.getById(sessionId);
@@ -1310,7 +1368,11 @@ Future<int> _serve(
       );
     },
     announce: (sessionId, open) => data.announce([
-      SessionQueueChanged(sessionId: sessionId, messages: open),
+      SessionQueueChanged(
+        sessionId: sessionId,
+        messages: open,
+        delivered: sessionQueue.takeDelivered(sessionId),
+      ),
     ]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
@@ -1331,8 +1393,18 @@ Future<int> _serve(
     resumesOnSend: speaksAcp,
     resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
     queue: sessionQueue,
+    inputHeld: inputHeld,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  // An event rule's "tell the agent" goes the way every send goes, so a chat
+  // session hears it too and a running turn queues it.
+  automations?.eventRules.send = (sessionId, text) async =>
+      await sessionInput.handle(
+            SessionSend(sessionId: sessionId, text: text),
+            null,
+            origin: QueuedMessageOrigin.automation,
+          )
+          as SessionSent;
   // Turns the last stop or crash cut off are continued now, each resume
   // claimed before any client can connect and reopen the same row; then
   // every turn this server runs is recorded open until it settles.
@@ -1359,8 +1431,13 @@ Future<int> _serve(
         },
         // A window connected by the time the agent is back shows it, as
         // `session_send`'s resume does; the inbox item covers one that is not.
+        personWaits: sessionQueue.personWaiting,
         resume: (sessionId, prompt) async {
-          final started = await launches.resume(sessionId, prompt: prompt);
+          // A send meanwhile queues behind the start rather than racing it.
+          sessionQueue.hold(sessionId);
+          final started = await launches
+              .resume(sessionId, prompt: prompt)
+              .whenComplete(() => sessionQueue.release(sessionId));
           data.tellIntent(
             OpenSessionTab(
               sessionId: started.sessionId,
@@ -1659,6 +1736,8 @@ Future<int> _serve(
           return session == null ? agent : '$agent in "${session.title}"';
         },
         proposed: (proposal) => automations?.fileProposal(proposal),
+        // A reference request_secret handed an agent, spent here.
+        redeemSecret: secretRequests.redeem,
       ),
     )
     // Every session is operated here: every agent runs in this server.
@@ -1683,6 +1762,7 @@ Future<int> _serve(
               reveal: reveal,
             ),
           );
+          return started;
         },
       ),
     )

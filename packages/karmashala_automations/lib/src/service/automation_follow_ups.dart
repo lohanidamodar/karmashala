@@ -24,10 +24,8 @@ class AutomationFollowUps {
     void Function()? onChanged,
     this._commands,
     this._webhooks,
-    bool Function(String repositoryId)? checksOn,
   }) : _dao = automations,
-       _onChanged = onChanged ?? _nothing,
-       _checksOn = checksOn ?? _never;
+       _onChanged = onChanged ?? _nothing;
 
   final AutomationRecords _dao;
   final ResumeRecords _resumes;
@@ -47,12 +45,7 @@ class AutomationFollowUps {
   final StepCommandRunner? _commands;
   final StepWebhookPoster? _webhooks;
 
-  /// Whether the checkout has checks on and at least one check — what a
-  /// command step needs before it runs unattended.
-  final bool Function(String repositoryId) _checksOn;
-
   static void _nothing() {}
-  static bool _never(String _) => false;
 
   /// Whether [run] failed: its agent did not finish, or a check did not pass.
   bool failedOf(Automation automation, AutomationRun run) {
@@ -160,7 +153,7 @@ class AutomationFollowUps {
   );
 
   /// The command, with every value as an environment variable and none in
-  /// its text. Only where checks are on, as every unattended change is.
+  /// its text.
   Future<String> _command(
     Automation automation,
     AutomationRun run,
@@ -172,12 +165,6 @@ class AutomationFollowUps {
       throw StateError('This server runs no commands for automations.');
     }
     if (step.refusal case final why?) throw StateError(why);
-    if (!_checksOn(automation.repositoryId)) {
-      throw StateError(
-        'Not run: checks are off for this checkout, or it has none. A command '
-        'runs with nobody watching only where checks are on.',
-      );
-    }
     final result = await commands.run(
       automation,
       run,

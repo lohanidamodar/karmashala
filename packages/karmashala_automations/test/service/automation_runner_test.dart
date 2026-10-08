@@ -26,18 +26,19 @@ class _Launcher implements AutomationSessionLauncher {
   Object? failWith;
   final launched = <String>[];
   final prompts = <String>[];
-  final branches = <String?>[];
+  final pulls = <PullRequestCheckout?>[];
+  List<String?> get branches => [for (final pull in pulls) pull?.localBranch];
   @override
   Future<String> launch(
     Automation automation,
     Repository repository,
     AgentInstallation installation, {
-    String? branch,
+    PullRequestCheckout? pullRequest,
   }) async {
     if (failWith != null) throw failWith!;
     launched.add(automation.id);
     prompts.add(automation.prompt);
-    branches.add(branch);
+    pulls.add(pullRequest);
     return 'session-1';
   }
 }
@@ -74,7 +75,7 @@ void main() {
     launcher = _Launcher();
     runner = AutomationRunner(
       automations: dao,
-      preflight: UnattendedPreflight(facts: facts, checks: ProjectCheckDao(db)),
+      preflight: UnattendedPreflight(facts: facts),
       facts: facts,
       checkpoints: checkpoints,
       launcher: launcher,
@@ -119,6 +120,38 @@ void main() {
     expect(launcher.prompts.single, contains('written by other people'));
     expect(dao.runById(run.id)!.variables['github.pr.branch'], 'feat/x');
     expect(dao.runById(run.id)!.prompt, launcher.prompts.single);
+    expect(launcher.pulls.single!.fork, isFalse);
+    expect(dao.runById(run.id)!.reason, isNot(contains('fork')));
+  });
+
+  test("a fork's pull request runs on the base repository's pull ref, in "
+      'a branch of its own, and the run says pushes do not reach it', () async {
+    final rule = automation().copyWith(
+      prompt: 'Fix #{{github.pr.number}}',
+      github: const AutomationGithubTrigger(
+        kind: GithubTriggerKind.checkFailed,
+        repository: 'o/r',
+      ),
+    );
+    final run = await runner.start(
+      rule,
+      fixtureTime,
+      note: 'Because "test" failed on #7.',
+      variables: const {
+        'github.pr.number': '7',
+        'github.pr.branch': 'main',
+        'github.pr.fork': 'yes',
+      },
+    );
+    final pull = launcher.pulls.single!;
+    expect(pull.fork, isTrue);
+    expect(pull.pullRef, 'refs/pull/7/head');
+    expect(pull.localBranch, 'pr/7-main');
+    expect(pull.repository, 'o/r');
+    final reason = dao.runById(run.id)!.reason;
+    expect(reason, startsWith('Because "test" failed on #7. '));
+    expect(reason, contains('read-only for pushes'));
+    expect(launcher.prompts.single, contains('read-only for pushes'));
   });
 
   test('a queued row becomes the run, not a second row beside it', () async {

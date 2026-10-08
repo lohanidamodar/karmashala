@@ -198,9 +198,8 @@ void main() {
     ),
     prompts: prompts,
     registry: registry,
-    resumeWith: (sessionId, prompt, _) async {
-      await launches.resume(sessionId, prompt: prompt);
-    },
+    resumeWith: (sessionId, prompt, _) =>
+        launches.resume(sessionId, prompt: prompt),
   );
 
   AcpSessionRuntime runtimeOf(String id) => registry.findAcp('karmashala_$id')!;

@@ -122,15 +122,25 @@ class WorktreeService {
   /// failure removes again; one with a local `x` checks that out. A branch
   /// already checked out in another worktree is refused before git is asked
   /// to add anything: git allows it in one place only.
+  ///
+  /// With [fetchRef] (and [existingBranch]), the fetch stage writes that ref
+  /// into the local [branch] first — how a pull request from a fork is
+  /// checked out, its branch living on no remote this checkout knows.
   Future<WorktreeCreated> create({
     required EnvironmentPath repo,
     required String worktreeName,
     required String branch,
     String? baseRef,
     bool existingBranch = false,
+    WorktreeRefFetch? fetchRef,
     bool launchesAgent = false,
     WorktreeCreationTracker? tracker,
   }) async {
+    if (fetchRef != null && !existingBranch) {
+      throw ArgumentError(
+        'A fetched ref is checked out as an existing branch.',
+      );
+    }
     // Before any stage: a refusal here has made nothing.
     final env = _environmentOf(repo);
     final path = worktreePathFor(env.kind, repo, worktreeName);
@@ -146,6 +156,7 @@ class WorktreeService {
         branch: branch,
         baseRef: existingBranch ? null : baseRef,
         existingBranch: existingBranch,
+        fetchRef: fetchRef,
         launchesAgent: launchesAgent,
         tracker: t,
       ).run();
@@ -187,6 +198,33 @@ class WorktreeService {
   ) => remove(repo, worktree);
 }
 
+/// A ref fetched into a worktree's branch before it is checked out: a pull
+/// request's `refs/pull/<n>/head`, which the base repository serves wherever
+/// the pull request's branch lives.
+class WorktreeRefFetch {
+  const WorktreeRefFetch({required this.ref, this.repository});
+
+  final String ref;
+
+  /// The `owner/name` the ref is fetched from: the remote whose URL names it,
+  /// else `origin`.
+  final String? repository;
+}
+
+/// Which of [remotes] (name to URL) to fetch [repository]'s refs from: the
+/// one whose URL names it, else `origin`, else the only one; null when none
+/// will do.
+String? remoteNaming(Map<String, String> remotes, String? repository) {
+  final wanted = repository?.trim().toLowerCase();
+  if (wanted != null && wanted.isNotEmpty) {
+    for (final MapEntry(:key, :value) in remotes.entries) {
+      if (RemoteRepo.parse(value)?.slug.toLowerCase() == wanted) return key;
+    }
+  }
+  if (remotes.containsKey('origin')) return 'origin';
+  return remotes.length == 1 ? remotes.keys.single : null;
+}
+
 /// One run of [WorktreeService.create]: the stages, in order, and what each
 /// failure or cancel leaves behind.
 class _Creation {
@@ -201,8 +239,12 @@ class _Creation {
     required this.existingBranch,
     required this.launchesAgent,
     required this.tracker,
+    this.fetchRef,
   }) : _localBranch = branch,
        _makesBranch = !existingBranch;
+
+  /// Fetched into [branch] before the checkout.
+  final WorktreeRefFetch? fetchRef;
 
   final WorktreeService service;
   final ExecutionEnvironment env;
@@ -329,6 +371,7 @@ class _Creation {
 
   Future<void> _fetch() async {
     await _stopIfCancelled(WorktreeStage.fetch);
+    if (fetchRef case final from?) return _fetchRefInto(from);
     // An existing branch is fetched when it names a remote's, so a worktree on
     // `origin/x` starts from what the remote has now.
     final base = existingBranch ? branch : baseRef;
@@ -394,6 +437,65 @@ class _Creation {
                 'and was stopped. Branching from what is already local.'
           : 'git fetch exited ${result.exitCode}. Branching from what is '
                 'already local.',
+      tail: result.outputTail,
+    );
+  }
+
+  /// [from]'s ref, forced into the local [branch]: the branch is this
+  /// fetch's copy of somebody else's, so it follows their force-pushes.
+  Future<void> _fetchRefInto(WorktreeRefFetch from) async {
+    final remote = remoteNaming(await git.remoteUrls(repo), from.repository);
+    if (remote == null) {
+      _stage(
+        WorktreeStage.fetch,
+        WorktreeStageState.warning,
+        detail:
+            'This checkout has no remote to fetch ${from.ref} from. Checking '
+            'out $branch as it is here.',
+      );
+      return;
+    }
+    _stage(
+      WorktreeStage.fetch,
+      WorktreeStageState.running,
+      detail: 'Fetching ${from.ref} from $remote into $branch.',
+    );
+    final GitStreamResult result;
+    try {
+      result = await _stream(WorktreeStage.fetch, repo, [
+        'fetch',
+        '--progress',
+        remote,
+        '+${from.ref}:refs/heads/$branch',
+      ]);
+    } on GitCancelled catch (cancel) {
+      await _cancelled(WorktreeStage.fetch, cancel.outputTail);
+    } on CommandException catch (error) {
+      _stage(
+        WorktreeStage.fetch,
+        WorktreeStageState.warning,
+        detail:
+            'git fetch could not be started ($error). Checking out $branch '
+            'as it is here.',
+      );
+      return;
+    }
+    if (result.ok) {
+      _stage(
+        WorktreeStage.fetch,
+        WorktreeStageState.done,
+        detail: 'Fetched ${from.ref} from $remote into $branch.',
+      );
+      return;
+    }
+    _stage(
+      WorktreeStage.fetch,
+      WorktreeStageState.warning,
+      detail: result.stalled
+          ? 'git fetch printed nothing for ${_minutes(service.idleTimeout)} '
+                'and was stopped. Checking out $branch as it is here.'
+          : 'git fetch exited ${result.exitCode}. Checking out $branch as it '
+                'is here.',
       tail: result.outputTail,
     );
   }

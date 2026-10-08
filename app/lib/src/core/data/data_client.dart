@@ -372,6 +372,10 @@ class DataClient {
   /// when the link drops, and listed again by whoever shows them.
   final sessionQueues = <String, List<QueuedMessage>>{};
 
+  /// The messages each session's last change said reached the agent, as
+  /// they last stood; let go once shown.
+  final sessionQueueDelivered = <String, List<QueuedMessage>>{};
+
   final _sessionQueueChanges = StreamController<SessionQueueChanged>.broadcast(
     sync: true,
   );
@@ -460,6 +464,18 @@ class DataClient {
 
   /// The vault's names, whole, each time they change.
   Stream<List<EnvVariableName>> get envChanges => _envChanges.stream;
+
+  /// Agents' requests for a secret waiting for the owner, as last told; null
+  /// until the server has said. Labels and reasons only, never a value.
+  List<SecretRequest>? secretRequests;
+
+  final _secretRequestChanges = StreamController<List<SecretRequest>>.broadcast(
+    sync: true,
+  );
+
+  /// The waiting secret requests, whole, each time they change.
+  Stream<List<SecretRequest>> get secretRequestChanges =>
+      _secretRequestChanges.stream;
 
   /// The folders pinned to every file browser, as last told. A new link
   /// starts from none: the server greets it only when something is pinned.
@@ -1104,6 +1120,19 @@ class DataClient {
             _sessionActiveModelChanges.add(change);
           }
         case final SessionQueueChanged change:
+          final before = <String, QueuedMessage>{
+            for (final m
+                in sessionQueues[change.sessionId] ?? const <QueuedMessage>[])
+              m.id: m,
+          };
+          final reached = <QueuedMessage>[
+            for (final id in change.delivered)
+              if (before[id] case final m?)
+                m.copyWith(state: QueuedMessageState.delivered),
+          ];
+          if (reached.isNotEmpty) {
+            sessionQueueDelivered[change.sessionId] = reached;
+          }
           sessionQueues[change.sessionId] = change.messages;
           if (!_sessionQueueChanges.isClosed) _sessionQueueChanges.add(change);
         case final SessionAgentChanged change:
@@ -1131,6 +1160,11 @@ class DataClient {
         case EnvVariablesChanged(:final variables):
           envVariables = variables;
           if (!_envChanges.isClosed) _envChanges.add(variables);
+        case SecretRequestsChanged(:final requests):
+          secretRequests = requests;
+          if (!_secretRequestChanges.isClosed) {
+            _secretRequestChanges.add(requests);
+          }
         case QuickAccessChanged(:final pins):
           _setQuickAccess(pins);
         case StoresChanged(:final view):
@@ -1344,6 +1378,7 @@ class DataClient {
     unawaited(_evidenceChanges.close());
     unawaited(_sshChanges.close());
     unawaited(_envChanges.close());
+    unawaited(_secretRequestChanges.close());
     unawaited(_quickAccessChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storesProgress.close());

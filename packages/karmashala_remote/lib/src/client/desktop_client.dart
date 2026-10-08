@@ -80,6 +80,7 @@ class DesktopLinkResume {
     this.lanRoutes,
     this.lanChances,
     this.proofs,
+    this.afterProof = kDesktopResumeAfterProof,
   });
 
   /// Fires when the link may be on a socket that is gone — the app came back
@@ -87,6 +88,11 @@ class DesktopLinkResume {
   /// for dropped if nothing answers within [kDesktopProofWindow]; a held one
   /// tries its routes at once.
   final Stream<void>? proofs;
+
+  /// How long a link held at a proof, or dropped by one, may take to resume
+  /// before it is ended and redialled: someone is looking at "Reconnecting…"
+  /// now, and a fresh dial is quicker than waiting out [grace].
+  final Duration afterProof;
 
   /// Hears true when the link is held for a resume, and false once it is
   /// back or has ended — for a "Reconnecting…" banner. A promotion is not a
@@ -182,6 +188,11 @@ const List<Duration> kDesktopResumeDelays = [
 /// before its socket is taken for dropped: a relay round trip on a cellular
 /// network, with slack.
 const Duration kDesktopProofWindow = Duration(seconds: 4);
+
+/// [DesktopLinkResume.afterProof]: a resume over a route that answers lands
+/// in a second or two; one that has not by now is waiting on routes that
+/// will not.
+const Duration kDesktopResumeAfterProof = Duration(seconds: 10);
 
 /// How often a link on a relay looks for a LAN route without a beacon to
 /// prompt it — the server's announced LAN address, or the typed one.

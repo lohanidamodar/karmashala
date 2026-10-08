@@ -60,7 +60,11 @@ enum QueueHoldKind {
   paused,
 
   /// Nothing runs the session, so nothing goes until it is resumed.
-  stopped;
+  stopped,
+
+  /// The agent's terminal input holds text someone typed there and has not
+  /// sent: nothing is typed over it until it is sent or cleared.
+  typedInput;
 
   static QueueHoldKind? fromName(String? name) {
     for (final kind in values) {

@@ -47,7 +47,20 @@ import 'package:karmashala_git/git.dart'
 import 'package:karmashala_git/github.dart'
     show
         BranchProtection,
-        GitHubService,
+        ForgePolicy,
+        GitHubException,
+        GitHubRepo,
+        Issue,
+        PullRequest,
+        PullRequestSnapshot,
+        mentionsForbidden,
+        mentionsNoPullRequest,
+        parseBranchProtection,
+        parseForgePolicy,
+        parseGhIssues,
+        parseGhPullRequestView,
+        parseGhPullRequests,
+        parseGhRepo,
         MergeStateStatus,
         WorkflowRun,
         boundRunLog,
@@ -112,6 +125,7 @@ part 'fake_git_work.dart';
 part 'fake_runs_work.dart';
 part 'fake_files_work.dart';
 part 'fake_env_vault.dart';
+part 'fake_github_access.dart';
 part 'fake_stores.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
@@ -297,6 +311,8 @@ class FakeDataServer {
 
   /// The server's environment vault, write-only, in memory.
   late final envVault = FakeEnvVault._(this);
+  late final github = FakeGithubAccess._(this);
+  late final secrets = FakeSecretRequests._(this);
 
   /// The server's app stores: credential summaries and what was read, in
   /// memory; no store is reached.
@@ -362,6 +378,21 @@ class FakeDataServer {
     _tell(null, [ArtifactChanged(artifact)]);
   }
 
+  /// What agents drew with `visualize`, by session and id, and an image
+  /// visual's bytes — seeded through [drawVisual].
+  final visuals = <(String, String), SessionVisual>{};
+  final visualImages = <(String, String), Uint8List>{};
+
+  /// [visual] drawn or updated, told to every client as the server's board
+  /// tells it.
+  void drawVisual(SessionVisual visual, {List<int>? image}) {
+    visuals[(visual.sessionId, visual.id)] = visual;
+    if (image != null) {
+      visualImages[(visual.sessionId, visual.id)] = Uint8List.fromList(image);
+    }
+    _tell(null, [VisualChanged(visual)]);
+  }
+
   Object? _handleArtifacts(ArtifactsRequest<Object?> request) {
     Artifact known(String id) =>
         artifacts[id] ?? (throw DataRefused.notFound('no artifact has id $id'));
@@ -406,6 +437,20 @@ class FakeDataServer {
         // The server's library announces it, to the asking client too.
         _tell(null, [ArtifactChanged(next)]);
         return next;
+      case SessionVisualsRead(:final sessionId):
+        return [
+          for (final v in visuals.values)
+            if (v.sessionId == sessionId) v,
+        ]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      case VisualImageRead(:final sessionId, :final id, :final offset):
+        final bytes =
+            visualImages[(sessionId, id)] ??
+            (throw DataRefused.notFound('no image visual "$id"'));
+        final start = offset.clamp(0, bytes.length);
+        return FileChunk(
+          Uint8List.sublistView(bytes, start),
+          fileSize: bytes.length,
+        );
     }
   }
 
@@ -552,6 +597,9 @@ class FakeDataServer {
           break;
         case EnvVariablesChanged():
           // Names only: seed a value through [envVault].
+          break;
+        case SecretRequestsChanged():
+          // Told, never kept: [secrets] holds them.
           break;
         case QuickAccessChanged(:final pins):
           quickAccessPins = [...pins];
@@ -737,6 +785,12 @@ class FakeDataServer {
     }
     if (request case final SshWorkRequest<Object?> work) {
       return DataReply(sshWork._handle(work) as R, revision, const []);
+    }
+    if (request case final GithubAccessRequest<Object?> work) {
+      return DataReply(github._handle(work) as R, revision, const []);
+    }
+    if (request case final SecretRequestWork<Object?> work) {
+      return DataReply(secrets._handle(work) as R, revision, const []);
     }
     if (request case final EnvVaultRequest<Object?> work) {
       return DataReply(envVault._handle(work) as R, revision, const []);
@@ -932,7 +986,9 @@ class FakeDataServer {
       WebhooksWorkRequest() ||
       SessionWorkRequest() ||
       ClientActive() ||
-      EnvVaultRequest() => throw StateError('answered above'),
+      EnvVaultRequest() ||
+      GithubAccessRequest() ||
+      SecretRequestWork() => throw StateError('answered above'),
       GitWorkRequest() ||
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
       SessionTranscriptRequest() => throw const DataRefused.unavailable(

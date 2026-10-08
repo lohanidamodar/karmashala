@@ -398,9 +398,15 @@ final class SessionActiveModelChanged extends DataChange {
 
 /// Session [sessionId]'s queued messages now stand at [messages] — queued,
 /// delivering and failed, in the order they go. A delivered or cancelled one
-/// has left the list; a client replaces its copy whole.
+/// has left the list; a client replaces its copy whole. [delivered] names
+/// the rows that reached the agent since the last change, so a client can
+/// tell a delivered message from a cancelled one; an older server sends none.
 final class SessionQueueChanged extends DataChange {
-  const SessionQueueChanged({required this.sessionId, required this.messages});
+  const SessionQueueChanged({
+    required this.sessionId,
+    required this.messages,
+    this.delivered = const [],
+  });
 
   factory SessionQueueChanged.fromJson(Map<String, Object?> json) =>
       SessionQueueChanged(
@@ -409,16 +415,22 @@ final class SessionQueueChanged extends DataChange {
           for (final row in (json['messages'] as List?) ?? const [])
             QueuedMessage.fromJson((row as Map).cast<String, Object?>()),
         ],
+        delivered: [
+          for (final id in (json['delivered'] as List?) ?? const [])
+            if (id is String) id,
+        ],
       );
 
   final String sessionId;
   final List<QueuedMessage> messages;
+  final List<String> delivered;
 
   @override
   Map<String, Object?> toJson() => {
     'change': 'sessionQueueChanged',
     'sessionId': sessionId,
     'messages': [for (final message in messages) message.toJson()],
+    if (delivered.isNotEmpty) 'delivered': delivered,
   };
 }
 

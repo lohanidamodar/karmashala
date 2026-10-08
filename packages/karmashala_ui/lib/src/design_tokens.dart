@@ -87,6 +87,9 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   /// The edge a status surface is drawn with, over its own hue.
   static const surfaceEdgeAlpha = 0.4;
 
+  /// The wash an added or removed diff line is drawn across its width with.
+  static const diffLineAlpha = 0.14;
+
   // Spec §3: warn E0A340 / B7791F, err E5534B / C9362E, ok 5FB37C / 2F8A4C.
   // The light warn and ok keep the spec's hue, darkened — as the spec darkens
   // the light accent — until words in them keep 4.5:1 on the sidebar: the
@@ -881,6 +884,12 @@ class Chrome {
   /// A workbench page tab's title bar — Stores, Usage, Logs: a glyph, the
   /// page's name in the app bar's title style, its controls and actions.
   static const tabAppBar = 44.0;
+
+  /// The tallest a picture named in a conversation is drawn inline.
+  static const inlineImage = 220.0;
+
+  /// One square thumbnail in a strip of several pictures.
+  static const imageThumb = 96.0;
 
   /// [tabAppBar] grown with the text scale; under a thumb, never under
   /// [Touch.appBarOf], so its actions keep their 48dp targets.
