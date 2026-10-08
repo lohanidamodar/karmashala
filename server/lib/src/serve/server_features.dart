@@ -54,6 +54,9 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.detach`: a sub-session unlinked from its parent, nothing
   // delivered between them after.
   'sessions.detach',
+  // `sessions.attach`: a top-level session linked under a parent, reporting
+  // to it when it finishes.
+  'sessions.attach',
 
   // `quickAccess.*`: folders pinned to every file browser, kept here for
   // every client and greeted with `quickAccessChanged`.

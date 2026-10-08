@@ -1220,7 +1220,8 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionHandoff() ||
     SessionSwitchAgent() ||
     // Who reports to whom is a session's shape, as its start is.
-    SessionDetachRequest() => Capability.startSession,
+    SessionDetachRequest() ||
+    SessionAttachRequest() => Capability.startSession,
     FilesUploadBegin() => Capability.sendAttachment,
     ProjectCreate() ||
     ProjectFoldersCreate() ||

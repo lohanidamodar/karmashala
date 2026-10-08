@@ -22,6 +22,10 @@ class ServerSessionWork implements SessionWork {
   /// where this server cannot, and the request is refused.
   Future<Object?> Function(String sessionId)? detach;
 
+  /// Attaches row [String] under a parent (`SessionAttacher.attach`); null
+  /// where this server cannot, and the request is refused.
+  Future<Object?> Function(String sessionId, String parentId)? attach;
+
   /// Rewinds a session; null refuses `sessions.rewind`.
   SessionRewinds? rewinds;
 
@@ -38,6 +42,8 @@ class ServerSessionWork implements SessionWork {
         ),
         SessionEndRequest(:final sessionId) => await _end(sessionId),
         SessionDetachRequest(:final sessionId) => await _detach(sessionId),
+        SessionAttachRequest(:final sessionId, :final parentId) =>
+          await _attach(sessionId, parentId),
         final SessionSourceBrief r => await continuations.sourceBrief(
           r.sessionId,
           timeoutSeconds: r.timeoutSeconds,
@@ -106,6 +112,14 @@ class ServerSessionWork implements SessionWork {
         this.detach ??
         (throw const DataRefused.unavailable('this server detaches nothing'));
     await detach(sessionId);
+    return const DataAck();
+  }
+
+  Future<DataAck> _attach(String sessionId, String parentId) async {
+    final attach =
+        this.attach ??
+        (throw const DataRefused.unavailable('this server attaches nothing'));
+    await attach(sessionId, parentId);
     return const DataAck();
   }
 

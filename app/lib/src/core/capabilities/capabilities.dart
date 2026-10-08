@@ -321,6 +321,10 @@ final class Capabilities {
   /// where it may start sessions.
   bool get detachSessions => serverOffers('sessions.detach') && mayStart;
 
+  /// A top-level session can be attached under a parent, where a phone may
+  /// start sessions.
+  bool get attachSessions => serverOffers('sessions.attach') && mayStart;
+
   /// New Project can make a missing folder and record a root without a scan;
   /// an older server ignores both and scans.
   bool get createsProjectFolders => serverOffers(ProjectFoldersCreate.feature);

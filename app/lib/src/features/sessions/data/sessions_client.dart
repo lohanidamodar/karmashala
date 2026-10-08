@@ -53,6 +53,11 @@ class SessionsClient {
   Future<void> detach(String sessionId) =>
       _send(SessionDetachRequest(sessionId));
 
+  /// Attaches top-level [sessionId] under [parentId]: it becomes that
+  /// session's sub-session and reports to it when it finishes.
+  Future<void> attach(String sessionId, {required String parentId}) =>
+      _send(SessionAttachRequest(sessionId, parentId: parentId));
+
   Future<HandoffSourceBrief> sourceBrief(String sessionId) =>
       _send(SessionSourceBrief(sessionId));
 

@@ -18,6 +18,10 @@ class FakeSessionWork {
   /// Set to refuse the next requests in these words.
   String? refuseWith;
 
+  /// Set to refuse `sessions.attach` in these words, as the server's checks
+  /// do.
+  String? attachRefusal;
+
   /// Agent ids whose process will not start: the server writes the row, marks
   /// it failed, and refuses — a partial launch.
   Set<String> failsFor = const {};
@@ -286,6 +290,25 @@ class FakeSessionWork {
               ..remove('parentSessionId')
               ..remove('parentLink'),
           ),
+        );
+        return const DataAck();
+      case SessionAttachRequest(:final sessionId, :final parentId):
+        final row =
+            _server.sessionRows.getById(sessionId) ??
+            (throw const DataRefused.notFound('no such session'));
+        if (attachRefusal case final refusal?) {
+          throw DataRefused.invalid(refusal);
+        }
+        if (row.parentSessionId != null) {
+          throw const DataRefused.invalid('it already has a parent');
+        }
+        // As the server does: the link comes, nothing else on the row.
+        _server.sessionRows.put(
+          Session.fromJson({
+            ...row.toJson(),
+            'parentSessionId': parentId,
+            'parentLink': 'spawn',
+          }),
         );
         return const DataAck();
       case SessionSourceBrief():

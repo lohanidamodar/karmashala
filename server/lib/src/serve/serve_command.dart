@@ -99,6 +99,7 @@ import '../sessions/interrupted_turns.dart';
 import '../sessions/session_input.dart';
 import '../sessions/delegation_results.dart';
 import '../sessions/session_active_models.dart';
+import '../sessions/session_attach.dart';
 import '../sessions/session_detach.dart';
 import '../sessions/session_queue.dart';
 import '../status/turn_settlement.dart';
@@ -1780,6 +1781,28 @@ Future<int> _serve(
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   sessionWork.detach = detacher.detach;
+  // A person's Attach to…: Detach's way back, with its own line.
+  final attacher = SessionAttacher(
+    database: database,
+    announce: data.announceSessions,
+    agentOf: (session) {
+      final agentId = checkoutRows
+          .installation(session.agentInstallationId)
+          ?.agentId;
+      return agentId == null ? 'not recorded' : liveAgents.nameOf(agentId);
+    },
+    isLive: prompts.status.holds,
+    delegations: delegations,
+    note: (parentId, child) => artifacts.visuals.draw(
+      sessionId: parentId,
+      environmentId: localHostEnvironmentId,
+      id: 'attached-${child.id}',
+      kind: VisualKind.note,
+      data: {'text': attachedNote(child.title)},
+    ),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  sessionWork.attach = attacher.attach;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(

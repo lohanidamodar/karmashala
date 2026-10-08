@@ -214,6 +214,14 @@ class SessionDao implements SessionStatusStore {
     [id],
   );
 
+  /// Links row [id] under [parentId] as [link] — an attach: nothing else on
+  /// the row moves.
+  void setParent(String id, String parentId, SessionLink link) => _db.execute(
+    'UPDATE sessions SET parent_session_id = ?, parent_link_kind = ? '
+    'WHERE id = ?;',
+    [parentId, link.name, id],
+  );
+
   /// Points row [id] at another agent and that agent's conversation (null for
   /// a new one) — a switch in place. Nothing else on the row moves.
   void switchAgent(

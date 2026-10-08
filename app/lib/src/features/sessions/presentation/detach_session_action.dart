@@ -24,7 +24,8 @@ bool watchCanDetach(WidgetRef ref, String sessionId) {
 
 /// **Detach**: [sessionId] becomes a session of its own — out of its
 /// parent's card and depth, and nothing goes between the two any more. Asked
-/// first, as there is no undo; said in words when the server refuses.
+/// first, as what it says while apart never reaches the parent; said in
+/// words when the server refuses.
 Future<void> detachSessionFromUi(
   BuildContext context,
   WidgetRef ref,
@@ -42,7 +43,9 @@ Future<void> detachSessionFromUi(
     message:
         'It becomes a session of its own. "$parent" stops hearing from it, '
         'and it can no longer report back. It keeps running, with its '
-        'transcript, worktree and project. This cannot be undone.',
+        'transcript, worktree and project. Attach to… can put it back '
+        'under a session later; what it says in between never reaches '
+        '"$parent".',
     confirmLabel: 'Detach',
   );
   if (!confirmed) return;
