@@ -255,6 +255,10 @@ final class Capabilities {
   /// The agent's rewind points, the files it changed and the question it has
   /// open are read by the server, where its record is (Stage 0 step 7).
   bool get rewindPointsViaServer => serverOffers('sessions.rewindPoints');
+
+  /// A session can be rewound to before one of the person's messages
+  /// (`sessions.rewind`, round 64).
+  bool get rewindViaServer => serverOffers('sessions.rewind');
   bool get changedFilesViaServer => serverOffers('sessions.changedFiles');
   bool get openQuestionViaServer => serverOffers('sessions.openQuestion');
 

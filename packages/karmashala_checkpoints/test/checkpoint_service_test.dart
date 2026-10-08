@@ -388,6 +388,42 @@ void main() {
       expect(diff, containsAllInOrder(['tree1', 'tree2']));
     });
 
+    test('a preview names what would change and what changed while no turn '
+        'ran, writing nothing', () async {
+      trees = ['tree1', 'tree2', 'tree2'];
+      final target = (await service.capture(
+        _repo,
+        sessionId: 's1',
+        reason: CheckpointReason.turnStart,
+      ))!;
+      await service.capture(_repo, sessionId: 's1');
+
+      final quiet = await service.restorePreview(target);
+      expect(quiet.files, ['lib/a.dart', 'lib/b.dart']);
+      expect(quiet.outside, isEmpty, reason: 'only the turn changed them');
+      expect(quiet.headMoved, isFalse);
+
+      trees = ['tree3'];
+      final edited = await service.restorePreview(target);
+      expect(edited.outside, ['lib/a.dart', 'lib/b.dart']);
+      final names = [
+        for (final c in gitCalls())
+          if (c.contains('--name-status')) c.sublist(c.length - 2),
+      ];
+      expect(names.reversed.take(2), [
+        ['tree1', 'tree3'],
+        ['tree2', 'tree3'],
+      ]);
+      expect(gitCalls().any((c) => c.contains('apply')), isFalse);
+      expect(dao.forSession('s1'), hasLength(2));
+
+      // A tree a restore went back to is not work done outside the agent.
+      trees = ['tree1'];
+      final restored = await service.restorePreview(target);
+      expect(restored.files, isEmpty);
+      expect(restored.outside, isEmpty);
+    });
+
     test('does nothing when the tree already is the checkpoint', () async {
       final target = (await service.capture(_repo, sessionId: 's1'))!;
       final outcome = await service.restore(target);

@@ -85,6 +85,10 @@ import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
 import '../mcp/tools/window_tool_sets.dart';
 import '../sessions/launch/conversation_presence.dart';
+import '../sessions/rewind/daemon_rewind_files.dart';
+import '../sessions/rewind/rewind_cuts.dart';
+import '../sessions/rewind/session_rewinds.dart';
+import '../sessions/rewind/terminal_rewind.dart';
 import '../sessions/launch/handoff_delivery.dart';
 import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/session_handoffs.dart';
@@ -183,7 +187,11 @@ import '../mcp/tools/snippet_tool_set.dart';
 import '../mcp/tools/session_tool_set.dart';
 import '../automations/checks_tool_set.dart';
 import 'package:karmashala_host_protocol/protocol.dart'
-    show AgentHookEvent, LifecycleEventKind, kHostVersion;
+    show
+        AgentHookEvent,
+        LifecycleEventKind,
+        SessionEndedWithoutCode,
+        kHostVersion;
 import 'package:logging/logging.dart' show Logger;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
@@ -1148,6 +1156,10 @@ Future<int> _serve(
     now: () => DateTime.now().toUtc(),
     legacy: Directory(p.join(dataDirectory, 'handoff')),
   );
+  final rewindCuts = RewindCuts(
+    read: () => database.readMetadata(kRewindCutsKey),
+    write: (value) => database.writeMetadata(kRewindCutsKey, value),
+  );
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     agents: liveAgents,
@@ -1176,6 +1188,7 @@ Future<int> _serve(
     links: SessionRepositoryDao(database),
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
+    rewindCuts: rewindCuts,
     hostEnvironment: hostEnvironment,
   );
   final checkoutFacts = DaemonCheckoutFacts(
@@ -1607,6 +1620,60 @@ Future<int> _serve(
     speaksAcp: speaksAcp,
   );
   data.sessionRecordReadings = sessionRecordReadings;
+  // A rewind reads the agent's record for its cut, restores through the
+  // checkpoints, and holds the queue while it works.
+  sessionWork.rewinds = SessionRewinds(
+    sessions: sessionRows,
+    agentOf: (id) => checkoutRows.installation(id)?.agentId,
+    registry: () => agentRegistry.current,
+    messages: sessionMessages,
+    // A chat form's record is its terminal form's: Claude Code chat keeps
+    // its conversation in Claude Code's own store.
+    transcriptLines: (sessionId) async {
+      final row = sessionRows.getById(sessionId);
+      final agentId = row == null
+          ? null
+          : checkoutRows.installation(row.agentInstallationId)?.agentId;
+      final conversation = row?.externalSessionId;
+      if (agentId == null || conversation == null || conversation.isEmpty) {
+        return null;
+      }
+      final String? path;
+      try {
+        path = await transcripts.recordFor(
+          agentRegistry.current.foldedIdOf(agentId),
+          conversation,
+        );
+      } on Object {
+        return null;
+      }
+      if (path == null) return null;
+      try {
+        return await File(path).readAsLines();
+      } on FileSystemException {
+        return null;
+      }
+    },
+    cuts: rewindCuts,
+    runsHere: launches.runsHere,
+    end: (sessionId) => launches.end(
+      sessionId,
+      quietly: true,
+      reason: SessionEndedWithoutCode.rewound,
+    ),
+    resume: (sessionId) => launches.resume(sessionId),
+    files: DaemonRewindFiles(checkpoints),
+    terminal: ScreenTerminalRewind(
+      screen: prompts.screen,
+      press: prompts.press,
+    ),
+    turnRunning: (sessionId) => switchQueue?.busy(sessionId) ?? false,
+    holdQueue: (sessionId) => switchQueue?.hold(sessionId),
+    releaseQueue: (sessionId) => switchQueue?.release(sessionId),
+    messagesChanged: (sessionId) =>
+        unawaited(sessionTranscripts.messagesChanged(sessionId)),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
   // A CLI in a terminal names its model in its record: read again on each
   // status edge of a session this server runs.
   activeModels.readRecord = sessionRecordReadings.activeModel;
@@ -1831,7 +1898,13 @@ Future<int> _serve(
     // What the app's own tools did, the server's since slice 5b: a window
     // is only asked to show the result.
     ..add(OpenSessionToolSet(tools, launches: launches))
-    ..add(ContinuationToolSet(tools, continuations: continuations))
+    ..add(
+      ContinuationToolSet(
+        tools,
+        continuations: continuations,
+        rewinds: sessionWork.rewinds,
+      ),
+    )
     ..add(TerminalToolSet(terminals: terminals, registry: registry, data: data))
     ..add(DevServerToolSet(terminals))
     ..add(recordings)

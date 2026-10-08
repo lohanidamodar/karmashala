@@ -23,4 +23,12 @@ abstract final class AcpExtensions {
   /// The `messageId` of the row a compaction writes, followed by
   /// `:<trigger>` when there is one.
   static const compactionMessageId = '_karmashala/compaction';
+
+  /// The `messageId` of the row a rewind writes where it cut the
+  /// conversation; its text is a `RewindMarker`'s.
+  static const rewoundMessageId = '_karmashala/rewound';
+
+  /// A `session/load` `_meta` key: keep the conversation only up to this
+  /// entry of the agent's own record (a rewind's cut).
+  static const resumeAt = '_karmashala/resume_at';
 }

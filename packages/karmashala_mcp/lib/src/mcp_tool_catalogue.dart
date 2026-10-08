@@ -235,6 +235,12 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     destructive: true,
     movesAttention: true,
   ),
+  // Discards edits since the message and cuts what the agent remembers;
+  // `preview: true` is a read.
+  'session_rewind': McpToolAnnotations(
+    destructive: true,
+    movesAttention: false,
+  ),
 
   // Terminal.
   'terminal_list': McpToolAnnotations.read,
@@ -744,6 +750,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
     McpToolCategory.sessions,
     'Fork a session and roll its files back to a checkpoint; not its '
     'conversation.',
+  ),
+  'session_rewind': McpToolListing(
+    McpToolCategory.sessions,
+    'Rewind a session to before a message: files, conversation, or both.',
   ),
   'get_usage': McpToolListing(
     McpToolCategory.sessions,

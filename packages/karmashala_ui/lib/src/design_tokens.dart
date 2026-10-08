@@ -273,6 +273,9 @@ class StateLayers {
   static const linkUnderlineAlpha = 0.40;
   static const focusRingAlpha = 0.6;
 
+  /// Content kept for reading but no longer in force: a rewound turn.
+  static const rewoundOpacity = 0.55;
+
   /// A pointer over something interactive. Ink, not the accent.
   static Color hover(ColorScheme scheme) =>
       scheme.onSurface.withValues(alpha: hoverAlpha);

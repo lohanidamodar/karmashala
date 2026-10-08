@@ -1165,6 +1165,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 /// [SessionQueueCancel], [SessionQueueSendNext], [SessionQueueSendNow],
 /// [SessionQueueSendAll], [SessionQueuePause]; `start_session` —
 /// [SessionStart], [SessionResume], [SessionFork], [SessionForkFromCheckpoint],
+/// [SessionRewind],
 /// [SessionHandoff], [SessionSwitchAgent]; `send_attachment` — [FilesUploadBegin]; `add_project` —
 /// [ProjectCreate], [ProjectFoldersCreate], [ImportsAdd]; `view_usage` —
 /// [UsageCurrent], [UsageRefresh], [UsageHistory]. `approve` is the host
@@ -1215,6 +1216,7 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionResume() ||
     SessionFork() ||
     SessionForkFromCheckpoint() ||
+    SessionRewind() ||
     SessionHandoff() ||
     SessionSwitchAgent() ||
     // Who reports to whom is a session's shape, as its start is.

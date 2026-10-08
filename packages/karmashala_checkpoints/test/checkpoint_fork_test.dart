@@ -57,6 +57,15 @@ void main() {
         ),
         contains('2 other sessions are'),
       );
+      // A rewind says so in its own words, with no fork in them.
+      final rewind = checkpointForkFileRefusal(
+        intoNewWorktree: false,
+        unsupportedEnvironmentReason: null,
+        otherSessionsInCheckout: const ['Nightly sweep'],
+        forRewind: true,
+      );
+      expect(rewind, contains('Conversation only'));
+      expect(rewind!.toLowerCase(), isNot(contains('fork')));
     });
 
     test('a new worktree gives the restore up, and says which it gave up', () {

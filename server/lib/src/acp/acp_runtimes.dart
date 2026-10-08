@@ -47,6 +47,8 @@ class AcpSessionStart {
     this.removed = const {},
     this.mcpUrl,
     this.resumeSessionId,
+    this.resumeAt,
+    this.onCutTaken,
     this.risk,
   });
 
@@ -66,6 +68,11 @@ class AcpSessionStart {
   final Set<String> removed;
   final String? mcpUrl;
   final String? resumeSessionId;
+
+  /// A rewind's cut, for [resumeSessionId]'s load; see
+  /// [AcpSessionRuntime.resumeAt].
+  final String? resumeAt;
+  final void Function()? onCutTaken;
   final PermissionRisk? risk;
 }
 
@@ -174,6 +181,8 @@ class AcpRuntimes {
     mcpUrl: start.mcpUrl,
     risk: start.risk,
     resumeSessionId: start.resumeSessionId,
+    resumeAt: start.resumeAt,
+    onCutTaken: start.onCutTaken,
     now: _now,
   );
 }

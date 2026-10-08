@@ -11,6 +11,7 @@ class TranscriptTurnActions {
     this.onRetry,
     this.onEdit,
     this.onFork,
+    this.onRewind,
     this.busy,
     this.forkPoints = const {},
     this.noForkPoint = kNoTurnCheckpoint,
@@ -24,6 +25,10 @@ class TranscriptTurnActions {
 
   /// Forks the session from [TurnForkTarget]; the host previews and asks.
   final void Function(TurnForkTarget target)? onFork;
+
+  /// Rewinds the session to before the person's message; the host asks how.
+  /// Offered on the person's own rows only.
+  final void Function(TurnRewindTarget target)? onRewind;
 
   /// Why retry, edit and fork wait right now — a turn is running.
   final String? busy;
@@ -40,6 +45,7 @@ class TranscriptTurnActions {
       other.onRetry == onRetry &&
       other.onEdit == onEdit &&
       other.onFork == onFork &&
+      other.onRewind == onRewind &&
       other.busy == busy &&
       other.noForkPoint == noForkPoint &&
       _sameForkPoints(other.forkPoints, forkPoints);
@@ -49,6 +55,7 @@ class TranscriptTurnActions {
     onRetry,
     onEdit,
     onFork,
+    onRewind,
     busy,
     noForkPoint,
     forkPoints.length,
@@ -76,10 +83,18 @@ class _TurnPlace {
     required this.start,
     required this.words,
     required this.isLatest,
+    this.turnIndex = 0,
+    this.rewound = false,
   });
 
   final int start;
   final String words;
+
+  /// The turn's place among the transcript's turns, rewound ones too.
+  final int turnIndex;
+
+  /// A rewind already undid this turn.
+  final bool rewound;
 
   /// Asked when an action runs, not kept: a new turn opening must not
   /// rebuild the rows of the one before.
@@ -92,10 +107,12 @@ class _TurnPlace {
       other is _TurnPlace &&
       other.start == start &&
       other.words == words &&
+      other.turnIndex == turnIndex &&
+      other.rewound == rewound &&
       other.isLatest == isLatest;
 
   @override
-  int get hashCode => Object.hash(start, words);
+  int get hashCode => Object.hash(start, words, turnIndex, rewound);
 }
 
 /// The person's own words in a message that opened a turn: no automation's
@@ -175,6 +192,25 @@ List<_TurnAction> _turnActionsFor({
           icon: AppIcons.pencilSimple,
           disabledBecause: busy,
           run: (_) async => edit(place.words),
+        ),
+    if (user)
+      if (actions.onRewind case final rewind?)
+        _TurnAction(
+          id: 'rewind',
+          label: 'Rewind to here…',
+          icon: AppIcons.arrowCounterClockwise,
+          disabledBecause: place.rewound
+              ? 'This message was already rewound.'
+              : busy == null
+              ? null
+              : kRewindWhileWorking,
+          run: (_) async => rewind(
+            TurnRewindTarget(
+              turnIndex: place.turnIndex,
+              words: place.words,
+              before: points?.before,
+            ),
+          ),
         ),
     if (actions.onFork case final fork?)
       _TurnAction(
@@ -275,7 +311,17 @@ String transcriptTurnMarkdown(List<ChatMessage> messages, int index) {
   while (end < messages.length && messages[end].role != 'user') {
     end++;
   }
-  final parts = <String>[];
+  final parts = <String>[
+    // A rewound turn is copied as what it is: kept, but undone.
+    if (rewindFolds(
+          messages.length,
+          roleAt: (i) => messages[i].role,
+          textAt: (i) => messages[i].text,
+          opensTurn: (i) => _opensTurn(messages[i]),
+        )[start] !=
+        null)
+      '_Rewound: this turn was undone._',
+  ];
   String? heading;
   void under(String name, String body) {
     if (heading != name) {

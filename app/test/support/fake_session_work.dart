@@ -324,11 +324,22 @@ class FakeSessionWork {
         return SessionStarted(session: row, launch: _launchOf(row));
       case SessionForkFromCheckpoint():
         throw const DataRefused.invalid('not scripted');
+      case final SessionRewind r:
+        rewinds.add(r);
+        if (rewindRefusesWith case final why?) throw DataRefused.invalid(why);
+        return r.preview ? rewindPreview : rewindAnswer;
     }
   }
 
   /// Every switch asked of the server, in order.
   final switches = <SessionSwitchAgent>[];
+
+  /// Every `sessions.rewind`, in order, and what a preview and a rewind
+  /// answer.
+  final rewinds = <SessionRewind>[];
+  Map<String, Object?> rewindPreview = const {'preview': true, 'turns': 1};
+  Map<String, Object?> rewindAnswer = const {'rewound': true, 'turns': 1};
+  String? rewindRefusesWith;
 
   SessionStarted _start(SessionStartSpec spec) {
     // A conversation the server already runs is answered as it is.

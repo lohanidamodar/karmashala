@@ -24,6 +24,7 @@ export 'src/agents/claude_code/claude_store_reader.dart';
 export 'src/cli_detection/data/cli_detection_service.dart';
 export 'src/cli_detection/data/cli_store.dart';
 export 'src/cli_detection/data/cli_transcript_reader.dart';
+export 'src/cli_detection/data/transcript_rewind.dart';
 export 'src/agents/codex/codex_app_server_client.dart';
 export 'src/agents/adapter/store_server_launch.dart';
 export 'src/agents/codex/codex_app_server_reader.dart';

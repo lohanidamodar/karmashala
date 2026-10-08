@@ -5,6 +5,7 @@ import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
 
 import '../../sessions/launch/session_continuations.dart';
+import '../../sessions/rewind/session_rewinds.dart';
 import 'agent_names.dart';
 import 'launch_tool_set.dart' show kNoWindowOpen, revealFor;
 import 'server_tool_context.dart';
@@ -15,7 +16,11 @@ import 'server_tool_set.dart';
 /// purpose: every decision is [SessionContinuations]'s; the new session runs
 /// in the server, and the window the person last used is asked to show it.
 class ContinuationToolSet extends ServerToolSet {
-  ContinuationToolSet(this._context, {required this.continuations}) {
+  ContinuationToolSet(
+    this._context, {
+    required this.continuations,
+    this.rewinds,
+  }) {
     _launches = LaunchDedupe(
       clock: _ContextClock(_context),
       onCollapsed: (tool) => _context.log(
@@ -27,6 +32,9 @@ class ContinuationToolSet extends ServerToolSet {
 
   final ServerToolContext _context;
   final SessionContinuations continuations;
+
+  /// `session_rewind`; null refuses it.
+  final SessionRewinds? rewinds;
 
   /// One new session per request, however often a caller that timed out
   /// sends it again.
@@ -97,6 +105,34 @@ class ContinuationToolSet extends ServerToolSet {
         answer['where'] = _show(started, callerSessionId: callerSessionId);
       }
       return answer;
+    }),
+    // Named, never defaulted to the caller, and never the caller itself: it
+    // restarts the agent it rewinds.
+    'session_rewind' => runTool(() async {
+      final sessionId = args['sessionId'] as String?;
+      if (sessionId == null) throw ArgumentError('Missing sessionId.');
+      if (sessionId == callerSessionId) {
+        throw StateError(
+          'A session cannot rewind itself: the rewind restarts its agent. '
+          'Ask the person, or another session, to do it.',
+        );
+      }
+      final turnIndex = (args['turnIndex'] as num?)?.round();
+      if (turnIndex == null) throw ArgumentError('Missing turnIndex.');
+      final work =
+          rewinds ?? (throw StateError('This server cannot rewind sessions.'));
+      return work.rewind(
+        SessionRewind(
+          sessionId: sessionId,
+          turnIndex: turnIndex,
+          words: (args['words'] as String?) ?? '',
+          mode: (args['mode'] as String?) ?? 'both',
+          checkpointTurn: (args['checkpointTurn'] as num?)?.round(),
+          checkpointId: args['checkpointId'] as String?,
+          confirm: args['confirm'] == true,
+          preview: args['preview'] == true,
+        ),
+      );
     }),
     _ => null,
   };
@@ -424,9 +460,10 @@ const List<Map<String, Object?>> sessionHandoffToolSchemas = [
         'Fork a session AND put its working tree back to one of its '
         'checkpoints, named by checkpointId or by turn. TWO HALVES, and only '
         'one of them is a rewind: the files go back to the checkpoint, and '
-        'the CONVERSATION IS CARRIED WHOLE — no agent CLI here can resume a '
-        'conversation at a turn, so the fork still remembers everything said '
-        'after that point, including edits the files no longer hold. Say what '
+        'the CONVERSATION IS CARRIED WHOLE — a fork never resumes it at a '
+        'turn (session_rewind cuts a Claude Code session\'s own conversation '
+        'in place), so the fork still remembers everything said after that '
+        'point, including edits the files no longer hold. Say what '
         'you rolled back in "instruction". The result lists "delivered" and '
         '"notDelivered" separately and never claims a half it did not do. '
         'DESTRUCTIVE on the file half: it discards edits made since that '
@@ -490,6 +527,71 @@ const List<Map<String, Object?>> sessionHandoffToolSchemas = [
         },
       },
       'required': ['sessionId'],
+    },
+  },
+  {
+    'name': 'session_rewind',
+    'description':
+        'DESTRUCTIVE. Rewind another session to before one of the person\'s '
+        'messages, in place: mode "code" puts its files back from the '
+        'checkpoint taken as that turn began (discarding every edit since, '
+        'its agent\'s and anyone else\'s); "conversation" cuts its agent\'s '
+        'conversation there so it forgets that message and everything '
+        'after (Claude Code only: a chat session is restarted, a terminal '
+        'one has its own /rewind menu answered); "both" does both. The '
+        'turns after are kept in the transcript, folded as rewound. Refused '
+        'while its agent works, for your own session, and, without "confirm", '
+        'when files changed outside the agent since then. Run with '
+        'preview:true first and show the person what it says.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'Session to rewind, from list_sessions. Not yours.',
+        },
+        'turnIndex': {
+          'type': 'number',
+          'description':
+              "The person's message to rewind to, by its place among the "
+              "person's messages in session_transcript, from 0, rewound ones "
+              'included.',
+        },
+        'words': {
+          'type': 'string',
+          'description':
+              "That message's words, so the rewind finds the right one even "
+              'if the count moved.',
+        },
+        'mode': {
+          'type': 'string',
+          'enum': ['both', 'conversation', 'code'],
+          'description': 'What goes back. Default both.',
+        },
+        'checkpointTurn': {
+          'type': 'number',
+          'description':
+              "For code: the checkpoint turn that message's turn began in, "
+              'from checkpoint_list.',
+        },
+        'checkpointId': {
+          'type': 'string',
+          'description': 'For code, instead of checkpointTurn: one checkpoint.',
+        },
+        'confirm': {
+          'type': 'boolean',
+          'description':
+              'Restore even though files changed outside the agent since '
+              'then. Requires the person to have said so.',
+        },
+        'preview': {
+          'type': 'boolean',
+          'description':
+              'Say what would change — turns undone, files restored, files '
+              'changed outside the agent — and change nothing.',
+        },
+      },
+      'required': ['sessionId', 'turnIndex'],
     },
   },
 ];

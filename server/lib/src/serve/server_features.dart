@@ -24,6 +24,9 @@ const Set<String> kServerFeatures = <String>{
   'sessions.transcript.subagent.agentId',
   // Readers of a record's raw lines, run on the server (Stage 0 step 7).
   'sessions.rewindPoints',
+  // `sessions.rewind`: a session put back to before one of the person's
+  // messages — its files, its conversation, or both (round 64).
+  'sessions.rewind',
   'sessions.changedFiles',
   'sessions.openQuestion',
   // `sessions.transcript` answers `digest` when asked (the plan and open

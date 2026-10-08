@@ -10,7 +10,110 @@ const OwnRewindPoints claudeRewind = OwnRewindPoints(
   lineMarker: '"file-history-snapshot"',
   parse: parseClaudeRewindPoints,
   note: claudeRewindNote,
+  conversation: claudeConversationRewind,
 );
+
+const _cutEvidence =
+    'claude 2.1.287, read off the binary 2026-10-08: "--resume-session-at '
+    '<message id>  When resuming, only messages up to and including the chain '
+    'entry with <message.id> (use with --resume in print mode)". Live the same '
+    "day: a resume at turn 1's last entry forgot turn 2 under the same session "
+    'id, and a cut with nothing sent after it did not hold on the next resume';
+
+/// Claude Code's conversation cut: `--resume-session-at` in chat form, its
+/// `/rewind` menu in a terminal.
+const ConversationRewind claudeConversationRewind = ConversationRewind(
+  promptsOf: claudeConversationPrompts,
+  chatEvidence: _cutEvidence,
+  menu: RewindMenu(
+    command: '/rewind',
+    listMarker: 'Restore the code and/or conversation to the point before',
+    confirmMarker: 'Confirm you want to restore',
+    labels: {
+      RewindMode.both: 'Restore code and conversation',
+      RewindMode.conversation: 'Restore conversation',
+      RewindMode.code: 'Restore code',
+    },
+    cancel: 'Never mind',
+    evidence:
+        'claude 2.1.287 in a ConPTY, 2026-10-08: /rewind lists "Rewind / '
+        'Restore the code and/or conversation to the point before…", the '
+        'messages oldest first with "❯ (current)" selected; Up selects the '
+        'one before; Enter shows "Confirm you want to restore the '
+        'conversation to the point before you sent this message:" quoting it '
+        'after "│", then "1. Restore conversation 2. Summarize from here 3. '
+        'Summarize up to here 4. Never mind" (the code choices only for a '
+        'message that changed files); a digit chooses, and the message is '
+        'put back in its input',
+  ),
+);
+
+/// The person's prompts on the live chain of a Claude Code transcript, oldest
+/// first: from [leaf], else the newest main-thread entry, back along
+/// `parentUuid`. Tool results, meta lines, compaction summaries and subagent
+/// lines are not prompts; a compaction ends the walk, so nothing before it is
+/// offered.
+List<ConversationPrompt> claudeConversationPrompts(
+  Iterable<String> lines, {
+  String? leaf,
+}) {
+  final entries = <String, Map<Object?, Object?>>{};
+  String? newest;
+  for (final line in lines) {
+    if (!line.contains('"uuid"')) continue;
+    final Object? record;
+    try {
+      record = jsonDecode(line);
+    } on FormatException {
+      continue;
+    }
+    if (record is! Map) continue;
+    final uuid = record['uuid'];
+    if (uuid is! String || record['isSidechain'] == true) continue;
+    entries[uuid] = record;
+    if (record['type'] == 'user' || record['type'] == 'assistant') {
+      newest = uuid;
+    }
+  }
+  final prompts = <ConversationPrompt>[];
+  final seen = <String>{};
+  var at = leaf ?? newest;
+  while (at != null && seen.add(at)) {
+    final entry = entries[at];
+    if (entry == null) break;
+    final parent = entry['parentUuid'];
+    final text = _promptText(entry);
+    if (text != null) {
+      prompts.add((
+        uuid: at,
+        parentUuid: parent is String ? parent : null,
+        text: text,
+      ));
+    }
+    if (entry['isCompactSummary'] == true) break;
+    at = parent is String ? parent : null;
+  }
+  return prompts.reversed.toList();
+}
+
+String? _promptText(Map<Object?, Object?> entry) {
+  if (entry['type'] != 'user' || entry['isMeta'] == true) return null;
+  if (entry['isCompactSummary'] == true) return null;
+  final message = entry['message'];
+  if (message is! Map) return null;
+  final content = message['content'];
+  if (content is String) return content;
+  if (content is! List) return null;
+  final texts = <String>[];
+  for (final block in content) {
+    if (block is! Map) continue;
+    if (block['type'] == 'tool_result') return null;
+    if (block['type'] == 'text' && block['text'] is String) {
+      texts.add(block['text'] as String);
+    }
+  }
+  return texts.isEmpty ? null : texts.join('\n');
+}
 
 /// Claude Code's rewind points, from the `file-history-snapshot` records in a
 /// session transcript: one per prompt that started a turn, keyed by

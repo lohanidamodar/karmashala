@@ -72,6 +72,10 @@ class SessionsClient {
 
   Future<SessionStarted> switchAgent(SessionSwitchAgent request) =>
       _send(request);
+
+  /// Rewinds a session to before one of the person's messages, or with
+  /// [SessionRewind.preview] says what that would change.
+  Future<Map<String, Object?>> rewind(SessionRewind request) => _send(request);
 }
 
 final sessionsClientProvider = Provider<SessionsClient>(

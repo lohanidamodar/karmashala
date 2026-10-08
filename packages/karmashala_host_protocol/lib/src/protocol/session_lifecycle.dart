@@ -52,6 +52,10 @@ class SessionEndedWithoutCode extends SessionLifecycle {
   /// session over: neither a crash nor a person's close.
   static const switched = 'switched to another agent';
 
+  /// The reason a session's agent was stopped to start again with its
+  /// conversation rewound.
+  static const rewound = 'restarted to rewind its conversation';
+
   final DateTime at;
   final String reason;
 }

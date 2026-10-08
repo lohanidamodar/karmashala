@@ -18,6 +18,7 @@ String? checkpointForkFileRefusal({
   required String? unsupportedEnvironmentReason,
   required List<String> otherSessionsInCheckout,
   String? turnRunningIn,
+  bool forRewind = false,
 }) {
   const left = 'The files were left as they are: ';
   if (unsupportedEnvironmentReason != null) {
@@ -37,6 +38,11 @@ String? checkpointForkFileRefusal({
     final who = otherSessionsInCheckout.length == 1
         ? '"${otherSessionsInCheckout.single}" is'
         : '${otherSessionsInCheckout.length} other sessions are';
+    if (forRewind) {
+      return '$left$who working in this checkout, and rolling it back would '
+          'take their uncommitted work with it. End them first, or choose '
+          'Conversation only.';
+    }
     return '$left$who working in this checkout, and rolling it back would '
         'take uncommitted work that is not this fork\'s with it. Fork with '
         'newWorktree true, or restore deliberately with checkpoint_restore '
