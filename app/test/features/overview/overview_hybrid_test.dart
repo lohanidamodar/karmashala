@@ -221,10 +221,13 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('sub-sessions: a summary, the three most urgent, "+2 more"', (
-      tester,
-    ) async {
-      await pump(tester);
+    testWidgets('sub-sessions inside their parent: a summary, then every one '
+        'up to five, each with its latest line and state', (tester) async {
+      final fixture = MissionFixture.full();
+      fixture.reader.answers['ks-r32-sub0'] = const LastAnswer.of(
+        'Ran the layout tests: all green.',
+      );
+      await pump(tester, fixture: fixture);
       final subs = find.byKey(const ValueKey('overview-subs:ks-r32'));
       await tester.scrollUntilVisible(subs, 200, scrollable: hybridList);
 
@@ -233,11 +236,18 @@ void main() {
         findsOneWidget,
       );
       Finder row(String id) => find.byKey(ValueKey('overview-sub:$id'));
-      expect(row('ks-r32-sub0'), findsOneWidget);
-      expect(row('ks-r32-sub1'), findsOneWidget);
-      expect(row('ks-r32-sub2'), findsOneWidget);
-      expect(row('ks-r32-sub3'), findsNothing);
-      expect(find.text('+2 more'), findsOneWidget);
+      for (var i = 0; i < 5; i++) {
+        expect(row('ks-r32-sub$i'), findsOneWidget, reason: 'sub$i');
+      }
+      expect(find.textContaining('more'), findsNothing);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('overview-last:ks-r32-sub0')),
+            )
+            .data,
+        'Ran the layout tests: all green.',
+      );
 
       await tester.tap(row('ks-r32-sub0'));
       await settleMission(tester);
@@ -247,6 +257,178 @@ void main() {
       );
       await unmountMission(tester);
     });
+
+    MissionFixture withSubs(
+      MissionSession Function(MissionSession s) change, {
+      List<MissionSession> extra = const [],
+    }) => MissionFixture(
+      sessions: [...MissionFixture.realisticSessions().map(change), ...extra],
+    );
+    MissionSession asState(MissionSession s, AgentState state) => (
+      id: s.id,
+      title: s.title,
+      project: s.project,
+      machine: s.machine,
+      agent: s.agent,
+      state: state,
+      age: s.age,
+      parent: s.parent,
+      report: s.report,
+    );
+
+    testWidgets('inside: a sixth folds into "+1 more"', (tester) async {
+      final sixth = asState(
+        MissionFixture.realisticSessions().firstWhere(
+          (s) => s.id == 'ks-r32-sub4',
+        ),
+        AgentState.ended,
+      );
+      await pump(
+        tester,
+        fixture: withSubs(
+          (s) => s,
+          extra: [
+            (
+              id: 'ks-r32-sub5',
+              title: 'Subagent 6',
+              project: sixth.project,
+              machine: sixth.machine,
+              agent: sixth.agent,
+              state: AgentState.ended,
+              age: const Duration(minutes: 9),
+              parent: 'ks-r32',
+              report: null,
+            ),
+          ],
+        ),
+      );
+      final subs = find.byKey(const ValueKey('overview-subs:ks-r32'));
+      await tester.scrollUntilVisible(subs, 200, scrollable: hybridList);
+      expect(find.text('+1 more'), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('inside: a child that needs you stands out as a waiting card '
+        'does', (tester) async {
+      await pump(
+        tester,
+        fixture: withSubs(
+          (s) => s.id == 'ks-r32-sub2' ? asState(s, AgentState.needsYou) : s,
+        ),
+      );
+      final subs = find.byKey(const ValueKey('overview-subs:ks-r32'));
+      await tester.scrollUntilVisible(subs, 200, scrollable: hybridList);
+      expect(
+        find.byKey(const ValueKey('overview-sub-needs-you:ks-r32-sub2')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('overview-sub-needs-you:ks-r32-sub0')),
+        findsNothing,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('as cards: each child is a card of its own after its parent, '
+        'tied to it, and the parent stacks none', (tester) async {
+      final c = await pump(tester);
+      c
+          .read(overviewPrefsProvider.notifier)
+          .setSubSessions(OverviewSubSessionMode.cards);
+      await settleMission(tester);
+
+      expect(find.byKey(const ValueKey('overview-subs:ks-r32')), findsNothing);
+      final work = [
+        for (final card in overviewSectionsOf(
+          c.read(overviewBoardProvider),
+          waitingSince: (_) => null,
+        ).work)
+          card.id,
+      ];
+      final at = work.indexOf('ks-r32');
+      expect(work.sublist(at + 1, at + 3), ['ks-r32-sub0', 'ks-r32-sub1']);
+
+      final child = find.byKey(
+        const ValueKey('overview-work-card:ks-r32-sub0'),
+      );
+      await tester.scrollUntilVisible(child, 200, scrollable: hybridList);
+      expect(
+        find.descendant(
+          of: child,
+          matching: find.text('↳ Round 32 · Overview redesign'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('overview-child-link:ks-r32-sub0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('overview-child-link:ks-r32')),
+        findsNothing,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('the filter panel offers the choice, and it is kept', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      expect(
+        c.read(overviewPrefsProvider).subSessions,
+        OverviewSubSessionMode.inside,
+      );
+      await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
+      await settleMission(tester);
+      await tester.tap(find.byKey(const ValueKey('sub-sessions:cards')));
+      await settleMission(tester);
+
+      expect(
+        c.read(overviewPrefsProvider).subSessions,
+        OverviewSubSessionMode.cards,
+      );
+      expect(
+        OverviewPrefs.fromJson(
+          c.read(overviewPrefsProvider).toJson(),
+        ).subSessions,
+        OverviewSubSessionMode.cards,
+      );
+      await unmountMission(tester);
+    });
+
+    for (final mode in OverviewSubSessionMode.values) {
+      for (final size in const [Size(360, 800), Size(1440, 900)]) {
+        testWidgets('${mode.name} at ${size.width.toInt()} px and text scale '
+            '1.6 fits', (tester) async {
+          final c = await pump(
+            tester,
+            size: size,
+            phone: size.width < 600,
+            textScale: 1.6,
+          );
+          c.read(overviewPrefsProvider.notifier).setSubSessions(mode);
+          await settleMission(tester);
+          // A phone draws a row per session; a desktop a card.
+          await tester.scrollUntilVisible(
+            size.width < 600
+                ? find.byKey(const ValueKey('overview-phone-row:ks-r32'))
+                : find.textContaining('Round 32 · Overview redesign').first,
+            200,
+            scrollable: hybridList,
+          );
+          expect(tester.takeException(), isNull);
+          if (mode == OverviewSubSessionMode.cards) {
+            await tester.scrollUntilVisible(
+              find.byKey(const ValueKey('overview-child-link:ks-r32-sub0')),
+              200,
+              scrollable: hybridList,
+            );
+            expect(tester.takeException(), isNull);
+          }
+          await unmountMission(tester);
+        });
+      }
+    }
 
     testWidgets('the latest message follows the agent, lit when it changes', (
       tester,

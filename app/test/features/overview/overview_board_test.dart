@@ -63,6 +63,7 @@ void main() {
     OverviewFilter filter = const OverviewFilter(),
     OverviewGroupBy groupBy = OverviewGroupBy.project,
     BoardOrderMemo? memo,
+    OverviewSubSessionMode subSessions = OverviewSubSessionMode.inside,
   }) => buildOverviewBoard(
     g,
     facts: with_ ?? facts(),
@@ -70,6 +71,7 @@ void main() {
     groupBy: groupBy,
     startOfToday: startOfToday,
     memo: memo ?? BoardOrderMemo(),
+    subSessions: subSessions,
   );
 
   List<String> ids(OverviewLane lane, BoardColumn column) => [
@@ -159,6 +161,76 @@ void main() {
     });
   });
 
+  group('sub-sessions as cards', () {
+    test('each child is a card of its own, right after its parent, which '
+        'it names', () {
+      final board = build(
+        groups({
+          AgentState.working: [
+            entry('p', age: const Duration(minutes: 10)),
+            entry('x', age: const Duration(minutes: 5)),
+            entry('c1', parent: 'p'),
+            entry('g', parent: 'c1', age: const Duration(minutes: 1)),
+          ],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      final working = board.lanes.single.cards(BoardColumn.working);
+      // Newest first is c1, g, x, p; each child follows its parent instead.
+      expect([for (final c in working) c.id], ['x', 'p', 'c1', 'g']);
+      final c1 = working.firstWhere((c) => c.id == 'c1');
+      expect(c1.parentId, 'p');
+      expect(c1.breadcrumb, 'T p');
+      expect(working.firstWhere((c) => c.id == 'g').parentId, 'c1');
+      expect(working.firstWhere((c) => c.id == 'p').children, isNull);
+    });
+
+    test('a child in another state keeps its own column, once', () {
+      final board = build(
+        groups({
+          AgentState.working: [entry('p')],
+          AgentState.needsYou: [entry('c', parent: 'p')],
+          AgentState.ready: [entry('r', parent: 'p')],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      final lane = board.lanes.single;
+      expect(ids(lane, BoardColumn.needsYou), ['c']);
+      expect(ids(lane, BoardColumn.ready), ['r']);
+      expect(ids(lane, BoardColumn.working), ['p']);
+    });
+
+    test('the dashboard\'s own order keeps a child after its parent', () {
+      final cards = build(
+        groups({
+          AgentState.working: [
+            entry('p', age: const Duration(minutes: 10)),
+            entry('c', parent: 'p'),
+            entry('q', age: const Duration(minutes: 3)),
+          ],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      ).lanes.single.cards(BoardColumn.working);
+      final reordered = byUrgency(cards.reversed.toList());
+      expect(
+        [for (final c in nestUnderParents(reordered)) c.id].join(),
+        anyOf('pcq', 'qpc'),
+      );
+    });
+
+    test('inside their parent, the default, children stack as before', () {
+      final board = build(
+        groups({
+          AgentState.working: [entry('p'), entry('c', parent: 'p')],
+        }),
+      );
+      final working = board.lanes.single.cards(BoardColumn.working);
+      expect([for (final c in working) c.id], ['p']);
+      expect(working.single.children!.total, 1);
+      expect(board.children['p']!.single.id, 'c');
+    });
+  });
+
   group('done', () {
     test('counts only what ended today; older ones wait behind Show all', () {
       final board = build(
@@ -206,12 +278,13 @@ void main() {
       const contextOfProject = {'p1': 'c-apps', 'p2': 'c-web', 'p4': 'c-gone'};
       final byContext = OverviewFacts(
         projectOf: (e) => {'a': 'p1', 'b': 'p2', 'c': 'p3', 'd': 'p4'}[e.id],
-        contextOf: (e) => contextOfProject[{
-          'a': 'p1',
-          'b': 'p2',
-          'c': 'p3',
-          'd': 'p4',
-        }[e.id]],
+        contextOf: (e) =>
+            contextOfProject[{
+              'a': 'p1',
+              'b': 'p2',
+              'c': 'p3',
+              'd': 'p4',
+            }[e.id]],
         machineOf: (e) => e.directory?.environmentId,
         agentOf: (_) => 'claude-code',
         projects: const [],

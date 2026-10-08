@@ -15,6 +15,7 @@ import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
 import '../application/overview_usage.dart';
 import 'overview_batch_bar.dart';
+import 'overview_cards.dart' show overviewCardEdge;
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
@@ -27,9 +28,16 @@ String overviewPlain(String text) => text
 /// **The latest thing the agent said**, two lines, lit briefly when it
 /// changes so a card that moved catches the eye.
 class OverviewLatestMessage extends ConsumerStatefulWidget {
-  const OverviewLatestMessage({required this.sessionId, super.key});
+  const OverviewLatestMessage({
+    required this.sessionId,
+    this.maxLines = 2,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// Two on a card; one on a sub-session's line.
+  final int maxLines;
 
   @override
   ConsumerState<OverviewLatestMessage> createState() =>
@@ -70,7 +78,7 @@ class _OverviewLatestMessageState extends ConsumerState<OverviewLatestMessage> {
       child: Text(
         overviewPlain(text),
         key: ValueKey('overview-last:${widget.sessionId}'),
-        maxLines: 2,
+        maxLines: widget.maxLines,
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.bodySmall,
       ),
@@ -162,12 +170,13 @@ class OverviewMetaLine extends ConsumerWidget {
 }
 
 /// A parent's sub-sessions on its card: a summary line, the [limit] most
-/// urgent, and "+N more", which opens the parent.
+/// urgent — each with its state and latest line — and "+N more", which opens
+/// the parent.
 class OverviewSubSessions extends ConsumerWidget {
   const OverviewSubSessions({
     required this.card,
     required this.onOpen,
-    this.limit = 3,
+    this.limit = 5,
     super.key,
   });
 
@@ -228,7 +237,9 @@ class OverviewSubSessions extends ConsumerWidget {
   }
 }
 
-/// One sub-session as a line: its state, its title and its chip.
+/// One sub-session as a line: its state, its title and its chip, and the
+/// latest thing it said under them. One that needs you is edged as a waiting
+/// card is.
 class OverviewSubSessionRow extends StatelessWidget {
   const OverviewSubSessionRow({
     required this.card,
@@ -243,7 +254,8 @@ class OverviewSubSessionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
-    return InkWell(
+    final glyph = density.iconSmall + Insets.hair;
+    final row = InkWell(
       key: ValueKey('overview-sub:${card.id}'),
       borderRadius: BorderRadius.circular(Radii.sm),
       onTap: () => onOpen(card),
@@ -252,26 +264,44 @@ class OverviewSubSessionRow extends StatelessWidget {
           horizontal: Insets.xxs,
           vertical: Insets.xxs,
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            OverviewStateGlyph(
-              state: card.state,
-              size: density.iconSmall + Insets.hair,
+            Row(
+              children: [
+                OverviewStateGlyph(state: card.state, size: glyph),
+                const SizedBox(width: Insets.sm),
+                Expanded(
+                  child: Text(
+                    card.entry.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: Insets.sm),
+                OverviewStateChip(state: card.state),
+              ],
             ),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Text(
-                card.entry.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
+            Padding(
+              padding: EdgeInsets.only(left: glyph + Insets.sm),
+              child: OverviewLatestMessage(sessionId: card.id, maxLines: 1),
             ),
-            const SizedBox(width: Insets.sm),
-            OverviewStateChip(state: card.state),
           ],
         ),
       ),
+    );
+    if (columnOf(card.state) != BoardColumn.needsYou) return row;
+    return DecoratedBox(
+      key: ValueKey('overview-sub-needs-you:${card.id}'),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(Radii.sm),
+        border: Border.all(color: overviewCardEdge(context, card.state)),
+      ),
+      child: row,
     );
   }
 }

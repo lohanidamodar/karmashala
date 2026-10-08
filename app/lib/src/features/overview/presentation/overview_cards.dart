@@ -79,6 +79,40 @@ class OverviewCardFrame extends ConsumerWidget {
 
 bool _touch(BuildContext context) => UiDensity.of(context).isTouch;
 
+/// [child], [card]'s own widget, tied to its parent's when the parent is in
+/// [among] — drawn just before it: indented, with a thin line down its side.
+/// Anything else is [child] as it is.
+Widget overviewTied(OverviewCard card, List<OverviewCard> among, Widget child) {
+  final parent = card.parentId;
+  if (parent == null || !among.any((c) => c.id == parent)) return child;
+  return OverviewChildLink(card: card, child: child);
+}
+
+/// A sub-session drawn as a card of its own, tied to its parent's just
+/// before it.
+class OverviewChildLink extends StatelessWidget {
+  const OverviewChildLink({required this.card, required this.child, super.key});
+
+  final OverviewCard card;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: ValueKey('overview-child-link:${card.id}'),
+    margin: const EdgeInsets.only(left: Insets.sm),
+    padding: const EdgeInsets.only(left: Insets.sm),
+    decoration: BoxDecoration(
+      border: Border(
+        left: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          width: StateLayers.focusRingWidth,
+        ),
+      ),
+    ),
+    child: child,
+  );
+}
+
 /// Title, where it runs, and the state chip.
 class OverviewCardHeader extends ConsumerWidget {
   const OverviewCardHeader({required this.card, this.chip, super.key});
@@ -127,7 +161,13 @@ class OverviewCardHeader extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  parent != null ? '↳ from $parent' : place,
+                  parent == null
+                      ? place
+                      // Drawn after its parent, the line names it; drawn
+                      // apart from it, it says where it came from.
+                      : card.parentId != null
+                      ? '↳ $parent'
+                      : '↳ from $parent',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
