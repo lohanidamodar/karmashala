@@ -85,7 +85,7 @@ class TerminalToolbar extends ConsumerWidget {
                 child: Row(
                   children: [
                     const Icon(AppIcons.terminal, size: Chrome.icon),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: Insets.smd),
                     Text(profile.label),
                   ],
                 ),

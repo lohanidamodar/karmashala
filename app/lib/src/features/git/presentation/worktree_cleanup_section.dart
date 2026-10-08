@@ -282,7 +282,7 @@ class _RulesEditorState extends State<_RulesEditor> {
           ],
         ),
         Padding(
-          padding: const EdgeInsets.only(left: 40),
+          padding: const EdgeInsets.only(left: Insets.xxl + Insets.sm),
           child: Text(
             'Since HEAD last moved or a session last ran in it.',
             style: small,
@@ -522,7 +522,7 @@ class _VerdictLine extends StatelessWidget {
             ],
           ),
           Padding(
-            padding: const EdgeInsets.only(left: 20),
+            padding: const EdgeInsets.only(left: Insets.lg + Insets.xs),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

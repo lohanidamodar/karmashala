@@ -99,7 +99,7 @@ class WorkbenchTabChip extends StatelessWidget {
               constraints: const BoxConstraints(maxWidth: kMaxTabWidth),
               padding: EdgeInsets.only(
                 left: dense ? Insets.xs : Insets.sm,
-                right: trailing == null ? Insets.sm : 2,
+                right: trailing == null ? Insets.sm : Insets.xxs,
               ),
               decoration: BoxDecoration(
                 border: Border(
@@ -157,7 +157,7 @@ class WorkbenchTabChip extends StatelessWidget {
                     ),
                   ),
                   if (trailing != null) ...[
-                    const SizedBox(width: 2),
+                    const SizedBox(width: Insets.xxs),
                     trailing!,
                   ],
                 ],

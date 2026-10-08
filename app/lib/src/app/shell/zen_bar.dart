@@ -115,7 +115,7 @@ class ZenBar extends StatelessWidget {
                     minHeight: _control,
                     maxWidth: _titleMaxWidth,
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.smd),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -174,7 +174,7 @@ class ZenBar extends StatelessWidget {
                             size: Chrome.iconSmall,
                             color: attention,
                           ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: Insets.xs + Insets.hair),
                           Text(
                             '$needsYou',
                             style: density

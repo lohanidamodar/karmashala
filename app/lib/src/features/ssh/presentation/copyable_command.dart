@@ -20,7 +20,7 @@ class CopyableCommand extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: Insets.xs,
-                vertical: 2,
+                vertical: Insets.xxs,
               ),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,

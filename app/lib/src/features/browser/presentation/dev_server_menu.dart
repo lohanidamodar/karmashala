@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../running/application/running_providers.dart';
 import '../../running/domain/port_label.dart';
@@ -30,7 +31,7 @@ class DevServerMenuButton extends ConsumerWidget {
               return _Note('Could not look: $error');
             }
             return const Padding(
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(Insets.md),
               child: InlineSpinner(semanticsLabel: 'Looking for dev servers'),
             );
           }
@@ -88,7 +89,10 @@ class _Note extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    padding: const EdgeInsets.symmetric(
+      horizontal: Insets.md,
+      vertical: Insets.sm,
+    ),
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),
       child: Text(

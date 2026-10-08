@@ -121,7 +121,7 @@ class UsageWindowMeter extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: Insets.xxs),
           LinearMeter(
             value: percent / 100,
             marker: pace.elapsed,

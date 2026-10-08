@@ -23,8 +23,12 @@ class ArtifactCountBadge extends StatelessWidget {
         key: const ValueKey('artifact-count-badge'),
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.fileCode, size: Chrome.iconSmall, color: scheme.primary),
-          const SizedBox(width: 2),
+          Icon(
+            AppIcons.fileCode,
+            size: Chrome.iconSmall,
+            color: scheme.primary,
+          ),
+          const SizedBox(width: Insets.xxs),
           Text(
             '$count',
             style: Chrome.tabLabel.copyWith(color: scheme.primary),

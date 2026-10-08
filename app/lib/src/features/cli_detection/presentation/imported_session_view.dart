@@ -28,6 +28,7 @@ import '../../terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// History for an imported CLI session, rendered like the chat transcript.
 /// Typing a message resumes it in place, replacing the imported entry.
@@ -96,7 +97,12 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+          padding: const EdgeInsets.fromLTRB(
+            Insets.xs,
+            Insets.xs,
+            Insets.sm,
+            Insets.xs,
+          ),
           child: Row(
             children: [
               IconButton(

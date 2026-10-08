@@ -50,7 +50,7 @@ class ItemCard extends StatelessWidget {
                 if (icon case final glyph?) ...[
                   Padding(
                     // Optical alignment with the title's cap height.
-                    padding: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.only(top: Insets.xxs),
                     child: Icon(
                       glyph,
                       size: Chrome.iconTitle,

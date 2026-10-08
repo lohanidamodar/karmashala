@@ -114,7 +114,12 @@ class DevicesDock extends StatelessWidget {
   /// The dock's own padding: the list's sides, a little air above the label
   /// and the list's 8 under the last row (board A2 `padding: 6px 6px 8px`,
   /// less the 4 every row insets its fill).
-  static const padding = EdgeInsets.fromLTRB(2, 6, 2, 8);
+  static const padding = EdgeInsets.fromLTRB(
+    Insets.xxs,
+    Insets.xsm,
+    Insets.xxs,
+    Insets.sm,
+  );
 
   @override
   Widget build(BuildContext context) {

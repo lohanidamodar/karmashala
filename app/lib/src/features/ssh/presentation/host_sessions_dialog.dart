@@ -241,7 +241,7 @@ class _SessionRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2, right: Insets.sm),
+            padding: const EdgeInsets.only(top: Insets.xxs, right: Insets.sm),
             child: Icon(
               running ? AppIcons.playCircle : AppIcons.checkCircle,
               color: running ? scheme.primary : scheme.onSurfaceVariant,

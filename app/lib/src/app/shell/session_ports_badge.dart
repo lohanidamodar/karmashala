@@ -42,7 +42,7 @@ class SessionPortsBadge extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: Insets.sm,
-                vertical: 3,
+                vertical: Insets.tight,
               ),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Radii.sm),

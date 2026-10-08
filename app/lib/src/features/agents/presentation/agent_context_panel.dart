@@ -273,7 +273,7 @@ class _EntryRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(
               switch (entry.standing) {
                 AgentContextStanding.taken => AppIcons.checkCircle,

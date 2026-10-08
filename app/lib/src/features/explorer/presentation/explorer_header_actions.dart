@@ -57,7 +57,7 @@ class ExplorerHeaderActions extends ConsumerWidget {
         // One funnel for everything the Explorer holds back: two hiding
         // controls would be two stories about why a session is off screen.
         if (hasProjects) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: Insets.xsm),
           const _ConnectedFilterButton(),
         ],
       ],

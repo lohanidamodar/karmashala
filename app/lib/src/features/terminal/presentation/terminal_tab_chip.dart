@@ -204,7 +204,7 @@ class TerminalTabChip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         glyph,
-        const SizedBox(width: 3),
+        const SizedBox(width: Insets.tight),
         Semantics(
           label: 'New tab, not opened yet',
           child: Container(

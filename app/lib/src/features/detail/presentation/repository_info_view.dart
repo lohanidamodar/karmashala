@@ -103,7 +103,7 @@ class _Field extends ConsumerWidget {
               if (path != null) _RevealButton(path: path!),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: Insets.xxs),
           SelectableText(value, style: MonoStyles.body),
         ],
       ),
@@ -188,13 +188,13 @@ class _GitTroubleNote extends StatelessWidget {
     // the Changes pane, where a failure is the whole content of the surface.
     final muted = theme.colorScheme.onSurfaceVariant;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: Insets.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             // Nudged onto the first line's text rather than its box.
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(
               // Glyph and sentence, never colour alone (§5).
               switch (report.trouble) {
@@ -364,7 +364,7 @@ class _WorktreesHeader extends StatelessWidget {
       child: InkWell(
         onTap: onToggle,
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.only(bottom: Insets.xs),
           child: Row(
             children: [
               Icon(
@@ -372,7 +372,7 @@ class _WorktreesHeader extends StatelessWidget {
                 size: Chrome.iconSmall,
                 color: muted,
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: Insets.xxs),
               const EyebrowLabel('Worktrees'),
               const Spacer(),
               if (count > 0) ...[
@@ -387,7 +387,7 @@ class _WorktreesHeader extends StatelessWidget {
                 child: InkWell(
                   onTap: onCreate,
                   child: Padding(
-                    padding: const EdgeInsets.all(2),
+                    padding: const EdgeInsets.all(Insets.xxs),
                     child: Icon(
                       AppIcons.plus,
                       size: Chrome.iconSmall,

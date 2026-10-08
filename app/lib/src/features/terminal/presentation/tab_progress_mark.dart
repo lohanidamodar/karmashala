@@ -29,7 +29,7 @@ class TabProgressMark extends StatelessWidget {
             ),
           ),
           if (total > 0) ...[
-            const SizedBox(width: 3),
+            const SizedBox(width: Insets.tight),
             Text(
               '${progress.done}/$total',
               style: Chrome.tabLabel.copyWith(

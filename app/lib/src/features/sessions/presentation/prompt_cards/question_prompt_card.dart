@@ -434,9 +434,7 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
                       if (chat != null && !compact)
                         TextButton(
                           style: quiet,
-                          onPressed: _busy
-                              ? null
-                              : () => run(_Secondary.chat),
+                          onPressed: _busy ? null : () => run(_Secondary.chat),
                           child: Text(
                             chat,
                             maxLines: 1,
@@ -718,12 +716,12 @@ class _OptionRow extends StatelessWidget {
             minHeight: density.isTouch ? _touchRow : 0,
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.only(top: Insets.xxs),
                   child: number == null
                       ? Icon(
                           icon,
@@ -895,7 +893,10 @@ class _Badge extends StatelessWidget {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: Insets.hair),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.xsm,
+        vertical: Insets.hair,
+      ),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: StateLayers.selectedAlpha),
         borderRadius: BorderRadius.circular(Radii.sm),

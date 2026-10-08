@@ -364,10 +364,7 @@ class SessionCard extends StatelessWidget {
           Flexible(
             child: details.isEmpty
                 ? titleText
-                : Tooltip(
-                    message: details,
-                    child: titleText,
-                  ),
+                : Tooltip(message: details, child: titleText),
           ),
           if (pinned) ...[
             SizedBox(width: density.glyphGap),
@@ -869,7 +866,7 @@ class DiffStatLabel extends StatelessWidget {
             '↑$ahead',
             style: style?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: Insets.xsm),
         ],
         if (stat.hasLineCounts) ...[
           if (stat.added != null)
@@ -878,7 +875,7 @@ class DiffStatLabel extends StatelessWidget {
               style: style?.copyWith(color: semantic.diffAdded),
             ),
           if (stat.added != null && stat.removed != null)
-            const SizedBox(width: 4),
+            const SizedBox(width: Insets.xs),
           if (stat.removed != null)
             Text(
               '−${stat.removed}',

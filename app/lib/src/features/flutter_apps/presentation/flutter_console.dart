@@ -594,7 +594,7 @@ class _ConsoleLine extends StatelessWidget {
         color: current ? StateLayers.subtle(scheme) : null,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1),
+        padding: const EdgeInsets.symmetric(vertical: Insets.hair),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

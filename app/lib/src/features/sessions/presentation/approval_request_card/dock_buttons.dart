@@ -181,7 +181,7 @@ class _AnswerInTerminal extends ConsumerWidget {
               0,
               _Docked.touchOf(context) ? Touch.target : _dockButtonHeight,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: Insets.xsm),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             // Compact takes eight pixels off the 48dp floor on a phone.
             visualDensity: _Docked.touchOf(context)
@@ -272,7 +272,7 @@ class _DockButton extends StatelessWidget {
             ),
           ),
           if (more != null && more.isNotEmpty) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: Insets.xsm),
             Flexible(
               child: Text(
                 more,
@@ -285,7 +285,7 @@ class _DockButton extends StatelessWidget {
             ),
           ],
           if (hint != null) ...[
-            const SizedBox(width: 6),
+            const SizedBox(width: Insets.xsm),
             _KeyCap(
               label: hint,
               color: primary ? ink.withValues(alpha: 0.7) : scheme.outline,

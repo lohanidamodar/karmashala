@@ -217,7 +217,7 @@ class StatsSectionHeading extends StatelessWidget {
           Semantics(header: true, child: EyebrowLabel(label)),
           if (detail case final line?)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: Insets.xxs),
               child: Text(
                 line,
                 style: theme.textTheme.bodySmall?.copyWith(

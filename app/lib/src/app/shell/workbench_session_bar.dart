@@ -138,7 +138,7 @@ class _SessionBar extends ConsumerWidget {
             color: zen ? tones.term : tones.chrome,
             padding: const EdgeInsets.symmetric(
               horizontal: Insets.sm,
-              vertical: 2,
+              vertical: Insets.xxs,
             ),
             // Inside the [Container], so the bar's own surface grows with the
             // reservation instead of leaving the terminal showing through.
@@ -221,7 +221,10 @@ class _PaneFoot extends ConsumerWidget {
           minHeight: zen ? Chrome.paneStrip : Chrome.tabStrip,
         ),
         color: zen ? tones.term : tones.chrome,
-        padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 2),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.xxs,
+        ),
         alignment: AlignmentDirectional.centerStart,
         child: child,
       ),

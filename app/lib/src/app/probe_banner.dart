@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../core/probe/probe_mode.dart';
 
@@ -40,16 +41,19 @@ class ProbeBanner extends StatelessWidget {
                 'installed, so their live status reaches the real app, not '
                 'this one.',
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.md,
+                vertical: Insets.xs,
+              ),
               child: Row(
                 children: [
                   Icon(AppIcons.warning, color: scheme.onErrorContainer),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: Insets.sm),
                   Text(
                     'PROBE',
                     style: style?.copyWith(fontWeight: FontWeight.w800),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: Insets.sm),
                   Expanded(
                     child: Text(
                       'Test instance — not your Karmashala. Data: '

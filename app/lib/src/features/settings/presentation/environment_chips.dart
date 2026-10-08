@@ -15,7 +15,10 @@ class SettingsChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.sm,
+        vertical: Insets.xxs,
+      ),
       decoration: BoxDecoration(
         color: scheme.secondaryContainer,
         borderRadius: BorderRadius.circular(Radii.sm),

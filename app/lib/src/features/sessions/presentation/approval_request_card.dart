@@ -283,7 +283,7 @@ class ApprovalRequestCard extends ConsumerWidget {
     if (board) return body;
     return Container(
       // Flush with the composer stack it is pinned above.
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      margin: const EdgeInsets.fromLTRB(Insets.sm, 0, Insets.sm, Insets.xsm),
       padding: const EdgeInsets.all(Insets.sm),
       // Amber, the one colour that means "needs you" (spec §5): the ask is
       // the thing on screen that is blocking the session.
@@ -707,7 +707,7 @@ class _Evidence extends StatelessWidget {
             color: scheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: Insets.xxs),
         // Scrolls rather than wrapping: these are rendered terminal rows and
         // re-flowing them would break the alignment they were drawn with.
         ConstrainedBox(
@@ -830,7 +830,7 @@ class _Answers extends ConsumerWidget {
             _TerminalLink(sessionId: sessionId),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: Insets.xxs),
         // Every button says which key it presses: we are typing into another
         // program on the user's behalf, and "Approve" alone would hide that.
         for (final answer in [rules.approve, rules.deny].nonNulls)

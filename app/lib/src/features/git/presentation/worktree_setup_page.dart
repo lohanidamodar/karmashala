@@ -266,7 +266,7 @@ class _Line extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 1),
+      padding: const EdgeInsets.only(top: Insets.hair),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -356,7 +356,10 @@ class _RunLine extends ConsumerWidget {
           ),
           for (final line in lines)
             Padding(
-              padding: const EdgeInsets.only(left: 20, top: 1),
+              padding: const EdgeInsets.only(
+                left: Insets.lg + Insets.xs,
+                top: Insets.hair,
+              ),
               child: Text(line, style: theme.textTheme.bodySmall),
             ),
         ],

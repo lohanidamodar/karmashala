@@ -45,7 +45,12 @@ class Sidebar {
   /// A list's own padding. Every sidebar row insets its fill another
   /// [ExplorerRow.inset] (4), so a row's fill lands 6 from the sidebar's edge
   /// and 8 from its top — the mockup's `padding: 8px 6px`.
-  static const listPadding = EdgeInsets.fromLTRB(2, 8, 2, 8);
+  static const listPadding = EdgeInsets.fromLTRB(
+    Insets.xxs,
+    Insets.sm,
+    Insets.xxs,
+    Insets.sm,
+  );
 
   /// Where a row's fill lands from the sidebar's side: [listPadding] and
   /// [ExplorerRow.inset]. The search field and the filter row above a list

@@ -149,7 +149,10 @@ class _Mark extends StatelessWidget {
       _MarkColor.attention => semantic.attention,
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.xs,
+        vertical: Insets.hair,
+      ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(color: color.withValues(alpha: 0.5)),

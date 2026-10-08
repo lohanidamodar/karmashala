@@ -241,7 +241,7 @@ class _Composer extends ConsumerWidget {
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: Insets.sm,
-            vertical: 6,
+            vertical: Insets.xsm,
           ),
           prefixIcon: Icon(
             AppIcons.plus,
@@ -546,11 +546,11 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                     .setDone(todo.id, next ?? false),
               ),
             ),
-            const SizedBox(width: 2),
+            const SizedBox(width: Insets.xxs),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.symmetric(
-                  vertical: density.isTouch ? Insets.md : 4,
+                  vertical: density.isTouch ? Insets.md : Insets.xs,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

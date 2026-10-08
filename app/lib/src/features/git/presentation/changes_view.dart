@@ -433,7 +433,12 @@ class _SectionHeader extends ConsumerWidget {
     );
     final copy = ref.read(workingCopyControllerProvider.notifier);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.xs, Insets.xs, 2),
+      padding: const EdgeInsets.fromLTRB(
+        Insets.sm,
+        Insets.xs,
+        Insets.xs,
+        Insets.xxs,
+      ),
       child: Row(
         children: [
           Expanded(
@@ -525,9 +530,9 @@ class _ChangedFileRow extends ConsumerWidget {
           color: selected ? StateLayers.selected(scheme) : null,
           padding: EdgeInsets.fromLTRB(
             nestedIn == null ? Insets.sm : _nestedIndent,
-            3,
+            Insets.tight,
             Insets.xs,
-            3,
+            Insets.tight,
           ),
           child: Row(
             children: [
@@ -613,7 +618,12 @@ class _NewFolderRow extends ConsumerWidget {
     return InkWell(
       onTap: onToggle,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(Insets.xs, 3, Insets.xs, 3),
+        padding: const EdgeInsets.fromLTRB(
+          Insets.xs,
+          Insets.tight,
+          Insets.xs,
+          Insets.tight,
+        ),
         child: Row(
           children: [
             Icon(
@@ -621,7 +631,7 @@ class _NewFolderRow extends ConsumerWidget {
               size: Chrome.iconSmall,
               color: scheme.onSurfaceVariant,
             ),
-            const SizedBox(width: 2),
+            const SizedBox(width: Insets.xxs),
             Icon(
               open ? AppIcons.folderOpen : AppIcons.folder,
               size: Chrome.iconSmall,
@@ -684,7 +694,12 @@ class _MoreFilesRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(_nestedIndent, 3, Insets.xs, 3),
+    padding: const EdgeInsets.fromLTRB(
+      _nestedIndent,
+      Insets.tight,
+      Insets.xs,
+      Insets.tight,
+    ),
     child: Text(
       '${groupedCount(file.moreFiles)} more files in ${file.newFolder}',
       maxLines: 1,

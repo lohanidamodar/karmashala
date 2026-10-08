@@ -250,8 +250,17 @@ class Insets {
 
   /// Between two lines of one item — a title and the line under it.
   static const xxs = 2.0;
+
+  /// A dense row's or a chip's vertical padding; a glyph-to-count gap.
+  static const tight = 3.0;
   static const xs = 4.0;
+
+  /// Between [xs] and [sm]: a chip's side padding, an icon-to-label gap.
+  static const xsm = 6.0;
   static const sm = 8.0;
+
+  /// Between [sm] and [md]: a menu row's or a bar's side padding.
+  static const smd = 10.0;
   static const md = 12.0;
   static const lg = 16.0;
   static const xl = 24.0;

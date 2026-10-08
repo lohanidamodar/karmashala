@@ -605,7 +605,7 @@ class _BarRow extends StatelessWidget {
     final fraction = this.fraction;
     final spoken = '$label: ${valueLabel ?? kStatNotRecorded}';
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
       child: MergeSemantics(
         child: Row(
           children: [

@@ -335,7 +335,7 @@ class AskToast extends StatelessWidget {
                         onPressed: () => onAnswer(true),
                         child: const Text('Yes'),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: Insets.xsm),
                       TextButton(
                         style: button(quiet: false),
                         onPressed: () => onAnswer(false),

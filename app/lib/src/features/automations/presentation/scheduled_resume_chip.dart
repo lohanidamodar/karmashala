@@ -60,7 +60,7 @@ class ScheduledResumeChip extends ConsumerWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: Insets.sm,
-                          vertical: 3,
+                          vertical: Insets.tight,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -93,7 +93,12 @@ class ScheduledResumeChip extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(Radii.sm),
                     child: TouchTarget(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 3, Insets.xs, 3),
+                        padding: const EdgeInsets.fromLTRB(
+                          0,
+                          Insets.tight,
+                          Insets.xs,
+                          Insets.tight,
+                        ),
                         child: Icon(
                           AppIcons.x,
                           size: Chrome.iconSmall,

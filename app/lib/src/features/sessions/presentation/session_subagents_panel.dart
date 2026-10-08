@@ -116,7 +116,7 @@ class SessionSubagentsBadge extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: Insets.sm,
-                vertical: 3,
+                vertical: Insets.tight,
               ),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Radii.sm),
@@ -424,7 +424,7 @@ class _EntryRow extends ConsumerWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Padding(
-        padding: const EdgeInsets.only(top: 2),
+        padding: const EdgeInsets.only(top: Insets.xxs),
         child: Icon(
           look.icon,
           size: Chrome.iconSmall,

@@ -455,7 +455,7 @@ class _DeliveryState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Insets.md, 6, Insets.sm, 0),
+    padding: const EdgeInsets.fromLTRB(Insets.md, Insets.xsm, Insets.sm, 0),
     child: Wrap(
       spacing: Insets.sm,
       runSpacing: Insets.xs,
@@ -527,7 +527,7 @@ class DeliveryStateLine extends ConsumerWidget {
       );
     }
     return Padding(
-      padding: const EdgeInsets.only(top: 2, bottom: Insets.xs),
+      padding: const EdgeInsets.only(top: Insets.xxs, bottom: Insets.xs),
       child: Wrap(
         spacing: Insets.sm,
         runSpacing: Insets.xs,

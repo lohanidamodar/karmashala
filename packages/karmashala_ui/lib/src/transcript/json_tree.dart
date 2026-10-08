@@ -299,7 +299,7 @@ class _JsonTreeViewState extends State<JsonTreeView> {
     if (entries.length > shown) {
       out.add(
         Padding(
-          padding: EdgeInsets.only(left: Insets.lg * (depth + 1)),
+          padding: EdgeInsets.only(left: Insets.lg * (depth + Insets.hair)),
           child: Align(
             alignment: Alignment.centerLeft,
             child: TextButton(

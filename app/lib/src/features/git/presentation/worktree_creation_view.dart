@@ -79,7 +79,7 @@ class _StageRow extends StatelessWidget {
         (state == WorktreeStageState.failed ||
             state == WorktreeStageState.warning);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -110,17 +110,26 @@ class _StageRow extends StatelessWidget {
           ),
           if (running && percent != null)
             Padding(
-              padding: const EdgeInsets.only(left: 22, top: 2),
+              padding: const EdgeInsets.only(
+                left: Insets.xl - Insets.xxs,
+                top: Insets.xxs,
+              ),
               child: LinearProgressIndicator(value: percent / 100),
             ),
           if (status.detail != null && status.detail!.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(left: 22, top: 1),
+              padding: const EdgeInsets.only(
+                left: Insets.xl - Insets.xxs,
+                top: Insets.hair,
+              ),
               child: Text(status.detail!, style: theme.textTheme.bodySmall),
             ),
           if (showTail)
             Container(
-              margin: const EdgeInsets.only(left: 22, top: Insets.xs),
+              margin: const EdgeInsets.only(
+                left: Insets.xl - Insets.xxs,
+                top: Insets.xs,
+              ),
               padding: const EdgeInsets.all(Insets.sm),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest,

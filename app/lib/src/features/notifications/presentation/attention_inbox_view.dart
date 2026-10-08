@@ -533,15 +533,15 @@ class _InboxRowContentState extends State<_InboxRowContent> {
         ),
         padding: const EdgeInsets.fromLTRB(
           Sidebar.labelPadX,
-          Insets.xs + 2,
+          Insets.xs + Insets.xxs,
           Insets.xs,
-          Insets.xs + 2,
+          Insets.xs + Insets.xxs,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: Insets.xxs),
               // An ask wears the needs-you mark every other surface does, seen
               // or not: reading it did not answer it.
               child: ask
@@ -600,7 +600,7 @@ class _InboxRowContentState extends State<_InboxRowContent> {
                   // enough to decide without opening the session.
                   if (item.detail case final detail?)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.only(top: Insets.xxs),
                       child: Text(
                         detail,
                         maxLines: 2,

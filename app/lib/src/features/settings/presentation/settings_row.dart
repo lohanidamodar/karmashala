@@ -137,7 +137,7 @@ class SettingsRow extends StatelessWidget {
         Text(label, style: SettingsStyles.rowLabel(context)),
         if (helpWidget != null)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: DefaultTextStyle.merge(
               style: SettingsStyles.rowHelp(context),
               child: helpWidget,
@@ -145,7 +145,7 @@ class SettingsRow extends StatelessWidget {
           )
         else if (help != null)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Text(help, style: SettingsStyles.rowHelp(context)),
           ),
       ],
@@ -156,7 +156,7 @@ class SettingsRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2, right: Insets.sm),
+            padding: const EdgeInsets.only(top: Insets.xxs, right: Insets.sm),
             child: leading,
           ),
           Expanded(child: labelBlock),
@@ -301,7 +301,7 @@ class SettingsValue extends StatelessWidget {
     final onTap = this.onTap;
     final pill = Container(
       height: SettingsLayout.controlHeight,
-      padding: const EdgeInsets.symmetric(horizontal: Insets.md - 2),
+      padding: const EdgeInsets.symmetric(horizontal: Insets.md - Insets.xxs),
       decoration: BoxDecoration(
         color: tones.raised,
         borderRadius: BorderRadius.circular(Radii.sm),

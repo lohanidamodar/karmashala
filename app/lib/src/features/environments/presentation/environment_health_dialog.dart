@@ -181,7 +181,7 @@ class _CheckRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(
               healthIcon(check.level),
               size: Chrome.icon,
@@ -216,7 +216,7 @@ class _CheckRow extends StatelessWidget {
                 if (check.detail case final detail?
                     when detail.trim().isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.only(top: Insets.xxs),
                     child: Text(detail, style: MonoStyles.small),
                   ),
                 if (check.remedy case final remedy?) ...[
@@ -262,7 +262,7 @@ class _CopyableCommand extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: Insets.xs,
-                vertical: 2,
+                vertical: Insets.xxs,
               ),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
@@ -315,7 +315,7 @@ class _EnvironmentRow extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(
               healthIcon(health.level),
               size: Chrome.icon,

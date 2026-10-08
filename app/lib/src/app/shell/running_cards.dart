@@ -209,7 +209,7 @@ class RunningPortCard extends ConsumerWidget {
                       ? Insets.xxs
                       : ((phone ? Touch.target : Chrome.menuRow) -
                                 Chrome.iconSmall) /
-                            2,
+                            Insets.xxs,
                 ),
                 child: Icon(
                   _iconFor(port.label.kind),

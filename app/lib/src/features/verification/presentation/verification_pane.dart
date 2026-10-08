@@ -169,7 +169,7 @@ class _RunRow extends ConsumerWidget {
                 style: theme.textTheme.bodyMedium,
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: Insets.xxs),
             Text(
               '${run.target.kind.label} · ${run.target.label}',
               maxLines: 1,
@@ -178,7 +178,7 @@ class _RunRow extends ConsumerWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: Insets.xxs),
             Text(
               [
                 '${run.steps.length} step${run.steps.length == 1 ? '' : 's'}',
@@ -814,7 +814,7 @@ class _MetaRow extends StatelessWidget {
     return LabeledValueRow(
       label: label,
       labelStyle: theme.textTheme.labelSmall,
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: Insets.xxs),
       value: SelectableText(value, style: theme.textTheme.bodySmall),
     );
   }

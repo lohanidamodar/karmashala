@@ -50,7 +50,10 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
           child: IgnorePointer(
             ignoring: opacity == 0.0,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.xxs,
+                vertical: Insets.hair,
+              ),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(Radii.sm),
@@ -89,7 +92,7 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
                     icon: const Icon(AppIcons.terminalWindow),
                     onPressed: widget.onMoveToNewTab,
                   ),
-                  const SizedBox(width: 2),
+                  const SizedBox(width: Insets.xxs),
                   DenseIconButton(
                     tooltip: 'Close pane',
                     color: scheme.onSurfaceVariant,

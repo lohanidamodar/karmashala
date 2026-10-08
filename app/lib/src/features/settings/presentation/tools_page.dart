@@ -151,7 +151,7 @@ class _BridgeVerdict extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: Insets.xxs),
               child: report.running
                   ? const InlineSpinner(size: InlineSpinnerSize.medium)
                   : Icon(

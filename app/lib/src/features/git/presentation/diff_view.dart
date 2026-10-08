@@ -623,7 +623,7 @@ class _ThreadCard extends StatelessWidget {
         if (entry.anchor.excerpt case final excerpt?
             when excerpt.trim().isNotEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
             child: Text(excerpt.trim(), style: MonoStyles.body),
           ),
         for (final comment in entry.thread.comments)

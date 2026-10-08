@@ -201,8 +201,8 @@ class _UsageMachineSwitcherState extends ConsumerState<UsageMachineSwitcher> {
         onTap: () => controller.isOpen ? controller.close() : controller.open(),
         child: Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: Insets.xs + 2,
-            vertical: 2,
+            horizontal: Insets.xs + Insets.xxs,
+            vertical: Insets.xxs,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

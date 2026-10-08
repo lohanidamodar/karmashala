@@ -296,7 +296,7 @@ class SettingsCategoryPicker extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: Insets.md,
-          vertical: Insets.sm + 2,
+          vertical: Insets.sm + Insets.xxs,
         ),
         child: Row(
           children: [

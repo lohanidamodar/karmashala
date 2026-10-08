@@ -174,7 +174,7 @@ class GitHubNote extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(icon, size: Chrome.iconSmall, color: muted),
           ),
           const SizedBox(width: Insets.xs),

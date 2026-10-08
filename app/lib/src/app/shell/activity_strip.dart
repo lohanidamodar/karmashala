@@ -329,7 +329,9 @@ class _StripButton extends StatelessWidget {
                         Container(
                           constraints: const BoxConstraints(minWidth: 15),
                           height: 15,
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Insets.tight,
+                          ),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: urgent

@@ -173,7 +173,7 @@ class _PlanRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(glyph, size: Chrome.iconSmall, color: colour),
           ),
           const SizedBox(width: Insets.sm),
