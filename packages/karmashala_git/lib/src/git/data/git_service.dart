@@ -870,6 +870,19 @@ class GitService {
     ];
   }
 
+  /// [repo]'s remotes, each name to its fetch URL; empty when it has none or
+  /// git refused.
+  Future<Map<String, String>> remoteUrls(EnvironmentPath repo) async {
+    final result = await _git(repo, ['remote', '-v']);
+    if (!result.ok) return const {};
+    final line = RegExp(r'^(\S+)\s+(.+?)\s+\(fetch\)\s*$');
+    return {
+      for (final text in result.stdout.split(RegExp(r'[\r\n]')))
+        if (line.firstMatch(text.trim()) case final match?)
+          match[1]!: match[2]!,
+    };
+  }
+
   /// Deletes local [branch] whatever it holds (`branch -D`). Only for a branch
   /// this app has just created and nothing has committed to.
   Future<void> deleteBranch(EnvironmentPath repo, String branch) async {
