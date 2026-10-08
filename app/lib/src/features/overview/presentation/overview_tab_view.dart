@@ -63,7 +63,17 @@ class OverviewTabView extends ConsumerWidget {
         actions: [
           const _ResumeButton(),
           const _NewSessionButton(),
-          if (view == OverviewView.board) const OverviewFilterButton(),
+          if (view == OverviewView.board) ...[
+            const OverviewFilterButton(),
+            // The keys need a keyboard; a thumb has none to press.
+            if (!UiDensity.of(context).isTouch)
+              IconButton(
+                key: const ValueKey('overview-keys-button'),
+                tooltip: 'Keyboard shortcuts (?)',
+                onPressed: () => showOverviewKeys(context),
+                icon: const Icon(AppIcons.keyboard),
+              ),
+          ],
         ],
         body: switch (view) {
           OverviewView.board => const _BoardBody(),

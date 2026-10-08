@@ -694,7 +694,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
       await settle(tester);
       expect(byKey('overview-resume-picker'), findsOneWidget);
-      expect(kOverviewTriageKeys.map((k) => k.$1), contains('R'));
+      expect(overviewKeyRows().expand((k) => k.keys), contains('R'));
     });
 
     group('from the peek and the cards', () {

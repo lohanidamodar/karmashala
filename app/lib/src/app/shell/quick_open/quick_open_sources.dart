@@ -40,6 +40,8 @@ import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart
 import '../../../features/overview/application/overview_prefs.dart';
 import '../../../features/overview/application/overview_resume.dart';
 import '../../../features/overview/presentation/background_launch_notice.dart';
+import '../../../features/overview/presentation/overview_triage.dart'
+    show showOverviewKeys;
 import '../../../features/sessions/application/session_engine_provider.dart';
 import '../../../features/sessions/application/session_launcher.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
@@ -771,6 +773,20 @@ class QuickOpenSources {
         ],
         opensTab: true,
         onSelect: () => openOverviewTab(ref),
+      ),
+      _command(
+        'Show Agent dashboard keys',
+        subtitle: 'The keys that triage the dashboard; ? on the board',
+        icon: AppIcons.keyboard,
+        keywords: const [
+          'shortcuts',
+          'keyboard',
+          'keys',
+          'overview',
+          'dashboard',
+          'help',
+        ],
+        onSelect: () => showOverviewKeys(context),
       ),
       ..._runningCommands(),
       ..._serverCommands(),

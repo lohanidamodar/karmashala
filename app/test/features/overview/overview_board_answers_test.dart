@@ -700,12 +700,10 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await settleMission(tester);
       expect(find.byKey(const ValueKey('overview-keys')), findsOneWidget);
-      expect(
-        find.text('Allow, always allow or deny the selected command'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Done'));
+      expect(find.text('Always allow the selected command'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await settleMission(tester);
+      expect(find.byKey(const ValueKey('overview-keys')), findsNothing);
       await unmountMission(tester);
     });
   });

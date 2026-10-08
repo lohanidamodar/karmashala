@@ -14,7 +14,7 @@ import '../../../app/shell/shell_area.dart' show shellCommandShownWith;
 import '../../../core/capabilities/capabilities.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../../overview/presentation/overview_triage.dart'
-    show kOverviewTriageKeys, kOverviewTriageNote;
+    show overviewKeyRows, kOverviewTriageNote;
 import '../application/settings_controller.dart';
 import 'copyable_name.dart';
 import 'settings_catalog.dart';
@@ -174,15 +174,18 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
                 '$kOverviewTriageNote Fixed keys: keymap.json does not '
                 'rebind them.',
               ),
-              for (final (keys, does) in kOverviewTriageKeys)
+              for (final row in overviewKeyRows())
                 if (_filter.text.isEmpty ||
-                    '$keys $does'.toLowerCase().contains(
+                    '${row.keys.join(' ')} ${row.does}'.toLowerCase().contains(
                       _filter.text.toLowerCase(),
                     ))
                   SettingsRow(
-                    label: does,
+                    label: row.does,
                     controlMaxWidth: 200,
-                    control: SettingsValue(label: keys, mono: true),
+                    control: SettingsValue(
+                      label: row.keys.join('  '),
+                      mono: true,
+                    ),
                   ),
             ],
           ),
