@@ -17,6 +17,29 @@ installs claim the same version name.
 
 ---
 
+## 1.34.4 — 2026-10-09 (build 71)
+
+- **A chat that's easier to read.**
+  - Each tool call is one line with a status dot, its verb and subject.
+  - Reads and searches in a row share a line.
+  - Failures stay visible in red with the exit code and first line.
+  - Short narration between tool calls is muted.
+  - The final answer of a turn hangs off an accent rule.
+  - An optional "One sentence per line in chat" setting.
+- **A warning when a session goes quiet.** Working with nothing new for 15 minutes (Settings → Notifications) shows a "Quiet" chip on the status line, card, peek and sidebar, a dashboard filter, and one inbox item. Peek, Nudge, Stop or End from there. Never while sub-sessions work, a usage limit holds, or it waits for you.
+- **The dashboard peek, tidied.**
+  - The header is one row: Chat, Terminal, Files and Sub-sessions icons, Stop, Open, ↑↓, pin and ⋯. Controls fold into ⋯ as it narrows.
+  - A cut-off title shows the full title on hover.
+  - "+N" opens a grouped list: Status, Agent, Code, Where, Session.
+- **One session menu everywhere.** Sidebar rows, tabs, dashboard cards, the peek, phone rows and sub-session rows show the same items in the same order.
+- **One Stop.** The composer's ■ is the only Stop control. Desktop shows a quiet "Esc to stop".
+- **Attach to…** puts a top-level session (a detached one, say) under a parent again.
+- **The tray** stops and restarts the server at once, without asking again in the window.
+- **Consistency:**
+  - Spacing, spinners, menus and tab headers now come from the shared design pieces, with a guard test that keeps them there.
+  - Large files are split.
+  - Links in imported sessions open.
+
 ## 1.34.3 — 2026-10-08 (build 70)
 
 - **The phone opens on the Agent dashboard.**
