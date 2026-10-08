@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
@@ -580,12 +579,18 @@ void main() {
         findsOneWidget,
       );
       expect(inPeek(find.text('Open tab')), findsOneWidget);
-      // The model its agent says it runs, beside the agent.
+      // The model its agent says it runs, and where, on the status strip.
+      final strip = find.byKey(const ValueKey('overview-peek-controls'));
       expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('overview-peek-place')))
-            .data,
-        startsWith('Claude Code · Opus 5.5 · karmashala'),
+        find.descendant(of: strip, matching: find.text('Opus 5.5')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: strip,
+          matching: find.byKey(const ValueKey('overview-peek-place')),
+        ),
+        findsOneWidget,
       );
       expect(inPeek(find.text('2/4')), findsOneWidget);
       // The old peek's sections are gone: the chat is the record.
@@ -853,37 +858,47 @@ void main() {
           );
           expect(body.height, greaterThanOrEqualTo(size.height * 0.6));
 
-          // One muted line of meta, the model by its name.
-          final place = tester.widget<Text>(
-            find.byKey(const ValueKey('overview-peek-place')),
+          // The model by its name, on the strip and never folded.
+          final strip = find.byKey(const ValueKey('overview-peek-controls'));
+          expect(
+            find
+                .descendant(of: strip, matching: find.text('Opus 5.5'))
+                .hitTestable(),
+            findsOneWidget,
           );
-          expect(place.maxLines, 1);
-          expect(place.data, isNot(contains('claude-')));
-
-          // No tab label is cut short.
-          for (final label in tester.widgetList<Text>(
+          expect(
             find.descendant(
-              of: find.byKey(const ValueKey('overview-peek-tabs')),
-              matching: find.byType(Text),
+              of: strip,
+              matching: find.textContaining('claude-'),
             ),
-          )) {
-            final paragraph = tester.renderObject<RenderParagraph>(
-              find.text(label.data!).last,
-            );
-            expect(paragraph.didExceedMaxLines, isFalse, reason: label.data);
-          }
+            findsNothing,
+          );
 
-          // Every action in reach: back and Open tab in the bar, the rest
-          // in ⋯, and the session's own controls under the chat.
+          // The views in the bar, beside back.
+          final back = tester.getRect(
+            find.byKey(const ValueKey('overview-peek-close')),
+          );
+          final views = tester.getRect(
+            find.byKey(const ValueKey('overview-peek-tabs')),
+          );
+          expect((views.center.dy - back.center.dy).abs(), lessThan(2));
+
+          // Every action in reach: back in the bar, the rest in ⋯, and the
+          // session's own strip under the chat.
           expect(find.byKey(const ValueKey('overview-peek-close')), findsOne);
-          expect(find.byKey(const ValueKey('overview-peek-open')), findsOne);
           expect(
             find.byKey(const ValueKey('overview-peek-controls')),
             findsOne,
           );
           await tester.tap(find.byKey(const ValueKey('overview-peek-more')));
           await settleMission(tester);
-          for (final item in const ['pin', 'previous', 'next', 'usage']) {
+          for (final item in const [
+            'open',
+            'subSessions',
+            'pin',
+            'previous',
+            'next',
+          ]) {
             expect(
               find.byKey(ValueKey('overview-peek-menu:$item')),
               findsOne,

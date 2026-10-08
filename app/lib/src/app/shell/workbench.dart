@@ -87,6 +87,7 @@ export 'workbench_tabs.dart';
 // library: every widget below is private and the tree golden records its name.
 import 'session_more_button.dart';
 import 'session_ports_badge.dart';
+import '../widgets/view_switch.dart';
 import '../widgets/yielding_row.dart';
 
 part 'workbench_compact.dart';

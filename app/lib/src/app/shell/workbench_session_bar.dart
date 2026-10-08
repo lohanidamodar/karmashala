@@ -585,114 +585,25 @@ class _ViewToggle extends StatelessWidget {
   final bool touch;
 
   @override
-  Widget build(BuildContext context) {
-    // The mockup's switch: a raised well with the chosen half lifted in the
-    // selection tone — no outline.
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      padding: const EdgeInsets.all(1),
-      decoration: BoxDecoration(
-        color: SurfaceTones.of(context).raised,
-        borderRadius: BorderRadius.circular(Radii.sm),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ViewToggleHalf(
-            icon: AppIcons.terminal,
-            label: 'Terminal',
-            tooltip: 'Terminal view',
-            selected: onTerminal,
-            compact: compact,
-            touch: touch,
-            onTap: onTerminalView,
-          ),
-          _ViewToggleHalf(
-            icon: AppIcons.chatCircle,
-            label: 'Chat',
-            tooltip: 'Chat view',
-            selected: !onTerminal,
-            compact: compact,
-            touch: touch,
-            onTap: onChat,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One side of [_ViewToggle].
-class _ViewToggleHalf extends StatelessWidget {
-  const _ViewToggleHalf({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    required this.selected,
-    required this.compact,
-    required this.onTap,
-    this.touch = false,
-  });
-
-  final IconData icon;
-  final String label;
-
-  /// Also the semantics label, which a [compact] half still needs.
-  final String tooltip;
-  final bool selected;
-  final bool compact;
-  final bool touch;
-  final VoidCallback onTap;
-
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final colour = selected ? scheme.onSurface : scheme.onSurfaceVariant;
-    return Tooltip(
-      message: tooltip,
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: tooltip,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            constraints: touch
-                ? const BoxConstraints(
-                    minWidth: Touch.target,
-                    minHeight: Touch.target,
-                  )
-                : null,
-            alignment: touch ? Alignment.center : null,
-            // Padded rather than fixed at 22px: the halves must grow with the
-            // ambient text scale or the row loses its shared centre-line.
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.sm,
-              vertical: kBarControlPad,
-            ),
-            decoration: BoxDecoration(
-              color: selected
-                  ? SurfaceTones.of(context).selected
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(Radii.sm - 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: Chrome.iconSmall, color: colour),
-                if (!compact) ...[
-                  const SizedBox(width: Insets.xs),
-                  Text(
-                    label,
-                    style: theme.textTheme.labelSmall?.copyWith(color: colour),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+  Widget build(BuildContext context) => ViewSwitch<bool>(
+    labelled: !compact,
+    touch: touch,
+    selected: onTerminal,
+    onChanged: (terminal) => terminal ? onTerminalView() : onChat(),
+    segments: const [
+      ViewSwitchSegment(
+        value: true,
+        icon: AppIcons.terminal,
+        label: 'Terminal',
+        tooltip: 'Terminal view',
       ),
-    );
-  }
+      ViewSwitchSegment(
+        value: false,
+        icon: AppIcons.chatCircle,
+        label: 'Chat',
+        tooltip: 'Chat view',
+      ),
+    ],
+  );
 }

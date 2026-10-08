@@ -10,7 +10,8 @@ import 'package:karmashala/src/features/sessions/application/session_launcher.da
     show kPermissionCycleSettle;
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
-import 'package:karmashala/src/features/sessions/presentation/session_agent_chip.dart';
+import 'package:karmashala/src/app/widgets/status_strip.dart';
+import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_notice_line.dart';
 import 'package:karmashala_session/launch.dart' show SessionSurface;
 import 'package:karmashala_session/session.dart';
@@ -105,8 +106,8 @@ void main() {
     await pump(tester);
 
     expect(
-      tester.widget<SessionAgentChip>(inPeek(find.byType(SessionAgentChip))),
-      isA<SessionAgentChip>().having((c) => c.sessionId, 'sessionId', 's1'),
+      tester.widget<SessionModelChip>(inPeek(find.byType(SessionModelChip))),
+      isA<SessionModelChip>().having((c) => c.sessionId, 'sessionId', 's1'),
     );
     expect(inPeek(find.byType(PermissionModeChip)), findsOneWidget);
     expect(
@@ -144,13 +145,18 @@ void main() {
     );
   });
 
-  testWidgets('at 360 px and text scale 1.6 it fits, ⋯ in reach', (
+  testWidgets('at 360 px and text scale 1.6 it fits, the verbs in reach', (
     tester,
   ) async {
     await pump(tester, size: const Size(360, 640), textScale: 1.6);
 
     expect(tester.takeException(), isNull);
-    final more = tester.getRect(inPeek(find.byType(SessionMoreButton)));
-    expect(more.right, lessThanOrEqualTo(360));
+    // Short of room, ⋯ gives its place to +N, whose sheet holds its verbs.
+    final fold = tester.getRect(inPeek(find.byKey(StatusStrip.foldKey)));
+    expect(fold.right, lessThanOrEqualTo(360));
+    await tester.tap(inPeek(find.byKey(StatusStrip.foldKey)));
+    await tester.pumpAndSettle();
+    expect(find.byType(SessionMoreBody), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

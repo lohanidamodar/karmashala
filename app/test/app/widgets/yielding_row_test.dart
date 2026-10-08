@@ -83,4 +83,46 @@ void main() {
     await pumpRow(tester, 400);
     expect(await tabOrder(tester), ['First', 'Second', 'Last']);
   });
+
+  testWidgets('a child with no width is never left out, nor gapped', (
+    tester,
+  ) async {
+    List<bool>? hidden;
+    Future<void> pumpSpaced(double width) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: YieldingRow(
+                  yieldFromStart: false,
+                  spacing: 10,
+                  onHiddenChanged: (h) => hidden = h,
+                  children: const [
+                    SizedBox(key: ValueKey('a'), width: 100, height: 10),
+                    SizedBox(key: ValueKey('b'), width: 100, height: 10),
+                    SizedBox.shrink(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    // 100 + 10 + 100: the empty child adds no gap.
+    await pumpSpaced(210);
+    expect(hidden, [false, false, false]);
+    expect(tester.getTopLeft(find.byKey(const ValueKey('b'))).dx, 110);
+
+    // Short of room, the last child with width goes — not the empty one.
+    await pumpSpaced(209);
+    expect(hidden, [false, true, false]);
+  });
 }

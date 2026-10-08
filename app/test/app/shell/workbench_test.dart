@@ -47,6 +47,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
+import 'package:karmashala/src/features/agents/presentation/picker_face.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_agent_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
@@ -1296,6 +1297,52 @@ void main() {
       }
       expect(find.byKey(const ValueKey('session-sheet')), findsOneWidget);
     });
+
+    // Round 59: the model at a glance on a phone, by its name alone, at the
+    // narrowest phone and the largest text.
+    for (final scale in const [1.0, 1.6]) {
+      testWidgets('the phone\'s row names the model, text ×$scale', (
+        tester,
+      ) async {
+        seedSessionInAPane();
+        container.read(selectedSessionIdProvider.notifier).select('s1');
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: const Scaffold(
+                body: CompactWorkbenchScope(child: WorkbenchView()),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final model = find.byKey(const ValueKey('compact-session-model'));
+        expect(tester.widget<SessionModelChip>(model).short, isTrue);
+        final face = find.descendant(
+          of: model,
+          matching: find.byType(PickerFace),
+        );
+        expect(face, findsOneWidget);
+        expect(tester.getRect(face).right, lessThanOrEqualTo(360));
+        // The name alone: no "· default" beside it.
+        expect(
+          find.descendant(of: model, matching: find.textContaining('default')),
+          findsNothing,
+        );
+      });
+    }
   });
 
   testWidgets('the bar survives the minimum window and larger text', (
