@@ -16,6 +16,7 @@ import '../application/overview_seen.dart';
 import '../application/overview_usage.dart';
 import 'overview_batch_bar.dart';
 import 'overview_cards.dart' show overviewCardEdge;
+import 'overview_end_button.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
@@ -378,69 +379,72 @@ class OverviewPhoneRow extends ConsumerWidget {
       AgentState.failed => SemanticColors.of(context).failure,
       _ => null,
     };
-    return Material(
-      color: selected ? StateLayers.selected(scheme) : Colors.transparent,
-      child: InkWell(
-        key: ValueKey('overview-phone-row:${card.id}'),
-        onTap: () {
-          if (!overviewPickSelects(ref, card, touch: true)) onOpen(card);
-        },
-        onLongPress: () => overviewPickSelects(ref, card, long: true),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: Touch.target),
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.xs,
-            vertical: Insets.sm,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: scheme.outlineVariant),
-              left: edge == null
-                  ? BorderSide.none
-                  : BorderSide(color: edge, width: Insets.xxs),
+    return OverviewHoverScope(
+      child: Material(
+        color: selected ? StateLayers.selected(scheme) : Colors.transparent,
+        child: InkWell(
+          key: ValueKey('overview-phone-row:${card.id}'),
+          onTap: () {
+            if (!overviewPickSelects(ref, card, touch: true)) onOpen(card);
+          },
+          onLongPress: () => overviewPickSelects(ref, card, long: true),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: Touch.target),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.xs,
+              vertical: Insets.sm,
             ),
-          ),
-          child: Row(
-            children: [
-              OverviewSelectBox(card: card),
-              OverviewAgentRing(card: card, size: Insets.xl + Insets.xs),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            card.entry.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: scheme.outlineVariant),
+                left: edge == null
+                    ? BorderSide.none
+                    : BorderSide(color: edge, width: Insets.xxs),
+              ),
+            ),
+            child: Row(
+              children: [
+                OverviewSelectBox(card: card),
+                OverviewAgentRing(card: card, size: Insets.xl + Insets.xs),
+                const SizedBox(width: Insets.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              card.entry.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
-                        OverviewNewBadge(card: card),
-                        const SizedBox(width: Insets.xs),
-                        // At large text it ends before the row does.
-                        Flexible(child: OverviewStatePill(card: card)),
-                        OverviewCardMenu(card: card),
-                      ],
-                    ),
-                    Text(
-                      line,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                          OverviewNewBadge(card: card),
+                          const SizedBox(width: Insets.xs),
+                          // At large text it ends before the row does.
+                          Flexible(child: OverviewStatePill(card: card)),
+                          OverviewEndButton(card: card),
+                          OverviewCardMenu(card: card),
+                        ],
                       ),
-                    ),
-                  ],
+                      Text(
+                        line,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -12,6 +12,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/phone_shell.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
@@ -51,6 +54,7 @@ void main() {
     double textScale = 1,
     MissionFixture? fixture,
     Widget? home,
+    List<Override> overrides = const [],
     Future<void> Function(WidgetTester tester, dynamic container)? before,
   }) async {
     final key = GlobalKey();
@@ -64,6 +68,7 @@ void main() {
       textScale: textScale,
       boundary: key,
       home: home,
+      overrides: overrides,
     );
     if (before != null) {
       await before(tester, container);
@@ -234,6 +239,40 @@ void main() {
       phone: true,
       before: (tester, _) async {
         await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
+      },
+    ),
+  );
+  // A card's quick End, on sessions the server runs: always there under a
+  // thumb, on hover under a mouse.
+  final everyRuns = [
+    sessionRunningOnHostProvider.overrideWithValue((_) => true),
+  ];
+  for (final scale in [1.0, 1.6]) {
+    testWidgets(
+      'end, phone 360 at $scale',
+      (t) => shoot(
+        t,
+        'end-phone-360-text${(scale * 100).round()}',
+        size: const Size(360, 800),
+        phone: true,
+        textScale: scale,
+        overrides: everyRuns,
+      ),
+    );
+  }
+  testWidgets(
+    'end, desktop hovered',
+    (t) => shoot(
+      t,
+      'end-desktop-1440-hover',
+      overrides: everyRuns,
+      before: (tester, _) async {
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: Offset.zero);
+        addTearDown(mouse.removePointer);
+        await mouse.moveTo(
+          tester.getCenter(find.byKey(const ValueKey('overview-card:ks-r32'))),
+        );
       },
     ),
   );

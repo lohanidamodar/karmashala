@@ -10,6 +10,7 @@ import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import 'overview_batch_bar.dart';
 import 'overview_card_parts.dart';
+import 'overview_end_button.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 
@@ -72,7 +73,13 @@ class OverviewCardFrame extends ConsumerWidget {
                 }
               },
         onLongPress: () => overviewPickSelects(ref, card, long: true),
-        child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
+        // Hovered or holding the keys, the card shows its End.
+        child: OverviewHoverScope(
+          child: Padding(
+            padding: const EdgeInsets.all(Insets.md),
+            child: child,
+          ),
+        ),
       ),
     );
   }
@@ -189,6 +196,7 @@ class OverviewCardHeader extends ConsumerWidget {
     return Row(
       children: [
         Expanded(child: header),
+        OverviewEndButton(card: card),
         OverviewCardMenu(card: card),
       ],
     );
@@ -278,18 +286,19 @@ class OverviewDoneRow extends ConsumerWidget {
               compactAge(now.difference(card.entry.activityAt)),
               style: theme.textTheme.labelSmall?.copyWith(color: muted),
             ),
+            OverviewEndButton(card: card),
             OverviewCardMenu(card: card),
           ],
         ),
       ),
     );
     final children = card.children;
-    if (children == null) return row;
+    if (children == null) return OverviewHoverScope(child: row);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        row,
+        OverviewHoverScope(child: row),
         _DoneRowSubSessions(card: card, total: children.total, onOpen: onOpen),
       ],
     );
