@@ -5,8 +5,10 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_automations/karmashala_automations.dart';
 import 'package:karmashala_automations/store.dart';
+import 'package:karmashala_git/github.dart';
+import 'package:karmashala_git/github_testing.dart';
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_host/src/automations/github/gh_github_api.dart';
+import 'package:karmashala_host/src/automations/github/client_github_api.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
@@ -19,30 +21,6 @@ Future<void> pump() async {
   }
 }
 
-/// `gh` answering from a list, recording what it was asked.
-class _Gh implements CommandRunner {
-  final printed = <String>[];
-  final asked = <List<String>>[];
-
-  @override
-  String get environmentId => 'local';
-
-  @override
-  Future<CommandResult> run(CommandRequest request) async {
-    asked.add(request.arguments);
-    final out = printed.removeAt(0);
-    return CommandResult(
-      exitCode: out.startsWith('HTTP/2.0 2') ? 0 : 1,
-      stdout: out,
-      stderr: '',
-    );
-  }
-
-  @override
-  Future<ProcessHandle> start(CommandRequest request) =>
-      throw UnimplementedError();
-}
-
 class _Base implements RunBaseCheckpoint {
   @override
   Future<String?> capture(
@@ -52,68 +30,109 @@ class _Base implements RunBaseCheckpoint {
   }) async => 'base-$runId';
 }
 
-class _Github implements GithubApi {
-  final answers = <String, Object?>{};
-
-  @override
-  Future<GithubAnswer> get(String path) async {
-    final key = answers.keys.where(path.startsWith).firstOrNull;
-    return GithubAnswer(status: key == null ? 404 : 200, body: answers[key]);
-  }
-}
-
-/// GitHub automations in the server: `gh api` read with its ETag kept, and
-/// the three things an event can do — notify, tell the session on the pull
-/// request's branch, or start an agent on that branch.
+/// GitHub automations in the server: GitHub's API read through the server's
+/// client with its ETag kept, and the three things an event can do — notify,
+/// tell the session on the pull request's branch, or start an agent on that
+/// branch.
 void main() {
-  group('gh api -i', () {
-    const ok =
-        'HTTP/2.0 200 OK\r\n'
-        'Etag: W/"abc"\r\n'
-        'X-Ratelimit-Remaining: 4321\r\n'
-        'X-Ratelimit-Reset: 1791390223\r\n'
-        '\r\n'
-        '[{"id": 1}]';
-    const notModified =
-        'HTTP/2.0 304 Not Modified\r\n'
-        'X-Ratelimit-Remaining: 4320\r\n'
-        '\r\n';
+  group('the trigger API over the client', () {
+    late FakeGithubServer server;
+    var now = DateTime.utc(2026, 10, 8, 12);
 
-    test('the status, the ETag, the budget and the body are read', () {
-      final answer = parseGhApiAnswer(ok)!;
-      expect(answer.status, 200);
-      expect(answer.etag, 'W/"abc"');
-      expect(answer.remaining, 4321);
-      expect(answer.resetAt, DateTime.utc(2026, 10, 7, 16, 23, 43));
-      expect(answer.body, [
-        {'id': 1},
-      ]);
-      expect(parseGhApiAnswer('gh: not logged in'), isNull);
-    });
+    setUp(() async => server = await FakeGithubServer.start());
+    tearDown(() => server.close());
+
+    ClientGithubApi api({Map<String, String>? tokens}) => ClientGithubApi(
+      fakeGithubClient(
+        server,
+        GithubCredentials(
+          saved: GithubTokenMap(tokens ?? {'github.com': 'tok'}),
+        ),
+        now: () => now,
+      ),
+      'github.com',
+    );
 
     test(
       'a second read asks with the ETag, and a 304 is the kept body',
       () async {
-        final gh = _Gh()..printed.addAll([ok, notModified]);
-        final api = GhGithubApi(
-          gh,
-          const EnvironmentPath(environmentId: 'local', path: '/src'),
-        );
-        expect((await api.get('repos/o/r/pulls')).body, [
+        server.on('GET', '/repos/o/r/pulls', (request) {
+          if (request.headers['if-none-match'] == 'W/"abc"') {
+            return const FakeGithubReply(
+              304,
+              headers: {'x-ratelimit-remaining': '4320'},
+            );
+          }
+          return const FakeGithubReply(
+            200,
+            body: [
+              {'id': 1},
+            ],
+            headers: {
+              'etag': 'W/"abc"',
+              'x-ratelimit-remaining': '4321',
+              'x-ratelimit-reset': '1791390223',
+            },
+          );
+        });
+        final github = api();
+        final first = await github.get('repos/o/r/pulls?state=open');
+        expect(first.body, [
           {'id': 1},
         ]);
-        final again = await api.get('repos/o/r/pulls');
-        expect(
-          gh.asked.last,
-          containsAllInOrder(['-H', 'If-None-Match: W/"abc"']),
-        );
+        expect(first.remaining, 4321);
+        expect(first.resetAt, DateTime.utc(2026, 10, 7, 16, 23, 43));
+        final again = await github.get('repos/o/r/pulls?state=open');
         expect(again.status, 200);
-        expect(again.body, [
-          {'id': 1},
-        ]);
+        expect(again.body, first.body);
         expect(again.remaining, 4320);
+        expect(server.requests.map((r) => r.authorization), [
+          'Bearer tok',
+          'Bearer tok',
+        ]);
+        expect(server.requests.first.uri.queryParameters, {'state': 'open'});
       },
     );
+
+    test('a spent budget reads as a 403 with nothing left', () async {
+      final reset = now.add(const Duration(minutes: 20));
+      server.on(
+        'GET',
+        '/repos/o/r/pulls',
+        (_) => FakeGithubReply(
+          403,
+          body: const {'message': 'API rate limit exceeded'},
+          headers: {
+            'x-ratelimit-remaining': '0',
+            'x-ratelimit-reset': '${reset.millisecondsSinceEpoch ~/ 1000}',
+          },
+        ),
+      );
+      final answer = await api().get('repos/o/r/pulls');
+      expect(answer.status, 403);
+      expect(answer.remaining, 0);
+      expect(answer.resetAt, reset);
+    });
+
+    test('no access is a read that could not happen', () async {
+      await expectLater(
+        api(tokens: {}).get('repos/o/r/pulls'),
+        throwsA(
+          isA<GithubReadException>().having(
+            (e) => e.message,
+            'message',
+            contains('gh auth login'),
+          ),
+        ),
+      );
+      expect(server.requests, isEmpty);
+    });
+
+    test('a repository is asked on the host its canonical id names', () {
+      expect(githubHostOfCanonical('github.com/o/r'), 'github.com');
+      expect(githubHostOfCanonical('ghe.corp.example/o/r'), 'ghe.corp.example');
+      expect(githubHostOfCanonical(null), 'github.com');
+    });
   });
 
   group('an event', () {
@@ -123,16 +142,38 @@ void main() {
     late FakePtyLauncher launcher;
     late SessionRegistry registry;
     late DaemonAutomations automations;
-    late _Github github;
+    late FakeGithubServer server;
+    var comments = <Object?>[];
     late List<InboxItem> raised;
     var ids = 0;
     var clock = now;
 
-    setUp(() {
+    setUp(() async {
       ids = 0;
       clock = now;
       raised = [];
-      github = _Github();
+      comments = [];
+      server = await FakeGithubServer.start();
+      server
+        ..on(
+          'GET',
+          '/repos/o/r/issues/comments',
+          (_) => FakeGithubReply(200, body: comments),
+        )
+        ..on(
+          'GET',
+          '/repos/o/r/pulls/7',
+          (_) => const FakeGithubReply(
+            200,
+            body: {
+              'number': 7,
+              'title': 'Speed up the cart',
+              'html_url': 'https://github.com/o/r/pull/7',
+              'head': {'ref': 'feat/x', 'sha': 'abc'},
+              'labels': <Object?>[],
+            },
+          ),
+        );
       db = AppDatabase.memory();
       db.execute('PRAGMA foreign_keys = OFF;');
       data = Directory.systemTemp.createTempSync('daemon-github-');
@@ -144,7 +185,9 @@ void main() {
       );
       db.execute(
         'INSERT INTO repositories (id, project_id, name, environment_id, '
-        "path, created_at) VALUES ('r1', 'p1', 'shop', 'local', '/src/shop', "
+        'canonical_id, '
+        "path, created_at) VALUES ('r1', 'p1', 'shop', 'local', "
+        "'github.com/o/r', '/src/shop', "
         '?);',
         [at],
       );
@@ -186,21 +229,18 @@ void main() {
         windows: false,
         raise: raised.add,
         checkpoints: _Base(),
-        githubApi: (_) => github,
+        githubClient: fakeGithubClient(
+          server,
+          GithubCredentials(saved: GithubTokenMap({'github.com': 'tok'})),
+          now: () => clock,
+        ),
         branchOf: (directory) async =>
             directory.path.endsWith('feat-x') ? 'feat/x' : 'main',
       );
-      github.answers['repos/o/r/issues/comments'] = <Object?>[];
-      github.answers['repos/o/r/pulls/7'] = {
-        'number': 7,
-        'title': 'Speed up the cart',
-        'html_url': 'https://github.com/o/r/pull/7',
-        'head': {'ref': 'feat/x', 'sha': 'abc'},
-        'labels': <Object?>[],
-      };
     });
 
     tearDown(() async {
+      await server.close();
       await automations.close();
       for (final handle in launcher.handles) {
         handle.finish(0);
@@ -235,7 +275,7 @@ void main() {
 
     Future<void> comment(String body) async {
       await automations.github.poller.sweep();
-      github.answers['repos/o/r/issues/comments'] = [
+      comments = [
         {
           'id': 99,
           'html_url': 'https://github.com/o/r/pull/7#issuecomment-99',

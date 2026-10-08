@@ -2934,6 +2934,9 @@ WorkbenchView
                                                                                                                                                                                                 _TerminalView key=[GlobalKey#…]
           _SessionBar
             Column
+              ColoredBox
+                SecretRequestCard
+                  SizedBox
               _ZenDimmed
                 MouseRegion
                   Focus
@@ -4180,6 +4183,9 @@ WorkbenchView
           _SessionBar
             Column
               ColoredBox
+                SecretRequestCard
+                  SizedBox
+              ColoredBox
                 ApprovalRequestCard
                   SizedBox
               _ZenDimmed
@@ -5025,6 +5031,9 @@ WorkbenchView
                                                                                                                       RichText
           _SessionBar
             Column
+              ColoredBox
+                SecretRequestCard
+                  SizedBox
               _ZenDimmed
                 MouseRegion
                   Focus
@@ -5916,6 +5925,9 @@ WorkbenchView
                                                                                                                                                                                                 _TerminalView key=[GlobalKey#…]
           _SessionBar
             Column
+              ColoredBox
+                SecretRequestCard
+                  SizedBox
               _ZenDimmed
                 MouseRegion
                   Focus

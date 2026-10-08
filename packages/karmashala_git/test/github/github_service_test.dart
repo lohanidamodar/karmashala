@@ -1,5 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/github.dart';
+import 'package:karmashala_git/github_testing.dart';
 import 'package:test/test.dart';
 
 import '../support/fake_command_runner.dart';
@@ -173,314 +174,469 @@ void main() {
     );
   });
 
-  group('GitHubService', () {
-    test('listPullRequests runs gh in the repo and parses JSON', () async {
-      late CommandRequest captured;
-      final runner = FakeCommandRunner(
-        responder: (req) {
-          captured = req;
-          return const CommandResult(
+  group('GitHubService over the API', () {
+    late FakeGithubServer github;
+    late FakeCommandRunner git;
+
+    setUp(() async {
+      github = await FakeGithubServer.start();
+      git = FakeCommandRunner(
+        responder: (request) => switch (request.arguments) {
+          ['remote', 'get-url', 'origin'] => const CommandResult(
             exitCode: 0,
-            stdout: '[{"number":1,"title":"PR","state":"OPEN"}]',
+            stdout: 'git@github.com:o/r.git\n',
             stderr: '',
-          );
-        },
-      );
-      final prs = await GitHubService(runner).listPullRequests(repo);
-      expect(prs.single.number, 1);
-      expect(captured.executable, 'gh');
-      expect(captured.arguments, [
-        'pr',
-        'list',
-        '--json',
-        'number,title,state,author,url',
-        '--limit',
-        '50',
-      ]);
-      expect(captured.workingDirectory!.path, r'C:\app');
-    });
-
-    test('createPullRequest returns the URL gh prints', () async {
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 0,
-          stdout: 'https://github.com/o/r/pull/9\n',
-          stderr: '',
-        ),
-      );
-      final url = await GitHubService(
-        runner,
-      ).createPullRequest(repo, title: 'T', body: 'B');
-      expect(url, 'https://github.com/o/r/pull/9');
-    });
-
-    test('a gh failure raises GitHubException', () async {
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: 'gh: not authenticated',
-        ),
-      );
-      expect(
-        () => GitHubService(runner).listIssues(repo),
-        throwsA(isA<GitHubException>()),
-      );
-    });
-
-    test('pullRequestFor asks once for the PR and its checks', () async {
-      late CommandRequest captured;
-      final runner = FakeCommandRunner(
-        responder: (req) {
-          captured = req;
-          return const CommandResult(
-            exitCode: 0,
-            stdout:
-                '{"number":12,"title":"Work","state":"OPEN",'
-                '"url":"https://github.com/o/r/pull/12","isDraft":false,'
-                '"mergeable":"MERGEABLE","reviewDecision":"APPROVED",'
-                '"headRefName":"work","statusCheckRollup":'
-                '[{"__typename":"CheckRun","name":"build",'
-                '"status":"COMPLETED","conclusion":"SUCCESS"}]}',
-            stderr: '',
-          );
-        },
-      );
-      final pr = await GitHubService(
-        runner,
-      ).pullRequestFor(repo, branch: 'work');
-
-      expect(captured.arguments.take(3), ['pr', 'view', 'work']);
-      expect(captured.arguments.last, contains('statusCheckRollup'));
-      expect(pr?.number, 12);
-      expect(pr?.state, PullRequestState.open);
-      expect(pr?.mergeable, isTrue);
-      expect(pr?.reviewDecision, ReviewDecision.approved);
-      expect(pr?.checks.state, ChecksState.passing);
-      expect(pr?.isReadyToMerge, isTrue);
-    });
-
-    test('pullRequestFor asks GitHub for its own merge verdict', () async {
-      // The field rides in the call that was already being made — it is the
-      // same lazy computation `mergeable` triggers, so asking for both costs
-      // one process and no extra work on GitHub's side.
-      late CommandRequest captured;
-      final runner = FakeCommandRunner(
-        responder: (req) {
-          captured = req;
-          return const CommandResult(
-            exitCode: 0,
-            stdout: '{"number":12,"state":"OPEN","mergeStateStatus":"BEHIND"}',
-            stderr: '',
-          );
-        },
-      );
-      final pr = await GitHubService(
-        runner,
-      ).pullRequestFor(repo, branch: 'work');
-
-      expect(captured.arguments.join(','), contains('mergeStateStatus'));
-      expect(pr?.mergeStateStatus, MergeStateStatus.behind);
-    });
-
-    test('forgePolicyFor asks graphql once, repo-relative', () async {
-      late CommandRequest captured;
-      final runner = FakeCommandRunner(
-        responder: (req) {
-          captured = req;
-          return const CommandResult(
-            exitCode: 0,
-            stdout:
-                '{"data":{"repository":{"squashMergeAllowed":true,'
-                '"pullRequest":{"reviewThreads":{"nodes":'
-                '[{"isResolved":false}]}}}}}',
-            stderr: '',
-          );
-        },
-      );
-      final policy = await GitHubService(
-        runner,
-      ).forgePolicyFor(repo, number: 12);
-
-      expect(captured.arguments.take(2), ['api', 'graphql']);
-      // gh fills these from the working directory, which is how this stays a
-      // repo-relative call like every other one in this service instead of
-      // parsing the remote URL itself.
-      expect(captured.arguments, contains('owner={owner}'));
-      expect(captured.arguments, contains('name={repo}'));
-      expect(captured.arguments, contains('number=12'));
-      expect(captured.workingDirectory, repo);
-      expect(policy.strategies.squash, isTrue);
-      expect(policy.unresolvedReviewThreads, 1);
-    });
-
-    test('a graphql error still yields whatever the body carried', () async {
-      // `gh api graphql` exits non-zero on a GraphQL error and prints the
-      // document anyway. Throwing would discard a partial answer that is worth
-      // more than none — and would turn a permissions quirk into a red row.
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout:
-              '{"data":{"repository":{"squashMergeAllowed":true}},'
-              '"errors":[{"message":"nope"}]}',
-          stderr: 'gh: GraphQL error',
-        ),
-      );
-      final policy = await GitHubService(
-        runner,
-      ).forgePolicyFor(repo, number: 12);
-      expect(policy.strategies.squash, isTrue);
-      expect(policy.unresolvedReviewThreads, isNull);
-    });
-
-    test('branchProtectionFor asks the base branch, repo-relative', () async {
-      late CommandRequest captured;
-      final runner = FakeCommandRunner(
-        responder: (req) {
-          captured = req;
-          return const CommandResult(
-            exitCode: 0,
-            stdout:
-                '{"url":"u","required_status_checks":{"strict":true,'
-                '"contexts":["ci/build"]},'
-                '"required_pull_request_reviews":'
-                '{"required_approving_review_count":2,'
-                '"require_code_owner_reviews":true},'
-                '"required_signatures":{"enabled":true},'
-                '"required_linear_history":{"enabled":false}}',
-            stderr: '',
-          );
-        },
-      );
-
-      final protection = await GitHubService(
-        runner,
-      ).branchProtectionFor(repo, branch: 'main');
-
-      expect(captured.arguments, [
-        'api',
-        'repos/{owner}/{repo}/branches/main/protection',
-      ]);
-      expect(captured.workingDirectory, repo);
-      expect(protection.status, BranchProtectionRead.read);
-      expect(protection.requiredApprovals, 2);
-      expect(protection.requiresCodeOwnerReview, isTrue);
-      expect(protection.requiredChecks, ['ci/build']);
-      expect(protection.requiresSignatures, isTrue);
-      // A `false` in the body is a fact; a missing key is not.
-      expect(protection.requiresLinearHistory, isFalse);
-      expect(protection.requiresConversationResolution, isFalse);
-    });
-
-    test(
-      'a 403 is the reader being refused, not the branch being open',
-      () async {
-        // The ordinary answer for anyone who is not an admin — `/protection` is
-        // an admin-only endpoint — so it must not read as "no rules here".
-        final runner = FakeCommandRunner(
-          responder: (_) => const CommandResult(
-            exitCode: 1,
-            stdout:
-                '{"message":"Must have admin rights to Repository.",'
-                '"status":"403"}',
-            stderr: 'gh: Must have admin rights to Repository. (HTTP 403)',
           ),
-        );
+          ['rev-parse', '--abbrev-ref', 'HEAD'] => const CommandResult(
+            exitCode: 0,
+            stdout: 'work\n',
+            stderr: '',
+          ),
+          _ => const CommandResult(exitCode: 1, stdout: '', stderr: 'no'),
+        },
+      );
+    });
 
-        final protection = await GitHubService(
-          runner,
-        ).branchProtectionFor(repo, branch: 'main');
+    tearDown(() => github.close());
 
-        expect(protection.status, BranchProtectionRead.forbidden);
-        expect(protection.rules, isEmpty);
-      },
+    GitHubService service({Map<String, String>? tokens}) => GitHubService(
+      git,
+      client: fakeGithubClient(
+        github,
+        GithubCredentials(
+          saved: GithubTokenMap(tokens ?? {'github.com': 'tok'}),
+        ),
+      ),
     );
 
-    test(
-      'a 404 and a body that will not parse are both "could not tell"',
-      () async {
-        // 404 is what an unprotected branch answers — and also what a branch
-        // guarded by a *ruleset* rather than by classic protection answers, so
-        // it is never evidence that nothing is in the way.
-        final missing = FakeCommandRunner(
-          responder: (_) => const CommandResult(
-            exitCode: 1,
-            stdout: '{"message":"Branch not protected","status":"404"}',
-            stderr: 'gh: Branch not protected (HTTP 404)',
-          ),
-        );
-        expect(
-          (await GitHubService(
-            missing,
-          ).branchProtectionFor(repo, branch: 'x')).status,
-          BranchProtectionRead.unknown,
-        );
-
-        final garbage = FakeCommandRunner(
-          responder: (_) =>
-              const CommandResult(exitCode: 0, stdout: 'not json', stderr: ''),
-        );
-        expect(
-          (await GitHubService(
-            garbage,
-          ).branchProtectionFor(repo, branch: 'x')).status,
-          BranchProtectionRead.unknown,
-        );
-      },
-    );
-
-    test(
-      'markPullRequestReady names the number rather than the branch',
-      () async {
-        late CommandRequest captured;
-        final runner = FakeCommandRunner(
-          responder: (req) {
-            captured = req;
-            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+    test('reads the repository off origin and asks for it', () async {
+      github.on(
+        'GET',
+        '/repos/o/r',
+        (_) => const FakeGithubReply(
+          200,
+          body: {
+            'full_name': 'o/r',
+            'html_url': 'https://github.com/o/r',
+            'private': true,
+            'stargazers_count': 3,
+            'description': 'd',
+            'default_branch': 'main',
           },
+        ),
+      );
+      final repository = await service().getRepository(repo);
+      expect(repository?.nameWithOwner, 'o/r');
+      expect(repository?.isPrivate, isTrue);
+      expect(repository?.defaultBranch, 'main');
+      expect(git.requests.first.workingDirectory, repo);
+    });
+
+    test(
+      'lists open pull requests and issues, leaving PRs out of issues',
+      () async {
+        github
+          ..on(
+            'GET',
+            '/repos/o/r/pulls',
+            (_) => const FakeGithubReply(
+              200,
+              body: [
+                {
+                  'number': 1,
+                  'title': 'PR',
+                  'state': 'open',
+                  'user': {'login': 'me'},
+                  'html_url': 'https://github.com/o/r/pull/1',
+                },
+              ],
+            ),
+          )
+          ..on(
+            'GET',
+            '/repos/o/r/issues',
+            (_) => const FakeGithubReply(
+              200,
+              body: [
+                {'number': 2, 'title': 'Bug', 'state': 'open'},
+                {
+                  'number': 1,
+                  'title': 'PR',
+                  'state': 'open',
+                  'pull_request': {},
+                },
+              ],
+            ),
+          );
+        final gh = service();
+        final prs = await gh.listPullRequests(repo);
+        expect(prs.single.number, 1);
+        expect(prs.single.state, 'OPEN');
+        expect(prs.single.author, 'me');
+        expect(
+          github.requests.first.uri.queryParameters,
+          containsPair('state', 'open'),
         );
-        await GitHubService(runner).markPullRequestReady(repo, number: 12);
-        expect(captured.arguments, ['pr', 'ready', '12']);
+        final issues = await gh.listIssues(repo);
+        expect(issues.map((i) => i.number), [2]);
       },
     );
 
-    test('a refused pr-ready throws with what gh said', () async {
-      final runner = FakeCommandRunner(
-        responder: (_) =>
-            const CommandResult(exitCode: 1, stdout: '', stderr: 'not a draft'),
-      );
-      expect(
-        () => GitHubService(runner).markPullRequestReady(repo, number: 12),
-        throwsA(isA<GitHubException>()),
-      );
-    });
+    test(
+      'pullRequestFor reads the branch\'s pull request and its checks',
+      () async {
+        github.onGraphql({
+          'pullRequests(headRefName': (request) {
+            final variables = (request.json as Map)['variables'] as Map;
+            expect(variables, {'owner': 'o', 'name': 'r', 'branch': 'work'});
+            return const FakeGithubReply(
+              200,
+              body: {
+                'data': {
+                  'repository': {
+                    'pullRequests': {
+                      'nodes': [
+                        {
+                          'number': 12,
+                          'title': 'Work',
+                          'state': 'OPEN',
+                          'url': 'https://github.com/o/r/pull/12',
+                          'isDraft': false,
+                          'mergeable': 'MERGEABLE',
+                          'mergeStateStatus': 'BEHIND',
+                          'reviewDecision': 'APPROVED',
+                          'headRefName': 'work',
+                          'baseRefName': 'main',
+                          'headRepositoryOwner': {'login': 'o'},
+                          'commits': {
+                            'nodes': [
+                              {
+                                'commit': {
+                                  'statusCheckRollup': {
+                                    'contexts': {
+                                      'nodes': [
+                                        {
+                                          '__typename': 'CheckRun',
+                                          'status': 'COMPLETED',
+                                          'conclusion': 'SUCCESS',
+                                        },
+                                      ],
+                                    },
+                                  },
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            );
+          },
+        });
+        final pr = await service().pullRequestFor(repo, branch: 'work');
+        expect(pr?.number, 12);
+        expect(pr?.state, PullRequestState.open);
+        expect(pr?.mergeable, isTrue);
+        expect(pr?.mergeStateStatus, MergeStateStatus.behind);
+        expect(pr?.reviewDecision, ReviewDecision.approved);
+        expect(pr?.checks.state, ChecksState.passing);
+        expect(pr?.baseRefName, 'main');
+      },
+    );
 
     test('a branch with no pull request is null, not an error', () async {
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: 'no pull requests found for branch "work"',
+      github.onGraphql({
+        'pullRequests(headRefName': (_) => const FakeGithubReply(
+          200,
+          body: {
+            'data': {
+              'repository': {
+                'pullRequests': {'nodes': []},
+              },
+            },
+          },
+        ),
+      });
+      expect(await service().pullRequestFor(repo, branch: 'work'), isNull);
+    });
+
+    test('no access is a refusal, not "there is no PR"', () async {
+      await expectLater(
+        service(tokens: {}).pullRequestFor(repo, branch: 'work'),
+        throwsA(
+          isA<GitHubException>()
+              .having((e) => e.refusal, 'refusal', GitHubRefusal.noAccess)
+              .having((e) => e.message, 'message', contains('gh auth login')),
         ),
       );
-      expect(
-        await GitHubService(runner).pullRequestFor(repo, branch: 'work'),
-        isNull,
+      expect(github.requests, isEmpty);
+    });
+
+    test('a checkout with no GitHub origin is refused in words', () async {
+      git.responder = (_) =>
+          const CommandResult(exitCode: 2, stdout: '', stderr: 'no origin');
+      await expectLater(
+        service().listIssues(repo),
+        throwsA(
+          isA<GitHubException>().having(
+            (e) => e.refusal,
+            'refusal',
+            GitHubRefusal.noRemote,
+          ),
+        ),
       );
     });
 
-    test('gh being unusable still throws — that is not "there is no PR"', () {
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 4,
-          stdout: '',
-          stderr: 'gh: You are not logged into any GitHub hosts',
-        ),
+    test(
+      'forgePolicyFor asks GraphQL with the repository and number',
+      () async {
+        github.onGraphql({
+          'reviewThreads': (request) {
+            expect(((request.json as Map)['variables'] as Map)['number'], 12);
+            return const FakeGithubReply(
+              200,
+              body: {
+                'data': {
+                  'repository': {
+                    'squashMergeAllowed': true,
+                    'pullRequest': {
+                      'reviewThreads': {
+                        'nodes': [
+                          {'isResolved': false},
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            );
+          },
+        });
+        final policy = await service().forgePolicyFor(repo, number: 12);
+        expect(policy.strategies.squash, isTrue);
+        expect(policy.unresolvedReviewThreads, 1);
+      },
+    );
+
+    test('branch protection: rules read, 403 forbidden, 404 unknown', () async {
+      github
+        ..on(
+          'GET',
+          '/repos/o/r/branches/main/protection',
+          (_) => const FakeGithubReply(
+            200,
+            body: {
+              'url': 'u',
+              'required_status_checks': {
+                'contexts': ['ci/build'],
+              },
+              'required_pull_request_reviews': {
+                'required_approving_review_count': 2,
+              },
+            },
+          ),
+        )
+        ..on(
+          'GET',
+          '/repos/o/r/branches/locked/protection',
+          (_) => const FakeGithubReply(
+            403,
+            body: {'message': 'Must have admin rights to Repository.'},
+          ),
+        );
+      final gh = service();
+      final main = await gh.branchProtectionFor(repo, branch: 'main');
+      expect(main.status, BranchProtectionRead.read);
+      expect(main.requiredApprovals, 2);
+      expect(main.requiredChecks, ['ci/build']);
+      expect(
+        (await gh.branchProtectionFor(repo, branch: 'locked')).status,
+        BranchProtectionRead.forbidden,
       );
       expect(
-        () => GitHubService(runner).pullRequestFor(repo, branch: 'work'),
-        throwsA(isA<GitHubException>()),
+        (await gh.branchProtectionFor(repo, branch: 'open')).status,
+        BranchProtectionRead.unknown,
+      );
+    });
+
+    test('lists workflow runs on a branch', () async {
+      github.on(
+        'GET',
+        '/repos/o/r/actions/runs',
+        (_) => const FakeGithubReply(
+          200,
+          body: {
+            'workflow_runs': [
+              {
+                'id': 77,
+                'name': 'CI',
+                'display_title': 'Fix',
+                'status': 'completed',
+                'conclusion': 'failure',
+                'head_branch': 'work',
+                'event': 'push',
+                'html_url': 'https://github.com/o/r/actions/runs/77',
+                'created_at': '2026-10-08T10:00:00Z',
+                'run_attempt': 1,
+              },
+            ],
+          },
+        ),
+      );
+      final runs = await service().listWorkflowRuns(
+        repo,
+        branch: 'work',
+        limit: 5,
+      );
+      expect(runs.single.id, 77);
+      expect(runs.single.failed, isTrue);
+      expect(runs.single.workflowName, 'CI');
+      expect(github.requests.single.uri.queryParameters, {
+        'branch': 'work',
+        'per_page': '5',
+      });
+    });
+
+    test('a failed run\'s log is its failed steps, fetched without the token '
+        'where GitHub redirects it', () async {
+      final blobs = await FakeGithubServer.start();
+      addTearDown(blobs.close);
+      blobs.on(
+        'GET',
+        '/log',
+        (_) => const FakeGithubReply(
+          200,
+          body:
+              '2026-10-08T10:00:01.1234567Z setting up\n'
+              '2026-10-08T10:00:05.0000000Z ##[error]test failed\n'
+              '2026-10-08T10:00:09.0000000Z cleaning up\n',
+        ),
+      );
+      github
+        ..on(
+          'GET',
+          '/repos/o/r/actions/runs/77/jobs',
+          (_) => const FakeGithubReply(
+            200,
+            body: {
+              'jobs': [
+                {
+                  'id': 5,
+                  'name': 'build',
+                  'conclusion': 'failure',
+                  'steps': [
+                    {
+                      'name': 'Set up',
+                      'conclusion': 'success',
+                      'started_at': '2026-10-08T10:00:00Z',
+                      'completed_at': '2026-10-08T10:00:02Z',
+                    },
+                    {
+                      'name': 'Test',
+                      'conclusion': 'failure',
+                      'started_at': '2026-10-08T10:00:03Z',
+                      'completed_at': '2026-10-08T10:00:06Z',
+                    },
+                  ],
+                },
+                {'id': 6, 'name': 'lint', 'conclusion': 'success'},
+              ],
+            },
+          ),
+        )
+        ..on(
+          'GET',
+          '/repos/o/r/actions/jobs/5/logs',
+          (_) => FakeGithubReply(
+            302,
+            headers: {'location': '${blobs.base.resolve('log')}'},
+          ),
+        );
+      final log = await service().failedRunLog(repo, runId: 77);
+      expect(log.tail, 'build | Test | ##[error]test failed');
+      expect(log.errors, hasLength(1));
+      expect(blobs.requests.single.authorization, isNull);
+      expect(
+        github.requests.map((r) => r.path),
+        isNot(contains('/repos/o/r/actions/jobs/6/logs')),
+      );
+    });
+
+    test('markPullRequestReady asks for the node and marks it ready', () async {
+      github
+        ..on(
+          'GET',
+          '/repos/o/r/pulls/12',
+          (_) => const FakeGithubReply(200, body: {'node_id': 'PR_x'}),
+        )
+        ..onGraphql({
+          'markPullRequestReadyForReview': (request) {
+            expect((request.json as Map)['variables'], {'id': 'PR_x'});
+            return const FakeGithubReply(
+              200,
+              body: {
+                'data': {
+                  'markPullRequestReadyForReview': {
+                    'pullRequest': {'isDraft': false},
+                  },
+                },
+              },
+            );
+          },
+        });
+      await service().markPullRequestReady(repo, number: 12);
+      expect(github.requests.last.path, '/graphql');
+    });
+
+    test(
+      'createPullRequest opens one from the branch onto the default',
+      () async {
+        github
+          ..on(
+            'GET',
+            '/repos/o/r',
+            (_) => const FakeGithubReply(
+              200,
+              body: {'full_name': 'o/r', 'default_branch': 'main'},
+            ),
+          )
+          ..on('POST', '/repos/o/r/pulls', (request) {
+            expect(request.json, {
+              'title': 'T',
+              'body': 'B',
+              'head': 'work',
+              'base': 'main',
+            });
+            return const FakeGithubReply(
+              201,
+              body: {'html_url': 'https://github.com/o/r/pull/9'},
+            );
+          });
+        final url = await service().createPullRequest(
+          repo,
+          title: 'T',
+          body: 'B',
+        );
+        expect(url, 'https://github.com/o/r/pull/9');
+      },
+    );
+
+    test('GitHub refusing is a GitHubException with its message', () async {
+      github.on(
+        'GET',
+        '/repos/o/r',
+        (_) => const FakeGithubReply(404, body: {'message': 'Not Found'}),
+      );
+      await expectLater(
+        service().getRepository(repo),
+        throwsA(
+          isA<GitHubException>()
+              .having((e) => e.status, 'status', 404)
+              .having((e) => e.message, 'message', contains('Not Found')),
+        ),
       );
     });
   });
@@ -582,169 +738,6 @@ void main() {
           checks: ChecksSummary(failed: 1),
         ).isReadyToMerge,
         isFalse,
-      );
-    });
-  });
-
-  /// **A `gh` that cannot answer is refused in words that name where it
-  /// looked.** Karmashala runs `gh` in the environment the repository belongs
-  /// to, so "gh failed" sends its reader to the wrong machine — and a missing
-  /// executable is a `CommandException` rather than an exit code, so without
-  /// this seam nothing in `GitHubService` ever sees it.
-  group('a gh that cannot answer', () {
-    ExecutionEnvironment env(
-      EnvironmentKind kind, {
-      String id = 'windows',
-      String name = 'Windows',
-      String? distro,
-    }) => ExecutionEnvironment(
-      id: id,
-      kind: kind,
-      name: name,
-      wslDistribution: distro,
-      createdAt: DateTime.utc(2026, 1, 1),
-    );
-
-    test('a gh that will not start names Windows and how to install it', () {
-      final runner = FakeCommandRunner(
-        throwError: CommandException('Failed to run "gh" on windows'),
-      );
-      expect(
-        () => GitHubService(
-          runner,
-          environment: env(EnvironmentKind.windowsNative),
-        ).getRepository(repo),
-        throwsA(
-          isA<GitHubException>()
-              .having(
-                (e) => e.refusal,
-                'refusal',
-                GitHubCliRefusal.notInstalled,
-              )
-              .having(
-                (e) => e.message,
-                'message',
-                allOf(
-                  contains('not installed in Windows'),
-                  contains('winget install --id GitHub.cli'),
-                ),
-              ),
-        ),
-      );
-    });
-
-    test('a WSL checkout is refused for WSL, and nothing else runs', () async {
-      // Exit 127: WSL and SSH hand the name to their own shell, so a missing
-      // gh there is an exit code and never a failure to start a process.
-      final runner = FakeCommandRunner(
-        environmentId: 'wsl:archlinux',
-        responder: (_) => const CommandResult(
-          exitCode: 127,
-          stdout: '',
-          stderr: 'zsh:1: command not found: gh',
-        ),
-      );
-      await expectLater(
-        GitHubService(
-          runner,
-          environment: env(
-            EnvironmentKind.wsl,
-            id: 'wsl:archlinux',
-            name: 'archlinux',
-            distro: 'archlinux',
-          ),
-        ).listPullRequests(repo),
-        throwsA(
-          isA<GitHubException>()
-              .having(
-                (e) => e.refusal,
-                'refusal',
-                GitHubCliRefusal.notInstalled,
-              )
-              .having(
-                (e) => e.message,
-                'message',
-                allOf(contains('WSL · archlinux'), isNot(contains('winget'))),
-              ),
-        ),
-      );
-      // One attempt, in the one environment the repository lives in: a retry
-      // anywhere else would be a different filesystem.
-      expect(runner.requests, hasLength(1));
-    });
-
-    test('an unauthenticated gh is its own refusal, with the fix', () {
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 4,
-          stdout: '',
-          stderr:
-              'To get started with GitHub CLI, please run:  gh auth login\n'
-              'Alternatively, populate the GH_TOKEN environment variable '
-              'with a GitHub API authentication token.',
-        ),
-      );
-      expect(
-        () => GitHubService(
-          runner,
-          environment: env(EnvironmentKind.windowsNative),
-        ).listIssues(repo),
-        throwsA(
-          isA<GitHubException>()
-              .having(
-                (e) => e.refusal,
-                'refusal',
-                GitHubCliRefusal.notAuthenticated,
-              )
-              .having(
-                (e) => e.message,
-                'message',
-                allOf(
-                  contains('in Windows is not signed in'),
-                  contains('gh auth login'),
-                  isNot(contains('not installed')),
-                ),
-              ),
-        ),
-      );
-    });
-
-    test("a gh that ran and failed still answers in gh's own words", () {
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: 'could not resolve to a Repository with the name',
-        ),
-      );
-      expect(
-        () => GitHubService(runner).getRepository(repo),
-        throwsA(
-          isA<GitHubException>()
-              .having((e) => e.refusal, 'refusal', isNull)
-              .having(
-                (e) => e.message,
-                'message',
-                contains('gh repo view failed: could not resolve'),
-              ),
-        ),
-      );
-    });
-
-    test('with no row in hand the refusal still names the runner', () {
-      final runner = FakeCommandRunner(
-        environmentId: 'wsl:Ubuntu',
-        throwError: CommandException('Failed to run "gh" in WSL "Ubuntu"'),
-      );
-      expect(
-        () => GitHubService(runner).listIssues(repo),
-        throwsA(
-          isA<GitHubException>().having(
-            (e) => e.message,
-            'message',
-            contains('not installed in wsl:Ubuntu'),
-          ),
-        ),
       );
     });
   });

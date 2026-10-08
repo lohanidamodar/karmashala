@@ -9,11 +9,12 @@ import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 import 'package:karmashala_automations/store.dart';
+import 'package:karmashala_git/github.dart' show GithubClient;
 import 'package:karmashala_session/session.dart';
 
 import '../daemon_checkout_facts.dart';
 import '../step_runners.dart' show exactRunner;
-import 'gh_github_api.dart';
+import 'client_github_api.dart';
 
 /// Set to `off` and the server never polls GitHub for automations.
 const String kGithubPollVariable = 'KARMASHALA_GITHUB_POLL';
@@ -39,13 +40,14 @@ class DaemonGithub {
     required this.newId,
     this.branchOf,
     GithubApi? Function(Automation automation)? apiFor,
+    this.github,
     CommandRunnerFactory? local,
     this.sweepEvery,
     this.log,
   }) : _local = local ?? const CommandRunnerFactory() {
     poller = GithubPoller(
       dao: dao,
-      apiFor: apiFor ?? _ghFor,
+      apiFor: apiFor ?? _apiFor,
       fire: fire,
       now: now,
       log: log,
@@ -81,7 +83,10 @@ class DaemonGithub {
   final void Function(String message)? log;
   final CommandRunnerFactory _local;
   late final GithubPoller poller;
-  final Map<String, GhGithubApi> _apis = {};
+  final Map<String, ClientGithubApi> _apis = {};
+
+  /// GitHub's API as the server's GitHub access; null polls nothing.
+  final GithubClient? github;
   Timer? _timer;
 
   void startPolling() {
@@ -98,13 +103,15 @@ class DaemonGithub {
     return facts.remoteRunnerFor(path) ?? exactRunner(place, _local);
   }
 
-  GithubApi? _ghFor(Automation automation) {
-    final checkout = facts.repository(automation.repositoryId)?.path;
-    if (checkout == null) return null;
-    final runner = _runnerFor(checkout);
-    if (runner == null) return null;
-    final key = '${automation.id} ${checkout.environmentId} ${checkout.path}';
-    return _apis[key] ??= GhGithubApi(runner, checkout);
+  /// GitHub on the host of [automation]'s checkout, for a checkout this
+  /// server works in.
+  GithubApi? _apiFor(Automation automation) {
+    final client = github;
+    final repository = facts.repository(automation.repositoryId);
+    if (client == null || repository == null) return null;
+    if (_runnerFor(repository.path) == null) return null;
+    final host = githubHostOfCanonical(repository.canonicalId);
+    return _apis[host] ??= ClientGithubApi(client, host);
   }
 
   Future<String?> _branch(EnvironmentPath directory) async {

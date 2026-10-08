@@ -83,6 +83,7 @@ import 'flutter_values.dart';
 import 'browser_values.dart';
 import 'terminal_values.dart';
 import 'env_values.dart';
+import 'github_values.dart';
 import 'store_values.dart';
 import 'package:store_console/store_console.dart' show StoreKind;
 import 'attention_values.dart';
@@ -114,6 +115,7 @@ part 'requests/browser_requests.dart';
 part 'requests/files_requests.dart';
 part 'requests/terminals_requests.dart';
 part 'requests/env_requests.dart';
+part 'requests/github_requests.dart';
 part 'requests/stores_requests.dart';
 part 'requests/attention_requests.dart';
 part 'requests/sessions_work_requests.dart';
@@ -323,6 +325,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _filesRequestFromJson(kind, args) ??
     _terminalsRequestFromJson(kind, args) ??
     _envRequestFromJson(kind, args) ??
+    _githubRequestFromJson(kind, args) ??
     _storesRequestFromJson(kind, args) ??
     _attentionRequestFromJson(kind, args) ??
     _sessionWorkRequestFromJson(kind, args) ??

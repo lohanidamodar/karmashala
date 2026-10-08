@@ -461,6 +461,18 @@ class DataClient {
   /// The vault's names, whole, each time they change.
   Stream<List<EnvVariableName>> get envChanges => _envChanges.stream;
 
+  /// Agents' requests for a secret waiting for the owner, as last told; null
+  /// until the server has said. Labels and reasons only, never a value.
+  List<SecretRequest>? secretRequests;
+
+  final _secretRequestChanges = StreamController<List<SecretRequest>>.broadcast(
+    sync: true,
+  );
+
+  /// The waiting secret requests, whole, each time they change.
+  Stream<List<SecretRequest>> get secretRequestChanges =>
+      _secretRequestChanges.stream;
+
   /// The folders pinned to every file browser, as last told. A new link
   /// starts from none: the server greets it only when something is pinned.
   List<QuickAccessPin> quickAccessPins = const [];
@@ -1131,6 +1143,11 @@ class DataClient {
         case EnvVariablesChanged(:final variables):
           envVariables = variables;
           if (!_envChanges.isClosed) _envChanges.add(variables);
+        case SecretRequestsChanged(:final requests):
+          secretRequests = requests;
+          if (!_secretRequestChanges.isClosed) {
+            _secretRequestChanges.add(requests);
+          }
         case QuickAccessChanged(:final pins):
           _setQuickAccess(pins);
         case StoresChanged(:final view):
@@ -1344,6 +1361,7 @@ class DataClient {
     unawaited(_evidenceChanges.close());
     unawaited(_sshChanges.close());
     unawaited(_envChanges.close());
+    unawaited(_secretRequestChanges.close());
     unawaited(_quickAccessChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storesProgress.close());

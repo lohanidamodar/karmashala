@@ -1419,6 +1419,40 @@
       }
     },
     {
+      "name": "request_secret",
+      "description": "Ask the owner for a secret (a webhook signing secret, an API key). They see a private card in your thread with your label and reason, and either save it on the server or decline. You get back a single-use reference, never the value: pass it to a tool that takes one (signingRef). Blocks until they answer or the wait ends.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "What the secret is: \"Stripe webhook signing secret\"."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why you need it, in a sentence the owner can judge."
+          },
+          "timeoutSeconds": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 1800,
+            "description": "How long to wait for an answer (default 600)."
+          }
+        },
+        "required": [
+          "label",
+          "reason"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
       "name": "project_add",
       "description": "Add a project to the Karmashala workspace: adopt a folder that is already there, clone a Git repository into one, or both. Every Git checkout beneath the folder is discovered and recorded, and any CLI sessions those checkouts already have are imported. Use this rather than telling the user to open the New Project dialog.",
       "inputSchema": {
@@ -2457,6 +2491,10 @@
           "callsPerHour": {
             "type": "integer",
             "minimum": 1
+          },
+          "signingRef": {
+            "type": "string",
+            "description": "A reference request_secret gave you: the webhook is signed with the secret the owner entered. Used up by this call."
           }
         },
         "required": [
@@ -2507,7 +2545,7 @@
           },
           "trigger": {
             "type": "object",
-            "description": "type is schedule (cron or everyMinutes), event (event: turn_finished, turn_failed or needs_you; action: start_session, message_session or notify_only), github (github: {kind, repository, action, branch, authors, logins, label, assignee, pollSeconds}) or webhook (signatureRequired, callsPerHour).",
+            "description": "type is schedule (cron or everyMinutes), event (event: turn_finished, turn_failed or needs_you; action: start_session, message_session or notify_only), github (github: {kind, repository, action, branch, authors, logins, label, assignee, pollSeconds}) or webhook (signatureRequired, callsPerHour, signingRef: a reference request_secret gave you, to sign with the secret the owner entered).",
             "properties": {
               "type": {
                 "type": "string",
@@ -6021,6 +6059,10 @@
     "github_run_log": {
       "category": "workspace",
       "summary": "A failed Actions run's log: its last 300 lines and its error lines."
+    },
+    "request_secret": {
+      "category": "sessions",
+      "summary": "Ask the owner for a secret; get a single-use reference, never the value."
     },
     "project_add": {
       "category": "workspace",

@@ -24,6 +24,7 @@ import 'session_archive_tool_set.dart' show sessionArchiveToolSchemas;
 import 'session_tool_schemas.dart';
 import 'usage_tool_set.dart';
 import 'webhook_tool_set.dart' show webhookToolSchemas;
+import 'secret_tool_set.dart' show secretToolSchemas;
 import 'store_tool_set.dart' show storeToolSchemas;
 import 'inbox_tool_set.dart';
 import 'build_tool_schemas.dart';
@@ -55,6 +56,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...fanOutToolSchemas,
   ...workspaceToolSchemas,
   ...gitHubRunToolSchemas,
+  ...secretToolSchemas,
   ...projectToolSchemas,
   ...worktreeToolSchemas,
   ...sessionCheckoutToolSchemas,

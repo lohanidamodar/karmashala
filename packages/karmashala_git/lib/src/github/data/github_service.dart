@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:agent_cli/process.dart';
+import '../../git/domain/remote_repo.dart';
+import '../api/github_client.dart';
+import '../api/github_credentials.dart';
 import '../domain/branch_protection.dart';
 import '../domain/github_repo.dart';
 import '../domain/issue.dart';
@@ -9,82 +12,32 @@ import '../domain/pull_request.dart';
 import '../domain/pull_request_snapshot.dart';
 import '../domain/workflow_run.dart';
 
-/// Why `gh` itself could not answer, as opposed to GitHub or the repository
-/// refusing. The two states need different words and different remedies, so
-/// they are not one value.
-enum GitHubCliRefusal {
-  /// There is no `gh` in the environment the repository lives in.
-  notInstalled,
+/// Why GitHub could not be asked at all, as opposed to GitHub or the
+/// repository refusing.
+enum GitHubRefusal {
+  /// No token Karmashala may use for the repository's host.
+  noAccess,
 
-  /// `gh` is there and holds no GitHub credentials — normal, and fixable in
-  /// one command.
-  notAuthenticated,
+  /// The checkout has no `origin`, or one that names no repository.
+  noRemote,
 }
 
-/// Raised when a `gh` invocation fails (e.g. not installed, not authenticated, or
-/// not a GitHub repository). Carries gh's stderr for an actionable diagnostic.
+/// Raised when a GitHub call fails: no access, no remote, or GitHub said no.
 class GitHubException implements Exception {
-  GitHubException(this.message, {this.refusal, this.cause});
+  GitHubException(this.message, {this.refusal, this.status, this.cause});
   final String message;
 
-  /// Set only when `gh` itself was the reason; null when `gh` ran and GitHub
-  /// or the repository answered no.
-  final GitHubCliRefusal? refusal;
+  /// Set only when GitHub could not be asked; null when it answered no.
+  final GitHubRefusal? refusal;
+
+  /// GitHub's HTTP status, when it answered.
+  final int? status;
 
   final Object? cause;
 
   @override
   String toString() => 'GitHubException: $message';
 }
-
-/// Whether the far side's shell answered that there is no `gh` there.
-///
-/// WSL and SSH hand the executable name to a shell on the other machine, so a
-/// missing `gh` arrives as exit 127 rather than as a failure to start a
-/// process. 127 is POSIX's own code for it and `gh` never exits with it.
-bool saysCommandNotFound(CommandResult result) =>
-    result.exitCode == 127 &&
-    '${result.stdout}\n${result.stderr}'.toLowerCase().contains('not found');
-
-/// Whether `gh` said it has no GitHub credentials. Its own remedy line is the
-/// marker: every unauthenticated path prints `gh auth login`, and a rejected
-/// token answers 401.
-bool mentionsNotAuthenticated(String text) {
-  final lower = text.toLowerCase();
-  return lower.contains('gh auth login') ||
-      lower.contains('not logged into') ||
-      lower.contains('authentication token') ||
-      lower.contains('http 401') ||
-      lower.contains('bad credentials');
-}
-
-/// The refusal for a `gh` that is not in [environment] at all.
-///
-/// It names the environment because Karmashala runs `gh` where the repository
-/// lives: a `gh` on Windows cannot answer for a checkout inside WSL, and one
-/// inside WSL cannot see a Windows checkout's files. A message that only says
-/// "gh failed" sends its reader to the wrong machine.
-String ghNotInstalledMessage(String environment, {EnvironmentKind? kind}) =>
-    'The GitHub CLI (gh) is not installed in $environment, which is where '
-    'this repository lives and where Karmashala runs gh. '
-    '${_ghInstallHint(kind)}';
-
-String _ghInstallHint(EnvironmentKind? kind) => switch (kind) {
-  EnvironmentKind.windowsNative =>
-    'Install it there — "winget install --id GitHub.cli", or '
-        'https://cli.github.com — then try again.',
-  null => 'Install it there (https://cli.github.com) and try again.',
-  _ =>
-    "Install it there with that machine's package manager "
-        '(https://cli.github.com) and try again.',
-};
-
-/// The refusal for a `gh` that is installed in [environment] and signed in to
-/// nothing. Named separately from [ghNotInstalledMessage] because the remedy
-/// is one command rather than an install, and this is the common state.
-String ghNotAuthenticatedMessage(String environment) =>
-    'The GitHub CLI (gh) in $environment is not signed in to GitHub. '
-    'Run "gh auth login" there, then try again.';
 
 /// Parses `gh pr list --json number,title,state,author` output.
 List<PullRequest> parseGhPullRequests(String json) {
@@ -348,77 +301,217 @@ List<dynamic> _decodeList(String json) {
   return decoded is List ? decoded : const [];
 }
 
-/// GitHub operations via the `gh` CLI, run through a [CommandRunner] with the
-/// repo as the working directory — that is how `gh` identifies it.
+/// [branch]'s pull requests, newest first, with what the strip reads.
+const String kPullRequestForBranchQuery =
+    r'query($owner:String!,$name:String!,$branch:String!){'
+    r'repository(owner:$owner,name:$name){'
+    r'pullRequests(headRefName:$branch,first:10,'
+    r'orderBy:{field:CREATED_AT,direction:DESC}){nodes{'
+    r'number title state url isDraft mergeable mergeStateStatus '
+    r'reviewDecision headRefName baseRefName '
+    r'headRepositoryOwner{login} '
+    r'commits(last:1){nodes{commit{statusCheckRollup{'
+    r'contexts(first:100){nodes{__typename '
+    r'... on CheckRun{status conclusion} '
+    r'... on StatusContext{state}}}}}}}}}}}';
+
+const String _markReadyMutation =
+    r'mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id})'
+    r'{pullRequest{isDraft}}}';
+
+/// The pull request [kPullRequestForBranchQuery] answered for a branch, in
+/// the shape [parseGhPullRequestView] reads: an open one from the
+/// repository's own owner first, then the newest.
+PullRequestSnapshot? pullRequestFromGraphql(
+  Map<String, Object?> answer, {
+  required String owner,
+}) {
+  final repository = (answer['data'] as Map?)?['repository'];
+  final nodes = ((repository as Map?)?['pullRequests'] as Map?)?['nodes'];
+  if (nodes is! List || nodes.isEmpty) return null;
+  final candidates = nodes.whereType<Map>().toList();
+  bool ours(Map node) =>
+      ((node['headRepositoryOwner'] as Map?)?['login'] as String?)
+          ?.toLowerCase() ==
+      owner.toLowerCase();
+  final chosen =
+      candidates.where((n) => n['state'] == 'OPEN' && ours(n)).firstOrNull ??
+      candidates.where((n) => n['state'] == 'OPEN').firstOrNull ??
+      candidates.where(ours).firstOrNull ??
+      candidates.firstOrNull;
+  if (chosen == null) return null;
+  final commits = (chosen['commits'] as Map?)?['nodes'];
+  Object? at(Object? node, String key) => node is Map ? node[key] : null;
+  final last = commits is List && commits.isNotEmpty ? commits.last : null;
+  final rollup = at(
+    at(at(at(last, 'commit'), 'statusCheckRollup'), 'contexts'),
+    'nodes',
+  );
+  return parseGhPullRequestView(
+    jsonEncode({
+      ...chosen.cast<String, Object?>(),
+      'statusCheckRollup': rollup,
+    }),
+  );
+}
+
+/// One REST run (`/actions/runs`) in [WorkflowRun]'s shape.
+WorkflowRun? workflowRunFromRest(Object? json) {
+  if (json is! Map) return null;
+  return WorkflowRun.fromJson({
+    'databaseId': json['id'],
+    'workflowName': json['name'],
+    'displayTitle': json['display_title'],
+    'status': json['status'],
+    'conclusion': json['conclusion'],
+    'headBranch': json['head_branch'],
+    'event': json['event'],
+    'url': json['html_url'],
+    'createdAt': json['created_at'],
+    'attempt': json['run_attempt'],
+  });
+}
+
+/// The failed steps of one job's log, as `job\tstep\tline` lines — the shape
+/// `gh run view --log-failed` prints and [boundRunLog] reads. A line is in a
+/// step when its timestamp falls in the step's run; a failed job whose steps
+/// carry no times is kept whole.
+List<String> failedStepLines(Map<Object?, Object?> job, String log) {
+  final jobName = '${job['name'] ?? 'job'}';
+  final steps = [
+    for (final step in (job['steps'] as List?) ?? const [])
+      if (step is Map && step['conclusion'] == 'failure')
+        (
+          name: '${step['name'] ?? 'step'}',
+          from: DateTime.tryParse('${step['started_at']}'),
+          to: DateTime.tryParse('${step['completed_at']}'),
+        ),
+  ];
+  final timed = steps.where((s) => s.from != null && s.to != null).toList();
+  final lines = const LineSplitter().convert(log);
+  if (timed.isEmpty) {
+    return [for (final line in lines) '$jobName\t-\t$line'];
+  }
+  final stamp = RegExp(r'^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z');
+  final kept = <String>[];
+  for (final line in lines) {
+    final match = stamp.firstMatch(line);
+    if (match == null) continue;
+    final at = DateTime.tryParse('${match.group(1)}Z');
+    if (at == null) continue;
+    for (final step in timed) {
+      // Step times are whole seconds; a line inside the last one still counts.
+      if (!at.isBefore(step.from!) &&
+          at.isBefore(step.to!.add(const Duration(seconds: 1)))) {
+        kept.add('$jobName\t${step.name}\t$line');
+        break;
+      }
+    }
+  }
+  return kept;
+}
+
+/// GitHub operations over its API, as whichever token the credentials give
+/// for the repository's host. Git, through [runner] where the checkout lives,
+/// says which repository and branch that is.
 class GitHubService {
-  GitHubService(this.runner, {this.environment});
+  GitHubService(this.runner, {required this.client, this.environment});
 
   final CommandRunner runner;
+  final GithubClient client;
 
-  /// The environment [runner] reaches, when the caller has the row. Only used
-  /// to name it in a refusal; without it the runner's id is used instead.
+  /// The environment [runner] reaches, when the caller has the row.
   final ExecutionEnvironment? environment;
 
-  /// Where `gh` was looked for, in the words the rest of the app names an
-  /// environment with.
-  String get whereGhRuns {
-    final env = environment;
-    return (env == null ? null : environmentLabel(env)) ??
-        describeEnvironmentId(runner.environmentId);
+  final Map<String, Future<RemoteRepo>> _remotes = {};
+
+  /// The GitHub repository `origin` names for [repo].
+  Future<RemoteRepo> remoteOf(EnvironmentPath repo) =>
+      _remotes['${repo.environmentId} ${repo.path}'] ??= _readRemote(repo);
+
+  Future<RemoteRepo> _readRemote(EnvironmentPath repo) async {
+    final url = await _git(repo, const ['remote', 'get-url', 'origin']);
+    final remote = RemoteRepo.parse(url);
+    if (remote == null || !remote.slug.contains('/')) {
+      throw GitHubException(
+        url == null
+            ? 'This checkout has no origin remote, so there is no GitHub '
+                  'repository to ask.'
+            : 'origin ($url) does not name a GitHub repository.',
+        refusal: GitHubRefusal.noRemote,
+      );
+    }
+    return remote;
   }
 
-  /// One `gh` process, and the one place a `gh` that cannot answer at all is
-  /// turned into words.
-  ///
-  /// A missing executable is a [CommandException], not an exit code, so every
-  /// `result.ok` branch below is bypassed for it — which is why the raw
-  /// exception used to reach the UI.
-  Future<CommandResult> _gh(EnvironmentPath repo, List<String> args) async {
-    final CommandResult result;
+  Future<String?> _git(EnvironmentPath repo, List<String> arguments) async {
     try {
-      result = await runner.run(
+      final result = await runner.run(
         CommandRequest(
-          executable: 'gh',
-          arguments: args,
+          executable: 'git',
+          arguments: arguments,
           workingDirectory: repo,
+          timeout: const Duration(seconds: 20),
         ),
       );
-    } on CommandException catch (e) {
-      throw GitHubException(
-        ghNotInstalledMessage(whereGhRuns, kind: environment?.kind),
-        refusal: GitHubCliRefusal.notInstalled,
-        cause: e,
-      );
+      final out = result.stdout.trim();
+      return result.ok && out.isNotEmpty ? out : null;
+    } on CommandException {
+      return null;
     }
-    if (saysCommandNotFound(result)) {
-      throw GitHubException(
-        ghNotInstalledMessage(whereGhRuns, kind: environment?.kind),
-        refusal: GitHubCliRefusal.notInstalled,
-      );
-    }
-    if (!result.ok &&
-        mentionsNotAuthenticated('${result.stdout}\n${result.stderr}')) {
-      throw GitHubException(
-        ghNotAuthenticatedMessage(whereGhRuns),
-        refusal: GitHubCliRefusal.notAuthenticated,
-      );
-    }
-    return result;
   }
 
-  /// Repository metadata for [repo] (name, description, visibility, stars,
-  /// default branch). Returns `null` if `gh` reports no repository.
-  Future<GitHubRepo?> getRepository(EnvironmentPath repo) async {
-    final result = await _gh(repo, [
-      'repo',
-      'view',
-      '--json',
-      'nameWithOwner,description,url,isPrivate,stargazerCount,defaultBranchRef',
-    ]);
-    if (!result.ok) {
-      throw GitHubException('gh repo view failed: ${result.stderr.trim()}');
+  /// One call, with access and transport failures in [GitHubException]'s words.
+  Future<T> _call<T>(Future<T> Function() call) async {
+    try {
+      return await call();
+    } on GithubNoAccess catch (e) {
+      throw GitHubException(
+        e.message,
+        refusal: GitHubRefusal.noAccess,
+        cause: e,
+      );
+    } on GithubApiException catch (e) {
+      throw GitHubException(e.message, status: e.status, cause: e);
     }
-    return parseGhRepo(result.stdout);
+  }
+
+  Future<GithubResponse> _get(
+    RemoteRepo remote,
+    String path, {
+    Map<String, String>? query,
+    String what = 'GitHub',
+    bool allowFailure = false,
+  }) => _call(() async {
+    final response = await client.rest(remote.host, path, query: query);
+    if (!allowFailure) ensureGithubOk(response, what);
+    return response;
+  });
+
+  String _repoPath(RemoteRepo remote) =>
+      'repos/${Uri.encodeComponent(remote.owner)}/'
+      '${Uri.encodeComponent(remote.name)}';
+
+  /// Repository metadata for [repo] (name, description, visibility, stars,
+  /// default branch).
+  Future<GitHubRepo?> getRepository(EnvironmentPath repo) async {
+    final remote = await remoteOf(repo);
+    final response = await _get(
+      remote,
+      _repoPath(remote),
+      what: 'Reading the repository',
+    );
+    final body = response.body;
+    if (body is! Map) return null;
+    final description = '${body['description'] ?? ''}';
+    return GitHubRepo(
+      nameWithOwner: '${body['full_name'] ?? remote.slug}',
+      url: '${body['html_url'] ?? remote.webUrl}',
+      isPrivate: body['private'] == true,
+      stargazerCount: (body['stargazers_count'] as num?)?.toInt() ?? 0,
+      description: description.isEmpty ? null : description,
+      defaultBranch: body['default_branch'] as String?,
+    );
   }
 
   /// Open pull requests for [repo].
@@ -426,122 +519,124 @@ class GitHubService {
     EnvironmentPath repo, {
     int limit = 50,
   }) async {
-    final result = await _gh(repo, [
-      'pr',
-      'list',
-      '--json',
-      'number,title,state,author,url',
-      '--limit',
-      '$limit',
-    ]);
-    if (!result.ok) {
-      throw GitHubException('gh pr list failed: ${result.stderr.trim()}');
-    }
-    return parseGhPullRequests(result.stdout);
+    final remote = await remoteOf(repo);
+    final response = await _get(
+      remote,
+      '${_repoPath(remote)}/pulls',
+      query: {'state': 'open', 'per_page': '${limit.clamp(1, 100)}'},
+      what: 'Listing pull requests',
+    );
+    return [
+      for (final item in (response.body as List?) ?? const [])
+        if (item is Map)
+          PullRequest(
+            number: (item['number'] as num?)?.toInt() ?? 0,
+            title: '${item['title'] ?? ''}',
+            state: '${item['state'] ?? ''}'.toUpperCase(),
+            author: (item['user'] as Map?)?['login'] as String?,
+            url: item['html_url'] as String?,
+          ),
+    ];
   }
 
-  /// The pull request for [branch] with its checks in one process, or `null`
-  /// when the branch definitely has none. A `gh` that could not answer throws.
+  /// The pull request for [branch] with its checks, or `null` when the
+  /// branch definitely has none.
   Future<PullRequestSnapshot?> pullRequestFor(
     EnvironmentPath repo, {
     required String branch,
   }) async {
-    final result = await _gh(repo, [
-      'pr',
-      'view',
-      branch,
-      '--json',
-      // `mergeStateStatus` and `baseRefName` ride along in a call already being
-      // made; requesting `mergeable` is what triggers the same computation anyway.
-      'number,title,state,url,isDraft,mergeable,mergeStateStatus,'
-          'reviewDecision,statusCheckRollup,headRefName,baseRefName',
-    ]);
-    if (!result.ok) {
-      if (mentionsNoPullRequest(result.stderr)) return null;
-      throw GitHubException('gh pr view failed: ${result.stderr.trim()}');
-    }
-    return parseGhPullRequestView(result.stdout);
+    final remote = await remoteOf(repo);
+    final answer = await _call(
+      () => client.graphql(
+        remote.host,
+        kPullRequestForBranchQuery,
+        variables: {
+          'owner': remote.owner,
+          'name': remote.name,
+          'branch': branch,
+        },
+      ),
+    );
+    return pullRequestFromGraphql(answer, owner: remote.owner);
   }
 
-  /// Open issues for [repo].
+  /// Open issues for [repo]; the issues API lists pull requests too, and
+  /// those are left out.
   Future<List<Issue>> listIssues(EnvironmentPath repo, {int limit = 50}) async {
-    final result = await _gh(repo, [
-      'issue',
-      'list',
-      '--json',
-      'number,title,state',
-      '--limit',
-      '$limit',
-    ]);
-    if (!result.ok) {
-      throw GitHubException('gh issue list failed: ${result.stderr.trim()}');
-    }
-    return parseGhIssues(result.stdout);
+    final remote = await remoteOf(repo);
+    final response = await _get(
+      remote,
+      '${_repoPath(remote)}/issues',
+      query: {'state': 'open', 'per_page': '${limit.clamp(1, 100)}'},
+      what: 'Listing issues',
+    );
+    return [
+      for (final item in (response.body as List?) ?? const [])
+        if (item is Map && item['pull_request'] == null)
+          Issue(
+            number: (item['number'] as num?)?.toInt() ?? 0,
+            title: '${item['title'] ?? ''}',
+            state: '${item['state'] ?? ''}'.toUpperCase(),
+          ),
+    ];
   }
 
-  /// The repository's merge settings and open review conversations, in one `gh
-  /// api graphql` call. Never throws for a policy reason — only a failed process.
+  /// The repository's merge settings and open review conversations, in one
+  /// GraphQL call. Never throws for a policy reason.
   Future<ForgePolicy> forgePolicyFor(
     EnvironmentPath repo, {
     required int number,
   }) async {
-    final result = await _gh(repo, [
-      'api',
-      'graphql',
-      '-f',
-      'query=$kForgePolicyQuery',
-      '-F',
-      'owner={owner}',
-      '-F',
-      'name={repo}',
-      '-F',
-      'number=$number',
-    ]);
-    // `gh api graphql` exits non-zero on a GraphQL error but still prints the
-    // document, so the body is parsed either way.
-    return parseForgePolicy(result.stdout);
+    final remote = await remoteOf(repo);
+    final answer = await _call(
+      () => client.graphql(
+        remote.host,
+        kForgePolicyQuery,
+        variables: {
+          'owner': remote.owner,
+          'name': remote.name,
+          'number': number,
+        },
+      ),
+    );
+    return parseForgePolicy(jsonEncode(answer));
   }
 
-  /// The branch-protection rules on [branch], for naming what a `BLOCKED` merge
-  /// waits on. Never throws for a policy reason: a 403 is the non-admin answer.
+  /// The branch-protection rules on [branch]. A 403 is the non-admin answer,
+  /// not a failure.
   Future<BranchProtection> branchProtectionFor(
     EnvironmentPath repo, {
     required String branch,
   }) async {
-    final result = await _gh(repo, [
-      'api',
-      // `{owner}` and `{repo}` are gh's own placeholders, filled from the
-      // working directory — repo-relative like every other call here.
-      'repos/{owner}/{repo}/branches/$branch/protection',
-    ]);
-    if (!result.ok) {
-      return mentionsForbidden('${result.stdout}\n${result.stderr}')
-          ? BranchProtection.forbidden
-          : BranchProtection.unknown;
-    }
-    return parseBranchProtection(result.stdout, branch: branch);
+    final remote = await remoteOf(repo);
+    final response = await _get(
+      remote,
+      '${_repoPath(remote)}/branches/${Uri.encodeComponent(branch)}/protection',
+      allowFailure: true,
+    );
+    if (response.status == 403) return BranchProtection.forbidden;
+    if (!response.ok) return BranchProtection.unknown;
+    return parseBranchProtection(response.text, branch: branch);
   }
 
-  /// The newest GitHub Actions runs, on [branch] when given — a pull
-  /// request's Actions checks are runs on its head branch.
+  /// The newest GitHub Actions runs, on [branch] when given.
   Future<List<WorkflowRun>> listWorkflowRuns(
     EnvironmentPath repo, {
     String? branch,
     int limit = 10,
   }) async {
-    final result = await _gh(repo, [
-      'run',
-      'list',
-      if (branch != null) ...['--branch', branch],
-      '--limit',
-      '$limit',
-      '--json',
-      WorkflowRun.jsonFields,
-    ]);
-    if (!result.ok) {
-      throw GitHubException('gh run list failed: ${result.stderr.trim()}');
-    }
-    return parseGhRuns(result.stdout);
+    final remote = await remoteOf(repo);
+    final response = await _get(
+      remote,
+      '${_repoPath(remote)}/actions/runs',
+      query: {'branch': ?branch, 'per_page': '${limit.clamp(1, 100)}'},
+      what: 'Listing workflow runs',
+    );
+    final runs = (response.body as Map?)?['workflow_runs'];
+    return [
+      for (final run in runs is List ? runs : const [])
+        ?workflowRunFromRest(run),
+    ];
   }
 
   /// The failed steps' log of run [runId], bounded by [boundRunLog]. Read
@@ -550,44 +645,97 @@ class GitHubService {
     EnvironmentPath repo, {
     required int runId,
   }) async {
-    final result = await _gh(repo, ['run', 'view', '$runId', '--log-failed']);
-    if (!result.ok) {
-      throw GitHubException(
-        'gh run view --log-failed failed: ${result.stderr.trim()}',
+    final remote = await remoteOf(repo);
+    final jobs = await _get(
+      remote,
+      '${_repoPath(remote)}/actions/runs/$runId/jobs',
+      query: const {'per_page': '100'},
+      what: 'Listing the run\'s jobs',
+    );
+    final list = (jobs.body as Map?)?['jobs'];
+    final lines = <String>[];
+    for (final job in list is List ? list : const []) {
+      if (job is! Map) continue;
+      final conclusion = job['conclusion'];
+      if (conclusion == null ||
+          const {'success', 'skipped', 'neutral'}.contains(conclusion)) {
+        continue;
+      }
+      final log = await _call(
+        () => client.rest(
+          remote.host,
+          '${_repoPath(remote)}/actions/jobs/${job['id']}/logs',
+          accept: '*/*',
+        ),
       );
+      if (!log.ok) continue;
+      lines.addAll(failedStepLines(job, log.text));
     }
-    return boundRunLog(runId, result.stdout);
+    return boundRunLog(runId, lines.join('\n'));
   }
 
-  /// Takes a pull request out of draft (`gh pr ready`). The number is passed
-  /// explicitly rather than inferred from whatever branch is checked out.
+  /// Takes a pull request out of draft.
   Future<void> markPullRequestReady(
     EnvironmentPath repo, {
     required int number,
   }) async {
-    final result = await _gh(repo, ['pr', 'ready', '$number']);
-    if (!result.ok) {
-      throw GitHubException('gh pr ready failed: ${result.stderr.trim()}');
+    final remote = await remoteOf(repo);
+    final pull = await _get(
+      remote,
+      '${_repoPath(remote)}/pulls/$number',
+      what: 'Reading the pull request',
+    );
+    final id = (pull.body as Map?)?['node_id'];
+    if (id is! String) {
+      throw GitHubException('GitHub named no id for pull request #$number.');
     }
+    await _call(
+      () => client.graphql(
+        remote.host,
+        _markReadyMutation,
+        variables: {'id': id},
+      ),
+    );
   }
 
-  /// Creates a pull request and returns its URL (gh prints it to stdout).
+  /// Opens a pull request from the checked-out branch onto the default
+  /// branch and returns its URL. The branch must already be pushed.
   Future<String> createPullRequest(
     EnvironmentPath repo, {
     required String title,
     String body = '',
   }) async {
-    final result = await _gh(repo, [
-      'pr',
-      'create',
-      '--title',
-      title,
-      '--body',
-      body,
+    final remote = await remoteOf(repo);
+    final branch = await _git(repo, const [
+      'rev-parse',
+      '--abbrev-ref',
+      'HEAD',
     ]);
-    if (!result.ok) {
-      throw GitHubException('gh pr create failed: ${result.stderr.trim()}');
+    if (branch == null || branch == 'HEAD') {
+      throw GitHubException(
+        'No branch is checked out, so there is nothing to open a pull '
+        'request from.',
+      );
     }
-    return result.stdout.trim();
+    final repository = await getRepository(repo);
+    final base = repository?.defaultBranch;
+    if (base == null) {
+      throw GitHubException('GitHub named no default branch to merge into.');
+    }
+    final response = await _call(() async {
+      final response = await client.rest(
+        remote.host,
+        '${_repoPath(remote)}/pulls',
+        method: 'POST',
+        body: {'title': title, 'body': body, 'head': branch, 'base': base},
+      );
+      ensureGithubOk(response, 'Opening the pull request');
+      return response;
+    });
+    final url = (response.body as Map?)?['html_url'];
+    if (url is! String) {
+      throw GitHubException('GitHub opened the pull request but named no URL.');
+    }
+    return url;
   }
 }

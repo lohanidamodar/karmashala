@@ -17,7 +17,13 @@ class CheckoutReach {
     bool? windows,
     this.runners = const CommandRunnerFactory(),
     this.files = const HostGitFiles(),
+    GithubClient? github,
   }) : _environments = ExecutionEnvironmentDao(database),
+       github =
+           github ??
+           GithubClient(
+             credentials: GithubCredentials(saved: const NoSavedGithubTokens()),
+           ),
        _windows = windows ?? Platform.isWindows;
 
   final ExecutionEnvironmentDao _environments;
@@ -28,6 +34,10 @@ class CheckoutReach {
 
   /// The filesystem `.git` is read through, spawning nothing.
   final GitFiles files;
+
+  /// GitHub's API as the server's GitHub access; without one, no host has a
+  /// token.
+  final GithubClient github;
 
   /// The recorded environment [id], or null.
   ExecutionEnvironment? environment(String id) => _environments.getById(id);
@@ -94,6 +104,7 @@ class CheckoutReach {
     final environment = environmentOf(path);
     return GitHubService(
       runners.forEnvironment(environment),
+      client: github,
       environment: environment,
     );
   }

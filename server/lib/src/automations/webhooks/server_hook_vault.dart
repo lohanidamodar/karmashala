@@ -78,6 +78,16 @@ class ServerHookVault {
     return secret;
   }
 
+  /// [secret] as [hookId]'s secret, replacing any.
+  Future<void> adopt(String hookId, String secret) async {
+    final before = _secrets[hookId];
+    await _change(
+      () => _secrets[hookId] = secret,
+      () =>
+          before == null ? _secrets.remove(hookId) : _secrets[hookId] = before,
+    );
+  }
+
   Future<void> forget(String hookId) async {
     final before = _secrets[hookId];
     if (before == null) return;
