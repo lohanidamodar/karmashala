@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show immutable, mapEquals;
+import 'package:flutter/foundation.dart' show immutable, mapEquals, setEquals;
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
@@ -117,6 +117,96 @@ final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
     subSessions: prefs.subSessions,
   );
 });
+
+/// Which parts of a card's "where" line are drawn, and why the rest are not.
+@immutable
+class OverviewCardDetails {
+  const OverviewCardDetails({required this.shown, required this.same});
+
+  final Set<OverviewCardDetail> shown;
+
+  /// Not hidden by the person, but the same on every session in view — or
+  /// known for none — so drawing it would say nothing.
+  final Set<OverviewCardDetail> same;
+
+  @override
+  bool operator ==(Object other) =>
+      other is OverviewCardDetails &&
+      setEquals(other.shown, shown) &&
+      setEquals(other.same, same);
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAllUnordered(shown),
+    Object.hashAllUnordered(same),
+  );
+}
+
+/// The parts of every card's "where" line: those this device shows, less any
+/// every session in view shares.
+final overviewCardDetailsProvider = Provider.autoDispose<OverviewCardDetails>((
+  ref,
+) {
+  final hidden = ref.watch(
+    overviewPrefsProvider.select((p) => p.hiddenDetails),
+  );
+  final facts = ref.watch(overviewFactsProvider);
+  final inView = ref.watch(overviewBoardProvider).states;
+  final values = {
+    for (final detail in OverviewCardDetail.values) detail: <String?>{},
+  };
+  for (final group in ref.watch(agentStateGroupsProvider)) {
+    for (final entry in group.entries) {
+      if (!inView.containsKey(entry.id)) continue;
+      values[OverviewCardDetail.project]!.add(facts.projectOf(entry));
+      values[OverviewCardDetail.context]!.add(facts.contextOf(entry));
+      values[OverviewCardDetail.machine]!.add(facts.machineOf(entry));
+    }
+  }
+  final same = {
+    for (final MapEntry(key: detail, value: seen) in values.entries)
+      if (seen.length <= 1) detail,
+  };
+  return OverviewCardDetails(
+    shown: {
+      for (final detail in OverviewCardDetail.values)
+        if (!hidden.contains(detail) && !same.contains(detail)) detail,
+    },
+    same: {
+      for (final detail in same)
+        if (!hidden.contains(detail)) detail,
+    },
+  );
+});
+
+/// Sessions on the Board per project, agent and machine id, whatever the
+/// filter: the counts beside the filter's choices.
+typedef OverviewFilterCounts = ({
+  Map<String?, int> projects,
+  Map<String?, int> agents,
+  Map<String?, int> machines,
+});
+
+final overviewFilterCountsProvider = Provider.autoDispose<OverviewFilterCounts>(
+  (ref) {
+    final facts = ref.watch(overviewFactsProvider);
+    final projects = <String?, int>{};
+    final agents = <String?, int>{};
+    final machines = <String?, int>{};
+    void count(Map<String?, int> into, String? id) =>
+        into.update(id, (n) => n + 1, ifAbsent: () => 1);
+    final seen = <String>{};
+    for (final group in ref.watch(agentStateGroupsProvider)) {
+      for (final entry in group.entries) {
+        if (!seen.add(entry.id)) continue;
+        count(projects, facts.projectOf(entry));
+        count(agents, facts.agentOf(entry));
+        count(machines, facts.machineOf(entry));
+      }
+    }
+    return (projects: projects, agents: agents, machines: machines);
+  },
+);
 
 final _overviewCountsOrderProvider = Provider.autoDispose<BoardOrderMemo>(
   (ref) => BoardOrderMemo(),

@@ -127,7 +127,7 @@ class OverviewCardHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
-    final place = watchOverviewPlace(ref, card);
+    final place = watchOverviewCardPlace(ref, card);
     final agent = watchOverviewAgentName(ref, card);
     final parent = card.breadcrumb;
     final header = Semantics(
@@ -161,20 +161,21 @@ class OverviewCardHeader extends ConsumerWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  parent == null
-                      ? place
-                      // Drawn after its parent, the line names it; drawn
-                      // apart from it, it says where it came from.
-                      : card.parentId != null
-                      ? '↳ $parent'
-                      : '↳ from $parent',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                if (parent != null || place.isNotEmpty)
+                  Text(
+                    parent == null
+                        ? place
+                        // Drawn after its parent, the line names it; drawn
+                        // apart from it, it says where it came from.
+                        : card.parentId != null
+                        ? '↳ $parent'
+                        : '↳ from $parent',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -242,7 +243,7 @@ class OverviewDoneRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final now = ref.read(clockProvider).nowUtc();
-    final place = watchOverviewPlace(ref, card);
+    final place = watchOverviewCardPlace(ref, card);
     final row = InkWell(
       key: ValueKey('overview-done:${card.id}'),
       borderRadius: BorderRadius.circular(Radii.sm),

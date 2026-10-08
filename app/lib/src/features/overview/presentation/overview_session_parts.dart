@@ -14,6 +14,7 @@ import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_card_line.dart';
+import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 
@@ -74,6 +75,26 @@ String watchOverviewPlace(WidgetRef ref, OverviewCard card) {
       : facts.contexts.where((c) => c.id == contextId).firstOrNull?.label ??
             kOverviewNoContextLabel;
   return [?context, ?project, ?machine].join(' · ');
+}
+
+/// "PopupBits · karmashala · Windows": where [card] runs, as a card draws it —
+/// only the parts [overviewCardDetailsProvider] shows.
+String watchOverviewCardPlace(WidgetRef ref, OverviewCard card) {
+  final shown = ref.watch(overviewCardDetailsProvider).shown;
+  if (shown.isEmpty) return '';
+  final facts = ref.watch(overviewFactsProvider);
+  String? labelIn(List<OverviewLaneKey> keys, String? id) =>
+      keys.where((k) => k.id == id).firstOrNull?.label;
+  final machineId = card.entry.directory?.environmentId;
+  return [
+    if (shown.contains(OverviewCardDetail.context))
+      labelIn(facts.contexts, facts.contextOf(card.entry)) ??
+          kOverviewNoContextLabel,
+    if (shown.contains(OverviewCardDetail.project))
+      ?labelIn(facts.projects, facts.projectOf(card.entry)),
+    if (shown.contains(OverviewCardDetail.machine) && machineId != null)
+      ref.watch(environmentLabelForIdProvider(machineId)),
+  ].join(' · ');
 }
 
 /// The agent's display name for [card], or null when it is not known.
