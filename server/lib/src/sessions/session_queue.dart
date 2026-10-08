@@ -466,6 +466,15 @@ class SessionQueue implements ResumeQueue {
     return !_personTyping(sessionId);
   }
 
+  /// Whether a message a person sent still waits in [sessionId]'s queue.
+  bool personWaiting(String sessionId) => dao
+      .open(sessionId)
+      .any(
+        (m) =>
+            m.state == QueuedMessageState.queued &&
+            _personOrigins.contains(m.origin),
+      );
+
   /// The messages [sessionId] holds, queued, delivering or failed, in order.
   List<QueuedMessage> list(String sessionId) => _open(sessionId);
 
@@ -740,11 +749,26 @@ class SessionQueue implements ResumeQueue {
     _announce(sessionId);
     var delivered = false;
     try {
-      await resume(sessionId, withPrompt ? head.text : null);
-      if (withPrompt) {
+      final started = await resume(sessionId, withPrompt ? head.text : null);
+      // One already running or starting answers the resume as it is, and
+      // the prompt that started it was another's: the head still waits.
+      final adopted = started is SessionStarted && started.adopted;
+      if (withPrompt && !adopted) {
         delivered = true;
         _finish(head, QueuedMessageState.delivered);
       } else {
+        if (withPrompt) {
+          dao.transition(
+            head.id,
+            from: QueuedMessageState.delivering,
+            to: QueuedMessageState.queued,
+            now: _now(),
+          );
+          log?.call(
+            'queue $sessionId: ${head.id} not the opening prompt of a '
+            'session already starting; it waits for the turn to end',
+          );
+        }
         _resumedForHead.add(sessionId);
       }
     } on Object catch (error) {

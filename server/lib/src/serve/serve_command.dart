@@ -1369,8 +1369,13 @@ Future<int> _serve(
         },
         // A window connected by the time the agent is back shows it, as
         // `session_send`'s resume does; the inbox item covers one that is not.
+        personWaits: sessionQueue.personWaiting,
         resume: (sessionId, prompt) async {
-          final started = await launches.resume(sessionId, prompt: prompt);
+          // A send meanwhile queues behind the start rather than racing it.
+          sessionQueue.hold(sessionId);
+          final started = await launches
+              .resume(sessionId, prompt: prompt)
+              .whenComplete(() => sessionQueue.release(sessionId));
           data.tellIntent(
             OpenSessionTab(
               sessionId: started.sessionId,
