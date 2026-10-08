@@ -131,7 +131,7 @@ class _HunkReviewHostState extends ConsumerState<HunkReviewHost>
         widget.onReverted?.call();
         _say(
           context,
-          'Put back. A checkpoint was taken first: undo it from Checkpoints.',
+          'Put back. Checkpoints holds the file as it was: undo it there.',
         );
       case RevertFailed(:final reason):
         _say(context, reason);
