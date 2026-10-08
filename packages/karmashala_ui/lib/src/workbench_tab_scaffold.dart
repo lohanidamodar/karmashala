@@ -19,8 +19,15 @@ class WorkbenchTabScaffold extends StatelessWidget {
     this.controls = const [],
     this.actions = const [],
     this.backgroundColor,
+    this.oneRowStrip = false,
     super.key,
   });
+
+  /// Under a [PaneTitleOverride], whether the strip keeps the controls and
+  /// actions on one row — the controls shrinking to fit — rather than
+  /// wrapping the actions under them. For a root tab, whose row is its only
+  /// header.
+  final bool oneRowStrip;
 
   final IconData icon;
   final String title;
@@ -39,6 +46,44 @@ class WorkbenchTabScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (PaneTitleOverride.maybeOf(context) != null) {
+      if (oneRowStrip) {
+        return Scaffold(
+          backgroundColor: backgroundColor,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                key: const ValueKey('workbench-tab-strip'),
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.lg,
+                  Insets.xs,
+                  Insets.xs,
+                  0,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: controls,
+                          ),
+                        ),
+                      ),
+                    ),
+                    ...actions,
+                  ],
+                ),
+              ),
+              Expanded(child: body),
+            ],
+          ),
+        );
+      }
       return Scaffold(
         backgroundColor: backgroundColor,
         body: _withStrip([

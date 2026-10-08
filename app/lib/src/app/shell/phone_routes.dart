@@ -6,7 +6,7 @@ import 'package:riverpod/riverpod.dart';
 
 /// The More tab's pages, in list order.
 enum PhoneMoreEntry {
-  overview,
+  sessions,
   usage,
   stores,
   automations,
@@ -23,6 +23,9 @@ enum PhoneMoreEntry {
 abstract interface class PhoneShellRoutes {
   /// Raises the session page, the workbench at compact.
   void showWorkbench();
+
+  /// Brings the Dashboard tab to the front.
+  void showDashboard();
 
   /// Brings the Projects tab to the front.
   void showProjects();

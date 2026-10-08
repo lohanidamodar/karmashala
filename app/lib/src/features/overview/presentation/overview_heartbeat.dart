@@ -64,54 +64,68 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
                 _sideBySide,
                 MediaQuery.textScalerOf(context),
               );
+          if (!wide) return _compactLine(chart);
           if (chart == null) return counters;
-          if (wide) {
-            return Row(
-              children: [
-                const Flexible(child: counters),
-                const SizedBox(width: Insets.md),
-                Expanded(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minWidth: _chartMin),
-                    child: chart,
-                  ),
-                ),
-              ],
-            );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
+          return Row(
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(child: counters),
-                  IconButton(
-                    key: const ValueKey('overview-chart-toggle'),
-                    tooltip: _chartOpen
-                        ? 'Hide the 2-hour chart'
-                        : 'Show the 2-hour chart',
-                    visualDensity: VisualDensity.compact,
-                    iconSize: UiDensity.of(context).icon,
-                    onPressed: () => setState(() => _chartOpen = !_chartOpen),
-                    icon: Icon(
-                      _chartOpen ? AppIcons.caretUp : AppIcons.caretDown,
-                    ),
-                  ),
-                ],
-              ),
-              if (_chartOpen)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Insets.xs),
+              const Flexible(child: counters),
+              const SizedBox(width: Insets.md),
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: _chartMin),
                   child: chart,
                 ),
+              ),
             ],
           );
         },
       ),
     );
   }
+
+  /// One line where the row is narrow: the counters with something in them
+  /// and the facts, sliding sideways rather than wrapping, and the chart
+  /// behind a toggle.
+  Widget _compactLine(Widget? chart) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Row(
+        children: [
+          const Expanded(
+            child: SingleChildScrollView(
+              key: ValueKey('overview-triage-line'),
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OverviewCounters(compact: true),
+                  SizedBox(width: Insets.md),
+                  OverviewFactsLine(),
+                ],
+              ),
+            ),
+          ),
+          if (chart != null)
+            IconButton(
+              key: const ValueKey('overview-chart-toggle'),
+              tooltip: _chartOpen
+                  ? 'Hide the 2-hour chart'
+                  : 'Show the 2-hour chart',
+              visualDensity: VisualDensity.compact,
+              iconSize: UiDensity.of(context).icon,
+              onPressed: () => setState(() => _chartOpen = !_chartOpen),
+              icon: Icon(_chartOpen ? AppIcons.caretUp : AppIcons.caretDown),
+            ),
+        ],
+      ),
+      if (_chartOpen && chart != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: Insets.xs),
+          child: chart,
+        ),
+    ],
+  );
 }
 
 /// "2h ▁▂▃▅▆ now": agents working and waiting on you over the window.

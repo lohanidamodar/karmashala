@@ -12,8 +12,14 @@ import '../application/overview_providers.dart';
 
 /// **The live counters**: needs you, failed, working, ready and done today,
 /// each a slim toggle that shows only its own and taps again to clear.
+///
+/// [compact], where the row is narrow, draws one line: only the counters with
+/// something in them (or the one filtering), never Done — the fold under the
+/// board says it and opens it — and "All clear" when nothing is left.
 class OverviewCounters extends ConsumerWidget {
-  const OverviewCounters({super.key});
+  const OverviewCounters({this.compact = false, super.key});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,31 +35,69 @@ class OverviewCounters extends ConsumerWidget {
       OverviewCounter.ready => strip.ready,
       OverviewCounter.done => doneToday,
     };
+    final shown = [
+      for (final counter in OverviewCounter.values)
+        if (!compact ||
+            counter.selectedIn(filter) ||
+            (counter != OverviewCounter.done && count(counter) > 0))
+          counter,
+    ];
+    if (shown.isEmpty && hidden == 0) {
+      final theme = Theme.of(context);
+      return Padding(
+        key: const ValueKey('overview-all-clear'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.xs,
+        ),
+        child: Text(
+          'All clear',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    final children = [
+      for (final counter in shown) ...[
+        _CounterChip(
+          counter: counter,
+          count: count(counter),
+          caption:
+              counter == OverviewCounter.needsYou &&
+                  wait != null &&
+                  strip.needsYou > 0
+              ? 'oldest ${compactAge(wait)}'
+              : null,
+          selected: counter.selectedIn(filter),
+          onTap: () => controller.setCounter(
+            counter.selectedIn(filter) ? null : counter,
+          ),
+        ),
+        if (counter == OverviewCounter.working && hidden > 0)
+          _HiddenWorking(count: hidden),
+      ],
+      if (!shown.contains(OverviewCounter.working) && hidden > 0)
+        _HiddenWorking(count: hidden),
+    ];
+    if (compact) {
+      return Row(
+        key: const ValueKey('overview-counters'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (i, child) in children.indexed) ...[
+            if (i > 0) const SizedBox(width: Insets.xs),
+            child,
+          ],
+        ],
+      );
+    }
     return Wrap(
       key: const ValueKey('overview-counters'),
       spacing: Insets.xs,
       runSpacing: Insets.xs,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        for (final counter in OverviewCounter.values) ...[
-          _CounterChip(
-            counter: counter,
-            count: count(counter),
-            caption:
-                counter == OverviewCounter.needsYou &&
-                    wait != null &&
-                    strip.needsYou > 0
-                ? 'oldest ${compactAge(wait)}'
-                : null,
-            selected: counter.selectedIn(filter),
-            onTap: () => controller.setCounter(
-              counter.selectedIn(filter) ? null : counter,
-            ),
-          ),
-          if (counter == OverviewCounter.working && hidden > 0)
-            _HiddenWorking(count: hidden),
-        ],
-      ],
+      children: children,
     );
   }
 }

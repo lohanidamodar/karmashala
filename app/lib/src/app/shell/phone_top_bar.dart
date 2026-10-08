@@ -289,7 +289,7 @@ class _NeedsYouCount extends ConsumerWidget {
           borderRadius: BorderRadius.circular(Radii.pill),
           onTap: () {
             ref.read(phoneWorkbenchProvider.notifier).close();
-            ref.read(phoneTabProvider.notifier).select(PhoneTab.sessions);
+            ref.read(phoneTabProvider.notifier).select(PhoneTab.dashboard);
           },
           child: ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 48, minHeight: 48),

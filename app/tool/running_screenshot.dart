@@ -56,6 +56,8 @@ class _Environments extends EnvironmentsController {
 
 class _Routes implements PhoneShellRoutes {
   @override
+  void showDashboard() {}
+  @override
   void showInbox() {}
   @override
   void showMore(PhoneMoreEntry entry) {}

@@ -227,7 +227,13 @@ void main() {
 
       expect(find.byKey(const ValueKey('overview-hybrid')), findsOneWidget);
       for (final column in BoardColumn.values) {
-        expect(counter(column), findsOneWidget);
+        // A narrow line leaves Done to the fold that opens it.
+        expect(
+          counter(column),
+          column == BoardColumn.done && size.width < 600
+              ? findsNothing
+              : findsOneWidget,
+        );
       }
       expect(card('ask'), findsOneWidget);
       // A phone lists what is at work in rows; the queue keeps its cards.
