@@ -11,7 +11,6 @@ import '../../settings/application/settings_controller.dart';
 
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../files/data/pick_server.dart';
 import '../../files/presentation/take_photo.dart';
@@ -20,6 +19,9 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/message_composer.dart';
+import '../../sessions/presentation/session_transcript_view.dart'
+    show systemTerminalMenuItems;
+import '../../sessions/presentation/transcript_links.dart';
 import '../../sessions/presentation/transcript_image_preview.dart'
     show TranscriptImageSource;
 import '../../media/application/session_media_providers.dart'
@@ -127,14 +129,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                         tooltip: 'Open in system terminal',
                         icon: const Icon(AppIcons.arrowSquareOut),
                         onSelected: (t) => _openIn(session, t),
-                        itemBuilder: (context) => [
-                          for (final t in list)
-                            DesktopMenuItem(
-                              value: t,
-                              label: 'Open in ${t.label}',
-                              icon: AppIcons.terminal,
-                            ),
-                        ],
+                        itemBuilder: (_) => systemTerminalMenuItems(list),
                       ),
                 orElse: () => const SizedBox.shrink(),
               ),
@@ -185,6 +180,19 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                         path: path,
                       ),
                     ),
+                // Links open as they do in every other transcript; a path
+                // has no session record to be placed against.
+                onLinkTap: (href) => unawaited(
+                  openTranscriptLink(
+                    context,
+                    ref,
+                    href,
+                    openPath: null,
+                    say: (said) => ScaffoldMessenger.maybeOf(
+                      context,
+                    )?.showSnackBar(SnackBar(content: Text(said))),
+                  ),
+                ),
                 emptyHint: emptyHint,
                 agentId: session.cli,
                 footer: MessageComposer(

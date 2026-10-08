@@ -220,42 +220,9 @@ mixin _TranscriptPlaces on ConsumerState<SessionTranscriptView> {
     if (!outcome.ok) _say(outcome.error!);
   }
 
-  /// A link the agent wrote, tapped on a touch screen: asked about first, since
-  /// a stray tap while scrolling must not leave the app.
-  Future<void> _openLink(String href) async {
-    final uri = Uri.tryParse(href);
-    if (uri != null && !uri.hasScheme) {
-      await _openPath(href);
-      return;
-    }
-    if (uri == null ||
-        !(uri.isScheme('http') ||
-            uri.isScheme('https') ||
-            uri.isScheme('mailto'))) {
-      _say('Only web links open from here: $href');
-      return;
-    }
-    // A click is deliberate; a tap while scrolling a phone is easily not, so
-    // only touch asks first.
-    if (UiDensity.of(context).isTouch) {
-      final go = await showAdaptiveModal<bool>(
-        context: context,
-        title: 'Open in the browser?',
-        builder: (context) => _OpenLinkBody(uri: uri),
-      );
-      if (go != true || !mounted) return;
-    }
-    try {
-      final opened = uri.isScheme('mailto')
-          ? await launchUrl(uri, mode: LaunchMode.externalApplication)
-          : await ref.read(openExternalUrlProvider)(uri.toString());
-      if (!opened) {
-        _say('Nothing on this device could open $href.');
-      }
-    } on Exception {
-      _say('Nothing on this device could open $href.');
-    }
-  }
+  /// A link the agent wrote: the one opener every transcript uses.
+  Future<void> _openLink(String href) =>
+      openTranscriptLink(context, ref, href, openPath: _openPath, say: _say);
 
   /// A file an agent's edit names, placed where the session runs.
   EnvironmentPath? _placeEditedFile(String path) => _placeToken(path)?.$1;
@@ -268,47 +235,5 @@ mixin _TranscriptPlaces on ConsumerState<SessionTranscriptView> {
       return;
     }
     ref.read(editorTabActionsProvider).openAt(placed.$1, line: placed.$2);
-  }
-}
-
-/// The link in full, so the reader sees where it goes, and the two answers.
-class _OpenLinkBody extends StatelessWidget {
-  const _OpenLinkBody({required this.uri});
-
-  final Uri uri;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SelectableText(
-            '$uri',
-            style: MonoStyles.body.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: Insets.lg),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: Touch.gap),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Open'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 }
