@@ -13,13 +13,16 @@ import '../application/server_overview.dart';
 
 /// Runs [command] on this machine's server, Restart and Stop confirmed first
 /// with what they end. Refuses what the server's overview does not offer.
+/// [confirmStop] false stops at once: the tray's Stop is already the person's
+/// word, and its window may be hidden behind the confirm.
 ///
 /// [context] must outlive the call: quick open passes its navigator's, since
 /// its own route is gone before the confirm is answered.
 Future<void> runServerCommand(
   BuildContext context,
-  ServerCommand command,
-) async {
+  ServerCommand command, {
+  bool confirmStop = true,
+}) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final ServerOverview overview;
   try {
@@ -36,6 +39,8 @@ Future<void> runServerCommand(
       container.invalidate(serverOverviewProvider);
     case ServerCommand.restart:
       await confirmServerRestart(context, overview);
+    case ServerCommand.stop when !confirmStop:
+      await _stop(container, overview);
     case ServerCommand.stop:
       await confirmServerStop(context, overview);
   }
@@ -107,7 +112,14 @@ Future<void> confirmServerStop(
     destructive: true,
   );
   if (!confirmed) return;
-  await container.read(localHostStatusProvider.notifier).stop(force: live != 0);
+  await _stop(container, overview);
+}
+
+/// Stops the server, forcing it when it holds sessions (or will not say).
+Future<void> _stop(ProviderContainer container, ServerOverview overview) async {
+  await container
+      .read(localHostStatusProvider.notifier)
+      .stop(force: overview.liveSessions != 0);
   container.invalidate(serverOverviewProvider);
 }
 
@@ -123,7 +135,7 @@ void listenForServerCommandRequests(BuildContext context, WidgetRef ref) {
     if (command == null) {
       openSettingsTab(ref, anchor: SettingsAnchor.serverStatus);
     } else {
-      unawaited(runServerCommand(context, command));
+      unawaited(runServerCommand(context, command, confirmStop: false));
     }
   });
 }

@@ -198,22 +198,18 @@ void main() {
       return (container, status);
     }
 
-    testWidgets('Stop shows the Settings page\'s confirm, naming what it '
-        'ends', (tester) async {
+    // The owner (2026-10-08): the tray's Stop is the person's word already;
+    // asking again in the window, which may be hidden, is a second click.
+    testWidgets('Stop from the tray stops at once, asking nothing', (
+      tester,
+    ) async {
       final (container, status) = await pump(tester, overview(live: 2));
 
       container
           .read(serverCommandRequestProvider.notifier)
           .ask(ServerCommand.stop);
       await tester.pumpAndSettle();
-      expect(find.text('Stop the server?'), findsOneWidget);
-      expect(
-        find.textContaining('ends the 2 running sessions'),
-        findsOneWidget,
-      );
-
-      await tester.tap(find.text('Stop').last);
-      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
       expect(status.calls, ['stop(force: true)']);
     });
 
@@ -232,14 +228,14 @@ void main() {
       expect(status.calls, isEmpty);
     });
 
-    testWidgets('the same command asked twice is shown twice', (tester) async {
+    testWidgets('the same command asked twice is acted on twice', (
+      tester,
+    ) async {
       final (container, status) = await pump(tester, overview(live: 0));
       final requests = container.read(serverCommandRequestProvider.notifier);
 
       for (var i = 0; i < 2; i++) {
         requests.ask(ServerCommand.stop);
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Stop').last);
         await tester.pumpAndSettle();
       }
       expect(status.calls, ['stop(force: false)', 'stop(force: false)']);
