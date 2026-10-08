@@ -17,6 +17,31 @@ installs claim the same version name.
 
 ---
 
+## 1.34.3 — 2026-10-08 (build 70)
+
+- **The phone opens on the Agent dashboard.**
+  - Dashboard replaces Sessions as the first tab; Sessions is under More, and "All sessions" ends the board.
+  - The dashboard's header is one row, and the summary shows only what isn't zero.
+- **Dashboard filters, redesigned.**
+  - View (group by, sub-sessions, what cards show) and Filter (searchable checklists of projects, agents and machines, with Only, All and Reset).
+  - Hide project, context or machine from the cards; a detail every card shares hides itself.
+  - A shortcuts sheet: `?`, the keyboard button, or Ctrl+K.
+  - End on each live card. It asks first when that loses a turn or a question.
+  - Narrow phones keep card titles readable.
+- **A slimmer session page.**
+  - The header is one row with Chat, Terminal and Files as icons.
+  - One status line carries the state, model, permission, agent, branch and machine, folding what doesn't fit into "+N".
+- **In the chat:**
+  - **Stop is always there while the agent works:** Send becomes ■ Stop, and Esc stops it from anywhere. If it doesn't stop, the chat offers to end the session.
+  - **Rewind** in Claude Code sessions: "Rewind to here…" on your message, for code and conversation, conversation only, or code only. Undone turns fold, and your message returns to the box.
+  - **Copy anything:** right-click or long-press a link, path or image for Open, Copy link, Copy path (as written, full or relative), Copy image and Save as.
+  - **A path in backticks is a link,** as in the terminal.
+- **Startup prompts show as cards.** Claude's "new MCP servers found" checklist and other first-run screens from Claude and Codex appear in the chat, answerable from there. An automation stops and says why.
+- **Sub-sessions:**
+  - **Detach** one from its parent, so they stop reporting to each other.
+  - The New-session dialog can link a session to its parent, or not.
+- **No false "finished" notices:** an agent run inside a session's terminal no longer moves that session's status, and a quiet pause settles before the parent hears of it.
+
 ## 1.34.2 — 2026-10-08 (build 69)
 
 - **The phone reconnects within seconds after the background.**
