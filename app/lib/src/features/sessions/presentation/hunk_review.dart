@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../application/hunk_review_marks.dart';
 import '../application/hunk_reverts.dart';
@@ -254,14 +255,10 @@ class HunkReviewBar extends StatelessWidget {
                 TextSpan(
                   children: [
                     TextSpan(text: 'Change ${hunk.index + 1}  '),
-                    TextSpan(
-                      text: '+${hunk.added}',
-                      style: TextStyle(color: semantic.diffAdded),
-                    ),
-                    const TextSpan(text: ' '),
-                    TextSpan(
-                      text: '−${hunk.removed}',
-                      style: TextStyle(color: semantic.diffRemoved),
+                    ...diffStatSpans(
+                      semantic,
+                      added: hunk.added,
+                      removed: hunk.removed,
                     ),
                   ],
                 ),

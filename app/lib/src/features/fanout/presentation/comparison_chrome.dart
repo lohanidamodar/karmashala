@@ -8,6 +8,7 @@ import '../../verification/presentation/attribution_mark.dart';
 import '../../verification/presentation/verdict_appearance.dart';
 import '../application/comparison_providers.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// Small shared pieces of the comparison surface. Neutral by decision: the
 /// only colour is [SemanticColors] — diff add/remove, a failure, a verdict.
@@ -127,17 +128,12 @@ class DiffStatLine extends StatelessWidget {
                   '${value.filesChanged} '
                   'file${value.filesChanged == 1 ? '' : 's'}  ',
             ),
-          if (value.insertions > 0 || value.deletions > 0) ...[
-            TextSpan(
-              text: '+${value.insertions}',
-              style: TextStyle(color: semantic.diffAdded),
+          if (value.insertions > 0 || value.deletions > 0)
+            ...diffStatSpans(
+              semantic,
+              added: value.insertions,
+              removed: value.deletions,
             ),
-            const TextSpan(text: ' '),
-            TextSpan(
-              text: '−${value.deletions}',
-              style: TextStyle(color: semantic.diffRemoved),
-            ),
-          ],
           if ((value.commits ?? 0) > 0)
             TextSpan(
               text:

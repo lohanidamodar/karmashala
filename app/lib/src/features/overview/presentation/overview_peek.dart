@@ -9,6 +9,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../app/shell/phone_shell.dart';
 import '../../../app/shell/session_more_button.dart';
@@ -1078,17 +1079,11 @@ class _PeekFilesState extends ConsumerState<_PeekFiles> {
                     if (stat != null && !stat.isBinary)
                       Text.rich(
                         TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '+${stat.added}',
-                              style: TextStyle(color: semantic.diffAdded),
-                            ),
-                            const TextSpan(text: ' '),
-                            TextSpan(
-                              text: '−${stat.removed}',
-                              style: TextStyle(color: semantic.diffRemoved),
-                            ),
-                          ],
+                          children: diffStatSpans(
+                            semantic,
+                            added: stat.added,
+                            removed: stat.removed,
+                          ),
                         ),
                         key: ValueKey('overview-peek-file-stat:$path'),
                         style: theme.textTheme.labelSmall?.copyWith(

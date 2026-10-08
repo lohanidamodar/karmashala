@@ -4,6 +4,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/transcript.dart'
     show
         PathLinkCallback,
@@ -450,17 +451,11 @@ class _Header extends StatelessWidget {
             SelectionContainer.disabled(
               child: Text.rich(
                 TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '+${diff.added}',
-                      style: TextStyle(color: semantic.diffAdded),
-                    ),
-                    const TextSpan(text: ' '),
-                    TextSpan(
-                      text: '−${diff.removed}',
-                      style: TextStyle(color: semantic.diffRemoved),
-                    ),
-                  ],
+                  children: diffStatSpans(
+                    semantic,
+                    added: diff.added,
+                    removed: diff.removed,
+                  ),
                 ),
                 style: MonoStyles.small,
               ),
