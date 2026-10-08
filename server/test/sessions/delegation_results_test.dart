@@ -76,7 +76,10 @@ void main() {
   };
 
   /// A tracker over this test's database, as a server builds one at start.
-  DelegationResults tracker() => DelegationResults(
+  DelegationResults tracker({
+    Duration settleWindow = const Duration(milliseconds: 20),
+    bool Function(String sessionId)? isWorking,
+  }) => DelegationResults(
     turnOf: (childId, since) => turns.firstTurn(
       childId,
       bound: const Duration(minutes: 5),
@@ -87,11 +90,14 @@ void main() {
     queue: queue,
     store: SessionDelegationDao(database),
     isLive: status.holds,
+    isWorking: isWorking,
+    inBackground: (id) => status.statusOf(id)?.report.backgroundOnly ?? false,
     isArchived: archived.contains,
     openAskOf: (id) => asks.containsKey(id) ? asks[id] : waits.openAskOf(id),
     restoreGrace: const Duration(milliseconds: 60),
     endChild: (childId) async => ended.add(childId),
     batchWindow: const Duration(milliseconds: 40),
+    settleWindow: settleWindow,
     modelOf: (id) => models[id] ?? 'not recorded',
     now: () => clock,
   );
@@ -196,13 +202,22 @@ void main() {
     status.tick();
   }
 
-  void hook(String sessionId, String event) => status.hook(
+  void hook(
+    String sessionId,
+    String event, {
+    String? conversation,
+    Map<String, Object?> more = const {},
+  }) => status.hook(
     AgentHookEvent(
       agent: AgentIds.claudeCode,
       event: event,
       sessionHeader: sessionId,
       receivedAt: DateTime.now().toUtc(),
-      body: {'session_id': 'conv-$sessionId', 'hook_event_name': event},
+      body: {
+        'session_id': conversation ?? 'conv-$sessionId',
+        'hook_event_name': event,
+        ...more,
+      },
     ),
   );
 
@@ -1283,6 +1298,201 @@ void main() {
       expect(SessionDelegationDao(database).awaiting(), isEmpty);
     });
   });
+
+  // Round 64, 2026-10-08: ten "finished its turn without reporting" pushes
+  // while the child's one turn ran on.
+  group('final: a child still busy is not reported finished', () {
+    DelegatedChild finalChild(String id) => DelegatedChild(
+      childId: id,
+      parentId: 'parent',
+      title: 'Task $id',
+      agent: 'Claude Code',
+      startedAt: t0,
+      reportMode: kReportModeFinal,
+    );
+
+    Future<void> started(String id, {String mode = kReportModeFinal}) async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal(id);
+      delegations.watch(
+        mode == kReportModeFinal ? finalChild(id) : child(id).withMode(mode),
+      );
+      hook(id, 'UserPromptSubmit');
+      await pumpEventQueue();
+    }
+
+    Map<String, Object?> background(String type, String status) => {
+      'background_tasks': [
+        {'id': 'b1', 'type': type, 'status': status, 'description': 'work'},
+      ],
+    };
+
+    test('a nested claude it runs from its shell inherits the pane, but its '
+        'turn ends are not the child\'s', () async {
+      await started('c1');
+      hook('c1', 'PreToolUse', more: {'tool_name': 'Bash'});
+      await pumpEventQueue();
+      for (var run = 0; run < 3; run++) {
+        hook('c1', 'UserPromptSubmit', conversation: 'nested-$run');
+        hook('c1', 'Stop', conversation: 'nested-$run');
+        await settle();
+      }
+      expect(delivered['parent'], isNull);
+      expect(status.statusOf('c1')!.report.status, AgentActivityStatus.working);
+
+      answers['c1'] = 'Finished, forgot to report.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await settle();
+      expect(
+        delivered['parent']!.single,
+        contains('finished its turn without reporting'),
+      );
+    });
+
+    for (final type in ['shell', 'subagent']) {
+      test('a turn handed off to a background $type is not pushed; the turn '
+          'that ends after it is, once', () async {
+        await started('c1');
+        hook('c1', 'Stop', more: background(type, 'running'));
+        await settle();
+        expect(delivered['parent'], isNull);
+        expect(delegations.viewOf('c1').state, 'running (background)');
+
+        // Woken by the task's notice: no UserPromptSubmit fires.
+        hook('c1', 'PreToolUse', more: {'tool_name': 'Read'});
+        answers['c1'] = 'All done.';
+        answeredAt['c1'] = clock;
+        hook('c1', 'Stop', more: {'background_tasks': <Object?>[]});
+        await settle();
+        expect(delivered['parent'], hasLength(1));
+        expect(
+          delivered['parent']!.single,
+          contains('finished its turn without reporting'),
+        );
+        expect(delivered['parent']!.single, contains('All done.'));
+      });
+    }
+
+    test('each_turn: the hand-off and the turn after it come as one', () async {
+      await started('c1', mode: kReportModeEachTurn);
+      hook('c1', 'Stop', more: background('shell', 'running'));
+      await settle();
+      expect(delivered['parent'], isNull);
+      answers['c1'] = 'Built.';
+      hook('c1', 'Stop', more: {'background_tasks': <Object?>[]});
+      await settle();
+      expect(delivered['parent']!.single, contains('"Task c1" — done'));
+    });
+
+    test('a quiet end is held, and dropped when the child goes on by '
+        'itself within the window', () async {
+      await delegations.close();
+      delegations = tracker(
+        settleWindow: const Duration(milliseconds: 300),
+        isWorking: queue.turns.running,
+      );
+      await started('c1');
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], isNull, reason: 'held for the window');
+      hook('c1', 'PreToolUse', more: {'tool_name': 'Bash'});
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await pumpEventQueue();
+      expect(delivered['parent'], isNull);
+
+      answers['c1'] = 'Now really done.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      await pumpEventQueue();
+      expect(delivered['parent'], hasLength(1));
+      expect(delivered['parent']!.single, contains('Now really done.'));
+    });
+
+    test('report_to_parent inside the window replaces the quiet end, and '
+        'goes at once', () async {
+      await delegations.close();
+      delegations = tracker(settleWindow: const Duration(milliseconds: 300));
+      await started('c1');
+      hook('c1', 'Stop');
+      await settle();
+      delegations.report(
+        const ParentReport(
+          childId: 'c1',
+          parentId: 'parent',
+          title: 'Task c1',
+          agent: 'Claude Code',
+          status: ReportStatus.done,
+          text: 'Here is my report.',
+        ),
+      );
+      await pumpEventQueue();
+      expect(delivered['parent']!.single, contains('Here is my report.'));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await pumpEventQueue();
+      expect(delivered['parent'], hasLength(1));
+    });
+
+    test('background work that hangs is told once, after the cap', () async {
+      await delegations.close();
+      turns = ChildTurnWait(
+        waits: waits,
+        answerOf: answerOf,
+        settled: queue.turns.settled,
+        recheck: const Duration(milliseconds: 5),
+        backgroundCap: const Duration(milliseconds: 80),
+      );
+      delegations = tracker();
+      await started('c1');
+      hook('c1', 'Stop', more: background('shell', 'running'));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await pumpEventQueue();
+      expect(
+        delivered['parent']!.single,
+        contains('quiet while background work runs'),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await pumpEventQueue();
+      expect(delivered['parent'], hasLength(1), reason: 'told once');
+    });
+
+    test(
+      'an ACP child under final: the settle window alone, then one push',
+      () async {
+        await delegations.close();
+        delegations = tracker(settleWindow: const Duration(milliseconds: 300));
+        await runTerminal('parent');
+        hook('parent', 'Stop');
+        final acp = await runAcp('ACP finished.');
+        delegations.watch(finalChild('c2'));
+        await acp.send('task');
+        await acp.awaitTurn();
+        answers['c2'] = 'ACP finished.';
+        await settle();
+        expect(delivered['parent'], isNull, reason: 'held for the window');
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await pumpEventQueue();
+        expect(
+          delivered['parent']!.single,
+          contains('finished its turn without reporting'),
+        );
+      },
+    );
+  });
+}
+
+extension on DelegatedChild {
+  DelegatedChild withMode(String mode) => DelegatedChild(
+    childId: childId,
+    parentId: parentId,
+    title: title,
+    agent: agent,
+    model: model,
+    startedAt: startedAt,
+    reportMode: mode,
+  );
 }
 
 /// The server's host for a runtime, cut to what these cases observe.

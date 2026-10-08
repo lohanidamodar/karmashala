@@ -3321,7 +3321,7 @@
     },
     {
       "name": "delegations",
-      "description": "The sessions you started with open_new_session or subagent_run, each with its state — running, reported done, blocked, needs input, failed or ended — whether its turn ends are pushed to you (followed), and its last report: what, by whom, when. Read it instead of polling transcripts or files; results and reports arrive by themselves.",
+      "description": "The sessions you started with open_new_session or subagent_run, each with its state — running, running (background), idle, reported done, blocked, needs input, failed or ended — whether its turn ends are pushed to you (followed), and its last report: what, by whom, when. Read it instead of polling transcripts or files; results and reports arrive by themselves.",
       "inputSchema": {
         "type": "object",
         "properties": {}

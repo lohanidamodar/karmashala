@@ -842,6 +842,7 @@ Future<int> _serve(
     database: database,
     data: data,
     heldHere: status.runsHere,
+    ownsConversation: status.ownsConversation,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   data.checkpointWork = checkpoints.handle;
@@ -1684,6 +1685,7 @@ Future<int> _serve(
           prompts.status.holds(id);
     },
     isWorking: sessionQueue.turns.running,
+    inBackground: (id) => status.statusOf(id)?.report.backgroundOnly ?? false,
     isArchived: (id) => SessionDao(database).getById(id)?.isArchived ?? false,
     openAskOf: sessionWaits.openAskOf,
     endChild: endChild,

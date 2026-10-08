@@ -166,8 +166,13 @@ class DaemonAgentStatus {
     }
   }
 
-  /// Folds in one hook the host took: the pane it names when it names one,
-  /// else the row whose conversation it is about.
+  /// Whether a hook fired in row [sessionId]'s pane about [conversationId]
+  /// is its agent's own, not an agent it ran (`HostedStatusKeeper`).
+  bool ownsConversation(String sessionId, String conversationId) =>
+      keeper.ownsConversation(sessionId, conversationId);
+
+  /// Folds in one hook the host took: the pane it names when its own agent
+  /// fired it, else the row whose conversation it is about.
   void hook(AgentHookEvent hook) {
     final body = jsonEncode(hook.body);
     final report = keeper.classify(
@@ -180,6 +185,9 @@ class DaemonAgentStatus {
     String? rowId;
     if (named != null && runningSessionOf(named) != null) {
       rowId = _rowOf(hostSessionIdOf(named));
+    }
+    if (rowId != null && !keeper.ownsConversation(rowId, report.sessionId)) {
+      rowId = null;
     }
     rowId ??= keeper.sessionForConversation(hook.agent, report.sessionId);
     if (rowId == null) return;

@@ -453,8 +453,10 @@ class LaunchToolSet extends ServerToolSet {
     return {
       'children': [for (final child in children) _delegationRow(child)],
       'note':
-          'state is running, reported done, blocked, needs input, failed or '
-          'ended. A followed child pushes the end of each turn it works to '
+          'state is running, running (background) (its own turn ended; work '
+          'it started still runs), idle, reported done, blocked, needs input, '
+          'failed or ended. A followed child pushes the end of each turn it '
+          'works to '
           'you, and report_to_parent arrives at once: end your turn and wait '
           'for them rather than polling.',
     };
@@ -1365,8 +1367,9 @@ const List<Map<String, Object?>> launchToolSchemas = [
     'name': 'delegations',
     'description':
         'The sessions you started with open_new_session or subagent_run, '
-        'each with its state — running, reported done, blocked, needs input, '
-        'failed or ended — whether its turn ends are pushed to you '
+        'each with its state — running, running (background), idle, reported '
+        'done, blocked, needs input, failed or ended — whether its turn ends '
+        'are pushed to you '
         '(followed), and its last report: what, by whom, when. Read it '
         'instead of polling transcripts or files; results and reports '
         'arrive by themselves.',

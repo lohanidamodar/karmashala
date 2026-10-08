@@ -44,6 +44,7 @@ class DaemonCheckpoints {
     required AppDatabase database,
     required this.data,
     required bool Function(String sessionId) heldHere,
+    bool Function(String sessionId, String conversationId)? ownsConversation,
     CommandRunnerFactory runnerFactory = const CommandRunnerFactory(),
     this.agents = AgentRegistry.builtIn,
     DateTime Function()? clock,
@@ -52,6 +53,7 @@ class DaemonCheckpoints {
     bool Function(EnvironmentPath directory)? present,
     void Function(String message)? log,
   }) : _heldHere = heldHere,
+       _ownsConversation = ownsConversation,
        _sessions = SessionDao(database),
        _repositories = RepositoryDao(database),
        _dao = CheckpointDao(database),
@@ -100,6 +102,11 @@ class DaemonCheckpoints {
   /// How long a `PreToolUse` is held; [kCheckpointHookHold] but in tests.
   final Duration hold;
   final bool Function(String sessionId) _heldHere;
+
+  /// Whether a hook in a held pane about a conversation is that pane's
+  /// agent's (`DaemonAgentStatus.ownsConversation`); null believes the pane.
+  final bool Function(String sessionId, String conversationId)?
+  _ownsConversation;
   final SessionDao _sessions;
   final RepositoryDao _repositories;
   final CheckpointDao _dao;
@@ -202,18 +209,21 @@ class DaemonCheckpoints {
     }
   }
 
-  /// The row a hook is about: the pane the server runs when it names one (as
-  /// the daemon's status reads it), else the row whose conversation it is,
-  /// else the row its pane was launched as while that row names no
-  /// conversation yet. A child agent inheriting its parent pane's id, in a
-  /// pane the server does not run, is not its parent's turn.
+  /// The row a hook is about: the pane the server runs when it names one and
+  /// its own agent fired it (as the daemon's status reads it), else the row
+  /// whose conversation it is, else the row its pane was launched as while
+  /// that row names no conversation yet. A child agent inheriting its parent
+  /// pane's id is not its parent's turn.
   String? _rowOf(String? header, String conversationId) {
-    if (header != null && _heldHere(header)) return header;
+    final held = header != null && _heldHere(header);
+    if (held && (_ownsConversation?.call(header, conversationId) ?? true)) {
+      return header;
+    }
     if (conversationId.isNotEmpty) {
       final byConversation = _sessions.getByExternalSessionId(conversationId);
       if (byConversation != null) return byConversation.id;
     }
-    if (header == null) return null;
+    if (header == null || held) return null;
     final row = _sessions.getById(header);
     final named = row?.externalSessionId;
     return row != null && (named == null || named.isEmpty) ? row.id : null;

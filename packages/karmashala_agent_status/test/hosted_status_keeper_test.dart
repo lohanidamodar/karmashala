@@ -239,6 +239,36 @@ void main() {
     });
   });
 
+  // Round 64, 2026-10-08: a child ran `claude -p` from its Bash tool, and
+  // each nested Stop read as the child finishing its turn.
+  group('a hook from another conversation in the pane', () {
+    setUp(() => keeper.track('row-1', agentId: claude.id));
+
+    test('mid-turn is an agent the pane ran, not the pane', () {
+      hook('UserPromptSubmit');
+      hook('PreToolUse', {'tool_name': 'Bash'});
+      expect(keeper.ownsConversation('row-1', 'conv-1'), isTrue);
+      expect(keeper.ownsConversation('row-1', 'nested'), isFalse);
+      expect(keeper.ownsConversation('row-1', ''), isTrue);
+    });
+
+    test('while its background work runs is not the pane either', () {
+      hook('UserPromptSubmit');
+      hook('Stop', {
+        'background_tasks': [
+          {'type': 'shell', 'status': 'running', 'command': 'claude -p hi'},
+        ],
+      });
+      expect(keeper.ownsConversation('row-1', 'nested'), isFalse);
+    });
+
+    test('at rest is the pane moving on (/clear, /resume)', () {
+      hook('UserPromptSubmit');
+      hook('Stop');
+      expect(keeper.ownsConversation('row-1', 'conv-2'), isTrue);
+    });
+  });
+
   // Found on a real phone, Claude Code 2.1.283, desktop app closed: every
   // surface (the phone's inbox, the desktop's `session_wait`, MCP) reads this
   // keeper, so what it says of a hook is what they all say.
