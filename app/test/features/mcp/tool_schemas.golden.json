@@ -5310,7 +5310,7 @@
     },
     {
       "name": "session_fork_from_checkpoint",
-      "description": "Fork a session AND put its working tree back to one of its checkpoints, named by checkpointId or by turn. TWO HALVES, and only one of them is a rewind: the files go back to the checkpoint, and the CONVERSATION IS CARRIED WHOLE — no agent CLI here can resume a conversation at a turn, so the fork still remembers everything said after that point, including edits the files no longer hold. Say what you rolled back in \"instruction\". The result lists \"delivered\" and \"notDelivered\" separately and never claims a half it did not do. DESTRUCTIVE on the file half: it discards edits made since that checkpoint, exactly as checkpoint_restore does, taking a safety checkpoint first and refusing a tree that has moved unless \"confirm\" is true. It refuses the file half outright — and says so rather than failing — when another live session is working in that checkout (an ended one never blocks it), when the repository cannot be checkpointed from here, or when newWorktree is true, because a checkpoint restores only into the checkout it was taken in. Use preview:true to read both decisions before committing.",
+      "description": "Fork a session AND put its working tree back to one of its checkpoints, named by checkpointId or by turn. TWO HALVES, and only one of them is a rewind: the files go back to the checkpoint, and the CONVERSATION IS CARRIED WHOLE — a fork never resumes it at a turn (session_rewind cuts a Claude Code session's own conversation in place), so the fork still remembers everything said after that point, including edits the files no longer hold. Say what you rolled back in \"instruction\". The result lists \"delivered\" and \"notDelivered\" separately and never claims a half it did not do. DESTRUCTIVE on the file half: it discards edits made since that checkpoint, exactly as checkpoint_restore does, taking a safety checkpoint first and refusing a tree that has moved unless \"confirm\" is true. It refuses the file half outright — and says so rather than failing — when another live session is working in that checkout (an ended one never blocks it), when the repository cannot be checkpointed from here, or when newWorktree is true, because a checkpoint restores only into the checkout it was taken in. Use preview:true to read both decisions before committing.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -5353,6 +5353,63 @@
         "idempotentHint": false,
         "openWorldHint": false,
         "movesAttentionHint": true
+      }
+    },
+    {
+      "name": "session_rewind",
+      "description": "DESTRUCTIVE. Rewind another session to before one of the person's messages, in place: mode \"code\" puts its files back from the checkpoint taken as that turn began (discarding every edit since, its agent's and anyone else's); \"conversation\" cuts its agent's conversation there so it forgets that message and everything after (Claude Code only: a chat session is restarted, a terminal one has its own /rewind menu answered); \"both\" does both. The turns after are kept in the transcript, folded as rewound. Refused while its agent works, for your own session, and, without \"confirm\", when files changed outside the agent since then. Run with preview:true first and show the person what it says.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session to rewind, from list_sessions. Not yours."
+          },
+          "turnIndex": {
+            "type": "number",
+            "description": "The person's message to rewind to, by its place among the person's messages in session_transcript, from 0, rewound ones included."
+          },
+          "words": {
+            "type": "string",
+            "description": "That message's words, so the rewind finds the right one even if the count moved."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "both",
+              "conversation",
+              "code"
+            ],
+            "description": "What goes back. Default both."
+          },
+          "checkpointTurn": {
+            "type": "number",
+            "description": "For code: the checkpoint turn that message's turn began in, from checkpoint_list."
+          },
+          "checkpointId": {
+            "type": "string",
+            "description": "For code, instead of checkpointTurn: one checkpoint."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Restore even though files changed outside the agent since then. Requires the person to have said so."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Say what would change — turns undone, files restored, files changed outside the agent — and change nothing."
+          }
+        },
+        "required": [
+          "sessionId",
+          "turnIndex"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
       }
     },
     {
@@ -6451,6 +6508,10 @@
     "session_fork_from_checkpoint": {
       "category": "sessions",
       "summary": "Fork a session and roll its files back to a checkpoint; not its conversation."
+    },
+    "session_rewind": {
+      "category": "sessions",
+      "summary": "Rewind a session to before a message: files, conversation, or both."
     },
     "terminal_list": {
       "category": "terminals",

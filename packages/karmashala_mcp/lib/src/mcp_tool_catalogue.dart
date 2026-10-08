@@ -744,8 +744,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
   'session_rewind': McpToolListing(
     McpToolCategory.sessions,
-    'Rewind a session in place to before a message: its files, its '
-    'conversation, or both.',
+    'Rewind a session to before a message: files, conversation, or both.',
   ),
   'get_usage': McpToolListing(
     McpToolCategory.sessions,
