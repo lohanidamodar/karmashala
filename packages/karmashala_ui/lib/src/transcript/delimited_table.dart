@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../design_tokens.dart';
+import 'data_table_view.dart';
 
 /// Rows a table draws; past it a line says how many more there are.
 const int kDelimitedTableRows = 200;
@@ -52,8 +53,8 @@ List<List<String>> parseDelimited(String text, {String separator = ','}) {
   return rows;
 }
 
-/// Rows of cells as a table, the first row as its header. Scrolls sideways
-/// inside its own box, never the page.
+/// Rows of cells as a [DataTableView], the first row as its header. Past
+/// [kDelimitedTableRows] a line says how many more there are.
 class DelimitedTable extends StatelessWidget {
   const DelimitedTable(this.rows, {super.key});
 
@@ -63,42 +64,18 @@ class DelimitedTable extends StatelessWidget {
   Widget build(BuildContext context) {
     if (rows.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final width = rows.fold<int>(0, (w, r) => r.length > w ? r.length : w);
     final shown = rows.take(kDelimitedTableRows + 1).toList();
-    final mono = MonoStyles.small.copyWith(color: scheme.onSurface);
-    TableRow line(List<String> cells, {bool header = false}) => TableRow(
-      decoration: header
-          ? BoxDecoration(color: scheme.surfaceContainerHigh)
-          : null,
-      children: [
-        for (var c = 0; c < width; c++)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.sm,
-              vertical: Insets.xs,
-            ),
-            child: Text(
-              c < cells.length ? cells[c] : '',
-              style: header ? mono.copyWith(fontWeight: FontWeight.w700) : mono,
-            ),
-          ),
-      ],
-    );
+    List<String> padded(List<String> cells) => [
+      for (var c = 0; c < width; c++) c < cells.length ? cells[c] : '',
+    ];
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Table(
-            defaultColumnWidth: const IntrinsicColumnWidth(),
-            border: TableBorder.all(color: scheme.outlineVariant),
-            children: [
-              line(shown.first, header: true),
-              for (final r in shown.skip(1)) line(r),
-            ],
-          ),
+        DataTableView(
+          columns: padded(shown.first),
+          rows: [for (final r in shown.skip(1)) padded(r)],
         ),
         if (rows.length > shown.length)
           Padding(
@@ -106,7 +83,7 @@ class DelimitedTable extends StatelessWidget {
             child: Text(
               '${rows.length - shown.length} more rows not shown',
               style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),
