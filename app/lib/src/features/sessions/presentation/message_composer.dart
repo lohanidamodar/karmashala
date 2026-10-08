@@ -971,7 +971,8 @@ class _MessageComposerState extends State<MessageComposer> {
     // A file still on its way, or one that stopped, would go missing from
     // the message.
     if (_busy || !widget.enabled || !_readyToSend) return;
-    final text = _input.text.trim();
+    final typed = _input.text;
+    final text = typed.trim();
     if (text.isEmpty && _attachments.isEmpty && _uploads.isEmpty) return;
     if (_uploads.isNotEmpty) {
       setState(() => _busy = true);
@@ -1008,7 +1009,12 @@ class _MessageComposerState extends State<MessageComposer> {
     try {
       await widget.onSend(buffer.toString());
       if (mounted) {
-        _input.clear();
+        // Only what went: text a note or a draft added meanwhile stays.
+        final left = textLeftAfterSend(_input.text, typed);
+        _input.value = TextEditingValue(
+          text: left,
+          selection: TextSelection.collapsed(offset: left.length),
+        );
         setState(_attachments.clear);
         // The box was disabled while it sent, which closed the keyboard; a
         // keyboard that shuts after each message reads as the session ending.
@@ -2156,4 +2162,14 @@ class _CommandPalette extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What stays in a box that held [now] once [sent] — the box's text when Send
+/// was pressed — has gone: anything added meanwhile, never the sent words.
+String textLeftAfterSend(String now, String sent) {
+  if (now == sent) return '';
+  if (sent.isNotEmpty && now.startsWith(sent)) {
+    return now.substring(sent.length).trimLeft();
+  }
+  return now;
 }

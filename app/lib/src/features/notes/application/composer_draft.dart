@@ -355,3 +355,25 @@ CommandSnippet _offered(String text) => CommandSnippet(
   createdAt: DateTime.utc(1970),
   updatedAt: DateTime.utc(1970),
 );
+
+/// Half-typed text a session's composer left when it closed, keyed by session
+/// id — the peek and the tab share one. Unlike an offer ([ComposerDrafts]) it
+/// is only ever put back into an **empty** box, so it never joins words
+/// someone is typing in another view of the same session.
+class ParkedDrafts {
+  final _parked = <String, String>{};
+
+  /// Keeps [text] for [sessionId], after any already kept that differs.
+  void park(String sessionId, String text) {
+    if (text.trim().isEmpty) return;
+    final kept = _parked[sessionId];
+    _parked[sessionId] = kept == null || kept.trim() == text.trim()
+        ? text
+        : '$kept\n\n$text';
+  }
+
+  /// Takes [sessionId]'s parked text, leaving nothing behind.
+  String? take(String sessionId) => _parked.remove(sessionId);
+}
+
+final parkedDraftsProvider = Provider<ParkedDrafts>((_) => ParkedDrafts());

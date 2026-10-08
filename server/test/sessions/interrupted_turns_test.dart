@@ -15,10 +15,8 @@ void main() {
   final t0 = DateTime.utc(2026, 10, 3, 12);
 
   String? stored;
-  OpenTurns turns() => OpenTurns(
-    read: () => stored,
-    write: (value) => stored = value,
-  );
+  OpenTurns turns() =>
+      OpenTurns(read: () => stored, write: (value) => stored = value);
 
   setUp(() => stored = null);
 
@@ -74,10 +72,7 @@ void main() {
       for (final id in ['s1', 's2', 's3', 's4', 's5']) {
         open.statusMoved(id, AgentActivityStatus.working, t0);
       }
-      open.ended(
-        'karmashala_s1',
-        reason: SessionEndedWithoutCode.hostStopped,
-      );
+      open.ended('karmashala_s1', reason: SessionEndedWithoutCode.hostStopped);
       open.ended(
         'karmashala_s2',
         reason: SessionEndedWithoutCode.hostStoppedWhileRunning,
@@ -209,11 +204,7 @@ void main() {
         'acp': row('acp', status: SessionStatus.completed),
         'crashed': row('crashed', status: SessionStatus.running),
       });
-      expect(decided.resume.map((r) => r.sessionId), [
-        'pty',
-        'acp',
-        'crashed',
-      ]);
+      expect(decided.resume.map((r) => r.sessionId), ['pty', 'acp', 'crashed']);
       expect(decided.skipped, isEmpty);
     });
 
@@ -266,13 +257,16 @@ void main() {
         },
       );
       expect(decided.resume.map((r) => r.sessionId), ['forked']);
-      expect({for (final s in decided.skipped) s.sessionId: s.reason}, {
-        'stopped': 'it was stopped',
-        'failed': 'it ended in error',
-        'archived': 'it was archived',
-        'handed': 'its work was handed off',
-        'gone': 'it is no longer in the workspace',
-      });
+      expect(
+        {for (final s in decided.skipped) s.sessionId: s.reason},
+        {
+          'stopped': 'it was stopped',
+          'failed': 'it ended in error',
+          'archived': 'it was archived',
+          'handed': 'its work was handed off',
+          'gone': 'it is no longer in the workspace',
+        },
+      );
       expect(decided.skipped.where((s) => s.forAPerson), isEmpty);
     });
 
@@ -362,6 +356,28 @@ void main() {
       expect(jsonDecode(recordWhenResumed!), isEmpty);
     });
 
+    test('a person\'s queued message goes first: the session is reopened '
+        'bare, never told to continue ahead of it', () async {
+      final open = turns()
+        ..statusMoved('s1', AgentActivityStatus.working, t0)
+        ..statusMoved('s2', AgentActivityStatus.working, t0);
+      final run = InterruptedTurnContinuer(
+        turns: open,
+        sessionOf: (id) => rows[id],
+        childrenOf: (_) => const [],
+        runsHere: (_) => false,
+        takesOpeningMessage: (_) => true,
+        personWaits: (id) => id == 's1',
+        resume: (id, prompt) async => resumed.add((id, prompt)),
+        now: () => t0.add(const Duration(minutes: 1)),
+        report: (id, detail) => reported[id] = detail,
+        log: logged.add,
+      );
+      expect(await run.run(), ['s1', 's2']);
+      expect(resumed, [('s1', null), ('s2', kInterruptedTurnPrompt)]);
+      expect(reported['s1'], contains('you had queued goes to it first'));
+    });
+
     test('every resume is started before the first one finishes', () async {
       final open = turns()
         ..statusMoved('s1', AgentActivityStatus.working, t0)
@@ -380,14 +396,18 @@ void main() {
       await run;
     });
 
-    test('once per boot: a second run and a second server find nothing', () async {
-      final open = turns()..statusMoved('s1', AgentActivityStatus.working, t0);
-      final run = continuer(open);
-      await run.run();
-      await run.run();
-      await continuer(turns()).run();
-      expect(resumed, hasLength(1));
-    });
+    test(
+      'once per boot: a second run and a second server find nothing',
+      () async {
+        final open = turns()
+          ..statusMoved('s1', AgentActivityStatus.working, t0);
+        final run = continuer(open);
+        await run.run();
+        await run.run();
+        await continuer(turns()).run();
+        expect(resumed, hasLength(1));
+      },
+    );
 
     test('a resume that fails is not tried again', () async {
       final open = turns()..statusMoved('s1', AgentActivityStatus.working, t0);
@@ -434,25 +454,32 @@ void main() {
       expect(logged.single, contains('not told'));
     });
 
-    test('switched off: nothing is resumed and the record is cleared', () async {
-      final open = turns()..statusMoved('s1', AgentActivityStatus.working, t0);
-      await continuer(open, enabled: false).run();
-      expect(resumed, isEmpty);
-      expect(turns().open, isEmpty);
-      expect(logged.single, contains('switched off'));
-      expect(reported['s1'], contains('switched off in Settings'));
-    });
+    test(
+      'switched off: nothing is resumed and the record is cleared',
+      () async {
+        final open = turns()
+          ..statusMoved('s1', AgentActivityStatus.working, t0);
+        await continuer(open, enabled: false).run();
+        expect(resumed, isEmpty);
+        expect(turns().open, isEmpty);
+        expect(logged.single, contains('switched off'));
+        expect(reported['s1'], contains('switched off in Settings'));
+      },
+    );
 
-    test('each continued session is filed for the inbox, told or not', () async {
-      final open = turns()
-        ..statusMoved('s1', AgentActivityStatus.working, t0)
-        ..statusMoved('s2', AgentActivityStatus.working, t0);
-      await continuer(open, takes: (session) => session.id == 's1').run();
-      expect(reported.keys, {'s1', 's2'});
-      expect(reported['s1'], startsWith(kTurnCutOffLead));
-      expect(reported['s1'], contains('continued it'));
-      expect(reported['s2'], contains('not asked to continue'));
-    });
+    test(
+      'each continued session is filed for the inbox, told or not',
+      () async {
+        final open = turns()
+          ..statusMoved('s1', AgentActivityStatus.working, t0)
+          ..statusMoved('s2', AgentActivityStatus.working, t0);
+        await continuer(open, takes: (session) => session.id == 's1').run();
+        expect(reported.keys, {'s1', 's2'});
+        expect(reported['s1'], startsWith(kTurnCutOffLead));
+        expect(reported['s1'], contains('continued it'));
+        expect(reported['s2'], contains('not asked to continue'));
+      },
+    );
 
     test('a turn left for a person is filed with the reason; one the person '
         'ended themselves is not', () async {

@@ -1308,7 +1308,18 @@ Future<int> _serve(
   // The one decision whether a turn still runs: the queue, a switch and the
   // open-turn record all read it.
   final turnSettlement = TurnSettlement(status: prompts.status)..start();
-  final sessionQueue = SessionQueue(
+  String? inputHeld(String sessionId) {
+    final own = prompts.status.runningSessionOf(sessionId);
+    if (own == null) return null;
+    return heldTypedInput(
+      own.input.unsent,
+      rows: typist.readScreen(sessionId),
+      markers: typist.markersFor(sessionId),
+    );
+  }
+
+  late final SessionQueue sessionQueue;
+  sessionQueue = SessionQueue(
     dao: SessionQueueDao(database),
     status: prompts.status,
     turns: turnSettlement,
@@ -1343,6 +1354,8 @@ Future<int> _serve(
     // A message is not typed over what a person is typing in the pane.
     personTypedAt: (sessionId) =>
         prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,
+    // Nor is one typed on top of text left unsent in the agent's input.
+    inputHeld: inputHeld,
     // A limit holds the queue until its resume, which sends the head.
     limitHold: (sessionId) {
       final session = sessionRows.getById(sessionId);
@@ -1355,7 +1368,11 @@ Future<int> _serve(
       );
     },
     announce: (sessionId, open) => data.announce([
-      SessionQueueChanged(sessionId: sessionId, messages: open),
+      SessionQueueChanged(
+        sessionId: sessionId,
+        messages: open,
+        delivered: sessionQueue.takeDelivered(sessionId),
+      ),
     ]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
@@ -1376,6 +1393,7 @@ Future<int> _serve(
     resumesOnSend: speaksAcp,
     resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
     queue: sessionQueue,
+    inputHeld: inputHeld,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   // An event rule's "tell the agent" goes the way every send goes, so a chat
@@ -1413,8 +1431,13 @@ Future<int> _serve(
         },
         // A window connected by the time the agent is back shows it, as
         // `session_send`'s resume does; the inbox item covers one that is not.
+        personWaits: sessionQueue.personWaiting,
         resume: (sessionId, prompt) async {
-          final started = await launches.resume(sessionId, prompt: prompt);
+          // A send meanwhile queues behind the start rather than racing it.
+          sessionQueue.hold(sessionId);
+          final started = await launches
+              .resume(sessionId, prompt: prompt)
+              .whenComplete(() => sessionQueue.release(sessionId));
           data.tellIntent(
             OpenSessionTab(
               sessionId: started.sessionId,
@@ -1739,6 +1762,7 @@ Future<int> _serve(
               reveal: reveal,
             ),
           );
+          return started;
         },
       ),
     )

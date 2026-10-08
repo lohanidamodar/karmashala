@@ -42,17 +42,23 @@ class QueuedMessagesStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = ref.watch(sessionQueueProvider(sessionId));
-    if (messages.isEmpty) return const SizedBox.shrink();
+    final delivered = ref.watch(recentlyDeliveredProvider(sessionId));
+    if (messages.isEmpty && delivered.isEmpty) return const SizedBox.shrink();
     final quarter = MediaQuery.sizeOf(context).height / 4;
     return LayoutBuilder(
       builder: (context, box) =>
-          folded || box.maxHeight < foldBelow || quarter < foldBelow
+          (folded || box.maxHeight < foldBelow || quarter < foldBelow) &&
+              messages.isNotEmpty
           ? _FoldedQueueLine(sessionId: sessionId, messages: messages)
-          : _strip(messages, quarter),
+          : _strip(messages, delivered, quarter),
     );
   }
 
-  Widget _strip(List<QueuedMessage> messages, double quarter) {
+  Widget _strip(
+    List<QueuedMessage> messages,
+    List<QueuedMessage> delivered,
+    double quarter,
+  ) {
     final hold = queueHoldOf(messages);
     var place = 0;
     return ConstrainedBox(
@@ -76,13 +82,21 @@ class QueuedMessagesStrip extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // What just went, above what still waits.
+                    for (final message in delivered)
+                      if (!messages.any((m) => m.id == message.id))
+                        _QueuedBubble(
+                          key: ValueKey('delivered-${message.id}'),
+                          message: message,
+                          place: null,
+                        ),
                     for (final message in messages)
                       _QueuedBubble(
                         key: ValueKey('queued-${message.id}'),
                         message: message,
-                        place: message.state == QueuedMessageState.failed
-                            ? null
-                            : ++place,
+                        place: message.state == QueuedMessageState.queued
+                            ? ++place
+                            : null,
                         onBackToComposer: onBackToComposer,
                       ),
                   ],
@@ -290,7 +304,8 @@ class _QueuedBubble extends ConsumerWidget {
 
   final QueuedMessage message;
 
-  /// Its turn among the waiting messages, from 1; null for a failed one.
+  /// Its turn among the queued messages, from 1; null for one that is not
+  /// queued.
   final int? place;
   final ValueChanged<String>? onBackToComposer;
 
@@ -306,10 +321,12 @@ class _QueuedBubble extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final failed = message.state == QueuedMessageState.failed;
+    final delivered = message.state == QueuedMessageState.delivered;
     final label = switch (message.state) {
       QueuedMessageState.delivering => 'Sending…',
       QueuedMessageState.failed => 'Not sent',
-      _ => place == 1 ? 'Queued · next' : 'Queued · $place',
+      QueuedMessageState.delivered => 'Delivered',
+      _ => 'Queued (${ordinalWord(place ?? 1)})',
     };
     final labelColor = failed ? scheme.error : scheme.onSurfaceVariant;
     final now = ref.watch(clockProvider).nowUtc().toLocal();
@@ -350,7 +367,11 @@ class _QueuedBubble extends ConsumerWidget {
                     Row(
                       children: [
                         Icon(
-                          failed ? AppIcons.warningCircle : AppIcons.clock,
+                          failed
+                              ? AppIcons.warningCircle
+                              : delivered
+                              ? AppIcons.checkCircle
+                              : AppIcons.clock,
                           size: Touch.iconSmall,
                           color: labelColor,
                         ),
@@ -613,6 +634,9 @@ String queueHoldWords(QueueHold hold, DateTime now) {
     QueueHoldKind.scheduled => 'Held until the scheduled resume',
     QueueHoldKind.paused => 'Paused — nothing more goes until you say',
     QueueHoldKind.stopped => "Waiting — this session isn't running",
+    QueueHoldKind.typedInput =>
+      "Waiting — text typed in the agent's terminal is not sent yet; send "
+          'or clear it there',
   };
 }
 
@@ -625,6 +649,8 @@ String queuedWhenWords(QueueHold? hold, DateTime now) {
     QueueHoldKind.paused => 'Paused: nothing goes until you resume',
     QueueHoldKind.stopped =>
       'Waiting: the session is stopped (resumes on send)',
+    QueueHoldKind.typedInput =>
+      "Waiting: send or clear what is typed in the agent's terminal",
     QueueHoldKind.limit when at != null => 'Held: usage limit until $at',
     QueueHoldKind.limit => 'Held: usage limit',
     QueueHoldKind.scheduled when at != null => 'Held: scheduled resume at $at',
@@ -676,7 +702,7 @@ class QueuedCountChip extends ConsumerWidget {
     final label = switch (hold?.kind) {
       _ when waiting == 0 => '$failed not sent',
       QueueHoldKind.paused => 'Paused · $waiting',
-      QueueHoldKind.stopped => 'Waiting · $waiting',
+      QueueHoldKind.stopped || QueueHoldKind.typedInput => 'Waiting · $waiting',
       QueueHoldKind.limit || QueueHoldKind.scheduled => 'Held · $waiting',
       null => '$waiting queued',
     };
@@ -733,4 +759,18 @@ class QueuedCountChip extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// [n] as an ordinal: 1st, 2nd, 3rd, 11th, 22nd.
+String ordinalWord(int n) {
+  final teen = n % 100 >= 11 && n % 100 <= 13;
+  final suffix = teen
+      ? 'th'
+      : switch (n % 10) {
+          1 => 'st',
+          2 => 'nd',
+          3 => 'rd',
+          _ => 'th',
+        };
+  return '$n$suffix';
 }
