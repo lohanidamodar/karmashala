@@ -70,6 +70,8 @@ class SessionQueue implements ResumeQueue {
     this.limitHold,
     this.endedDeliberately,
     this.personTypedAt,
+    this.inputHeld,
+    this.inputRecheck = const Duration(seconds: 2),
     this.typingGrace = const Duration(seconds: 5),
     this.readPaused,
     this.writePaused,
@@ -129,6 +131,14 @@ class SessionQueue implements ResumeQueue {
   /// When a person last typed into row [String]'s terminal, or null: a
   /// message typed then would land in their draft.
   final DateTime? Function(String sessionId)? personTypedAt;
+
+  /// The unsent text row [String]'s terminal input holds, or null: a message
+  /// typed now would join it ([QueueHoldKind.typedInput]).
+  final String? Function(String sessionId)? inputHeld;
+
+  /// How often a queue held by typed input looks again.
+  final Duration inputRecheck;
+  final _inputWatch = <String, Timer>{};
 
   /// Where the paused sessions are kept (app metadata), so a restart does not
   /// turn a person's pause into a delivery.
@@ -281,6 +291,9 @@ class SessionQueue implements ResumeQueue {
     for (final hold in _typingHolds.values) {
       hold.timer.cancel();
     }
+    for (final timer in _inputWatch.values) {
+      timer.cancel();
+    }
     for (final timer in _awaitingTurn.values) {
       timer.cancel();
     }
@@ -350,7 +363,8 @@ class SessionQueue implements ResumeQueue {
     _unpause(sessionId);
     if (!busy(sessionId) &&
         !dao.hasWaiting(sessionId) &&
-        !_holdsNewMessages(sessionId)) {
+        !_holdsNewMessages(sessionId) &&
+        inputHeld?.call(sessionId) == null) {
       return null;
     }
     final message = dao.enqueue(
@@ -1169,6 +1183,13 @@ class SessionQueue implements ResumeQueue {
     }
     final limit = limitHold?.call(sessionId);
     if (limit != null) return limit;
+    if (inputHeld?.call(sessionId) != null) {
+      _inputWatch[sessionId] ??= Timer(inputRecheck, () {
+        _inputWatch.remove(sessionId);
+        _kick(sessionId);
+      });
+      return const QueueHold(QueueHoldKind.typedInput);
+    }
     if (_nothingRuns(sessionId)) return const QueueHold(QueueHoldKind.stopped);
     return null;
   }

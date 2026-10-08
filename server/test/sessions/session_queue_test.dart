@@ -194,6 +194,44 @@ void main() {
       expect(delivered, ['second']);
     });
 
+    test(
+      'a message is never typed on top of text left unsent in the '
+      "agent's input: it waits, says why, and goes once that is cleared",
+      () async {
+        String? held = 'half a thought';
+        final waiting = SessionQueue(
+          dao: dao,
+          status: status,
+          inputHeld: (_) => held,
+          inputRecheck: const Duration(milliseconds: 20),
+          quietPeriod: const Duration(seconds: 30),
+          announce: (_, open) => announced.add(open),
+          newId: () => 'h1',
+          now: () => t0,
+        )..deliver = ((_, text) async => delivered.add(text));
+        addTearDown(waiting.close);
+        await queue.close();
+        waiting.start();
+        await runAgent();
+
+        final admitted = waiting.admit(
+          's1',
+          'from the peek',
+          origin: QueuedMessageOrigin.app,
+          asTyping: true,
+        );
+        expect(admitted, isA<AdmitQueued>());
+        await pumpEventQueue();
+        expect(delivered, isEmpty);
+        expect(waiting.list('s1').single.hold?.kind, QueueHoldKind.typedInput);
+
+        held = null;
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        await pumpEventQueue();
+        expect(delivered, ['from the peek']);
+      },
+    );
+
     // Declined with Esc or left to "Chat about this", a question fires no
     // hook; the screen showing Claude's composer again is what closes it, and
     // the message queued behind it goes.

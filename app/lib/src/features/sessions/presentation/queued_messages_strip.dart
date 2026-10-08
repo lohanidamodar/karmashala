@@ -613,6 +613,9 @@ String queueHoldWords(QueueHold hold, DateTime now) {
     QueueHoldKind.scheduled => 'Held until the scheduled resume',
     QueueHoldKind.paused => 'Paused — nothing more goes until you say',
     QueueHoldKind.stopped => "Waiting — this session isn't running",
+    QueueHoldKind.typedInput =>
+      "Waiting — text typed in the agent's terminal is not sent yet; send "
+          'or clear it there',
   };
 }
 
@@ -625,6 +628,8 @@ String queuedWhenWords(QueueHold? hold, DateTime now) {
     QueueHoldKind.paused => 'Paused: nothing goes until you resume',
     QueueHoldKind.stopped =>
       'Waiting: the session is stopped (resumes on send)',
+    QueueHoldKind.typedInput =>
+      "Waiting: send or clear what is typed in the agent's terminal",
     QueueHoldKind.limit when at != null => 'Held: usage limit until $at',
     QueueHoldKind.limit => 'Held: usage limit',
     QueueHoldKind.scheduled when at != null => 'Held: scheduled resume at $at',
@@ -676,7 +681,7 @@ class QueuedCountChip extends ConsumerWidget {
     final label = switch (hold?.kind) {
       _ when waiting == 0 => '$failed not sent',
       QueueHoldKind.paused => 'Paused · $waiting',
-      QueueHoldKind.stopped => 'Waiting · $waiting',
+      QueueHoldKind.stopped || QueueHoldKind.typedInput => 'Waiting · $waiting',
       QueueHoldKind.limit || QueueHoldKind.scheduled => 'Held · $waiting',
       null => '$waiting queued',
     };

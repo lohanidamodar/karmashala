@@ -1264,6 +1264,16 @@ Future<int> _serve(
   // The one decision whether a turn still runs: the queue, a switch and the
   // open-turn record all read it.
   final turnSettlement = TurnSettlement(status: prompts.status)..start();
+  String? inputHeld(String sessionId) {
+    final own = prompts.status.runningSessionOf(sessionId);
+    if (own == null) return null;
+    return heldTypedInput(
+      own.input.unsent,
+      rows: typist.readScreen(sessionId),
+      markers: typist.markersFor(sessionId),
+    );
+  }
+
   final sessionQueue = SessionQueue(
     dao: SessionQueueDao(database),
     status: prompts.status,
@@ -1299,6 +1309,8 @@ Future<int> _serve(
     // A message is not typed over what a person is typing in the pane.
     personTypedAt: (sessionId) =>
         prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,
+    // Nor is one typed on top of text left unsent in the agent's input.
+    inputHeld: inputHeld,
     // A limit holds the queue until its resume, which sends the head.
     limitHold: (sessionId) {
       final session = sessionRows.getById(sessionId);
@@ -1332,6 +1344,7 @@ Future<int> _serve(
     resumesOnSend: speaksAcp,
     resume: (sessionId, prompt) => launches.resume(sessionId, prompt: prompt),
     queue: sessionQueue,
+    inputHeld: inputHeld,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   // An event rule's "tell the agent" goes the way every send goes, so a chat

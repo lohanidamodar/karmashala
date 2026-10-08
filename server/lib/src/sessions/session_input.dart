@@ -33,6 +33,7 @@ class SessionInput {
     this.resumesOnSend,
     this.resume,
     this.queue,
+    this.inputHeld,
     this.log,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now {
@@ -52,6 +53,9 @@ class SessionInput {
 
   /// Where a send waits while the session's turn runs; null sends at once.
   final SessionQueue? queue;
+
+  /// The unsent text row [String]'s terminal input holds, or null.
+  final String? Function(String sessionId)? inputHeld;
   final void Function(String message)? log;
   final DateTime Function() _now;
 
@@ -278,6 +282,14 @@ class SessionInput {
     final report = prompts.status.statusOf(sessionId)?.report;
     if (report?.hasOpenQuestion ?? false) throw _questionOpen;
     if (report?.hasOpenPrompt ?? false) throw _promptOpen;
+    if (inputHeld?.call(sessionId) case final held?) {
+      throw DataRefused(
+        DataRefusalCode.conflict,
+        "the agent's input already holds text typed in its terminal "
+        '("${_excerpt(held)}"), so nothing was typed over it. Send or clear '
+        'that text in the terminal, and this message goes next',
+      );
+    }
     final MessageDelivery delivery;
     try {
       delivery = await typist.deliver(sessionId, text, leadIn: leadIn);
@@ -299,6 +311,11 @@ class SessionInput {
       case MessageDelivery.readBack:
         return const SessionSent(sent: true, via: SessionSent.readBack);
     }
+  }
+
+  static String _excerpt(String text) {
+    final flat = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return flat.length > 40 ? '…${flat.substring(flat.length - 40)}' : flat;
   }
 
   /// The protocol takes one turn at a time; a message during one would be
@@ -394,4 +411,19 @@ final class _Remembered {
 
   final Future<Object?> answer;
   final DateTime at;
+}
+
+/// [unsent] — text a client typed into a terminal and has not sent — while
+/// the agent's composer on [rows] still shows it; null otherwise, and when
+/// the composer cannot be read ([markers] unknown).
+String? heldTypedInput(
+  String unsent, {
+  required List<String>? rows,
+  required List<String>? markers,
+}) {
+  final flat = unsent.trim();
+  if (flat.isEmpty || rows == null || markers == null) return null;
+  // Its tail, short enough not to be split by the composer's wrap.
+  final tail = flat.length > 16 ? flat.substring(flat.length - 16) : flat;
+  return composerHolds(rows, markers, messageProbe(tail)) ? unsent : null;
 }

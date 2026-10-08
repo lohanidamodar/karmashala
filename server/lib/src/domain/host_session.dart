@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:xterm2/core.dart';
 
 import '../pty/pty.dart';
+import 'input_line.dart';
 import 'output_backlog.dart';
 import 'screen_facts.dart';
 import 'screen_session.dart';
@@ -115,6 +116,10 @@ class HostSession implements ScreenSession {
   /// session: replaying into its own record would double every byte.
   final SessionRecorder? recorder;
   final WriteToken token = WriteToken();
+
+  /// What clients typed and have not sent, so a message is never typed on
+  /// top of it.
+  final InputLine input = InputLine();
   final PtyHandle _pty;
 
   /// How much history the host's own copy of the screen keeps: tmux's
@@ -251,6 +256,7 @@ class HostSession implements ScreenSession {
     final refusal = _requireToken(clientId, now);
     if (refusal != null) return refusal;
     token.touch(now);
+    input.typed(bytes);
     _pty.write(bytes);
     return null;
   }
@@ -262,6 +268,7 @@ class HostSession implements ScreenSession {
   /// read back off the screen. False once the process has ended.
   bool typeAsHost(Uint8List bytes) {
     if (_lifecycle.hasEnded) return false;
+    input.typedByServer(bytes);
     _pty.write(bytes);
     return true;
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../domain/prompt_refusal.dart';
 
 /// Types a message into a session's composer and presses Return **once the
@@ -69,8 +71,30 @@ class SessionMessageTypist {
 
   /// [send], saying whether the Return was read back off the screen.
   /// [leadIn] is typed first, as its own write, so it reads as typed rather
-  /// than as part of a paste.
+  /// than as part of a paste. One message at a time per session: a second
+  /// waits for the first's Return, so their keys never interleave.
   Future<MessageDelivery> deliver(
+    String sessionId,
+    String text, {
+    String? leadIn,
+  }) {
+    final before = _typing[sessionId];
+    final run = before == null
+        ? _deliver(sessionId, text, leadIn: leadIn)
+        : before.then((_) => _deliver(sessionId, text, leadIn: leadIn));
+    final done = run.then<void>((_) {}, onError: (Object _) {});
+    _typing[sessionId] = done;
+    unawaited(
+      done.whenComplete(() {
+        if (identical(_typing[sessionId], done)) _typing.remove(sessionId);
+      }),
+    );
+    return run;
+  }
+
+  final _typing = <String, Future<void>>{};
+
+  Future<MessageDelivery> _deliver(
     String sessionId,
     String text, {
     String? leadIn,
