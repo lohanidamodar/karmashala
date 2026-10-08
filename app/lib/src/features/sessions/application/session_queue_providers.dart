@@ -48,6 +48,36 @@ final sessionQueueProvider = Provider.autoDispose
       return const [];
     });
 
+/// How long a message the server delivered stays marked Delivered.
+const kDeliveredShownFor = Duration(seconds: 4);
+
+/// [sessionId]'s messages the server said reached the agent, shown for
+/// [kDeliveredShownFor] — never one that was only cancelled or refused.
+final recentlyDeliveredProvider = Provider.autoDispose
+    .family<List<QueuedMessage>, String>((ref, sessionId) {
+      if (!ref.watch(capabilitiesProvider.select((c) => c.sessionQueue))) {
+        return const [];
+      }
+      final client = ref.watch(dataClientProvider);
+      final told = client.sessionQueueChanges.listen((change) {
+        if (change.sessionId == sessionId) ref.invalidateSelf();
+      });
+      Timer? expiry;
+      ref.onDispose(() {
+        told.cancel();
+        expiry?.cancel();
+      });
+      final last = client.sessionQueueDelivered[sessionId];
+      if (last == null) return const [];
+      expiry = Timer(kDeliveredShownFor, () {
+        if (identical(client.sessionQueueDelivered[sessionId], last)) {
+          client.sessionQueueDelivered.remove(sessionId);
+        }
+        ref.invalidateSelf();
+      });
+      return last;
+    });
+
 /// Edits and cancels a session's queued messages at the server; what moved
 /// comes back as `sessionQueueChanged`. Throws [DataRefused] in words.
 class SessionQueueActions {

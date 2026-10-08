@@ -360,6 +360,14 @@ class SessionQueue implements ResumeQueue {
   /// The row of each session's immediate delivery in flight.
   final _immediate = <String, String>{};
 
+  /// Rows delivered since each session's clients were last told.
+  final _delivered = <String, List<String>>{};
+
+  /// The rows of [sessionId] delivered since this was last asked — what
+  /// [announce] tells clients reached the agent.
+  List<String> takeDelivered(String sessionId) =>
+      _delivered.remove(sessionId) ?? const [];
+
   /// Claims [sessionId] for [text] now, giving it a row like any other
   /// message, so every send has an id and its clients see it on its way.
   AdmitNow _claimNow(
@@ -518,6 +526,7 @@ class SessionQueue implements ResumeQueue {
         now: _now(),
         error: delivered ? null : (error ?? 'it could not be delivered'),
       );
+      if (delivered) (_delivered[sessionId] ??= []).add(id);
       if (dao.getById(id) case final row?) _settle(row);
       _announce(sessionId);
     }
@@ -901,13 +910,16 @@ class SessionQueue implements ResumeQueue {
   }
 
   void _finish(QueuedMessage head, QueuedMessageState to, {String? error}) {
-    dao.transition(
+    final moved = dao.transition(
       head.id,
       from: QueuedMessageState.delivering,
       to: to,
       now: _now(),
       error: error,
     );
+    if (moved && to == QueuedMessageState.delivered) {
+      (_delivered[head.sessionId] ??= []).add(head.id);
+    }
     if (to == QueuedMessageState.failed) {
       log?.call('queue ${head.sessionId}: ${head.id} failed: $error');
     }

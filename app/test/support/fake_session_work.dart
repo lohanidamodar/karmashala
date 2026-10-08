@@ -70,7 +70,7 @@ class FakeSessionWork {
     if (queue.isEmpty) return;
     final head = queue.removeAt(0);
     sent.add(SessionSend(sessionId: sessionId, text: head.text));
-    _tellQueue(sessionId);
+    _tellQueue(sessionId, delivered: [head.id]);
   }
 
   /// What holds each session's queue, marked on its queued messages.
@@ -96,9 +96,14 @@ class FakeSessionWork {
     ];
   }
 
-  void _tellQueue(String sessionId) => _server._tell(null, [
-    SessionQueueChanged(sessionId: sessionId, messages: _told(sessionId)),
-  ]);
+  void _tellQueue(String sessionId, {List<String> delivered = const []}) =>
+      _server._tell(null, [
+        SessionQueueChanged(
+          sessionId: sessionId,
+          messages: _told(sessionId),
+          delivered: delivered,
+        ),
+      ]);
 
   Object? _queueRequest(SessionInputRequest<Object?> request) {
     queueAsked.add(request);

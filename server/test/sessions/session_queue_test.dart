@@ -1137,6 +1137,8 @@ void main() {
       expect(announced.last.single.text, 'hello');
       queue.afterImmediate('s1', delivered: true);
       expect(dao.getById(now.message!.id)!.state, QueuedMessageState.delivered);
+      expect(queue.takeDelivered('s1'), [now.message!.id]);
+      expect(queue.takeDelivered('s1'), isEmpty, reason: 'told once');
       expect(queue.list('s1'), isEmpty);
     });
 
@@ -1152,6 +1154,7 @@ void main() {
               )
               as AdmitNow;
       queue.afterImmediate('s1', delivered: false, error: 'not running');
+      expect(queue.takeDelivered('s1'), isEmpty, reason: 'it never went');
       final row = dao.getById(first.message!.id)!;
       expect(
         (row.state, row.error),

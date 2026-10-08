@@ -372,6 +372,10 @@ class DataClient {
   /// when the link drops, and listed again by whoever shows them.
   final sessionQueues = <String, List<QueuedMessage>>{};
 
+  /// The messages each session's last change said reached the agent, as
+  /// they last stood; let go once shown.
+  final sessionQueueDelivered = <String, List<QueuedMessage>>{};
+
   final _sessionQueueChanges = StreamController<SessionQueueChanged>.broadcast(
     sync: true,
   );
@@ -1104,6 +1108,19 @@ class DataClient {
             _sessionActiveModelChanges.add(change);
           }
         case final SessionQueueChanged change:
+          final before = <String, QueuedMessage>{
+            for (final m
+                in sessionQueues[change.sessionId] ?? const <QueuedMessage>[])
+              m.id: m,
+          };
+          final reached = <QueuedMessage>[
+            for (final id in change.delivered)
+              if (before[id] case final m?)
+                m.copyWith(state: QueuedMessageState.delivered),
+          ];
+          if (reached.isNotEmpty) {
+            sessionQueueDelivered[change.sessionId] = reached;
+          }
           sessionQueues[change.sessionId] = change.messages;
           if (!_sessionQueueChanges.isClosed) _sessionQueueChanges.add(change);
         case final SessionAgentChanged change:

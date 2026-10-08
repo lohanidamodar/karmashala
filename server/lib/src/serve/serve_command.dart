@@ -1274,7 +1274,8 @@ Future<int> _serve(
     );
   }
 
-  final sessionQueue = SessionQueue(
+  late final SessionQueue sessionQueue;
+  sessionQueue = SessionQueue(
     dao: SessionQueueDao(database),
     status: prompts.status,
     turns: turnSettlement,
@@ -1323,7 +1324,11 @@ Future<int> _serve(
       );
     },
     announce: (sessionId, open) => data.announce([
-      SessionQueueChanged(sessionId: sessionId, messages: open),
+      SessionQueueChanged(
+        sessionId: sessionId,
+        messages: open,
+        delivered: sessionQueue.takeDelivered(sessionId),
+      ),
     ]),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
