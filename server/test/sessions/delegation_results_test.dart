@@ -1578,6 +1578,79 @@ void main() {
       expect(message, isNot(contains('Terminal says hi.')));
     });
   });
+
+  group('an attached child', () {
+    DelegatedChild attached(String id) => DelegatedChild(
+      childId: id,
+      parentId: 'parent',
+      title: 'Task $id',
+      agent: 'Claude Code',
+      startedAt: t0,
+      reportMode: kReportModeFinal,
+    );
+
+    test('its finished turn reaches the parent once, under final', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+
+      delegations.attach(attached('c1'));
+      final row = SessionDelegationDao(database).byChild('c1')!;
+      expect(row.parentSessionId, 'parent');
+      expect(row.reportMode, kReportModeFinal);
+      expect(row.isOpen, isTrue);
+
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Finished after the attach.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(
+        delivered['parent']!.single,
+        contains('Finished after the attach.'),
+      );
+    });
+
+    test('its own report reaches the parent', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.attach(attached('c1'));
+      final delivery = delegations.report(
+        const ParentReport(
+          childId: 'c1',
+          parentId: 'parent',
+          title: 'Task c1',
+          agent: 'Claude Code',
+          status: ReportStatus.done,
+          text: 'All five fixed.',
+        ),
+      );
+      await pumpEventQueue();
+      expect(delivery, ReportDelivery.delivered);
+      expect(delivered['parent']!.single, contains('All five fixed.'));
+    });
+
+    test('detached and attached again, it is followed again', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      delegations.detach('c1');
+      delegations.attach(attached('c1'));
+      expect(delegations.watching('parent').single.childId, 'c1');
+
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Back and done.';
+      answeredAt['c1'] = clock;
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent']!.single, contains('Back and done.'));
+    });
+  });
 }
 
 extension on DelegatedChild {

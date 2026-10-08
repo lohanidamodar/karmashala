@@ -475,6 +475,30 @@ class DelegationResults {
     log?.call('delegation $childId: detached; nothing more goes either way');
   }
 
+  /// [child] was attached under its parent: a delegation of its own from
+  /// now, and the next turn it works is followed as its mode says.
+  void attach(DelegatedChild child) {
+    final id = child.childId;
+    _detached.remove(id);
+    _held.remove(id)?.cancel();
+    _watched.remove(id);
+    store.put(
+      SessionDelegation(
+        childSessionId: id,
+        parentSessionId: child.parentId,
+        title: child.title,
+        agent: child.agent,
+        model: child.model,
+        delegatedAt: child.startedAt,
+        turn: 0,
+        reportMode: child.reportMode,
+        closedAt: child.reportMode == kReportModeNone ? child.startedAt : null,
+      ),
+    );
+    if (child.reportMode != kReportModeNone && isLive(id)) _stand(child);
+    log?.call('delegation $id: attached to ${child.parentId}');
+  }
+
   /// A child's own [report], put in its parent's queue at once — never
   /// batched, never lifting a pause — and kept as its last. The turn it was
   /// made in is not pushed as well. A child nothing follows is recorded as a

@@ -25,6 +25,10 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
   ),
   SessionEndRequest.name => SessionEndRequest(args.string('sessionId')),
   SessionDetachRequest.name => SessionDetachRequest(args.string('sessionId')),
+  SessionAttachRequest.name => SessionAttachRequest(
+    args.string('sessionId'),
+    parentId: args.string('parentId'),
+  ),
   SessionSourceBrief.name => SessionSourceBrief(
     args.string('sessionId'),
     timeoutSeconds: args.optionalInt('timeoutSeconds'),
@@ -293,6 +297,35 @@ final class SessionDetachRequest extends SessionWorkRequest<DataAck> {
 
   @override
   Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Attaches top-level session [sessionId] under [parentId]: it becomes the
+/// parent's sub-session and reports to it when it finishes (`final`). The
+/// parent's thread gets a line saying so. Refused `notFound` for a session
+/// that is gone, `invalid` for a loop, past the depth cap, an archived
+/// session, or one already under a parent.
+final class SessionAttachRequest extends SessionWorkRequest<DataAck> {
+  const SessionAttachRequest(this.sessionId, {required this.parentId});
+
+  static const String name = 'sessions.attach';
+
+  final String sessionId;
+  final String parentId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'parentId': parentId,
+  };
 
   @override
   Object? resultToJson(DataAck result) => null;
