@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart' show PaneTitleOverride;
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/explorer_tree_provider.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
-import '../../features/explorer/presentation/agents_lens.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
+import '../../features/overview/presentation/overview_tab_view.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/terminal/presentation/session_host_banner.dart'
     show RemoteResumingStrip;
@@ -24,12 +25,15 @@ import 'shell_area.dart';
 import 'shell_compact_bar.dart' show ShellTabSwitcher;
 import 'workbench.dart';
 
-export 'phone_routes.dart' show PhoneWorkbenchController, phoneWorkbenchProvider;
+export 'phone_routes.dart'
+    show PhoneWorkbenchController, phoneWorkbenchProvider;
 
-/// The phone shell's tabs (owner's decision 5), in bottom-bar order. Devices
-/// is never one: a phone has no adb of its own.
+/// The phone shell's tabs (owner's decision 5), in bottom-bar order. The
+/// Agent dashboard is the first and the landing page (owner, 2026-10-08); the
+/// session list moved under More. Devices is never one: a phone has no adb of
+/// its own.
 enum PhoneTab {
-  sessions(ShellArea.sessions),
+  dashboard(null),
   projects(ShellArea.projects),
   terminals(ShellArea.terminals),
   inbox(ShellArea.inbox),
@@ -37,22 +41,28 @@ enum PhoneTab {
 
   const PhoneTab(this.area);
 
-  /// The strip's area this tab shows; null for More.
+  /// The strip's area this tab shows; null for Dashboard and More.
   final ShellArea? area;
 
-  String get label => area?.label ?? 'More';
+  String get label => switch (this) {
+    dashboard => 'Dashboard',
+    more => 'More',
+    _ => area!.label,
+  };
 
-  IconData get icon => switch (area) {
-    final area? => ActivityStrip.iconFor(area),
-    null => AppIcons.dotsThree,
+  IconData get icon => switch (this) {
+    dashboard => AppIcons.squaresFour,
+    more => AppIcons.dotsThree,
+    _ => ActivityStrip.iconFor(area!),
   };
 }
 
 /// The tab in front. A provider, not widget state, so a rotation through the
-/// desktop layout and back lands on the same tab.
+/// desktop layout and back lands on the same tab. Not kept across launches:
+/// the phone always opens on the Dashboard.
 class PhoneTabController extends Notifier<PhoneTab> {
   @override
-  PhoneTab build() => PhoneTab.sessions;
+  PhoneTab build() => PhoneTab.dashboard;
 
   void select(PhoneTab tab) => state = tab;
 }
@@ -126,6 +136,12 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
   }
 
   @override
+  void showDashboard() {
+    ref.read(phoneWorkbenchProvider.notifier).close();
+    ref.read(phoneTabProvider.notifier).select(PhoneTab.dashboard);
+  }
+
+  @override
   void showProjects() {
     ref.read(phoneWorkbenchProvider.notifier).close();
     ref.read(phoneTabProvider.notifier).select(PhoneTab.projects);
@@ -189,7 +205,8 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
   }
 
   Widget _body(PhoneTab tab) => switch (tab) {
-    PhoneTab.sessions => const AgentsPage(),
+    // A root tab: no page title or back arrow, its controls one row.
+    PhoneTab.dashboard => const PaneTitleOverride(child: OverviewTabView()),
     PhoneTab.projects => const ExplorerPanel(terminals: false),
     PhoneTab.terminals => ExplorerTreeView(source: terminalsTreeProvider),
     PhoneTab.inbox => const AttentionInboxView(),
@@ -221,9 +238,10 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Under the app bar, not above it where the status bar covers it.
-            // On Sessions the stale list's own strip says "Reconnecting…" or
-            // "Not connected", with its *Use Auto*: one strip, not two.
-            if (tab != PhoneTab.sessions || !staleShown)
+            // Sessions, under More, draws the stale list's own strip saying
+            // "Reconnecting…" or "Not connected", with its *Use Auto*: one
+            // strip, not two.
+            if (tab != PhoneTab.more || !staleShown)
               const RemoteResumingStrip(),
             Expanded(child: _tabStack(tab, workbench)),
           ],
@@ -275,7 +293,7 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
   );
 }
 
-/// Sessions and Inbox carry what waits on the user, as the strip does.
+/// Dashboard and Inbox carry what waits on the user, as the strip does.
 class _PhoneBottomBar extends ConsumerWidget {
   const _PhoneBottomBar({required this.tab, required this.onPick});
 
@@ -294,7 +312,7 @@ class _PhoneBottomBar extends ConsumerWidget {
     Widget icon(PhoneTab each) {
       final glyph = Icon(each.icon);
       return switch (each) {
-        PhoneTab.sessions when needsYou > 0 => Badge.count(
+        PhoneTab.dashboard when needsYou > 0 => Badge.count(
           count: needsYou,
           backgroundColor: staleNeedsYou != null ? scheme.outline : attention,
           child: glyph,
@@ -314,9 +332,9 @@ class _PhoneBottomBar extends ConsumerWidget {
     }
 
     String label(PhoneTab each) => switch (each) {
-      PhoneTab.sessions when needsYou > 0 && staleNeedsYou != null =>
-        'Sessions, $needsYou needed you when last seen',
-      PhoneTab.sessions when needsYou > 0 => 'Sessions, $needsYou need you',
+      PhoneTab.dashboard when needsYou > 0 && staleNeedsYou != null =>
+        'Dashboard, $needsYou needed you when last seen',
+      PhoneTab.dashboard when needsYou > 0 => 'Dashboard, $needsYou need you',
       PhoneTab.inbox when asks > 0 => 'Inbox, $asks to answer',
       PhoneTab.inbox when news => 'Inbox, new updates',
       _ => each.label,

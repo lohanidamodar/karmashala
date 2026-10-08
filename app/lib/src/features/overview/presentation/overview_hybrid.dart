@@ -4,6 +4,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_routes.dart';
+import '../../../app/shell/phone_shell.dart' show PhoneTabsScope;
 import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
@@ -202,9 +204,11 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
               for (final (lane, cards) in overviewWorkGroupsOf(board)) ...[
                 Padding(
                   key: ValueKey('overview-work-group:${lane.key}'),
-                  padding: const EdgeInsets.only(
+                  // A phone's rows carry their own padding: the header sits
+                  // on them.
+                  padding: EdgeInsets.only(
                     top: Insets.xs,
-                    bottom: Insets.sm,
+                    bottom: phone ? 0 : Insets.sm,
                   ),
                   child: Text(
                     '${lane.label} · ${cards.length}',
@@ -316,6 +320,21 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     OverviewDoneRow(card: card, onOpen: onOpen),
                   ),
             ],
+            // The phone's Dashboard took Sessions' tab; the list is a tap
+            // away from here as well as from More.
+            if (PhoneTabsScope.contains(context))
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  key: const ValueKey('overview-all-sessions'),
+                  onPressed: () => ref
+                      .read(phoneShellRouterProvider)
+                      .current
+                      ?.showMore(PhoneMoreEntry.sessions),
+                  icon: const Icon(AppIcons.chatCircleDots),
+                  label: const Text('All sessions'),
+                ),
+              ),
           ],
         );
       },

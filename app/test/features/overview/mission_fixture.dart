@@ -29,6 +29,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ActiveModelSource, ActivityEntry, ActivityKind;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala/src/app/shell/phone_shell.dart' show PhoneTabsScope;
 import 'package:karmashala_ui/rows.dart' show SessionDiffStat;
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -725,7 +726,7 @@ class FakeOverviewReader implements OverviewReader {
 }
 
 /// Draws the Overview tab over [fixture] at [size]: the desktop's tab, or
-/// with [phone] the phone's More page under a thumb's density.
+/// with [phone] the phone's Dashboard tab under a thumb's density.
 Future<ProviderContainer> pumpMission(
   WidgetTester tester, {
   required MissionFixture fixture,
@@ -736,6 +737,7 @@ Future<ProviderContainer> pumpMission(
   double textScale = 1,
   GlobalKey? boundary,
   List<Override> overrides = const [],
+  Widget? home,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -769,11 +771,11 @@ Future<ProviderContainer> pumpMission(
   final theme = base.copyWith(
     platform: phone ? TargetPlatform.android : TargetPlatform.windows,
   );
-  Widget page = const OverviewTabView();
-  if (phone) {
-    page = Scaffold(
-      appBar: AppBar(title: const Text('Agent dashboard')),
-      body: const PaneTitleOverride(child: OverviewTabView()),
+  Widget page = home ?? const OverviewTabView();
+  if (phone && home == null) {
+    // The phone's Dashboard tab, as the phone shell mounts it.
+    page = const Scaffold(
+      body: PhoneTabsScope(child: PaneTitleOverride(child: OverviewTabView())),
     );
   }
   await tester.pumpWidget(

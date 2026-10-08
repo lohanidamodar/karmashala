@@ -164,6 +164,18 @@ void main() {
     expect(find.text('Logs'), findsNothing);
   });
 
+  testWidgets('the dashboard keys are a command that shows them', (
+    tester,
+  ) async {
+    await open(tester);
+
+    await type(tester, 'dashboard keys');
+    expect(find.text('Show Agent dashboard keys'), findsOneWidget);
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(find.byKey(const ValueKey('overview-keys')), findsOneWidget);
+  });
+
   testWidgets('New session is offered with nothing selected', (tester) async {
     // It used to be hidden here, because the dialog it opens could only create
     // a session for the selected repository. The dialog picks its own

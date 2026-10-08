@@ -102,6 +102,29 @@ void main() {
     expect(second.read(overviewPrefsProvider).groupBy, OverviewGroupBy.context);
   });
 
+  test('the card details hidden are kept across a reload', () async {
+    final first = open();
+    first.read(overviewPrefsProvider.notifier)
+      ..setDetailShown(OverviewCardDetail.machine, false)
+      ..setDetailShown(OverviewCardDetail.context, false)
+      ..setDetailShown(OverviewCardDetail.context, true);
+    final file = File(
+      '${dir.path}${Platform.pathSeparator}overview_device.json',
+    );
+    await until(
+      () => file.existsSync() && file.readAsStringSync().contains('machine'),
+    );
+
+    final second = open();
+    second.read(overviewPrefsProvider);
+    await until(
+      () => second.read(overviewPrefsProvider).hiddenDetails.isNotEmpty,
+    );
+    expect(second.read(overviewPrefsProvider).hiddenDetails, {
+      OverviewCardDetail.machine,
+    });
+  });
+
   test('picking every project again is "all", so new projects show', () {
     final c = open();
     final prefs = c.read(overviewPrefsProvider.notifier);

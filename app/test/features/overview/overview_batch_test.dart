@@ -293,6 +293,8 @@ void main() {
       expect(find.text('1 selected'), findsOneWidget);
       final row = find.byKey(const ValueKey('overview-phone-row:ks-release'));
       await tester.scrollUntilVisible(row, 200, scrollable: hybridList);
+      await tester.ensureVisible(row);
+      await settleMission(tester);
       await tester.longPress(row);
       await settleMission(tester);
       expect(find.text('2 selected'), findsOneWidget);

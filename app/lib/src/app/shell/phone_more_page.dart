@@ -9,14 +9,16 @@ import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
 import '../../features/agents/presentation/usage_tab/usage_tab_view.dart';
 import '../../features/automations/presentation/automations_tab_view.dart';
 import '../../features/notes/presentation/notes_view.dart';
-import '../../features/overview/presentation/overview_tab_view.dart';
+import '../../features/explorer/presentation/agents_lens.dart';
 import '../../features/remote/presentation/machines_section.dart';
 import '../../features/settings/presentation/about_page.dart';
 import '../../features/settings/presentation/settings_layout.dart';
 import '../../features/settings/presentation/settings_tab_view.dart';
 import '../../features/settings/presentation/settings_theme.dart';
 import '../../features/stores/presentation/stores_tab_view.dart';
+import 'activity_strip.dart' show ActivityStrip;
 import 'phone_log_page.dart';
+import 'shell_area.dart';
 import 'running_tab_view.dart';
 import 'phone_routes.dart';
 import 'phone_shell.dart' show PhoneTabsScope;
@@ -28,10 +30,11 @@ class PhoneMoreList extends StatelessWidget {
 
   static (String, IconData, WidgetBuilder) _entry(PhoneMoreEntry entry) =>
       switch (entry) {
-        PhoneMoreEntry.overview => (
-          'Agent dashboard',
-          AppIcons.squaresFour,
-          (_) => const PaneTitleOverride(child: OverviewTabView()),
+        // Every session, the Dashboard's first tab's place before it.
+        PhoneMoreEntry.sessions => (
+          'Sessions',
+          ActivityStrip.iconFor(ShellArea.sessions),
+          (_) => const AgentsPage(),
         ),
         PhoneMoreEntry.usage => ('Usage', AppIcons.chartBar, _usage),
         PhoneMoreEntry.stores => (

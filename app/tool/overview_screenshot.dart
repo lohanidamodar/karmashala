@@ -12,7 +12,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/shell/phone_shell.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
@@ -49,6 +53,8 @@ void main() {
     Brightness brightness = Brightness.dark,
     double textScale = 1,
     MissionFixture? fixture,
+    Widget? home,
+    List<Override> overrides = const [],
     Future<void> Function(WidgetTester tester, dynamic container)? before,
   }) async {
     final key = GlobalKey();
@@ -61,6 +67,8 @@ void main() {
       brightness: brightness,
       textScale: textScale,
       boundary: key,
+      home: home,
+      overrides: overrides,
     );
     if (before != null) {
       await before(tester, container);
@@ -232,6 +240,167 @@ void main() {
       before: (tester, _) async {
         await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
       },
+    ),
+  );
+  // A card's quick End, on sessions the server runs: always there under a
+  // thumb, on hover under a mouse.
+  final everyRuns = [
+    sessionRunningOnHostProvider.overrideWithValue((_) => true),
+  ];
+  for (final scale in [1.0, 1.6]) {
+    testWidgets(
+      'end, phone 360 at $scale',
+      (t) => shoot(
+        t,
+        'end-phone-360-text${(scale * 100).round()}',
+        size: const Size(360, 800),
+        phone: true,
+        textScale: scale,
+        overrides: everyRuns,
+      ),
+    );
+  }
+  testWidgets(
+    'end, desktop hovered',
+    (t) => shoot(
+      t,
+      'end-desktop-1440-hover',
+      overrides: everyRuns,
+      before: (tester, _) async {
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        await mouse.addPointer(location: Offset.zero);
+        addTearDown(mouse.removePointer);
+        await mouse.moveTo(
+          tester.getCenter(find.byKey(const ValueKey('overview-card:ks-r32'))),
+        );
+      },
+    ),
+  );
+  // The whole phone shell: the Dashboard as its first tab and home.
+  for (final width in [360.0, 412.0]) {
+    testWidgets(
+      'phone shell $width',
+      (t) => shoot(
+        t,
+        'phone-shell-${width.round()}',
+        size: Size(width, 800),
+        phone: true,
+        home: const PhoneShell(),
+      ),
+    );
+  }
+  // The view-and-filters panel with some filters set, at both ends of the
+  // width range and at 1× and 1.6× text.
+  for (final (name, size, phone) in [
+    ('360', const Size(360, 640), true),
+    ('1440', const Size(1440, 900), false),
+  ]) {
+    for (final scale in [1.0, 1.6]) {
+      testWidgets(
+        'panel $name at $scale',
+        (t) => shoot(
+          t,
+          'panel-$name-text${(scale * 100).round()}',
+          size: size,
+          phone: phone,
+          textScale: scale,
+          before: (tester, container) async {
+            container.read(overviewPrefsProvider.notifier)
+              ..setMachines({'windows', 'wsl:arch'})
+              ..setProjects({'p-ks', 'p-beej'});
+            await tester.pump();
+            await tester.tap(
+              find.byKey(const ValueKey('overview-filter-button')),
+            );
+          },
+        ),
+      );
+    }
+  }
+  for (final (name, size, phone) in [
+    ('360', const Size(360, 640), true),
+    ('1440', const Size(1440, 900), false),
+  ]) {
+    for (final scale in [1.0, 1.6]) {
+      testWidgets(
+        'keys $name at $scale',
+        (t) => shoot(
+          t,
+          'keys-$name-text${(scale * 100).round()}',
+          size: size,
+          phone: phone,
+          textScale: scale,
+          before: (tester, _) async {
+            await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+            await tester.sendKeyEvent(LogicalKeyboardKey.slash, character: '?');
+            await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+          },
+        ),
+      );
+    }
+  }
+  // The phone's Dashboard tab: its one-row header and triage line.
+  for (final width in [360.0, 390.0, 412.0]) {
+    for (final scale in [1.0, 1.6]) {
+      testWidgets(
+        'dashboard phone $width at $scale',
+        (t) => shoot(
+          t,
+          'dash-phone-${width.round()}-text${(scale * 100).round()}',
+          size: Size(width, 800),
+          phone: true,
+          textScale: scale,
+        ),
+      );
+    }
+  }
+  testWidgets(
+    'cards, details hidden',
+    (t) => shoot(
+      t,
+      'cards-1440-details-hidden',
+      fixture: MissionFixture(
+        answers: MissionFixture.realisticAnswers(),
+        glances: MissionFixture.realisticGlances(),
+        files: MissionFixture.realisticFiles(),
+        activity: MissionFixture.realisticActivity(),
+        contexts: const [
+          OverviewLaneKey('c-apps', 'Apps'),
+          OverviewLaneKey('c-web', 'Web'),
+        ],
+        contextOfProject: const {
+          'p-ks': 'c-apps',
+          'p-beej': 'c-apps',
+          'p-web': 'c-web',
+        },
+      ),
+      before: (tester, container) async {
+        container.read(overviewPrefsProvider.notifier)
+          ..setDetailShown(OverviewCardDetail.context, false)
+          ..setDetailShown(OverviewCardDetail.machine, false);
+      },
+    ),
+  );
+  testWidgets(
+    'cards, every detail',
+    (t) => shoot(
+      t,
+      'cards-1440-details-all',
+      fixture: MissionFixture(
+        answers: MissionFixture.realisticAnswers(),
+        glances: MissionFixture.realisticGlances(),
+        files: MissionFixture.realisticFiles(),
+        activity: MissionFixture.realisticActivity(),
+        contexts: const [
+          OverviewLaneKey('c-apps', 'Apps'),
+          OverviewLaneKey('c-web', 'Web'),
+        ],
+        contextOfProject: const {
+          'p-ks': 'c-apps',
+          'p-beej': 'c-apps',
+          'p-web': 'c-web',
+        },
+      ),
     ),
   );
   testWidgets(

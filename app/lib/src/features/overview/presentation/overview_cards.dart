@@ -10,8 +10,10 @@ import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import 'overview_batch_bar.dart';
 import 'overview_card_parts.dart';
+import 'overview_end_button.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
+import 'overview_title_block.dart';
 
 /// The edge a card of [state] is drawn with: colour only where the owner is
 /// wanted, on the border and never the surface.
@@ -72,7 +74,13 @@ class OverviewCardFrame extends ConsumerWidget {
                 }
               },
         onLongPress: () => overviewPickSelects(ref, card, long: true),
-        child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
+        // Hovered or holding the keys, the card shows its End.
+        child: OverviewHoverScope(
+          child: Padding(
+            padding: const EdgeInsets.all(Insets.md),
+            child: child,
+          ),
+        ),
       ),
     );
   }
@@ -127,68 +135,81 @@ class OverviewCardHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
-    final place = watchOverviewPlace(ref, card);
+    final place = watchOverviewCardPlace(ref, card);
     final agent = watchOverviewAgentName(ref, card);
     final parent = card.breadcrumb;
-    final header = Semantics(
-      header: true,
-      label: [
-        card.entry.title,
-        card.state.label,
-        ?agent,
-        if (place.isNotEmpty) place,
-        if (parent != null) 'from $parent',
-      ].join(', '),
-      excludeSemantics: true,
-      child: Row(
-        children: [
-          OverviewSelectBox(card: card),
-          OverviewAgentRing(
-            card: card,
-            size: density.isTouch ? Insets.xl + Insets.xs : Chrome.control,
-          ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final titleStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    return Row(
+      children: [
+        OverviewSelectBox(card: card),
+        OverviewAgentRing(
+          card: card,
+          size: density.isTouch ? Insets.xl + Insets.xs : Chrome.control,
+        ),
+        const SizedBox(width: Insets.sm),
+        Expanded(
+          child: OverviewTitleBlock(
+            titleFloor: overviewTitleFloor(
+              context,
+              card.entry.title,
+              titleStyle,
+            ),
+            title: Semantics(
+              header: true,
+              label: [
+                card.entry.title,
+                card.state.label,
+                ?agent,
+                if (place.isNotEmpty) place,
+                if (parent != null) 'from $parent',
+              ].join(', '),
+              excludeSemantics: true,
+              child: Text(
+                card.entry.title,
+                key: ValueKey('overview-card-title:${card.id}'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: titleStyle,
+              ),
+            ),
+            meta: parent != null || place.isNotEmpty
+                ? ExcludeSemantics(
+                    child: Text(
+                      parent == null
+                          ? place
+                          // Drawn after its parent, the line names it; drawn
+                          // apart from it, it says where it came from.
+                          : card.parentId != null
+                          ? '↳ $parent'
+                          : '↳ from $parent',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  )
+                : null,
+            // The menu and End stay their own buttons; the state is in the
+            // title's label.
+            trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  card.entry.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+                OverviewNewBadge(card: card),
+                const SizedBox(width: Insets.sm),
+                Flexible(
+                  child: ExcludeSemantics(
+                    child: chip ?? OverviewStatePill(card: card),
                   ),
                 ),
-                Text(
-                  parent == null
-                      ? place
-                      // Drawn after its parent, the line names it; drawn
-                      // apart from it, it says where it came from.
-                      : card.parentId != null
-                      ? '↳ $parent'
-                      : '↳ from $parent',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                OverviewEndButton(card: card),
+                OverviewCardMenu(card: card),
               ],
             ),
           ),
-          OverviewNewBadge(card: card),
-          const SizedBox(width: Insets.sm),
-          chip ?? OverviewStatePill(card: card),
-        ],
-      ),
-    );
-    // Outside the header's one label, so the menu stays its own button.
-    return Row(
-      children: [
-        Expanded(child: header),
-        OverviewCardMenu(card: card),
+        ),
       ],
     );
   }
@@ -242,7 +263,7 @@ class OverviewDoneRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final now = ref.read(clockProvider).nowUtc();
-    final place = watchOverviewPlace(ref, card);
+    final place = watchOverviewCardPlace(ref, card);
     final row = InkWell(
       key: ValueKey('overview-done:${card.id}'),
       borderRadius: BorderRadius.circular(Radii.sm),
@@ -257,38 +278,52 @@ class OverviewDoneRow extends ConsumerWidget {
             OverviewAgentRing(card: card, size: Insets.xl - Insets.xxs),
             const SizedBox(width: Insets.sm),
             Expanded(
-              child: Text.rich(
-                TextSpan(
+              child: OverviewTitleBlock(
+                titleFloor: overviewTitleFloor(
+                  context,
+                  card.entry.title,
+                  theme.textTheme.bodySmall,
+                ),
+                title: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: card.entry.title),
+                      if (place.isNotEmpty)
+                        TextSpan(
+                          text: '  $place',
+                          style: TextStyle(color: muted),
+                        ),
+                    ],
+                  ),
+                  key: ValueKey('overview-card-title:${card.id}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextSpan(text: card.entry.title),
-                    if (place.isNotEmpty)
-                      TextSpan(
-                        text: '  $place',
-                        style: TextStyle(color: muted),
-                      ),
+                    Text(
+                      compactAge(now.difference(card.entry.activityAt)),
+                      style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                    ),
+                    OverviewEndButton(card: card),
+                    OverviewCardMenu(card: card),
                   ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
               ),
             ),
-            Text(
-              compactAge(now.difference(card.entry.activityAt)),
-              style: theme.textTheme.labelSmall?.copyWith(color: muted),
-            ),
-            OverviewCardMenu(card: card),
           ],
         ),
       ),
     );
     final children = card.children;
-    if (children == null) return row;
+    if (children == null) return OverviewHoverScope(child: row);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        row,
+        OverviewHoverScope(child: row),
         _DoneRowSubSessions(card: card, total: children.total, onOpen: onOpen),
       ],
     );

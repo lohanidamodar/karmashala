@@ -42,10 +42,28 @@ class OverviewTabView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(overviewPrefsProvider.select((p) => p.view));
+    // The phone's Dashboard tab: no name over it, its header the one row.
+    final rootTab = PaneTitleOverride.maybeOf(context) != null;
+    final actions = [
+      const _ResumeButton(),
+      const _NewSessionButton(),
+      if (view == OverviewView.board) ...[
+        const OverviewFilterButton(),
+        // The keys need a keyboard; a thumb has none to press.
+        if (!UiDensity.of(context).isTouch)
+          IconButton(
+            key: const ValueKey('overview-keys-button'),
+            tooltip: 'Keyboard shortcuts (?)',
+            onPressed: () => showOverviewKeys(context),
+            icon: const Icon(AppIcons.keyboard),
+          ),
+      ],
+    ];
     return _OnScreen(
       child: WorkbenchTabScaffold(
         icon: AppIcons.squaresFour,
         title: 'Agent dashboard',
+        oneRowStrip: rootTab,
         controls: [
           CompactSegmented<OverviewView>(
             key: const ValueKey('overview-view'),
@@ -60,11 +78,17 @@ class OverviewTabView extends ConsumerWidget {
             onChanged: ref.read(overviewPrefsProvider.notifier).setView,
           ),
         ],
-        actions: [
-          const _ResumeButton(),
-          const _NewSessionButton(),
-          if (view == OverviewView.board) const OverviewFilterButton(),
-        ],
+        actions: rootTab
+            ? [
+                // Compact, so the segment and every action share the row.
+                Theme(
+                  data: Theme.of(
+                    context,
+                  ).copyWith(visualDensity: VisualDensity.compact),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+                ),
+              ]
+            : actions,
         body: switch (view) {
           OverviewView.board => const _BoardBody(),
           OverviewView.timeline => const _TimelineBody(),

@@ -16,6 +16,17 @@ enum OverviewView { board, timeline }
 /// Cards with chips, or one line per session.
 enum OverviewDensity { cards, lines }
 
+/// A part of a card's "where" line that can be hidden.
+enum OverviewCardDetail {
+  project('Project'),
+  context('Context'),
+  machine('Machine');
+
+  const OverviewCardDetail(this.label);
+
+  final String label;
+}
+
 /// What this device's Overview shows. Kept per device, like the session
 /// lists' switches: one window's picture should not rearrange another's.
 class OverviewPrefs {
@@ -27,7 +38,11 @@ class OverviewPrefs {
     this.launchInBackground = true,
     this.subSessions = OverviewSubSessionMode.inside,
     this.pinned = const [],
+    this.hiddenDetails = const {},
   });
+
+  /// The parts of a card's "where" line this device hides.
+  final Set<OverviewCardDetail> hiddenDetails;
 
   /// Sessions held at the top of the board, in the order they were pinned;
   /// at most [kOverviewPinLimit].
@@ -57,6 +72,7 @@ class OverviewPrefs {
     bool? launchInBackground,
     OverviewSubSessionMode? subSessions,
     List<String>? pinned,
+    Set<OverviewCardDetail>? hiddenDetails,
   }) => OverviewPrefs(
     filter: filter ?? this.filter,
     groupBy: groupBy ?? this.groupBy,
@@ -65,6 +81,7 @@ class OverviewPrefs {
     launchInBackground: launchInBackground ?? this.launchInBackground,
     subSessions: subSessions ?? this.subSessions,
     pinned: pinned ?? this.pinned,
+    hiddenDetails: hiddenDetails ?? this.hiddenDetails,
   );
 
   Map<String, Object?> toJson() => {
@@ -79,6 +96,8 @@ class OverviewPrefs {
     'launchInBackground': launchInBackground,
     'subSessions': subSessions.name,
     if (pinned.isNotEmpty) 'pinned': pinned,
+    if (hiddenDetails.isNotEmpty)
+      'hiddenDetails': [for (final detail in hiddenDetails) detail.name],
   };
 
   static OverviewPrefs fromJson(Object? json) {
@@ -129,6 +148,11 @@ class OverviewPrefs {
           ...ids.whereType<String>().toSet().take(kOverviewPinLimit),
         ],
         _ => const [],
+      },
+      hiddenDetails: {
+        for (final detail in OverviewCardDetail.values)
+          if (strings(json['hiddenDetails'])?.contains(detail.name) ?? false)
+            detail,
       },
     );
   }
@@ -182,6 +206,9 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
 
   void showAllProjects() => _setFilter(projects: null, keepProjects: false);
 
+  void setProjects(Set<String>? projects) =>
+      _setFilter(projects: projects, keepProjects: false);
+
   void setAgents(Set<String>? agents) =>
       _setFilter(agents: agents, keepAgents: false);
 
@@ -224,6 +251,14 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
 
   void setView(OverviewView view) {
     if (state.view != view) _set(state.copyWith(view: view));
+  }
+
+  /// Shows or hides [detail] on every card.
+  void setDetailShown(OverviewCardDetail detail, bool shown) {
+    final hidden = {...state.hiddenDetails};
+    if (shown ? hidden.remove(detail) : hidden.add(detail)) {
+      _set(state.copyWith(hiddenDetails: hidden));
+    }
   }
 
   /// Pins [sessionId], or unpins it; false when the board already holds

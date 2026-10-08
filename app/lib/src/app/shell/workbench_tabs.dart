@@ -159,11 +159,12 @@ void openLogsTab(WidgetRef ref, {LogSource? source}) {
   activateTerminalTab(ref, tabId);
 }
 
-/// Opens the Overview tab, or brings it forward. The phone has it under More.
+/// Opens the Overview tab, or brings it forward. On the phone it is the
+/// Dashboard tab.
 void openOverviewTab(WidgetRef ref) {
   final phone = ref.read(phoneShellRouterProvider).current;
   if (phone != null) {
-    phone.showMore(PhoneMoreEntry.overview);
+    phone.showDashboard();
     return;
   }
   final tabId = ref

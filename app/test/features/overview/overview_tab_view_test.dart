@@ -6,6 +6,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart' show TranscriptMessage;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -227,7 +228,13 @@ void main() {
 
       expect(find.byKey(const ValueKey('overview-hybrid')), findsOneWidget);
       for (final column in BoardColumn.values) {
-        expect(counter(column), findsOneWidget);
+        // A narrow line leaves Done to the fold that opens it.
+        expect(
+          counter(column),
+          column == BoardColumn.done && size.width < 600
+              ? findsNothing
+              : findsOneWidget,
+        );
       }
       expect(card('ask'), findsOneWidget);
       // A phone lists what is at work in rows; the queue keeps its cards.
@@ -304,10 +311,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('overview-filter-project:p2')));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.projects, {'p1'});
-    await tester.tap(find.text('Machine').last);
+    await tester.tap(find.byKey(const ValueKey('group-by:machine')));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).groupBy, OverviewGroupBy.machine);
-    await tester.tap(find.text('Project').last);
+    await tester.tap(find.byKey(const ValueKey('group-by:project')));
     await settle(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settle(tester);
@@ -694,7 +701,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyR);
       await settle(tester);
       expect(byKey('overview-resume-picker'), findsOneWidget);
-      expect(kOverviewTriageKeys.map((k) => k.$1), contains('R'));
+      expect(overviewKeyRows().expand((k) => k.keys), contains('R'));
     });
 
     group('from the peek and the cards', () {
@@ -998,6 +1005,138 @@ void main() {
       expect(c.read(overviewFocusProvider).peeked, isNull);
     });
   });
+
+  group('a card\'s quick End', () {
+    Finder end(String id) => find.byKey(ValueKey('overview-end:$id'));
+    double shown(WidgetTester tester, String id) => tester
+        .widget<AnimatedOpacity>(find.byKey(ValueKey('overview-end-slot:$id')))
+        .opacity;
+
+    setUp(() => server.sessionWork.running.addAll(['ask', 'busy', 'idle']));
+
+    Future<void> hover(WidgetTester tester, Finder target) async {
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(target));
+      await settle(tester);
+    }
+
+    testBoard('is on live cards only, hidden until the card is hovered', (
+      tester,
+    ) async {
+      await pump(tester, const Size(1440, 900));
+      for (final id in ['ask', 'busy', 'idle']) {
+        expect(end(id), findsOneWidget, reason: id);
+      }
+      await openDone(tester);
+      // Ended: no process to end.
+      expect(end('done'), findsNothing);
+      expect(shown(tester, 'busy'), 0);
+
+      await hover(tester, card('busy'));
+      expect(shown(tester, 'busy'), 1);
+      expect(shown(tester, 'idle'), 0);
+    });
+
+    testBoard('shows while the keyboard is in it', (tester) async {
+      await pump(tester, const Size(1440, 900));
+      expect(shown(tester, 'idle'), 0);
+      Focus.of(
+        tester.element(
+          find.descendant(of: end('idle'), matching: find.byType(Icon)),
+        ),
+      ).requestFocus();
+      await settle(tester);
+      expect(shown(tester, 'idle'), 1);
+    });
+
+    testBoard('a session whose state nobody read asks first, as rows do', (
+      tester,
+    ) async {
+      await pump(tester, const Size(1440, 900));
+      await hover(tester, card('idle'));
+      await tester.tap(end('idle'));
+      await settle(tester);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.textContaining('cannot tell'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      expect(server.sessionWork.running, contains('idle'));
+    });
+
+    testBoard('a waiting session asks first, saying its question is dropped', (
+      tester,
+    ) async {
+      await pump(tester, const Size(1440, 900));
+      final queued = find.byKey(const ValueKey('overview-card:ask'));
+      await hover(tester, queued);
+      await tester.tap(end('ask'));
+      await settle(tester);
+      expect(find.text('End "Chat ask"?'), findsOneWidget);
+      expect(
+        find.text(
+          'It is waiting for you, and its question is dropped. '
+          'The conversation stays.',
+        ),
+        findsOneWidget,
+      );
+      // Cancelled, nothing ends.
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      expect(server.sessionWork.running, contains('ask'));
+    });
+
+    testBoard('a working session asks first, then ends at the server', (
+      tester,
+    ) async {
+      await pump(tester, const Size(1440, 900));
+      await hover(tester, card('busy'));
+      await tester.tap(end('busy'));
+      await settle(tester);
+      expect(find.text('End "Chat busy"?'), findsOneWidget);
+      expect(server.sessionWork.running, contains('busy'));
+
+      await tester.tap(find.text('End session'));
+      await settle(tester);
+      expect(server.sessionWork.running, isNot(contains('busy')));
+      expect(
+        server.sessionWork.asked.whereType<SessionEndRequest>().map(
+          (r) => r.sessionId,
+        ),
+        ['busy'],
+      );
+      // Asked first, it offers no Undo.
+      expect(find.text('Undo'), findsNothing);
+    });
+
+    testBoard('an idle session ends at once, with Undo that resumes it', (
+      tester,
+    ) async {
+      final c = await pump(tester, const Size(1440, 900));
+      // Known idle at its prompt: the one state that ends without asking.
+      server.attention.statusOf(
+        'idle',
+        AgentActivityStatus.idle,
+        sessionId: 'cli-idle',
+        label: 'idle',
+        source: AgentStatusSource.terminalGrid,
+      );
+      await settle(tester);
+      await hover(tester, card('idle'));
+      await tester.tap(end('idle'));
+      await settle(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(server.sessionWork.running, isNot(contains('idle')));
+      expect(find.text('Ended "Chat idle"'), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await settle(tester);
+      // The dashboard's own resume, kept here and peeked.
+      expect(actions.resumed, ['idle']);
+      expect(c.read(overviewFocusProvider).peeked, 'idle');
+    });
+  });
 }
 
 /// Bounded: an ask's shield breathes for ever.
@@ -1011,6 +1150,18 @@ class _SpyActions extends ExplorerActions {
   _SpyActions(super.ref);
 
   final List<String> opened = [];
+
+  /// Every session resumed in the background, which still goes through.
+  final List<String> resumed = [];
+
+  @override
+  Future<ExplorerResult> resumeInBackground(
+    String sessionId, {
+    String? message,
+  }) {
+    resumed.add(sessionId);
+    return super.resumeInBackground(sessionId, message: message);
+  }
 
   @override
   Future<ExplorerResult> openNative(String sessionId) async {
