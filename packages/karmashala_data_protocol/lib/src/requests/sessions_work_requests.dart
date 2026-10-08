@@ -75,6 +75,16 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     confirm: args.boolean('confirm', orElse: false),
     preview: args.boolean('preview', orElse: false),
   ),
+  SessionRewind.name => SessionRewind(
+    sessionId: args.string('sessionId'),
+    turnIndex: args.integer('turnIndex'),
+    words: args.optionalString('words') ?? '',
+    mode: args.string('mode'),
+    checkpointTurn: args.optionalInt('checkpointTurn'),
+    checkpointId: args.optionalString('checkpointId'),
+    confirm: args.boolean('confirm', orElse: false),
+    preview: args.boolean('preview', orElse: false),
+  ),
   SessionSend.name => SessionSend(
     sessionId: args.string('sessionId'),
     text: args.string('text'),
@@ -452,6 +462,59 @@ final class SessionForkFromCheckpoint
     'turn': ?turn,
     'instruction': instruction,
     'newWorktree': newWorktree,
+    'confirm': confirm,
+    'preview': preview,
+  };
+
+  @override
+  Object? resultToJson(Map<String, Object?> result) => result;
+
+  @override
+  Map<String, Object?> resultFromJson(Object? json) =>
+      _decode(kind, () => _object(json, kind));
+}
+
+/// Rewinds session [sessionId] to before the person's message that opened
+/// its turn [turnIndex] (counting every turn the transcript shows, rewound
+/// ones too), whose words are [words]: its files from the checkpoint
+/// [checkpointTurn] or [checkpointId] names, its conversation cut in the
+/// agent, or both ([mode]: `both`, `conversation`, `code`). [preview] says
+/// what it would do and changes nothing; a tree changed outside the agent
+/// is refused without [confirm]. `sessions.rewind` in `welcome.features`.
+final class SessionRewind extends SessionWorkRequest<Map<String, Object?>> {
+  const SessionRewind({
+    required this.sessionId,
+    required this.turnIndex,
+    required this.mode,
+    this.words = '',
+    this.checkpointTurn,
+    this.checkpointId,
+    this.confirm = false,
+    this.preview = false,
+  });
+
+  static const String name = 'sessions.rewind';
+
+  final String sessionId;
+  final int turnIndex;
+  final String words;
+  final String mode;
+  final int? checkpointTurn;
+  final String? checkpointId;
+  final bool confirm;
+  final bool preview;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'turnIndex': turnIndex,
+    'words': words,
+    'mode': mode,
+    'checkpointTurn': ?checkpointTurn,
+    'checkpointId': ?checkpointId,
     'confirm': confirm,
     'preview': preview,
   };

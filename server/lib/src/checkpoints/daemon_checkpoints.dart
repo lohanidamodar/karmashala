@@ -393,6 +393,16 @@ class DaemonCheckpoints {
     );
   }
 
+  /// What restoring [checkpoint] would change, asked in its session's queue
+  /// and writing no file.
+  Future<RestorePreview> restorePreview(Checkpoint checkpoint) {
+    _reachable(checkpoint.repository);
+    return recorder.queued(
+      checkpoint.sessionId,
+      () => service.restorePreview(checkpoint),
+    );
+  }
+
   /// Why the working-tree half of forking [sessionId] from [checkpoint]
   /// cannot be delivered, or null when it can be attempted
   /// ([checkpointForkFileRefusal] over what this server knows: whether it

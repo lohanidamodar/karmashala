@@ -83,7 +83,10 @@ import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
 import '../mcp/tools/window_tool_sets.dart';
 import '../sessions/launch/conversation_presence.dart';
+import '../sessions/rewind/daemon_rewind_files.dart';
 import '../sessions/rewind/rewind_cuts.dart';
+import '../sessions/rewind/session_rewinds.dart';
+import '../sessions/rewind/terminal_rewind.dart';
 import '../sessions/launch/handoff_delivery.dart';
 import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/session_handoffs.dart';
@@ -181,7 +184,11 @@ import '../mcp/tools/snippet_tool_set.dart';
 import '../mcp/tools/session_tool_set.dart';
 import '../automations/checks_tool_set.dart';
 import 'package:karmashala_host_protocol/protocol.dart'
-    show AgentHookEvent, LifecycleEventKind, kHostVersion;
+    show
+        AgentHookEvent,
+        LifecycleEventKind,
+        SessionEndedWithoutCode,
+        kHostVersion;
 import 'package:logging/logging.dart' show Logger;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
@@ -1609,6 +1616,42 @@ Future<int> _serve(
     speaksAcp: speaksAcp,
   );
   data.sessionRecordReadings = sessionRecordReadings;
+  // A rewind reads the agent's record for its cut, restores through the
+  // checkpoints, and holds the queue while it works.
+  sessionWork.rewinds = SessionRewinds(
+    sessions: sessionRows,
+    agentOf: (id) => checkoutRows.installation(id)?.agentId,
+    registry: () => agentRegistry.current,
+    messages: sessionMessages,
+    transcriptLines: (sessionId) async {
+      final path = (await sessionTranscripts.lookUp(sessionId)).path;
+      if (path == null) return null;
+      try {
+        return await File(path).readAsLines();
+      } on FileSystemException {
+        return null;
+      }
+    },
+    cuts: rewindCuts,
+    runsHere: launches.runsHere,
+    end: (sessionId) => launches.end(
+      sessionId,
+      quietly: true,
+      reason: SessionEndedWithoutCode.rewound,
+    ),
+    resume: (sessionId) => launches.resume(sessionId),
+    files: DaemonRewindFiles(checkpoints),
+    terminal: ScreenTerminalRewind(
+      screen: prompts.screen,
+      press: prompts.press,
+    ),
+    turnRunning: (sessionId) => switchQueue?.busy(sessionId) ?? false,
+    holdQueue: (sessionId) => switchQueue?.hold(sessionId),
+    releaseQueue: (sessionId) => switchQueue?.release(sessionId),
+    messagesChanged: (sessionId) =>
+        unawaited(sessionTranscripts.messagesChanged(sessionId)),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
   // A CLI in a terminal names its model in its record: read again on each
   // status edge of a session this server runs.
   activeModels.readRecord = sessionRecordReadings.activeModel;

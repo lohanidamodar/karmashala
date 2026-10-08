@@ -100,12 +100,14 @@ final class ConversationRewind {
 }
 
 /// An agent's rewind menu in its terminal: [command] opens a list of the
-/// person's messages, newest last; Enter on one opens the choices, whose
-/// labels are [labels], and [cancel] closes it.
+/// person's messages, oldest first, with the present selected last; Up moves
+/// back one message. Enter on one opens a confirmation quoting it, whose
+/// numbered choices are [labels]; [cancel] closes it.
 final class RewindMenu {
   const RewindMenu({
     required this.command,
     required this.listMarker,
+    required this.confirmMarker,
     required this.labels,
     required this.cancel,
     required this.evidence,
@@ -115,6 +117,9 @@ final class RewindMenu {
 
   /// Text the message list shows while it is open.
   final String listMarker;
+
+  /// Text the confirmation shows above the message it quotes.
+  final String confirmMarker;
 
   /// Each mode's choice, as the menu words it.
   final Map<RewindMode, String> labels;

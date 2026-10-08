@@ -101,6 +101,16 @@ void main() {
         confirm: true,
         preview: true,
       ),
+      const SessionRewind(
+        sessionId: 's1',
+        turnIndex: 2,
+        words: 'make it blue',
+        mode: 'both',
+        checkpointTurn: 4,
+        confirm: true,
+        preview: true,
+      ),
+      const SessionRewind(sessionId: 's1', turnIndex: 0, mode: 'code'),
       const SessionSwitchAgent(
         sessionId: 's1',
         targetInstallationId: 'i2',

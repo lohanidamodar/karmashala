@@ -4,6 +4,7 @@ import '../../acp/acp_login_required.dart';
 import '../../data/session_work.dart';
 import 'server_session_launcher.dart';
 import 'session_continuations.dart';
+import '../rewind/session_rewinds.dart';
 
 /// The session work a client asks of the server (`sessions.*`, slice 5b),
 /// answered by the one launch path. A refusal is the launch's own words:
@@ -16,6 +17,9 @@ class ServerSessionWork implements SessionWork {
 
   /// Told before a person's End stops row [String]: what waits is cancelled.
   void Function(String sessionId)? ending;
+
+  /// Rewinds a session; null refuses `sessions.rewind`.
+  SessionRewinds? rewinds;
 
   @override
   Future<Object?> handle(SessionWorkRequest<Object?> request) async {
@@ -74,6 +78,10 @@ class ServerSessionWork implements SessionWork {
             confirm: r.confirm,
             preview: r.preview,
           ),
+        final SessionRewind r =>
+          await (rewinds ??
+                  (throw StateError('This server cannot rewind a session.')))
+              .rewind(r),
       };
     } on DataRefused {
       rethrow;

@@ -27,7 +27,8 @@ const ConversationRewind claudeConversationRewind = ConversationRewind(
   chatEvidence: _cutEvidence,
   menu: RewindMenu(
     command: '/rewind',
-    listMarker: 'Restore the code and/or conversation to a previous point',
+    listMarker: 'Restore the code and/or conversation to the point before',
+    confirmMarker: 'Confirm you want to restore',
     labels: {
       RewindMode.both: 'Restore code and conversation',
       RewindMode.conversation: 'Restore conversation',
@@ -35,11 +36,15 @@ const ConversationRewind claudeConversationRewind = ConversationRewind(
     },
     cancel: 'Never mind',
     evidence:
-        'claude 2.1.287 binary, read 2026-10-08: the message selector titled '
-        '"Restore the code and/or conversation to a previous point", then '
-        '"Restore code and conversation", "Restore conversation", "Restore '
-        'code" (the code ones only for a message that changed files), '
-        '"Summarize from here", "Summarize up to here", "Never mind"',
+        'claude 2.1.287 in a ConPTY, 2026-10-08: /rewind lists "Rewind / '
+        'Restore the code and/or conversation to the point before…", the '
+        'messages oldest first with "❯ (current)" selected; Up selects the '
+        'one before; Enter shows "Confirm you want to restore the '
+        'conversation to the point before you sent this message:" quoting it '
+        'after "│", then "1. Restore conversation 2. Summarize from here 3. '
+        'Summarize up to here 4. Never mind" (the code choices only for a '
+        'message that changed files); a digit chooses, and the message is '
+        'put back in its input',
   ),
 );
 
