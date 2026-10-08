@@ -33,6 +33,7 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala_ui/rows.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// A clock the test moves by hand, so the elapsed times are the test's own
 /// arithmetic rather than the wall clock's.
@@ -145,7 +146,8 @@ void main() {
     SessionSurface surface = SessionSurface.pane,
     bool acp = false,
     int? contextUsed,
-    VoidCallback? onStop,
+    bool escStops = false,
+    bool touch = false,
   }) async {
     final db = TestMachine();
     await tester.pumpWidget(
@@ -161,10 +163,13 @@ void main() {
           contextUsed: contextUsed,
         ),
         child: MaterialApp(
-          home: Scaffold(
-            body: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [WorkingLine(sessionId: 's1', onStop: onStop)],
+          home: UiDensityScope(
+            density: touch ? UiDensity.touch : UiDensity.pointer,
+            child: Scaffold(
+              body: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [WorkingLine(sessionId: 's1', escStops: escStops)],
+              ),
             ),
           ),
         ),
@@ -427,32 +432,61 @@ void main() {
       expect(tester.getSize(find.byType(WorkingLine)), Size.zero);
     });
 
-    testWidgets('Stop is offered where Esc stops the turn', (tester) async {
-      var stopped = 0;
-      await pumpLine(
-        tester,
-        messages: [call(id: 't1')],
-        onStop: () => stopped++,
+    // The composer's ■ is the one Stop control; the line only names the key.
+    final hint = find.byKey(const ValueKey('chat-working-esc-hint'));
+
+    testWidgets('a pointer surface names Esc as text, not a button', (
+      tester,
+    ) async {
+      await pumpLine(tester, messages: [call(id: 't1')], escStops: true);
+      expect(hint, findsOneWidget);
+      expect(find.text('Esc to stop'), findsOneWidget);
+      expect(
+        find.ancestor(of: hint, matching: find.byType(InkWell)),
+        findsNothing,
       );
-      await tester.tap(find.text('Stop · Esc'));
-      expect(stopped, 1);
     });
 
     testWidgets('...and while the agent thinks with no call in flight', (
       tester,
     ) async {
-      var stopped = 0;
       await pumpLine(
         tester,
         messages: const [],
-        onStop: () => stopped++,
+        escStops: true,
         statuses: Stream.value(
           report(working: AgentWorkingDetail(since: issued)),
         ),
       );
       expect(find.text('Working…'), findsOneWidget);
-      await tester.tap(find.text('Stop · Esc'));
-      expect(stopped, 1);
+      expect(hint, findsOneWidget);
+    });
+
+    testWidgets('a touch surface names no key', (tester) async {
+      await pumpLine(
+        tester,
+        messages: [call(id: 't1')],
+        escStops: true,
+        touch: true,
+      );
+      expect(find.byKey(const ValueKey('chat-working-line')), findsOneWidget);
+      expect(hint, findsNothing);
+    });
+
+    testWidgets('a narrow window drops the hint', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await pumpLine(tester, messages: [call(id: 't1')], escStops: true);
+      expect(find.byKey(const ValueKey('chat-working-line')), findsOneWidget);
+      expect(hint, findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('where Esc does not stop, nothing names it', (tester) async {
+      await pumpLine(tester, messages: [call(id: 't1')]);
+      expect(hint, findsNothing);
     });
 
     testWidgets('under reduced motion the mark is still', (tester) async {
@@ -657,7 +691,7 @@ void main() {
             home: Scaffold(
               body: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
-                children: [WorkingLine(sessionId: 's1', onStop: () {})],
+                children: [WorkingLine(sessionId: 's1', escStops: true)],
               ),
             ),
           ),

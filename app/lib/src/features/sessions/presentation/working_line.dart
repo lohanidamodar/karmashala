@@ -37,16 +37,21 @@ _Turn _turnOf(AgentStatusReport? report) {
 
 /// **The chat's live "working" line**, under the last message while a turn
 /// runs, like the terminal's spinner line: the agent's own word, what it is on
-/// or "Working…", the turn's time, its tokens, and Stop where Esc stops it.
-/// Nothing between turns, nor while the agent asks — its card shows then.
+/// or "Working…", the turn's time, its tokens, and "Esc to stop" where Esc
+/// stops it. Nothing between turns, nor while the agent asks — its card shows
+/// then.
 class WorkingLine extends ConsumerStatefulWidget {
-  const WorkingLine({required this.sessionId, this.onStop, super.key});
+  const WorkingLine({
+    required this.sessionId,
+    this.escStops = false,
+    super.key,
+  });
 
   final String sessionId;
 
-  /// Stops the running turn — board N2's `Stop · Esc` pill, offered for as
-  /// long as the line shows, tool call or not. Null draws no pill.
-  final VoidCallback? onStop;
+  /// Esc stops the turn here, so a pointer surface names the key as quiet
+  /// text. The composer's ■ is the one Stop control (owner, 2026-10-08).
+  final bool escStops;
 
   @override
   ConsumerState<WorkingLine> createState() => _WorkingLineState();
@@ -148,7 +153,8 @@ class _WorkingLineState extends ConsumerState<WorkingLine> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final onStop = widget.onStop;
+    // A phone has no Esc to name.
+    final escHint = widget.escStops && !UiDensity.of(context).isTouch;
     final spot = activity.blindSpot;
     final tooltip = [
       for (final call in running)
@@ -201,15 +207,27 @@ class _WorkingLineState extends ConsumerState<WorkingLine> {
       child: Padding(
         key: const ValueKey('chat-working-line'),
         padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
-        child: Row(
-          children: [
-            Expanded(child: line),
-            if (onStop != null) ...[
-              const SizedBox(width: Insets.sm),
-              _StopPill(onPressed: onStop),
-            ],
-          ],
-        ),
+        child: !escHint
+            ? line
+            : LayoutBuilder(
+                // Too narrow, and the hint would crowd out what is running.
+                builder: (context, box) => box.maxWidth < UiDensity.compactWidth
+                    ? line
+                    : Row(
+                        children: [
+                          Expanded(child: line),
+                          const SizedBox(width: Insets.sm),
+                          ExcludeSemantics(
+                            child: Text(
+                              'Esc to stop',
+                              key: const ValueKey('chat-working-esc-hint'),
+                              maxLines: 1,
+                              style: muted,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
       ),
     );
   }
@@ -223,65 +241,6 @@ class _WorkingLineState extends ConsumerState<WorkingLine> {
       sessionUsageProvider(widget.sessionId).select((u) => u?.contextUsed),
     );
     return used == null ? null : '${formatTokenCount(used)} in context';
-  }
-}
-
-/// Board N2's `Stop · Esc`: a small outlined pill, the key named on it because
-/// it is the faster way and nothing else in the chat says so.
-class _StopPill extends StatelessWidget {
-  const _StopPill({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    // A phone has no Esc to name, and a thumb needs the touch floor.
-    final touch = UiDensity.of(context).isTouch;
-    return Semantics(
-      // Its own node: merged into the line's, the line would read as a
-      // button and its label would gain this one.
-      container: true,
-      button: true,
-      label: touch ? 'Stop the running turn' : 'Stop the running turn (Esc)',
-      excludeSemantics: true,
-      child: Tooltip(
-        message: touch
-            ? 'Stop the running turn'
-            : 'Stop the running turn · Esc',
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(Radii.sm),
-          child: Container(
-            constraints: touch
-                ? const BoxConstraints(
-                    minHeight: Touch.target,
-                    minWidth: Touch.target,
-                  )
-                : null,
-            alignment: touch ? Alignment.center : null,
-            padding: EdgeInsets.symmetric(
-              horizontal: touch ? Insets.md : Insets.sm,
-              vertical: Insets.hair * 2,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(Radii.sm),
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            child: Text(
-              touch ? 'Stop' : 'Stop · Esc',
-              maxLines: 1,
-              style:
-                  (touch
-                          ? theme.textTheme.labelLarge
-                          : theme.textTheme.labelSmall)
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 

@@ -1176,7 +1176,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             onSaveNote: notesEnabled ? _saveNote : null,
             workingLine: WorkingLine(
               sessionId: widget.sessionId,
-              onStop: _stop,
+              escStops: true,
             ),
             // Stop was pressed and the turn has ended since: its footer says
             // so whatever the agent wrote, as not every agent writes a line.

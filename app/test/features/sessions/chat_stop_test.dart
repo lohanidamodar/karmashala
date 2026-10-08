@@ -156,6 +156,13 @@ void main() {
   }
 
   final stop = find.byKey(const ValueKey('composer-stop'));
+  final escHint = find.byKey(const ValueKey('chat-working-esc-hint'));
+  // Every control that stops the turn says so to a screen reader.
+  final stopControls = find.byWidgetPredicate(
+    (w) =>
+        w is Semantics &&
+        (w.properties.label?.startsWith('Stop the running turn') ?? false),
+  );
 
   for (final (name, size, touch) in [
     ('phone', phone, true),
@@ -172,8 +179,10 @@ void main() {
         tester.widget<IconButton>(stop).tooltip,
         touch ? 'Stop' : 'Stop · Esc',
       );
-      // The working line's own Stop too, call or not.
+      // One Stop: the working line names Esc on a desktop, as text only.
       expect(find.byKey(const ValueKey('chat-working-line')), findsOneWidget);
+      expect(stopControls, findsOneWidget);
+      expect(escHint, touch ? findsNothing : findsOneWidget);
       if (touch) {
         final box = tester.getSize(stop);
         expect(box.width, greaterThanOrEqualTo(Touch.target));
@@ -208,6 +217,8 @@ void main() {
       );
       await working(tester, AgentActivityStatus.working);
       expect(stop, findsOneWidget);
+      expect(stopControls, findsOneWidget);
+      expect(escHint, touch ? findsNothing : findsOneWidget);
       await tester.tap(stop);
       await frames(tester);
       expect(server.sessionWork.interrupts, ['acp-1']);
@@ -216,6 +227,17 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('a desktop window too narrow for the hint drops it', (
+    tester,
+  ) async {
+    await pump(tester, size: phone);
+    await working(tester, AgentActivityStatus.working);
+    expect(find.byKey(const ValueKey('chat-working-line')), findsOneWidget);
+    expect(stopControls, findsOneWidget);
+    expect(escHint, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('Esc stops while the agent works with no call in flight, and '
       'is left alone while it is idle', (tester) async {

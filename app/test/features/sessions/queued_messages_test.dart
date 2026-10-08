@@ -350,7 +350,7 @@ void main() {
 
   for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
     testWidgets('on a $name, long queued messages are clamped to three lines '
-        'and the running turn\'s Stop stays above the composer', (
+        'and the running turn\'s line stays above the composer', (
       tester,
     ) async {
       await pump(
@@ -372,17 +372,17 @@ void main() {
       await send(tester, long);
 
       expect(find.byKey(const ValueKey('queued-expand-q1')), findsOneWidget);
-      final stop = find.byTooltip(RegExp('^Stop the running turn'));
-      expect(stop, findsOneWidget);
+      final line = find.byKey(const ValueKey('chat-working-line'));
+      expect(line, findsOneWidget);
       final composerTop = tester.getRect(find.byType(TextField).last).top;
-      final stopRect = tester.getRect(stop);
-      expect(stopRect.top, greaterThanOrEqualTo(0));
-      expect(stopRect.bottom, lessThanOrEqualTo(composerTop));
+      final lineRect = tester.getRect(line);
+      expect(lineRect.top, greaterThanOrEqualTo(0));
+      expect(lineRect.bottom, lessThanOrEqualTo(composerTop));
 
       await tester.tap(find.byKey(const ValueKey('queued-expand-q1')));
       await settle(tester);
       expect(find.text('Show less'), findsOneWidget);
-      expect(tester.getRect(stop).bottom, lessThanOrEqualTo(composerTop));
+      expect(tester.getRect(line).bottom, lessThanOrEqualTo(composerTop));
       expect(tester.takeException(), isNull);
     });
   }
