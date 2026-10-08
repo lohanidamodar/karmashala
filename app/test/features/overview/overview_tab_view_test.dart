@@ -304,10 +304,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('overview-filter-project:p2')));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.projects, {'p1'});
-    await tester.tap(find.text('Machine').last);
+    await tester.tap(find.byKey(const ValueKey('group-by:machine')));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).groupBy, OverviewGroupBy.machine);
-    await tester.tap(find.text('Project').last);
+    await tester.tap(find.byKey(const ValueKey('group-by:project')));
     await settle(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settle(tester);

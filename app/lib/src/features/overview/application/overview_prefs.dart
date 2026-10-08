@@ -206,6 +206,9 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
 
   void showAllProjects() => _setFilter(projects: null, keepProjects: false);
 
+  void setProjects(Set<String>? projects) =>
+      _setFilter(projects: projects, keepProjects: false);
+
   void setAgents(Set<String>? agents) =>
       _setFilter(agents: agents, keepAgents: false);
 

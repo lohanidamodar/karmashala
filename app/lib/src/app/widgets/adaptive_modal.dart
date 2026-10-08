@@ -93,6 +93,80 @@ Future<T?> showAdaptiveModal<T>({
   );
 }
 
+/// A bottom sheet on a compact window, elsewhere a popover under the control
+/// [context] belongs to, its end edge on the control's. For a panel of
+/// choices that apply as they are made: no barrier tint, and Esc or a click
+/// outside closes it. [builder] draws a body that scrolls if it must.
+Future<T?> showAdaptivePopover<T>({
+  required BuildContext context,
+  required String title,
+  required WidgetBuilder builder,
+  double width = DialogWidth.narrow,
+}) {
+  final size = MediaQuery.sizeOf(context);
+  final box = context.findRenderObject() as RenderBox?;
+  if (WidthClass.of(size.width).isCompact || box == null || !box.hasSize) {
+    return showAdaptiveModal<T>(
+      context: context,
+      title: title,
+      builder: builder,
+    );
+  }
+  final anchor = box.localToGlobal(Offset.zero) & box.size;
+  final motion = Motion.of(context);
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.transparent,
+    transitionDuration: motion.fast,
+    pageBuilder: (context, _, _) {
+      final screen = MediaQuery.sizeOf(context);
+      final tones = SurfaceTones.of(context);
+      final panelWidth = math.min(width, screen.width - Insets.sm * 2);
+      final top = anchor.bottom + Insets.xs;
+      final double left = (anchor.right - panelWidth).clamp(
+        Insets.sm,
+        math.max(Insets.sm, screen.width - panelWidth - Insets.sm),
+      );
+      return Stack(
+        children: [
+          Positioned(
+            top: top,
+            left: left,
+            width: panelWidth,
+            child: Semantics(
+              scopesRoute: true,
+              namesRoute: true,
+              explicitChildNodes: true,
+              label: title,
+              child: Material(
+                color: tones.raised,
+                elevation: Elevations.popup,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(Radii.md),
+                  side: BorderSide(color: tones.floatingLine),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: math.max(0, screen.height - top - Insets.sm),
+                  ),
+                  child: builder(context),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+    transitionBuilder: (context, animation, _, child) => FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: Motion.enter),
+      child: child,
+    ),
+  );
+}
+
 /// A bottom sheet on a compact window, a panel along the window's end edge
 /// elsewhere (PROJECT.md §6): for a list read beside the work it describes.
 /// [builder] draws a body that scrolls itself.
