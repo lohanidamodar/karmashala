@@ -332,8 +332,11 @@ void main() {
         final admission = typed('yes continue fixing');
         expect(admission, isA<AdmitNow>());
         expect((admission as AdmitNow).midTurn, isTrue);
-        expect(dao.open('s1'), isEmpty);
+        expect(dao.open('s1').map((m) => m.state), [
+          QueuedMessageState.delivering,
+        ], reason: 'on its way, under its own id');
         queue.afterImmediate('s1', delivered: true, midTurn: true);
+        expect(dao.open('s1'), isEmpty);
         expect(queue.busy('s1'), isTrue, reason: 'its own turn still runs');
 
         hook('Stop');
@@ -1054,6 +1057,139 @@ void main() {
         'third done',
       ]);
       expect(await input.handle(const SessionQueueList('s2'), null), isEmpty);
+    });
+
+    test('the peek, a card and an automation sending at the same moment each '
+        'get an id and a place of their own; none replaces another', () async {
+      final process = FakeAcpProcess(FakeAcpAgent());
+      final runtime = registry.openAcp(
+        'karmashala_s2',
+        runtimeOver(
+          process,
+          database: database,
+          workingDirectory: temp.path,
+          sessionId: 's2',
+          host: _DaemonHost(status),
+        ),
+      );
+      await runtime.start();
+      status.tick();
+      final queue = queueOver()..start();
+      final input = SessionInput(
+        prompts: prompts,
+        typist: SessionMessageTypist(
+          readScreen: (_) => null,
+          markersFor: (_) => null,
+          type: (_, _) => false,
+          press: (_, _) => false,
+        ),
+        queue: queue,
+      );
+
+      final sent = (await Future.wait([
+        input.handle(
+          const SessionSend(sessionId: 's2', text: 'From the peek'),
+          null,
+        ),
+        input.handle(
+          const SessionSend(sessionId: 's2', text: 'From a card'),
+          'phone',
+        ),
+        input.handle(
+          const SessionSend(sessionId: 's2', text: 'Tell: the build broke'),
+          null,
+          origin: QueuedMessageOrigin.automation,
+        ),
+      ])).cast<SessionSent>();
+
+      expect(sent.map((s) => s.messageId).toSet(), hasLength(3));
+      expect(sent.map((s) => (s.queued, s.position)), [
+        (false, null),
+        (true, 1),
+        (true, 2),
+      ]);
+      expect(
+        dao.getById(sent.first.messageId!)!.state,
+        QueuedMessageState.delivered,
+      );
+      for (var i = 0; i < 3; i++) {
+        await runtime.awaitTurn();
+        await pump();
+      }
+      expect(
+        [for (final p in process.agent.prompts) p.single.toJson()['text']],
+        ['From the peek', 'From a card', 'Tell: the build broke'],
+      );
+      expect([
+        for (final s in sent) dao.getById(s.messageId!)!.state,
+      ], everyElement(QueuedMessageState.delivered));
+    });
+  });
+
+  group('every send has a row', () {
+    test('a send that goes at once is seen on its way and then delivered, '
+        'under its own id', () {
+      final queue = queueOver()..start();
+      final now =
+          queue.admit('s1', 'hello', origin: QueuedMessageOrigin.app)
+              as AdmitNow;
+      expect(now.message!.state, QueuedMessageState.delivering);
+      expect(announced.last.single.text, 'hello');
+      queue.afterImmediate('s1', delivered: true);
+      expect(dao.getById(now.message!.id)!.state, QueuedMessageState.delivered);
+      expect(queue.list('s1'), isEmpty);
+    });
+
+    test('one refused is closed with the refusal, and a retry under the '
+        'same request id goes again', () {
+      final queue = queueOver()..start();
+      final first =
+          queue.admit(
+                's1',
+                'hello',
+                origin: QueuedMessageOrigin.app,
+                requestId: 'k1',
+              )
+              as AdmitNow;
+      queue.afterImmediate('s1', delivered: false, error: 'not running');
+      final row = dao.getById(first.message!.id)!;
+      expect(
+        (row.state, row.error),
+        (QueuedMessageState.cancelled, 'not running'),
+      );
+
+      final retry = queue.admit(
+        's1',
+        'hello',
+        origin: QueuedMessageOrigin.app,
+        requestId: 'k1',
+      );
+      expect(retry, isA<AdmitNow>());
+      expect((retry as AdmitNow).message!.id, isNot(first.message!.id));
+    });
+
+    test('a server that stops in the middle of a delivery fails that one at '
+        'its next start, and what was queued behind it still goes', () async {
+      final before = queueOver()..start();
+      final now =
+          before.admit('s1', 'on its way', origin: QueuedMessageOrigin.app)
+              as AdmitNow;
+      final behind =
+          before.admit('s1', 'behind it', origin: QueuedMessageOrigin.app)
+              as AdmitQueued;
+      await before.close();
+
+      final after = queueOver()..start();
+      expect(
+        dao.getById(now.message!.id)!.state,
+        QueuedMessageState.failed,
+        reason: 'it may have reached the agent, so it is not sent again',
+      );
+      expect(after.list('s1').map((m) => (m.text, m.state)), [
+        ('on its way', QueuedMessageState.failed),
+        ('behind it', QueuedMessageState.queued),
+      ]);
+      expect(behind.position, 1, reason: "the one on its way is not ahead");
     });
   });
 }

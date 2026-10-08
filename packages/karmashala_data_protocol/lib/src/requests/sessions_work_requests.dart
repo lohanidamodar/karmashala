@@ -792,6 +792,8 @@ final class SessionInterrupt extends SessionInputRequest<DataAck> {
 ///
 /// A queued message is [sent] — the server took it — with [queuedId] its row
 /// and [position] its place among the session's waiting messages, from 1.
+/// [messageId] names the row every send has at the server, delivered at once
+/// or queued; an older server sends none.
 final class SessionSent {
   const SessionSent({
     required this.sent,
@@ -800,6 +802,7 @@ final class SessionSent {
     this.notice,
     this.queuedId,
     this.position,
+    this.messageId,
   });
 
   factory SessionSent.fromJson(Map<String, Object?> json) => SessionSent(
@@ -809,6 +812,9 @@ final class SessionSent {
     notice: json['notice'] is String ? json['notice']! as String : null,
     queuedId: json['queuedId'] is String ? json['queuedId']! as String : null,
     position: (json['position'] as num?)?.toInt(),
+    messageId: json['messageId'] is String
+        ? json['messageId']! as String
+        : null,
   );
 
   static const String readBack = 'readBack';
@@ -821,8 +827,22 @@ final class SessionSent {
   final String? notice;
   final String? queuedId;
   final int? position;
+  final String? messageId;
 
   bool get queued => queuedId != null;
+
+  /// This answer naming [id] as its row.
+  SessionSent withMessageId(String? id) => id == null
+      ? this
+      : SessionSent(
+          sent: sent,
+          via: via,
+          resumed: resumed,
+          notice: notice,
+          queuedId: queuedId,
+          position: position,
+          messageId: id,
+        );
 
   Map<String, Object?> toJson() => {
     'sent': sent,
@@ -831,6 +851,7 @@ final class SessionSent {
     'notice': ?notice,
     'queuedId': ?queuedId,
     'position': ?position,
+    'messageId': ?messageId,
   };
 }
 

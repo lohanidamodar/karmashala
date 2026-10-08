@@ -1711,6 +1711,7 @@ Future<int> _serve(
               reveal: reveal,
             ),
           );
+          return started;
         },
       ),
     )

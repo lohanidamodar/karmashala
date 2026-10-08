@@ -219,25 +219,29 @@ class SessionInput {
     )) {
       case AdmitQueued(:final message, :final position):
         return _queued(message, position);
-      case AdmitNow(:final midTurn):
+      case AdmitNow(:final midTurn, :final message):
         var delivered = false;
+        String? error;
         try {
           final sent = await deliverNow(sessionId, text);
           delivered = true;
-          return sent;
+          return sent.withMessageId(message?.id);
         } on DataRefused catch (refusal) {
+          error = refusal.message;
           final nothingTyped =
               refusal.code == DataRefusalCode.notFound ||
               refusal.code == DataRefusalCode.conflict;
           if (!midTurn || !nothingTyped) rethrow;
           // Still claimed, so it is queued, never typed again here.
-          final queued = queue.queueIfBusy(
-            sessionId,
-            text,
-            origin: origin,
-            originId: originId,
-            requestId: requestId,
-          )!;
+          final queued =
+              queue.requeueImmediate(sessionId) ??
+              queue.queueIfBusy(
+                sessionId,
+                text,
+                origin: origin,
+                originId: originId,
+                requestId: requestId,
+              )!;
           log?.call(
             'sessions.send $sessionId: not typed into the running turn '
             '(${refusal.message}); queued',
@@ -248,6 +252,7 @@ class SessionInput {
             sessionId,
             delivered: delivered,
             midTurn: midTurn,
+            error: error,
           );
         }
     }
@@ -258,6 +263,7 @@ class SessionInput {
         sent: true,
         via: SessionSent.queuedVia,
         queuedId: message.id,
+        messageId: message.id,
         position: position,
       );
 

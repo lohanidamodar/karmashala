@@ -26,11 +26,15 @@ sealed class QueueAdmission {
 /// Deliver it now. The session is held busy until the caller reports the
 /// delivery with [SessionQueue.afterImmediate].
 final class AdmitNow extends QueueAdmission {
-  const AdmitNow({this.midTurn = false});
+  const AdmitNow({this.midTurn = false, this.message});
 
   /// Typed into the running turn, as a person typing would: a delivery
   /// refused before anything was typed belongs in the queue instead.
   final bool midTurn;
+
+  /// Its row, `delivering` until [SessionQueue.afterImmediate]; null without
+  /// a queue.
+  final QueuedMessage? message;
 }
 
 /// It waits at the server as [message], [position] among the session's
@@ -326,10 +330,15 @@ class SessionQueue implements ResumeQueue {
     bool asTyping = false,
   }) {
     if (asTyping && _takesTypedNow(sessionId, requestId)) {
-      _inFlight.add(sessionId);
-      _sawWorking.remove(sessionId);
       log?.call('queue $sessionId: typed into the running turn');
-      return const AdmitNow(midTurn: true);
+      return _claimNow(
+        sessionId,
+        text,
+        origin: origin,
+        originId: originId,
+        requestId: requestId,
+        midTurn: true,
+      );
     }
     final queued = queueIfBusy(
       sessionId,
@@ -339,9 +348,68 @@ class SessionQueue implements ResumeQueue {
       requestId: requestId,
     );
     if (queued != null) return queued;
+    return _claimNow(
+      sessionId,
+      text,
+      origin: origin,
+      originId: originId,
+      requestId: requestId,
+    );
+  }
+
+  /// The row of each session's immediate delivery in flight.
+  final _immediate = <String, String>{};
+
+  /// Claims [sessionId] for [text] now, giving it a row like any other
+  /// message, so every send has an id and its clients see it on its way.
+  AdmitNow _claimNow(
+    String sessionId,
+    String text, {
+    required QueuedMessageOrigin origin,
+    String? originId,
+    String? requestId,
+    bool midTurn = false,
+  }) {
     _inFlight.add(sessionId);
     _sawWorking.remove(sessionId);
-    return const AdmitNow();
+    final row = dao.enqueue(
+      id: _newId(),
+      sessionId: sessionId,
+      text: text,
+      origin: origin,
+      originId: originId,
+      requestId: requestId,
+      now: _now(),
+    );
+    dao.transition(
+      row.id,
+      from: QueuedMessageState.queued,
+      to: QueuedMessageState.delivering,
+      now: _now(),
+    );
+    _immediate[sessionId] = row.id;
+    _announce(sessionId);
+    return AdmitNow(midTurn: midTurn, message: dao.getById(row.id));
+  }
+
+  /// Puts the immediate delivery in flight for [sessionId] back in the
+  /// queue, as nothing of it was typed; null when there is none.
+  AdmitQueued? requeueImmediate(String sessionId) {
+    final id = _immediate.remove(sessionId);
+    if (id == null ||
+        !dao.transition(
+          id,
+          from: QueuedMessageState.delivering,
+          to: QueuedMessageState.queued,
+          now: _now(),
+        )) {
+      return null;
+    }
+    _withQueued.add(sessionId);
+    final row = dao.getById(id)!;
+    log?.call('queue $sessionId: $id queued, as it could not go now');
+    _announce(sessionId);
+    return AdmitQueued(row, dao.positionOf(sessionId, row.seq));
   }
 
   /// [admit] for a caller that delivers by its own means: null means "send
@@ -431,12 +499,28 @@ class SessionQueue implements ResumeQueue {
 
   /// Reports the immediate delivery [admit] allowed. One typed [midTurn]
   /// starts no turn of its own: the running one's end is what to wait for.
+  /// A refused one's row is cancelled with [error]: its sender was answered
+  /// with the refusal and still holds the message.
   void afterImmediate(
     String sessionId, {
     required bool delivered,
     bool midTurn = false,
+    String? error,
   }) {
     _inFlight.remove(sessionId);
+    if (_immediate.remove(sessionId) case final id?) {
+      dao.transition(
+        id,
+        from: QueuedMessageState.delivering,
+        to: delivered
+            ? QueuedMessageState.delivered
+            : QueuedMessageState.cancelled,
+        now: _now(),
+        error: delivered ? null : (error ?? 'it could not be delivered'),
+      );
+      if (dao.getById(id) case final row?) _settle(row);
+      _announce(sessionId);
+    }
     if (delivered && !midTurn) _awaitTurnStart(sessionId);
     _kick(sessionId);
   }
@@ -1220,17 +1304,18 @@ class SessionQueue implements ResumeQueue {
       _enqueueAutomation(sessionId, message);
       return message;
     }
-    _inFlight.add(sessionId);
-    _sawWorking.remove(sessionId);
+    _claimNow(sessionId, message, origin: QueuedMessageOrigin.automation);
     var delivered = false;
+    String? error;
     try {
       await deliver(sessionId, message);
       delivered = true;
       return message;
     } on DataRefused catch (refusal) {
+      error = refusal.message;
       throw StateError(refusal.message);
     } finally {
-      afterImmediate(sessionId, delivered: delivered);
+      afterImmediate(sessionId, delivered: delivered, error: error);
     }
   }
 
