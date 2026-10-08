@@ -178,6 +178,31 @@ void main() {
       expect(parent.children, isNull);
     });
 
+    test('an attached session nests under its new parent', () {
+      final apart = build(
+        groups({
+          AgentState.ready: [entry('p')],
+          AgentState.working: [entry('c')],
+        }),
+      ).lanes.single;
+      expect(ids(apart, BoardColumn.working), ['c']);
+
+      // Attached: the server set the row's parent, and nothing else.
+      final board = build(
+        groups({
+          AgentState.ready: [entry('p')],
+          AgentState.working: [entry('c', parent: 'p')],
+        }),
+      );
+      final cards = [
+        for (final column in BoardColumn.values)
+          ...board.lanes.single.cards(column),
+      ];
+      expect(cards.map((card) => card.id), ['p']);
+      expect(cards.single.children!.total, 1);
+      expect(board.children['p']!.map((card) => card.id), ['c']);
+    });
+
     test('an ended parent whose child works stays at work, carrying it', () {
       // Round 56: a parent is not done while its sub-sessions work.
       final board = build(
