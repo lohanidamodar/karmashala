@@ -40,6 +40,7 @@ class PermissionModeChip extends ConsumerWidget {
   const PermissionModeChip({
     required this.sessionId,
     this.maxLabelWidth = 160,
+    this.short = false,
     super.key,
   });
 
@@ -48,6 +49,11 @@ class PermissionModeChip extends ConsumerWidget {
   /// How much room the mode's name may take before it ellipsises. A width the
   /// host picks, as `ModelChip`'s is; never a share of the window.
   final double maxLabelWidth;
+
+  /// The CLI's own word alone, for a strip short of room: "Automatic", not
+  /// "Build · Automatic · default". The glyph still marks a risky mode, and
+  /// the tooltip names it whole.
+  final bool short;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -78,9 +84,11 @@ class PermissionModeChip extends ConsumerWidget {
     final dangerous = known && support.isDangerous(effective.selection);
     // The familiar name for the rung, ahead of this CLI's own word for it —
     // never instead of it. See `pairedWithFamiliarName`.
-    final label = known
-        ? describeSelectionFamiliarShort(support, effective.selection)
-        : 'Not established';
+    final label = !known
+        ? 'Not established'
+        : short
+        ? describeSelectionShort(support, effective.selection)
+        : describeSelectionFamiliarShort(support, effective.selection);
 
     return PopupMenuButton<PermissionChoice>(
       tooltip: '',
@@ -152,7 +160,7 @@ class PermissionModeChip extends ConsumerWidget {
           qualifiers: [
             // A mode this session is merely *following* has to look different
             // from one it chose, and that is not discoverable by hovering.
-            if (effective.inherited) 'default',
+            if (effective.inherited && !short) 'default',
             // A mode this build does not name, substituted down to the agent's
             // default — on the face, because the user set another.
             if (effective.unrecognised) 'unrecognised',

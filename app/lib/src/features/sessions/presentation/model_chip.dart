@@ -167,6 +167,7 @@ class ModelChip extends StatelessWidget {
     required this.whenPicked,
     required this.onSelected,
     this.maxLabelWidth = 120,
+    this.short = false,
     super.key,
   });
 
@@ -187,6 +188,10 @@ class ModelChip extends StatelessWidget {
   /// How much room the model's name may take. At 720px this is the difference
   /// between a row that yields and a row that overflows.
   final double maxLabelWidth;
+
+  /// The name alone, for a strip short of room: "Opus 5.5", not "Opus 5.5 ·
+  /// default". The tooltip still says whether it follows the default.
+  final bool short;
 
   @override
   Widget build(BuildContext context) {
@@ -246,7 +251,7 @@ class ModelChip extends StatelessWidget {
         child: PickerFace(
           icon: view.alarming ? AppIcons.warningCircle : AppIcons.robot,
           label: view.label,
-          qualifiers: [?view.qualifier],
+          qualifiers: [if (!short) ?view.qualifier],
           alarming: view.alarming,
           maxLabelWidth: maxLabelWidth,
         ),
@@ -261,6 +266,7 @@ class SessionModelChip extends ConsumerWidget {
   const SessionModelChip({
     required this.sessionId,
     this.maxLabelWidth = 120,
+    this.short = false,
     super.key,
   });
 
@@ -269,6 +275,9 @@ class SessionModelChip extends ConsumerWidget {
   /// How much of the model's name to show before ellipsising. The terminal's
   /// bar asks less: a pixel here can push `Commit` onto a line of its own.
   final double maxLabelWidth;
+
+  /// See [ModelChip.short].
+  final bool short;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -286,6 +295,7 @@ class SessionModelChip extends ConsumerWidget {
       ref.watch(sessionModelProvider(sessionId)),
       active: ref.watch(sessionActiveModelProvider(sessionId)),
       maxLabelWidth: maxLabelWidth,
+      short: short,
     );
   }
 }
@@ -371,6 +381,7 @@ Widget _buildModelChip(
   SessionModelState? state, {
   SessionActiveModel? active,
   double maxLabelWidth = 120,
+  bool short = false,
 }) {
   if (state == null) return const SizedBox.shrink();
   final view = modelChipViewFor(state, active: active);
@@ -379,6 +390,7 @@ Widget _buildModelChip(
   return ModelChip(
     view: view,
     maxLabelWidth: maxLabelWidth,
+    short: short,
     whenPicked: () =>
         switch (launcher.liveModelSwitchBlockerFor(state.sessionId)) {
           null => 'now',
