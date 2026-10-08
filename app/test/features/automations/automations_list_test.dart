@@ -18,8 +18,9 @@ import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fake_data_server.dart';
 
-/// The Automations list: templates first, then each checkout's automations,
-/// each said in one line with how it last went and when it next runs.
+/// The Automations list: each checkout's automations as a grid of cards, each
+/// with how it last went and when it next runs, and the templates — open while
+/// there is nothing, folded once there is.
 void main() {
   late ProviderContainer container;
   late FakeDataServer server;
@@ -189,6 +190,96 @@ void main() {
       draft.steps.of(AutomationStepKind.tell)!.when,
       AutomationStepWhen.failure,
     );
+    // The check step carries its own command, so it can be saved as it is.
+    final check = draft.steps.of(AutomationStepKind.check)!;
+    expect(check.text, 'flutter test');
+    expect(check.refusal, isNull);
+  });
+
+  testWidgets('once one exists the templates fold behind one line', (
+    tester,
+  ) async {
+    server.automationRows.insert(nightly());
+    await pump(tester);
+    expect(find.text('A second agent reviews the work'), findsNothing);
+    final fold = find.byKey(const ValueKey('templates-fold'));
+    expect(fold, findsOneWidget);
+    await tester.ensureVisible(fold);
+    await tester.tap(fold);
+    await tester.pumpAndSettle();
+    for (final template in kAutomationTemplates) {
+      expect(find.byKey(ValueKey('template-${template.title}')), findsOne);
+    }
+    await tester.tap(fold);
+    await tester.pumpAndSettle();
+    expect(find.text('A second agent reviews the work'), findsNothing);
+  });
+
+  testWidgets('there is no checks section on the tab', (tester) async {
+    server.automationRows.insert(nightly());
+    await pump(tester);
+    expect(find.textContaining('Checks for unattended runs'), findsNothing);
+    expect(find.textContaining('No check yet'), findsNothing);
+    expect(find.text('Add a check'), findsNothing);
+    // One switch per automation, and none per checkout.
+    expect(find.byType(Switch), findsOneWidget);
+  });
+
+  group('the grid', () {
+    test('columns by width and text size', () {
+      const one = TextScaler.noScaling;
+      final big = TextScaler.linear(1.6);
+      // The tab's own width: the window less the list's padding.
+      int at(double window, TextScaler scaler) =>
+          automationGridColumns(window - 2 * 16, scaler);
+      expect(
+        [
+          for (final w in const <double>[360, 390, 1100, 1440, 1920])
+            at(w, one),
+        ],
+        [1, 1, 2, 3, 3],
+      );
+      expect(
+        [
+          for (final w in const <double>[360, 390, 1100, 1440, 1920])
+            at(w, big),
+        ],
+        [1, 1, 1, 2, 3],
+      );
+    });
+
+    for (final (scale, expected) in const [
+      (1.0, [1, 1, 2, 3, 3]),
+      (1.6, [1, 1, 1, 2, 3]),
+    ]) {
+      testWidgets('lays out at every width, text ${scale}x, with no overflow', (
+        tester,
+      ) async {
+        server.automationRows
+          ..insert(nightly())
+          ..insert(hook());
+        for (final (i, width) in const <double>[
+          360.0,
+          390,
+          1100,
+          1440,
+          1920,
+        ].indexed) {
+          await pump(tester, size: Size(width, 900), textScale: scale);
+          expect(tester.takeException(), isNull, reason: '$width at $scale');
+          expect(
+            find.byKey(ValueKey('automation-grid-${expected[i]}')),
+            findsOneWidget,
+            reason: '$width at $scale',
+          );
+          // No narrow column in the middle of a wide window.
+          final grid = tester.getSize(
+            find.byKey(ValueKey('automation-grid-${expected[i]}')),
+          );
+          expect(grid.width, width - 2 * 16, reason: '$width at $scale');
+        }
+      });
+    }
   });
 
   test('the sixth template notifies when an agent needs you, and such a rule '
@@ -222,8 +313,7 @@ void main() {
         ),
       );
     await pump(tester);
-    expect(find.text('app'), findsWidgets);
-    expect(find.text('· 2'), findsOneWidget);
+    expect(find.text('app · 2'), findsOneWidget);
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('automation-summary-auto1')))
@@ -231,6 +321,7 @@ void main() {
       'Every day at 02:00, in app → start Claude Code in a worktree → check '
       'the result → if it fails, tell the agent',
     );
+    expect(find.byType(AutomationCard), findsNWidgets(2));
     expect(find.text('Succeeded 7h ago'), findsOneWidget);
     expect(find.text('Every day at 02:00'), findsOneWidget);
     expect(find.text('Never run'), findsOneWidget);
@@ -313,17 +404,19 @@ void main() {
     for (final size in const [
       Size(360, 740),
       Size(390, 844),
+      Size(1100, 800),
       Size(1440, 900),
+      Size(1920, 1080),
     ]) {
-      await pump(tester, size: size);
-      expect(tester.takeException(), isNull, reason: '$size');
+      for (final scale in const [1.0, 1.6]) {
+        await pump(tester, size: size, textScale: scale);
+        expect(tester.takeException(), isNull, reason: '$size at $scale');
+      }
     }
-    await pump(tester, size: const Size(390, 844), textScale: 1.6);
-    expect(tester.takeException(), isNull);
   });
 }
 
 final _rowSwitches = find.descendant(
-  of: find.byType(AutomationRow),
+  of: find.byType(AutomationCard),
   matching: find.byType(Switch),
 );

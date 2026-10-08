@@ -53,7 +53,6 @@ TurnOnReview turnOnReview(
   required String checkout,
   required String agent,
   required AgentPermissionSupport? permissions,
-  required List<String> checks,
   String? proposedBy,
   DateTime? now,
 }) {
@@ -71,18 +70,12 @@ TurnOnReview turnOnReview(
       checkout: checkout,
       agent: agent,
       permissions: permissions,
-      checks: checks,
     ),
     limits: _limits(automation),
     proposedBy: proposer,
     steps: proposer == null
         ? const []
-        : dryRunSteps(
-            automation,
-            checkout: checkout,
-            agent: agent,
-            checks: checks,
-          ),
+        : dryRunSteps(automation, checkout: checkout, agent: agent),
   );
 }
 
@@ -91,7 +84,6 @@ List<TurnOnLine> _changes(
   required String checkout,
   required String agent,
   required AgentPermissionSupport? permissions,
-  required List<String> checks,
 }) {
   final action = automation.github?.action ?? automation.trigger?.action;
   final where = automation.worktree
@@ -128,10 +120,11 @@ List<TurnOnLine> _changes(
     for (final step in automation.steps.after)
       switch (step.kind) {
         AutomationStepKind.check => (
-          label: 'Checks',
-          text: checks.isEmpty
-              ? 'Runs $checkout\'s checks on the result.'
-              : 'Runs ${checks.join(', ')} on the result.',
+          label: 'Check',
+          text: step.checkCommands.isEmpty
+              ? 'Runs $checkout\'s project checks on the result.'
+              : 'Runs ${step.checkCommands.join(', ')} on the result; a '
+                    'non-zero exit fails the run.',
         ),
         AutomationStepKind.command => (
           label: 'Command',

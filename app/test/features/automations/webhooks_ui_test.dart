@@ -107,7 +107,7 @@ void main() {
       expect(find.textContaining('Listening'), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(AutomationRow),
+          of: find.byType(AutomationCard),
           matching: find.byType(Switch),
         ),
         findsOneWidget,

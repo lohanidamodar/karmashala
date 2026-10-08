@@ -89,17 +89,7 @@ final projectChecksProvider = Provider.family<List<ProjectCheck>, String>((
   return ref.watch(projectChecksDataProvider).forRepository(repositoryId);
 });
 
-final projectVerificationEnabledProvider = Provider.family<bool, String>((
-  ref,
-  repositoryId,
-) {
-  ref.watch(automationsRevisionProvider);
-  return ref
-      .watch(projectChecksDataProvider)
-      .isVerificationEnabled(repositoryId);
-});
-
-/// Writes an automation or a checkout's verification through the server.
+/// Writes an automation, or a checkout's project checks, through the server.
 /// Arming goes through here and nowhere else — no MCP tool reaches it.
 class AutomationController {
   AutomationController(this._ref);
@@ -116,11 +106,6 @@ class AutomationController {
       _ref.read(automationsDataProvider).setEnabled(id, enabled: enabled);
 
   void delete(String id) => _ref.read(automationsDataProvider).delete(id);
-
-  void setVerificationEnabled(String repositoryId, {required bool enabled}) =>
-      _ref
-          .read(projectChecksDataProvider)
-          .setVerification(repositoryId, enabled: enabled);
 
   void addCheck(String repositoryId, String name, List<String> command) => _ref
       .read(projectChecksDataProvider)

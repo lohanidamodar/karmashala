@@ -20,18 +20,6 @@ enum UnattendedReach {
 /// Why an automation may not fire with nobody watching. Named values so a
 /// surface can decide where to send the user, while the sentence stays one.
 enum UnattendedRefusalKind {
-  /// Verification is off for the checkout the automation would run in.
-  verificationDisabled,
-
-  /// Verification is on and there is nothing configured for it to run.
-  noProjectChecks,
-
-  /// A command step would run where checks are off or there are none.
-  commandWithoutChecks,
-
-  /// The agent may change things and nothing after it checks the result.
-  noCheckStep,
-
   /// The agent this was armed on is no longer installed here.
   agentUnavailable,
 
@@ -75,15 +63,10 @@ class UnattendedRefusal {
 class UnattendedGateInput {
   const UnattendedGateInput({
     required this.repositoryName,
-    required this.verificationEnabled,
-    required this.projectCheckCount,
     required this.agentName,
     required this.permits,
     required this.reach,
     this.agentInstalled = true,
-    this.requiresChecks = true,
-    this.hasCheckStep = true,
-    this.hasCommandStep = false,
     this.permissionLabel = '',
     this.permissionEvidence = '',
     this.reachReason = '',
@@ -91,20 +74,6 @@ class UnattendedGateInput {
 
   /// The checkout's own name, so a sentence names the thing that is not ready.
   final String repositoryName;
-
-  final bool verificationEnabled;
-
-  final int projectCheckCount;
-
-  /// Whether the two verification rules apply. False for a scheduled resume:
-  /// it continues a conversation its user was already reviewing.
-  final bool requiresChecks;
-
-  /// Whether a "Check the result" step follows the agent.
-  final bool hasCheckStep;
-
-  /// Whether a "Run a command" step follows the agent.
-  final bool hasCommandStep;
 
   final String agentName;
 
@@ -134,8 +103,9 @@ class UnattendedGateInput {
 bool permissionModeCanPrompt(PermissionRisk risk) =>
     risk == PermissionRisk.ask || risk == PermissionRisk.acceptEdits;
 
-/// Why this automation may not fire unattended, or `null` when it may. Ordered
-/// so a person can act: the checkout, then the mode, then reachability last.
+/// Why this automation may not fire unattended, or `null` when it may: its
+/// agent must be here, must never stop to ask, and must be reachable. A check
+/// is an optional step, never a precondition.
 UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
   final repository = input.repositoryName.trim().isEmpty
       ? 'this checkout'
@@ -143,41 +113,6 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
   final agent = input.agentName.trim().isEmpty
       ? 'this agent'
       : input.agentName.trim();
-
-  // A read-only agent changes nothing, so there is no result to judge.
-  final judged =
-      input.requiresChecks && input.permits != PermissionRisk.readOnly;
-  if (judged && !input.verificationEnabled) {
-    return UnattendedRefusal(
-      UnattendedRefusalKind.verificationDisabled,
-      'Checks are off for $repository. Nobody watches an unattended run, so '
-      'what it did has to be checked without you — turn checks on for this '
-      'checkout and give it at least one.',
-    );
-  }
-  if (judged && input.projectCheckCount <= 0) {
-    return UnattendedRefusal(
-      UnattendedRefusalKind.noProjectChecks,
-      '$repository has no check yet. An unattended run needs at least one '
-      'command that says whether the work still stands, because nobody is '
-      'there to look — add one first.',
-    );
-  }
-  if (input.hasCommandStep &&
-      (!input.verificationEnabled || input.projectCheckCount <= 0)) {
-    return UnattendedRefusal(
-      UnattendedRefusalKind.commandWithoutChecks,
-      'A "Run a command" step runs only where checks are on. Turn checks on '
-      'for $repository and give it at least one, or remove the step.',
-    );
-  }
-  if (judged && !input.hasCheckStep) {
-    return UnattendedRefusal(
-      UnattendedRefusalKind.noCheckStep,
-      'Nothing checks what the agent did. Add a "Check the result" step, or '
-      'run the agent read-only.',
-    );
-  }
 
   if (!input.agentInstalled) {
     return UnattendedRefusal(

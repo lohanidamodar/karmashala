@@ -271,6 +271,43 @@ void main() {
   List<AutomationRun> runs([String id = 'auto-r1']) =>
       automationDao().runsFor(id);
 
+  group('project checks from before a check carried its own command', () {
+    test('are carried into "Check the result" once, on start', () async {
+      nightly();
+      await startDaemon();
+      final step = automationDao()
+          .getById('auto-r1')!
+          .steps
+          .of(AutomationStepKind.check)!;
+      expect(step.text, 'make test');
+      expect(step.name, 'the tests');
+
+      ProjectCheckDao(db).insert(
+        ProjectCheck(
+          id: 'check-late',
+          repositoryId: 'r1',
+          name: 'later',
+          command: const ['make', 'lint'],
+          createdAt: now,
+        ),
+      );
+      automations.carryChecksIntoSteps();
+      expect(
+        automationDao().getById('auto-r1')!.steps.of(AutomationStepKind.check),
+        step,
+      );
+    });
+
+    test('an automation with a command of its own is left alone', () async {
+      final own = AutomationSteps(const [
+        AutomationStep(kind: AutomationStepKind.check, text: 'flutter test'),
+      ]);
+      nightly(steps: own);
+      await startDaemon();
+      expect(automationDao().getById('auto-r1')!.steps, own);
+    });
+  });
+
   group('missed while the host was down', () {
     test('inside the grace it fires once on start, as a session the host '
         'owns', () async {
@@ -408,8 +445,8 @@ void main() {
     });
 
     test('a gate refusal starts nothing and answers 500', () async {
-      // Read-only needs no check, so an agent that may edit is refused.
-      webhook(verified: false, mode: 'bypassPermissions');
+      // Nobody is there to answer an agent that stops to ask.
+      webhook(mode: 'default');
       await startDaemon();
       final answer = await handlerFor().answer(call('d2'));
       expect(answer.status, 500);
@@ -646,14 +683,28 @@ void main() {
 
     test('never passes the gate by hand', () async {
       nightly();
-      ProjectCheckDao(
-        db,
-      ).setVerificationEnabled('r1', enabled: false, now: now);
+      final armed = automationDao().getById('auto-r1')!;
+      automationDao().update(
+        armed.copyWith(
+          permissionMode: const PermissionSelection({'mode': 'default'}),
+        ),
+      );
       await startDaemon();
       final run = await automations.runNow('auto-r1');
       expect(run.state, AutomationRunState.failed);
-      expect(run.reason, contains('Checks are off'));
+      expect(run.reason, contains('stops and asks'));
       expect(launcher.started, isEmpty);
+    });
+
+    test('an agent that never asks runs with no checks at all', () async {
+      nightly(steps: AutomationSteps(const []));
+      ProjectCheckDao(db)
+        ..setVerificationEnabled('r1', enabled: false, now: now)
+        ..delete('check-r1');
+      await startDaemon();
+      final run = await automations.runNow('auto-r1');
+      expect(run.state, AutomationRunState.running);
+      expect(launcher.started, isNotEmpty);
     });
 
     test(

@@ -8,6 +8,7 @@ import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'tool_edit_diff_card.dart';
 import 'transcript_image_preview.dart';
+import 'transcript_inline_images.dart';
 
 /// The body of a transcript row that is a tool call: the command, the file, the
 /// picture. Expanding *replaces* the truncated head, never adding a second copy.
@@ -54,6 +55,22 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
       _commandExpanded = false;
       _outputExpanded = false;
     }
+  }
+
+  ToolActivity? _namedFor;
+  List<String> _named = const [];
+
+  /// The pictures the call's command or answer names, besides the one it read.
+  List<String> _namedImages() {
+    final activity = widget.activity;
+    if (!identical(activity, _namedFor)) {
+      _namedFor = activity;
+      _named = {
+        ...inlineImagePaths(activity.subject),
+        ...inlineImagePaths(activity.output),
+      }.where((path) => path != activity.imagePath).toList();
+    }
+    return _named;
   }
 
   @override
@@ -105,6 +122,7 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
             ),
           ),
         ],
+        TranscriptImageStrip(paths: _namedImages()),
         if (widget.activity.edits.isNotEmpty)
           ToolEditDiffCard(
             activity: widget.activity,

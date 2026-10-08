@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -310,6 +311,15 @@ class _ImageViewerDialog extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              TextButton(
+                key: const ValueKey('image-viewer-copy'),
+                onPressed: () => Clipboard.setData(ClipboardData(text: label)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: theme.textTheme.labelSmall,
+                ),
+                child: const Text('Copy path'),
               ),
               IconButton(
                 tooltip: 'Close',

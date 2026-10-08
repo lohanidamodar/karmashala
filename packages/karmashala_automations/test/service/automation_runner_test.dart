@@ -75,7 +75,7 @@ void main() {
     launcher = _Launcher();
     runner = AutomationRunner(
       automations: dao,
-      preflight: UnattendedPreflight(facts: facts, checks: ProjectCheckDao(db)),
+      preflight: UnattendedPreflight(facts: facts),
       facts: facts,
       checkpoints: checkpoints,
       launcher: launcher,

@@ -31,6 +31,7 @@ import 'tool_activity_row.dart';
 import 'tool_edit_diff_card.dart';
 import 'tool_run.dart';
 import 'transcript_image_preview.dart';
+import 'transcript_inline_images.dart';
 import 'turn_changed_files.dart';
 
 export 'tool_run.dart' show TranscriptTurn;
@@ -673,6 +674,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
               messages: visible,
               row: row,
               rowAt: rowAt,
+              resolveHostPath: widget.resolveHostPath,
             );
       if (index != newRow) return drawn;
       return Column(

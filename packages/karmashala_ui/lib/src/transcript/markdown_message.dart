@@ -11,6 +11,7 @@ import '../diagram/mermaid_view.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'code_block.dart';
 import 'fence_visuals.dart';
+import 'markdown_image.dart';
 import 'transcript_selection.dart';
 
 /// What tells a link this app made out of a bare path from one the author
@@ -122,6 +123,7 @@ class MarkdownMessage extends StatelessWidget {
         ),
         'math': _MathBuilder(),
       },
+      imageBuilder: (uri, _, alt) => MarkdownImage(uri: uri, alt: alt),
       inlineSyntaxes: onPathTap == null
           ? _mathSyntaxes
           : [..._mathSyntaxes, ...kPathLinkSyntaxes],

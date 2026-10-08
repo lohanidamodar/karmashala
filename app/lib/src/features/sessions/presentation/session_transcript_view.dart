@@ -89,6 +89,7 @@ import 'queued_messages_strip.dart';
 import 'operator_chip.dart';
 import 'transcript_file_preview.dart';
 import 'transcript_image_preview.dart';
+import 'transcript_inline_images.dart';
 import 'stop_children_offer.dart';
 import 'delegation_card.dart';
 import 'session_failed_state.dart';
@@ -607,18 +608,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
-  /// Whether [path] is inside the session's checkout, its repository or the
-  /// tree the Files panel shows — what a preview reads without asking.
-  bool _inSessionScope(EnvironmentPath path) {
-    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
-    final roots = [
-      _workingDirectory(),
-      if (session != null)
-        ref.read(workspaceDataProvider).repository(session.repositoryId)?.path,
-      ref.read(fileTreeRootProvider),
-    ];
-    return roots.any((root) => root != null && isUnderFileTreeRoot(root, path));
-  }
+  /// A picture's path placed in the session's environment. A tear-off, so the
+  /// rows below can tell it has not changed.
+  EnvironmentPath? _placeImage(String path) => _placeToken(path)?.$1;
+
+  /// Reveals a picture's path as a click on it would.
+  void _openImage(String path) => unawaited(_openPath(path));
 
   /// The preview a tapped path opens under its message. A tear-off, so the
   /// rows it is handed to can tell it has not changed.
@@ -636,7 +631,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       key: ValueKey('preview-$token'),
       path: path,
       line: line,
-      inScope: _inSessionScope(path),
       onClose: onClose,
       onOpenInEditor: () =>
           ref.read(editorTabActionsProvider).openAt(path, line: line),
@@ -973,7 +967,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       builder: (context, hovering) => FileDropHighlight(
         label: 'Drop to attach',
         visible: hovering,
-        child: body,
+        // Pictures the conversation names are drawn in it, read through the
+        // server wherever the session runs.
+        child: TranscriptInlineImages(
+          place: _placeImage,
+          onOpen: _openImage,
+          child: body,
+        ),
       ),
     );
   }

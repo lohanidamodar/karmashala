@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/automations/application/automation_draft.dart';
 import 'package:karmashala/src/features/automations/application/automation_editor_state.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/turn_on_review.dart';
@@ -137,7 +136,7 @@ void main() {
   }
 
   final rowSwitch = find.descendant(
-    of: find.byType(AutomationRow),
+    of: find.byType(AutomationCard),
     matching: find.byType(Switch),
   );
   final confirm = find.byKey(const ValueKey('turn-on-confirm'));
@@ -281,9 +280,8 @@ void main() {
     server.automationRows.insert(nightly());
     await tester.binding.setSurfaceSize(const Size(1440, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    container
-        .read(automationEditorProvider.notifier)
-        .open(AutomationDraft.from(nightly()));
+    // Opened as the list opens it, which carries the checkout's checks.
+    container.read(automationEditorProvider.notifier).edit(nightly());
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -356,7 +354,6 @@ void main() {
         checkout: 'app',
         agent: 'Claude Code',
         permissions: null,
-        checks: const ['tests'],
       );
       final limits = {for (final l in review.limits) l.label: l.text};
       expect(limits['Runs an hour'], 'No limit');

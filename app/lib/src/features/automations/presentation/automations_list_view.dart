@@ -18,11 +18,26 @@ import '../application/automation_templates.dart';
 import 'automation_editor.dart';
 import 'automation_run_actions.dart';
 import 'automation_run_status.dart';
-import 'project_checks_section.dart';
 import 'proposal_actions.dart';
 import 'turn_on_confirm_dialog.dart' show turnOnAutomation;
 
-/// The Automations list: templates first, then every automation by checkout.
+/// The narrowest an automation or template card is laid out, at 1x text.
+const double kAutomationCardMinWidth = 360;
+
+/// The most cards a row holds, however wide the tab.
+const int kAutomationGridMaxColumns = 3;
+
+/// How many cards fit across [width] under [textScaler]: one on a phone, two
+/// or three on a desktop — a card grows with its text, so 1.6x text fits
+/// fewer.
+int automationGridColumns(double width, TextScaler textScaler) {
+  final card = WidthClass.scaleBreakpoint(kAutomationCardMinWidth, textScaler);
+  final fit = ((width + Insets.md) / (card + Insets.md)).floor();
+  return fit.clamp(1, kAutomationGridMaxColumns);
+}
+
+/// The Automations list: every automation as a card, grouped by checkout, and
+/// the templates — open while there is nothing, folded once there is.
 class AutomationsListView extends ConsumerWidget {
   const AutomationsListView({super.key});
 
@@ -45,38 +60,28 @@ class AutomationsListView extends ConsumerWidget {
       key: const ValueKey('automations-list'),
       padding: const EdgeInsets.all(Insets.lg),
       children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const ProposalsNotice(),
-                const EyebrowLabel('Start from a template'),
-                const SizedBox(height: Insets.sm),
-                _Templates(repositories: repositories),
-                const SizedBox(height: Insets.xl),
-                if (automations.isEmpty)
-                  const PanePlaceholder(
-                    icon: AppIcons.lightning,
-                    message:
-                        'Nothing set up yet. Start from a template, or make a '
-                        'new automation.',
-                  )
-                else
-                  for (final entry in byCheckout.entries)
-                    _CheckoutGroup(
-                      repository: repositories
-                          .where((r) => r.id == entry.key)
-                          .firstOrNull,
-                      automations: entry.value,
-                    ),
-                const SizedBox(height: Insets.lg),
-                const ProjectChecksSection(),
-              ],
-            ),
+        const ProposalsNotice(),
+        if (automations.isEmpty) ...[
+          const PanePlaceholder(
+            icon: AppIcons.lightning,
+            message:
+                'Nothing set up yet. Start from a template, or make a new '
+                'automation.',
           ),
-        ),
+          const SizedBox(height: Insets.lg),
+          const EyebrowLabel('Start from a template'),
+          const SizedBox(height: Insets.sm),
+          const _Templates(),
+        ] else ...[
+          for (final entry in byCheckout.entries)
+            _CheckoutGroup(
+              repository: repositories
+                  .where((r) => r.id == entry.key)
+                  .firstOrNull,
+              automations: entry.value,
+            ),
+          const _FoldedTemplates(),
+        ],
       ],
     );
   }
@@ -117,37 +122,114 @@ DraftTrigger triggerOf(Automation a) => a.github != null
     ? DraftTrigger.once
     : DraftTrigger.schedule;
 
-class _Templates extends ConsumerWidget {
-  const _Templates({required this.repositories});
+/// [count] cells in [automationGridColumns] columns, each row as tall as its
+/// tallest card and as wide as the grid.
+class AutomationGrid extends StatelessWidget {
+  const AutomationGrid({required this.count, required this.cell, super.key});
 
-  final List<Repository> repositories;
+  final int count;
+  final Widget Function(int index) cell;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => LayoutBuilder(
-    builder: (context, constraints) {
-      final columns = constraints.maxWidth >= 720
-          ? 3
-          : constraints.maxWidth >= 440
-          ? 2
-          : 1;
-      final width =
-          (constraints.maxWidth - Insets.sm * (columns - 1)) / columns;
-      return Wrap(
-        spacing: Insets.sm,
-        runSpacing: Insets.sm,
-        children: [
-          for (final template in kAutomationTemplates)
-            SizedBox(
-              width: width,
-              child: _TemplateCard(
-                template: template,
-                onTap: () => newAutomation(ref, template: template),
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = automationGridColumns(constraints.maxWidth, scaler);
+        return Column(
+          key: ValueKey('automation-grid-$columns'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var start = 0; start < count; start += columns)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Insets.md),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = start; i < start + columns; i++) ...[
+                        if (i > start) const SizedBox(width: Insets.md),
+                        Expanded(
+                          child: i < count ? cell(i) : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
-            ),
-        ],
-      );
-    },
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _Templates extends ConsumerWidget {
+  const _Templates();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => AutomationGrid(
+    count: kAutomationTemplates.length,
+    cell: (i) => _TemplateCard(
+      template: kAutomationTemplates[i],
+      onTap: () => newAutomation(ref, template: kAutomationTemplates[i]),
+    ),
   );
+}
+
+/// The templates behind one line, once there are automations to look at.
+class _FoldedTemplates extends StatefulWidget {
+  const _FoldedTemplates();
+
+  @override
+  State<_FoldedTemplates> createState() => _FoldedTemplatesState();
+}
+
+class _FoldedTemplatesState extends State<_FoldedTemplates> {
+  var _open = false;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          key: const ValueKey('templates-fold'),
+          icon: Icon(_open ? AppIcons.caretUp : AppIcons.caretDown),
+          label: const Text('Start from a template'),
+          onPressed: () => setState(() => _open = !_open),
+        ),
+      ),
+      if (_open) ...[const SizedBox(height: Insets.sm), const _Templates()],
+    ],
+  );
+}
+
+/// The rounded, outlined surface every card on the tab shares.
+class _CardSurface extends StatelessWidget {
+  const _CardSurface({required this.child, required this.onTap, super.key});
+
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.md),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
+      ),
+    );
+  }
 }
 
 class _TemplateCard extends StatelessWidget {
@@ -160,51 +242,44 @@ class _TemplateCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(Radii.md),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      child: InkWell(
-        key: ValueKey('template-${template.title}'),
-        borderRadius: BorderRadius.circular(Radii.md),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    triggerIcon(template.trigger),
-                    size: Touch.iconSmall,
-                    color: scheme.tertiary,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Flexible(
-                    child: Text(
-                      template.trigger.label,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: Insets.xs),
-              Text(template.title, style: theme.textTheme.titleSmall),
-              const SizedBox(height: Insets.xxs),
-              Text(
-                template.description,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+    return _CardSurface(
+      key: ValueKey('template-${template.title}'),
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Tooltip(
+            message: template.trigger.label,
+            child: Icon(
+              triggerIcon(template.trigger),
+              size: Touch.icon,
+              color: scheme.tertiary,
+            ),
           ),
-        ),
+          const SizedBox(width: Insets.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  template.title,
+                  style: theme.textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: Insets.xxs),
+                Text(
+                  template.description,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -219,49 +294,47 @@ class _CheckoutGroup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final name = repository?.name ?? 'A checkout that is gone';
     return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.lg),
+      padding: const EdgeInsets.only(bottom: Insets.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Flexible(
-                child: Text(
-                  repository?.name ?? 'A checkout that is gone',
-                  style: theme.textTheme.titleSmall,
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    text: name,
+                    style: theme.textTheme.titleSmall,
+                    children: [
+                      TextSpan(
+                        text: ' · ${automations.length}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: Insets.xs),
-              Text('· ${automations.length}', style: theme.textTheme.bodySmall),
-              const Spacer(),
               if (repository case final repository?)
-                TextButton.icon(
+                IconButton(
+                  key: ValueKey('automation-new-in-${repository.id}'),
+                  tooltip: 'New automation in ${repository.name}',
                   icon: const Icon(AppIcons.plus),
-                  label: Text('New in ${repository.name}'),
                   onPressed: () =>
                       newAutomation(ref, repositoryId: repository.id),
                 ),
             ],
           ),
           const SizedBox(height: Insets.xs),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(Radii.md),
-            ),
-            child: Column(
-              children: [
-                for (final (i, automation) in automations.indexed) ...[
-                  if (i > 0) const Divider(height: 1),
-                  AutomationRow(
-                    key: ValueKey(automation.id),
-                    automation: automation,
-                    checkout: repository?.name ?? 'its checkout',
-                  ),
-                ],
-              ],
+          AutomationGrid(
+            count: automations.length,
+            cell: (i) => AutomationCard(
+              key: ValueKey(automations[i].id),
+              automation: automations[i],
+              checkout: repository?.name ?? 'its checkout',
             ),
           ),
         ],
@@ -270,10 +343,10 @@ class _CheckoutGroup extends ConsumerWidget {
   }
 }
 
-/// One automation: what it does in one line, how it last went, when it next
-/// runs, its switch and its menu.
-class AutomationRow extends ConsumerWidget {
-  const AutomationRow({
+/// One automation: its kind, name, what it does in plain words, how it last
+/// went, when it next runs, its switch and its menu.
+class AutomationCard extends ConsumerWidget {
+  const AutomationCard({
     required this.automation,
     required this.checkout,
     super.key,
@@ -283,18 +356,7 @@ class AutomationRow extends ConsumerWidget {
   final String checkout;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => LayoutBuilder(
-    builder: (context, constraints) => _row(
-      context,
-      ref,
-      wide: !WidthClass.of(
-        constraints.maxWidth,
-        textScaler: MediaQuery.textScalerOf(context),
-      ).isCompact,
-    ),
-  );
-
-  Widget _row(BuildContext context, WidgetRef ref, {required bool wide}) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final now = ref.watch(clockProvider).nowUtc();
@@ -319,130 +381,109 @@ class AutomationRow extends ConsumerWidget {
         ? 'Never run'
         : '${runOutcome(last, checks).label} '
               '${describeAge(last.firedAt, now: now)}';
-    final next = nextRunWords(automation, now: now);
-    final status = Text(
-      wide ? lastRun : '$lastRun · $next',
-      style: theme.textTheme.bodySmall?.copyWith(
-        color: last == null
-            ? scheme.onSurfaceVariant
-            : runOutcomeColor(context, runOutcome(last, checks)),
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
-    return InkWell(
+    final small = theme.textTheme.bodySmall;
+    return _CardSurface(
       onTap: () => ref.read(automationEditorProvider.notifier).edit(automation),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: Insets.md,
-          vertical: Insets.sm,
-        ),
-        child: Row(
-          children: [
-            Tooltip(
-              message: triggerOf(automation).label,
-              child: Icon(
-                triggerIcon(triggerOf(automation)),
-                color: scheme.tertiary,
-                size: Touch.icon,
-              ),
-            ),
-            const SizedBox(width: Insets.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    automation.name,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    summary,
-                    key: ValueKey('automation-summary-${automation.id}'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (!wide) status,
-                ],
-              ),
-            ),
-            if (wide) ...[
-              const SizedBox(width: Insets.md),
-              SizedBox(
-                width: Touch.target * 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    status,
-                    Text(
-                      next,
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Tooltip(
+                message: triggerOf(automation).label,
+                child: Icon(
+                  triggerIcon(triggerOf(automation)),
+                  color: scheme.tertiary,
+                  size: Touch.icon,
                 ),
               ),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Text(
+                  automation.name,
+                  style: theme.textTheme.titleSmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Switch(
+                value: automation.enabled,
+                onChanged: (on) => on
+                    ? turnOnAutomation(context, ref, automation)
+                    : ref
+                          .read(automationControllerProvider)
+                          .setEnabled(automation.id, enabled: false),
+              ),
+              _CardMenu(automation: automation),
             ],
-            Switch(
-              value: automation.enabled,
-              onChanged: (on) => on
-                  ? turnOnAutomation(context, ref, automation)
-                  : ref
-                        .read(automationControllerProvider)
-                        .setEnabled(automation.id, enabled: false),
+          ),
+          Text(
+            summary,
+            key: ValueKey('automation-summary-${automation.id}'),
+            style: small?.copyWith(color: scheme.onSurfaceVariant),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const Spacer(),
+          const SizedBox(height: Insets.sm),
+          Text(
+            lastRun,
+            style: small?.copyWith(
+              color: last == null
+                  ? scheme.onSurfaceVariant
+                  : runOutcomeColor(context, runOutcome(last, checks)),
             ),
-            _RowMenu(automation: automation),
-          ],
-        ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            nextRunWords(automation, now: now),
+            style: small,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
 }
 
-enum _RowAction { runNow, edit, duplicate, runs, delete }
+enum _CardAction { runNow, edit, duplicate, runs, delete }
 
-class _RowMenu extends ConsumerWidget {
-  const _RowMenu({required this.automation});
+class _CardMenu extends ConsumerWidget {
+  const _CardMenu({required this.automation});
 
   final Automation automation;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      PopupMenuButton<_RowAction>(
+      PopupMenuButton<_CardAction>(
         key: ValueKey('automation-menu-${automation.id}'),
         tooltip: 'More for ${automation.name}',
         icon: const Icon(AppIcons.dotsThree),
         onSelected: (action) {
           switch (action) {
-            case _RowAction.runNow:
+            case _CardAction.runNow:
               runAutomationNow(context, ref, automation);
-            case _RowAction.edit:
+            case _CardAction.edit:
               ref.read(automationEditorProvider.notifier).edit(automation);
-            case _RowAction.duplicate:
+            case _CardAction.duplicate:
               // Opened to create, not saved: saving a copy is arming it.
               ref
                   .read(automationEditorProvider.notifier)
                   .open(AutomationDraft.from(automation).asNewCopy());
-            case _RowAction.runs:
+            case _CardAction.runs:
               showRunsOf(ref, automation.id);
-            case _RowAction.delete:
+            case _CardAction.delete:
               confirmDeleteAutomation(context, ref, automation);
           }
         },
         itemBuilder: (_) => const [
-          PopupMenuItem(value: _RowAction.runNow, child: Text('Run now')),
-          PopupMenuItem(value: _RowAction.edit, child: Text('Edit')),
-          PopupMenuItem(value: _RowAction.duplicate, child: Text('Duplicate')),
-          PopupMenuItem(value: _RowAction.runs, child: Text('See its runs')),
-          PopupMenuItem(value: _RowAction.delete, child: Text('Delete…')),
+          PopupMenuItem(value: _CardAction.runNow, child: Text('Run now')),
+          PopupMenuItem(value: _CardAction.edit, child: Text('Edit')),
+          PopupMenuItem(value: _CardAction.duplicate, child: Text('Duplicate')),
+          PopupMenuItem(value: _CardAction.runs, child: Text('See its runs')),
+          PopupMenuItem(value: _CardAction.delete, child: Text('Delete…')),
         ],
       );
 }

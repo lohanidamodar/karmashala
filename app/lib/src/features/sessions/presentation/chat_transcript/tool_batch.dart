@@ -8,6 +8,7 @@ class _ToolBatchTile extends StatefulWidget {
     required this.messages,
     required this.row,
     required this.rowAt,
+    this.resolveHostPath,
     super.key,
   });
 
@@ -15,6 +16,7 @@ class _ToolBatchTile extends StatefulWidget {
   final List<ChatMessage> messages;
   final TranscriptRow row;
   final Widget Function(int offset) rowAt;
+  final String? Function(String path)? resolveHostPath;
 
   @override
   State<_ToolBatchTile> createState() => _ToolBatchTileState();
@@ -23,6 +25,65 @@ class _ToolBatchTile extends StatefulWidget {
 class _ToolBatchTileState extends State<_ToolBatchTile> {
   bool _open = false;
   bool _hovered = false;
+
+  (List<ChatMessage>, TranscriptRow)? _imagesFor;
+  List<String> _named = const [];
+  List<String> _returned = const [];
+
+  /// The pictures the folded calls named or answered with, so a fold never
+  /// hides one. A pinned call draws its own.
+  void _foldedImages() {
+    final key = (widget.messages, widget.row);
+    if (_imagesFor case (
+      final m,
+      final r,
+    ) when identical(m, key.$1) && r == key.$2) {
+      return;
+    }
+    _imagesFor = key;
+    final named = <String>{};
+    final returned = <String>{};
+    final row = widget.row;
+    for (var i = row.from; i < row.to; i++) {
+      if (row.pinned.contains(i)) continue;
+      final tool = widget.messages[i].tool;
+      if (tool == null) continue;
+      named
+        ..addAll(inlineImagePaths(tool.subject))
+        ..addAll(inlineImagePaths(tool.output));
+      if (tool.imagePath case final path?) returned.add(path);
+    }
+    _named = named.toList();
+    _returned = returned.difference(named).toList();
+  }
+
+  Widget _folded() {
+    _foldedImages();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TranscriptImageStrip(paths: _named),
+        if (_returned.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: SelectionContainer.disabled(
+              child: Wrap(
+                spacing: Insets.xs,
+                runSpacing: Insets.xs,
+                children: [
+                  for (final path in _returned)
+                    TranscriptImagePreview(
+                      path: path,
+                      resolveHostPath: widget.resolveHostPath,
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -183,8 +244,10 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
                   ),
                 ),
               )
-            else
+            else ...[
               for (final i in row.pinned) widget.rowAt(i),
+              _folded(),
+            ],
             if (!row.live)
               if (turnChangedFiles(widget.messages, row) case final files?)
                 TurnChangedFilesLine(files: files),
