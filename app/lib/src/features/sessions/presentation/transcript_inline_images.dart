@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../environments/application/environment_values.dart'
     show EnvironmentPath;
 import 'package:agent_cli/stream.dart' show looksLikeImagePath;
@@ -13,6 +15,9 @@ import 'package:karmashala_ui/transcript.dart';
 
 import '../application/file_preview_loader.dart';
 import '../domain/file_preview_kind.dart';
+import '../../../core/clipboard/image_clipboard.dart'
+    show imageClipboardProvider;
+import 'chat_target_menu.dart' show keepTranscriptTargetMenu;
 
 /// The most pictures one row draws; the rest are counted, not fetched.
 const int kInlineImageStripMax = 24;
@@ -287,15 +292,42 @@ class _InlineImageState extends ConsumerState<_InlineImage> {
         ),
       ),
     );
-    if (widget.thumb) return tile;
+    final withActions = TranscriptImageActions(
+      target: _target(bytes),
+      child: tile,
+    );
+    if (widget.thumb) return withActions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Align(alignment: Alignment.centerLeft, child: tile),
-        _Actions(name: _name, onOpen: _open, onCopy: _copy),
+        Align(alignment: Alignment.centerLeft, child: withActions),
+        _Actions(
+          name: _name,
+          onOpen: _open,
+          onCopy: _copy,
+          onCopyImage: _copyImage(context, bytes),
+        ),
       ],
     );
+  }
+
+  TranscriptImageTarget? _target(Uint8List? bytes) => bytes == null
+      ? null
+      : TranscriptImageTarget(path: widget.path, bytes: () async => bytes);
+
+  /// Copy image where the chat has a menu to run it and this device's
+  /// clipboard takes a picture.
+  VoidCallback? _copyImage(BuildContext context, Uint8List? bytes) {
+    final scope = TranscriptTargetMenuScope.maybeScopeOf(context);
+    final target = _target(bytes);
+    if (scope == null ||
+        target == null ||
+        !ref.read(imageClipboardProvider).supported) {
+      return null;
+    }
+    return () =>
+        unawaited(scope.run(context, target, TranscriptTargetAction.copy));
   }
 
   VoidCallback? get _open {
@@ -308,7 +340,7 @@ class _InlineImageState extends ConsumerState<_InlineImage> {
     Clipboard.setData(ClipboardData(text: path));
     ScaffoldMessenger.maybeOf(
       context,
-    )?.showSnackBar(const SnackBar(content: Text('Path copied')));
+    )?.showSnackBar(const SnackBar(content: Text('Path copied to clipboard')));
   }
 
   void _enlarge(Uint8List bytes) {
@@ -334,24 +366,30 @@ class _InlineImageState extends ConsumerState<_InlineImage> {
                       _open!();
                     },
               onCopy: _copy,
+              onCopyImage: _copyImage(dialog, bytes),
               onClose: () => Navigator.of(dialog).pop(),
             ),
           ),
         ),
         const Divider(height: 1),
         Flexible(
-          child: InteractiveViewer(
-            maxScale: 8,
-            child: _picture(context, bytes, full: true),
+          child: TranscriptImageActions(
+            target: _target(bytes),
+            child: InteractiveViewer(
+              maxScale: 8,
+              child: _picture(context, bytes, full: true),
+            ),
           ),
         ),
       ],
     );
+    // The dialog's route is outside the chat, so its menu is carried over.
+    final menu = keepTranscriptTargetMenu(context, body);
     showDialog<void>(
       context: context,
       builder: (_) => full
-          ? Dialog.fullscreen(child: SafeArea(child: body))
-          : Dialog(insetPadding: const EdgeInsets.all(Insets.xl), child: body),
+          ? Dialog.fullscreen(child: SafeArea(child: menu))
+          : Dialog(insetPadding: const EdgeInsets.all(Insets.xl), child: menu),
     );
   }
 
@@ -399,12 +437,14 @@ class _Actions extends StatelessWidget {
     required this.name,
     required this.onOpen,
     required this.onCopy,
+    this.onCopyImage,
     this.onClose,
   });
 
   final String name;
   final VoidCallback? onOpen;
   final VoidCallback onCopy;
+  final VoidCallback? onCopyImage;
   final VoidCallback? onClose;
 
   @override
@@ -435,6 +475,13 @@ class _Actions extends StatelessWidget {
             onPressed: open,
             style: style,
             child: const Text('Open'),
+          ),
+        if (onCopyImage case final copyImage?)
+          TextButton(
+            key: const ValueKey('inline-image-copy-image'),
+            onPressed: copyImage,
+            style: style,
+            child: const Text('Copy image'),
           ),
         TextButton(
           key: const ValueKey('inline-image-copy'),

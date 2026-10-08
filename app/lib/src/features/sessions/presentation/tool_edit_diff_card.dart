@@ -5,7 +5,11 @@ import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart'
-    show PathLinkCallback, pathLinkStyle;
+    show
+        PathLinkCallback,
+        TranscriptPathLink,
+        TranscriptTargetPress,
+        pathLinkStyle;
 import '../../git/presentation/diff_line_tile.dart';
 import 'hunk_review.dart';
 
@@ -370,12 +374,15 @@ class _Header extends StatelessWidget {
       style: tap == null ? style : style.merge(pathLinkStyle(scheme)),
     );
     if (tap == null) return text;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        key: const ValueKey('diff-file-link'),
-        onTap: () => tap(path),
-        child: text,
+    return TranscriptTargetPress(
+      targetAt: (_) => TranscriptPathLink(path),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          key: const ValueKey('diff-file-link'),
+          onTap: () => tap(path),
+          child: text,
+        ),
       ),
     );
   }

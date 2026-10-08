@@ -15,6 +15,7 @@ export 'src/transcript/message_boundary.dart';
 export 'src/transcript/numbered_code.dart';
 export 'src/transcript/thinking_accordion.dart';
 export 'src/transcript/transcript_selection.dart';
+export 'src/transcript/transcript_target_menu.dart';
 export 'src/transcript/visual_card.dart';
 export 'src/chat/thinking_split.dart';
 export 'src/chat/transcript_role_header.dart';

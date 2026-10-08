@@ -180,6 +180,16 @@ class TranscriptSelectionArea extends StatefulWidget {
 
   final Widget child;
 
+  /// What is selected in the conversation [context] is in, read as Copy would
+  /// copy it; null when nothing is.
+  static String? selectedTextOf(BuildContext context) {
+    final whole = context
+        .getInheritedWidgetOfExactType<_SelectionOwner>()
+        ?.delegate;
+    final text = whole?.getSelectedContent()?.plainText;
+    return text == null || text.isEmpty ? null : text;
+  }
+
   @override
   State<TranscriptSelectionArea> createState() =>
       _TranscriptSelectionAreaState();
@@ -196,6 +206,18 @@ class _TranscriptSelectionAreaState extends State<TranscriptSelectionArea> {
 
   @override
   Widget build(BuildContext context) => SelectionArea(
-    child: SelectionContainer(delegate: _whole, child: widget.child),
+    child: SelectionContainer(
+      delegate: _whole,
+      child: _SelectionOwner(delegate: _whole, child: widget.child),
+    ),
   );
+}
+
+class _SelectionOwner extends InheritedWidget {
+  const _SelectionOwner({required this.delegate, required super.child});
+
+  final ReadingOrderSelectionDelegate delegate;
+
+  @override
+  bool updateShouldNotify(_SelectionOwner old) => delegate != old.delegate;
 }

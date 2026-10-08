@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../app_icons.dart';
 import '../design_tokens.dart';
+import 'transcript_target_menu.dart';
 
 /// Draws a picture a message embeds as `![alt](path)`, from the path as written.
 typedef MarkdownLocalImageBuilder =
@@ -65,13 +68,16 @@ class MarkdownImage extends StatelessWidget {
     if (scheme == 'data') {
       final bytes = _dataBytes(uri);
       if (bytes != null) {
-        return ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: Chrome.inlineImage),
-          child: Image.memory(
-            bytes,
-            fit: BoxFit.contain,
-            semanticLabel: alt,
-            errorBuilder: (context, _, _) => _AltNote(alt: alt),
+        return TranscriptImageActions(
+          target: TranscriptImageTarget(bytes: () async => bytes),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: Chrome.inlineImage),
+            child: Image.memory(
+              bytes,
+              fit: BoxFit.contain,
+              semanticLabel: alt,
+              errorBuilder: (context, _, _) => _AltNote(alt: alt),
+            ),
           ),
         );
       }
@@ -127,16 +133,48 @@ class _WebImageState extends State<_WebImage> {
         ),
       );
     }
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: Chrome.inlineImage),
-      child: Image.network(
-        widget.uri.toString(),
-        fit: BoxFit.contain,
-        semanticLabel: widget.alt,
-        errorBuilder: (context, _, _) =>
-            const _AltNote(alt: 'The image did not load.'),
+    final image = NetworkImage(widget.uri.toString());
+    return TranscriptImageActions(
+      target: TranscriptImageTarget(
+        uri: widget.uri,
+        bytes: () => imageProviderPng(image),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: Chrome.inlineImage),
+        child: Image(
+          image: image,
+          fit: BoxFit.contain,
+          semanticLabel: widget.alt,
+          errorBuilder: (context, _, _) =>
+              const _AltNote(alt: 'The image did not load.'),
+        ),
       ),
     );
+  }
+}
+
+/// The first frame [provider] draws, as PNG; null when it does not load.
+Future<Uint8List?> imageProviderPng(ImageProvider provider) async {
+  final done = Completer<ui.Image?>();
+  final stream = provider.resolve(ImageConfiguration.empty);
+  final listener = ImageStreamListener(
+    (info, _) {
+      if (!done.isCompleted) done.complete(info.image.clone());
+      info.dispose();
+    },
+    onError: (_, _) {
+      if (!done.isCompleted) done.complete(null);
+    },
+  );
+  stream.addListener(listener);
+  final image = await done.future;
+  stream.removeListener(listener);
+  if (image == null) return null;
+  try {
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return data?.buffer.asUint8List();
+  } finally {
+    image.dispose();
   }
 }
 

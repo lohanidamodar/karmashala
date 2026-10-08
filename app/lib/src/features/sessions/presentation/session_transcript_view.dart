@@ -80,7 +80,10 @@ import 'package:karmashala_session/launch.dart';
 import 'working_line.dart';
 import 'chat_cards/chat_tool_ask.dart';
 import 'chat_cards/pinned_plan_strip.dart';
+import 'chat_target_menu.dart';
 import 'chat_transcript.dart';
+import '../../../core/clipboard/image_clipboard.dart'
+    show imageClipboardProvider, saveImageAs;
 import 'end_session_action.dart';
 import 'switch_agent_control.dart';
 import 'session_recap_card.dart';
@@ -621,22 +624,62 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// [token] placed in the session's environment with the line it names, or
   /// null when there is no record of where the session runs.
   (EnvironmentPath, int?)? _placeToken(String token) {
-    final parsed = tokenForMatch(token);
     final base = _workingDirectory();
     if (base == null) return null;
-    final kind = ref
-        .read(environmentsDataProvider)
-        .getById(base.environmentId)
-        ?.kind;
-    final resolved = resolveTranscriptPath(
-      parsed.path,
-      workingDirectory: base.path,
-      context: transcriptPathContext(kind),
-    );
     return (
-      EnvironmentPath(environmentId: base.environmentId, path: resolved),
-      parsed.line,
+      placeTranscriptPath(
+        token,
+        folder: base,
+        kind: _environmentKind(base.environmentId),
+      ),
+      tokenForMatch(token).line,
     );
+  }
+
+  EnvironmentKind? _environmentKind(String environmentId) =>
+      ref.read(environmentsDataProvider).getById(environmentId)?.kind;
+
+  /// The menu on every link, path, picture and code span in the chat.
+  late final _targetMenu = ChatTargetMenu(
+    folder: _workingDirectory,
+    kindOf: _environmentKind,
+    openPath: _openFromMenu,
+    openLink: _openLink,
+    canReveal: (path) => ref.read(revealInFileManagerProvider).canReveal(path),
+    reveal: _revealFromMenu,
+    imageClipboard: () => ref.read(imageClipboardProvider),
+    saveImage: _saveImage,
+  );
+
+  /// Open, from a menu: a file opens as a tab; a folder is shown as a click
+  /// on it shows it.
+  Future<void> _openFromMenu(String token) async {
+    final placed = _placeToken(token);
+    if (placed == null) return _openPath(token);
+    final (path, line) = placed;
+    final FileStat stat;
+    try {
+      stat = await ref.read(filesClientProvider).stat(path);
+    } on FilesException catch (error) {
+      _say(error.message);
+      return;
+    }
+    if (!mounted) return;
+    if (!stat.exists) return _say('${path.path} is not on disk.');
+    if (stat.isDirectory) return _openPath(token);
+    ref.read(editorTabActionsProvider).openAt(path, line: line);
+  }
+
+  Future<void> _revealFromMenu(EnvironmentPath path) async {
+    final outcome = await ref
+        .read(revealInFileManagerProvider)
+        .reveal(path, select: true);
+    if (!outcome.ok) _say(outcome.error!);
+  }
+
+  Future<void> _saveImage(Uint8List bytes, String name) async {
+    final said = await saveImageAs(bytes, name);
+    if (said != null) _say(said);
   }
 
   /// A picture's path placed in the session's environment. A tear-off, so the
@@ -683,19 +726,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       );
       return;
     }
-    final kind = ref
-        .read(environmentsDataProvider)
-        .getById(base.environmentId)
-        ?.kind;
-    final resolved = resolveTranscriptPath(
-      parsed.path,
-      workingDirectory: base.path,
-      context: transcriptPathContext(kind),
+    final path = placeTranscriptPath(
+      token,
+      folder: base,
+      kind: _environmentKind(base.environmentId),
     );
-    final path = EnvironmentPath(
-      environmentId: base.environmentId,
-      path: resolved,
-    );
+    final resolved = path.path;
 
     // The server looks, wherever the session's files are: this machine, WSL
     // or an SSH host.
@@ -1003,7 +1039,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         child: TranscriptInlineImages(
           place: _placeImage,
           onOpen: _openImage,
-          child: body,
+          child: ChatTargetMenuScope(menu: _targetMenu, child: body),
         ),
       ),
     );

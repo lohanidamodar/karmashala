@@ -86,6 +86,20 @@ class _MessageActions extends StatelessWidget {
           _TurnMoreButton(
             actions: turn,
             extra: [
+              _TurnAction(
+                id: 'copy-plain',
+                label: 'Copy as plain text',
+                icon: AppIcons.article,
+                run: (context) async {
+                  final messenger = ScaffoldMessenger.maybeOf(context);
+                  await Clipboard.setData(
+                    ClipboardData(text: markdownPlainText(copyText)),
+                  );
+                  messenger?.showSnackBar(
+                    const SnackBar(content: Text('Text copied to clipboard')),
+                  );
+                },
+              ),
               if (copyTurn != null)
                 _TurnAction(
                   id: 'copy-turn',
@@ -116,6 +130,15 @@ class _MessageActions extends StatelessWidget {
       children: [
         if (save != null) _SaveNoteButton(onSave: save),
         _CopyButton(text: copyText),
+        _ConfirmingIconButton(
+          key: const ValueKey('chat-copy-plain'),
+          icon: AppIcons.article,
+          tooltip: 'Copy as plain text',
+          confirmedTooltip: 'Copied',
+          onPressed: () => Clipboard.setData(
+            ClipboardData(text: markdownPlainText(copyText)),
+          ),
+        ),
         if (copyTurn != null)
           _ConfirmingIconButton(
             key: const ValueKey('chat-copy-turn'),
