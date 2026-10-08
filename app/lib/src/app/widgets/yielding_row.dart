@@ -14,6 +14,8 @@ class YieldingRow extends StatefulWidget {
   const YieldingRow({
     required this.children,
     this.yieldFromStart = true,
+    this.onHiddenChanged,
+    this.spacing = 0,
     super.key,
   });
 
@@ -22,6 +24,14 @@ class YieldingRow extends StatefulWidget {
   /// Whether the first children are the least important (controls anchored
   /// at the end), rather than the last (facts read from the start).
   final bool yieldFromStart;
+
+  /// Told, a frame after a layout changes it, which children are left out:
+  /// for a host that offers them somewhere else.
+  final ValueChanged<List<bool>>? onHiddenChanged;
+
+  /// The gap between two children drawn side by side. A child with no width
+  /// gets none, so one that says nothing leaves no hole.
+  final double spacing;
 
   @override
   State<YieldingRow> createState() => _YieldingRowState();
@@ -37,6 +47,7 @@ class _YieldingRowState extends State<YieldingRow> {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (mounted && !listEquals(hidden, _hidden)) {
         setState(() => _hidden = hidden);
+        widget.onHiddenChanged?.call(hidden);
       }
     });
   }
@@ -46,6 +57,7 @@ class _YieldingRowState extends State<YieldingRow> {
     final children = widget.children;
     return _YieldingRowLayout(
       yieldFromStart: widget.yieldFromStart,
+      spacing: widget.spacing,
       onLaidOut: _laidOut,
       children: [
         for (var i = 0; i < children.length; i++)
@@ -63,15 +75,17 @@ class _YieldingRowLayout extends MultiChildRenderObjectWidget {
   const _YieldingRowLayout({
     required super.children,
     required this.yieldFromStart,
+    required this.spacing,
     required this.onLaidOut,
   });
 
   final bool yieldFromStart;
+  final double spacing;
   final ValueChanged<List<bool>> onLaidOut;
 
   @override
   RenderYieldingRow createRenderObject(BuildContext context) =>
-      RenderYieldingRow(yieldFromStart)..onLaidOut = onLaidOut;
+      RenderYieldingRow(yieldFromStart, spacing)..onLaidOut = onLaidOut;
 
   @override
   void updateRenderObject(
@@ -79,6 +93,7 @@ class _YieldingRowLayout extends MultiChildRenderObjectWidget {
     RenderYieldingRow renderObject,
   ) => renderObject
     ..yieldFromStart = yieldFromStart
+    ..spacing = spacing
     ..onLaidOut = onLaidOut;
 }
 
@@ -90,7 +105,7 @@ class RenderYieldingRow extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _YieldingParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _YieldingParentData> {
-  RenderYieldingRow(this._yieldFromStart);
+  RenderYieldingRow(this._yieldFromStart, [this._spacing = 0]);
 
   /// Told, after each layout, which children were left out.
   ValueChanged<List<bool>>? onLaidOut;
@@ -99,6 +114,13 @@ class RenderYieldingRow extends RenderBox
   set yieldFromStart(bool value) {
     if (value == _yieldFromStart) return;
     _yieldFromStart = value;
+    markNeedsLayout();
+  }
+
+  double _spacing;
+  set spacing(double value) {
+    if (value == _spacing) return;
+    _spacing = value;
     markNeedsLayout();
   }
 
@@ -121,22 +143,33 @@ class RenderYieldingRow extends RenderBox
   void performLayout() {
     final children = _children;
     final natural = BoxConstraints(maxHeight: constraints.maxHeight);
-    var total = 0.0;
     for (final child in children) {
       child.layout(natural, parentUsesSize: true);
       _data(child).shown = true;
-      total += child.size.width;
     }
-    final order = _yieldFromStart ? children : children.reversed.toList();
-    var shown = children.length;
+    // A child with no width is never what overflows, so it is never left out
+    // and never counted as the one that stays.
+    bool drawn(RenderBox child) => _data(child).shown && child.size.width > 0;
+    double width() {
+      final drawnChildren = children.where(drawn).toList();
+      return drawnChildren.fold(0.0, (sum, c) => sum + c.size.width) +
+          _spacing * math.max(0, drawnChildren.length - 1);
+    }
+
+    final order = [
+      for (final child in _yieldFromStart ? children : children.reversed)
+        if (child.size.width > 0) child,
+    ];
+    var total = width();
+    var shown = order.length;
     for (final child in order) {
-      if (total <= constraints.maxWidth || shown == 1) break;
+      if (total <= constraints.maxWidth || shown <= 1) break;
       _data(child).shown = false;
-      total -= child.size.width;
       shown--;
+      total = width();
     }
     if (total > constraints.maxWidth) {
-      final last = children.firstWhere((c) => _data(c).shown);
+      final last = order.firstWhere((c) => _data(c).shown);
       last.layout(
         natural.copyWith(maxWidth: constraints.maxWidth),
         parentUsesSize: true,
@@ -150,6 +183,7 @@ class RenderYieldingRow extends RenderBox
     }
     size = constraints.constrain(Size(total, height));
     var x = 0.0;
+    var first = true;
     for (final child in children) {
       final data = _data(child);
       // A child left out is placed past the end, where a reader of positions
@@ -157,6 +191,10 @@ class RenderYieldingRow extends RenderBox
       if (!data.shown) {
         data.offset = Offset(size.width, 0);
         continue;
+      }
+      if (child.size.width > 0) {
+        if (!first) x += _spacing;
+        first = false;
       }
       data.offset = Offset(x, (size.height - child.size.height) / 2);
       x += child.size.width;
