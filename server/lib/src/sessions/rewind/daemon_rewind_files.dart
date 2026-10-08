@@ -32,6 +32,7 @@ class DaemonRewindFiles implements RewindFiles {
         checkpoint,
         sessionId: sessionId,
         intoNewWorktree: false,
+        forRewind: true,
       );
 
   @override

@@ -412,8 +412,10 @@ class DaemonCheckpoints {
     required String sessionId,
     required bool intoNewWorktree,
     String? requestedBy,
+    bool forRewind = false,
   }) => checkpointForkFileRefusal(
     intoNewWorktree: intoNewWorktree,
+    forRewind: forRewind,
     turnRunningIn: turnRunningIn(checkpoint.sessionId, requestedBy),
     unsupportedEnvironmentReason: service.unsupportedReason(
       checkpoint.repository,
