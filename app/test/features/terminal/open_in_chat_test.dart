@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/general_pages.dart';
@@ -178,9 +181,13 @@ void main() {
 
   testWidgets('the Settings row writes the choice', (tester) async {
     final server = FakeDataServer(clock: () => testTime);
+    final prefs = Directory.systemTemp.createTempSync('ks-open-in-chat');
+    addTearDown(() => prefs.deleteSync(recursive: true));
     final probe = ProviderContainer(
       overrides: [
         await server.override(),
+        // The section's other row reads this device's dashboard file.
+        overviewPrefsDirectoryProvider.overrideWithValue(() async => prefs),
         clientCapabilitiesProvider.overrideWithValue(
           desktopClient(density: UiDensity.touch),
         ),
@@ -201,14 +208,16 @@ void main() {
 
     final row = find.text('Open agent sessions in chat view');
     expect(row, findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    // The section's first row; the background-launch row follows it.
+    final toggle = find.byType(Switch).first;
+    expect(tester.widget<Switch>(toggle).value, isTrue);
     expect(probe.read(settingsControllerProvider).openSessionsInChat, isNull);
 
-    await tester.tap(find.byType(Switch));
+    await tester.tap(toggle);
     await tester.pumpAndSettle();
 
     expect(probe.read(settingsControllerProvider).openSessionsInChat, isFalse);
     expect(probe.read(sessionsOpenInChatProvider), isFalse);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(tester.widget<Switch>(toggle).value, isFalse);
   });
 }

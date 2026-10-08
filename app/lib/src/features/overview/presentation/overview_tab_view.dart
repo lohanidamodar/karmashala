@@ -154,14 +154,13 @@ class _NewSessionButton extends ConsumerWidget {
       unawaited(
         NewSessionDialog.show(
           context,
-          keepHere: ref.read(overviewPrefsProvider).newSessionKeepsHere,
+          // Ticked as the background setting says; unticking is for this
+          // start only.
+          keepHere: ref.read(launchInBackgroundProvider),
           preferChat: true,
           onStarted: (session, {required keptHere}) {
-            prefs.setNewSessionKeepsHere(keptHere);
             if (keptHere) {
-              ref
-                  .read(overviewPrefsProvider.notifier)
-                  .setView(OverviewView.board);
+              prefs.setView(OverviewView.board);
               focus.peek(session.id);
             }
           },

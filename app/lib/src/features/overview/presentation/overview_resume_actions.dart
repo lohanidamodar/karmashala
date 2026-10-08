@@ -6,6 +6,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../explorer/application/agent_states.dart';
+import '../../explorer/application/workspace_session_entry.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../application/overview_board.dart';
@@ -46,6 +47,20 @@ Future<void> resumeOnDashboard(
   if (result.message case final said?) {
     messenger?.showSnackBar(SnackBar(content: Text(said)));
   }
+}
+
+/// The peek's and a card's Resume: [resumeOnDashboard] while "Resume and
+/// start sessions in the background" is on, and into its tab, as Open tab
+/// does, while it is off.
+Future<void> resumeFromDashboard(
+  BuildContext context,
+  WidgetRef ref,
+  WorkspaceSessionEntry entry,
+) {
+  if (!ref.read(launchInBackgroundProvider)) {
+    return openOverviewSession(context, ref, entry);
+  }
+  return resumeOnDashboard(context, ref, entry.id);
 }
 
 /// "Resuming…", while a session kept here comes back.
@@ -150,7 +165,7 @@ class OverviewCardMenu extends ConsumerWidget {
             case 'pin':
               toggleOverviewPin(button, ref, card.id);
             case 'resume':
-              await resumeOnDashboard(button, ref, card.id);
+              await resumeFromDashboard(button, ref, card.entry);
             case 'open':
               await openOverviewSession(button, ref, card.entry);
           }

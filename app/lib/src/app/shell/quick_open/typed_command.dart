@@ -307,9 +307,14 @@ class CommandCatalog {
     this.oldestWaiting,
     this.searchConversations,
     this.scratchInstallation,
+    this.launchInBackground = true,
   });
 
   final List<CommandProject> projects;
+
+  /// The "Resume and start sessions in the background" setting: whether
+  /// `resume` and `start` keep the person where they are, or open a tab.
+  final bool launchInBackground;
 
   /// What a session with no project runs on, as the dialog would pick it;
   /// null when no agent is installed anywhere.

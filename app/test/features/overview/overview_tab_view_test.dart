@@ -526,7 +526,7 @@ void main() {
       expect(byKey('overview-resume-picker'), findsNothing);
       expect(c.read(overviewFocusProvider).peeked, 'parked');
       expect(byKey('overview-peek:parked'), findsOneWidget);
-      expect(c.read(overviewPrefsProvider).resumeKeepsHere, isTrue);
+      expect(c.read(overviewPrefsProvider).launchInBackground, isTrue);
       expectStayedPut(c);
     });
 
@@ -578,7 +578,7 @@ void main() {
       expectStayedPut(c);
     });
 
-    testBoard('unticked, it opens a tab and remembers that', (tester) async {
+    testBoard('unticked, it opens a tab, this once', (tester) async {
       final c = await pump(tester, const Size(1440, 900));
       await openPicker(tester);
       await tester.tap(row('parked'));
@@ -589,7 +589,22 @@ void main() {
       await settle(tester);
 
       expect(actions.opened, ['parked']);
-      expect(c.read(overviewPrefsProvider).resumeKeepsHere, isFalse);
+      expect(c.read(overviewPrefsProvider).launchInBackground, isTrue);
+    });
+
+    testBoard('with the setting off, it starts unticked', (tester) async {
+      final c = await pump(tester, const Size(1440, 900));
+      c.read(overviewPrefsProvider.notifier).setLaunchInBackground(false);
+      await openPicker(tester);
+      await tester.tap(row('parked'));
+      await settle(tester);
+
+      expect(
+        tester
+            .widget<CheckboxListTile>(byKey('overview-resume-keep-here'))
+            .value,
+        isFalse,
+      );
     });
 
     testBoard('on a phone it is a full-screen sheet, and resuming keeps you '
@@ -714,6 +729,29 @@ void main() {
         // Running now: the button gives way to Stop.
         expect(byKey('overview-peek-resume'), findsNothing);
         expectStayedPut(c);
+      });
+
+      testBoard("with the setting off, the peek's Resume opens its tab", (
+        tester,
+      ) async {
+        final c = await pump(tester, const Size(1440, 900));
+        c.read(overviewPrefsProvider.notifier).setLaunchInBackground(false);
+        await peekPaused(tester);
+        await tester.tap(byKey('overview-peek-resume'));
+        await settle(tester);
+
+        expect(actions.opened, ['paused']);
+        expect(starts(), isEmpty);
+      });
+
+      testBoard("Open tab opens it whatever the setting", (tester) async {
+        final c = await pump(tester, const Size(1440, 900));
+        expect(c.read(overviewPrefsProvider).launchInBackground, isTrue);
+        await peekPaused(tester);
+        await tester.tap(byKey('overview-peek-open'));
+        await settle(tester);
+
+        expect(actions.opened, ['paused']);
       });
 
       testBoard('a card\'s ⋯ offers Resume', (tester) async {

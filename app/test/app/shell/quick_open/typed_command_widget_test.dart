@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:agent_cli/descriptors.dart' show AgentIds;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
@@ -11,6 +13,8 @@ import 'package:karmashala/src/app/shell/quick_open/typed_command_history.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_resume.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/sessions/application/new_session_memory.dart';
@@ -34,6 +38,12 @@ class _RecordingExplorerActions extends ExplorerActions {
   /// The opening message each start carried, in [starts]' order.
   final messages = <String?>[];
 
+  /// Whether each start opened a tab, in [starts]' order.
+  final openTabs = <bool>[];
+
+  /// Sessions opened in their tab — a resume that moves the person.
+  final opened = <String>[];
+
   @override
   Future<ExplorerResult> startSession({
     required Repository repository,
@@ -41,10 +51,18 @@ class _RecordingExplorerActions extends ExplorerActions {
     AgentInstallation? installation,
     String? title,
     String? firstMessage,
+    bool openTab = true,
   }) async {
     starts.add((repositoryId: repository.id, installationId: installation?.id));
     messages.add(firstMessage);
+    openTabs.add(openTab);
     return const ExplorerResult(ExplorerOutcome.started);
+  }
+
+  @override
+  Future<ExplorerResult> openNative(String sessionId) async {
+    opened.add(sessionId);
+    return const ExplorerResult(ExplorerOutcome.resumed);
   }
 }
 
@@ -85,12 +103,16 @@ void main() {
   Future<ProviderContainer> open(
     WidgetTester tester, {
     List<Override> overrides = const [],
+    bool background = true,
   }) async {
     final data = await server.override();
+    final prefs = Directory.systemTemp.createTempSync('ks-r56-palette');
+    addTearDown(() => prefs.deleteSync(recursive: true));
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(machine: db),
         data,
+        overviewPrefsDirectoryProvider.overrideWithValue(() async => prefs),
         explorerActionsProvider.overrideWith(_RecordingExplorerActions.new),
         overviewResumerProvider.overrideWith(_RecordingResumer.new),
         ...overrides,
@@ -102,6 +124,10 @@ void main() {
     explorer =
         container.read(explorerActionsProvider) as _RecordingExplorerActions;
     resumer = container.read(overviewResumerProvider) as _RecordingResumer;
+    // Before the palette opens: it reads the setting into what it offers.
+    container
+        .read(overviewPrefsProvider.notifier)
+        .setLaunchInBackground(background);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -224,6 +250,120 @@ void main() {
     expect(TypedCommandHistory(server.store).list(), [
       'resume fix-login-redirect',
     ]);
+    // No dashboard on screen to peek it on, so a notice says so, with Open.
+    expect(find.text('Resumed "Fix login redirect"'), findsOneWidget);
+    expect(explorer.opened, isEmpty);
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Open'));
+    await tester.pumpAndSettle();
+    expect(explorer.opened, ['s1']);
+  });
+
+  group('the "Resume and start sessions in the background" setting', () {
+    void turnOff(ProviderContainer container) => container
+        .read(overviewPrefsProvider.notifier)
+        .setLaunchInBackground(false);
+
+    testWidgets('with the dashboard showing, its card is peeked instead of a '
+        'notice', (tester) async {
+      final container = await open(tester);
+      // The board's focus lives exactly while the dashboard is built.
+      final board = container.listen(overviewFocusProvider, (_, _) {});
+      addTearDown(board.close);
+
+      await type(tester, 'resume fix-login-redirect');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(resumer.resumed, [('s1', null)]);
+      expect(container.read(overviewFocusProvider).peeked, 's1');
+      expect(find.text('Resumed "Fix login redirect"'), findsNothing);
+      expect(explorer.opened, isEmpty);
+    });
+
+    testWidgets('off, resume by name opens its tab, as it says', (
+      tester,
+    ) async {
+      await open(tester, background: false);
+
+      await type(tester, 'resume fix-login-redirect');
+      expect(
+        find.textContaining('in the background'),
+        findsNothing,
+        reason: 'the preview says what Enter does',
+      );
+      expect(find.text('Opens its tab'), findsOneWidget);
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(resumer.resumed, isEmpty);
+      expect(explorer.opened, ['s1']);
+    });
+
+    testWidgets('on, picking a stopped session by name resumes it in the '
+        'background, and nothing is selected', (tester) async {
+      final container = await open(tester);
+
+      await type(tester, 'login');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(resumer.resumed, [('s1', null)]);
+      expect(explorer.opened, isEmpty);
+      expect(container.read(selectedSessionIdProvider), isNull);
+      expect(find.text('Resumed "Fix login redirect"'), findsOneWidget);
+    });
+
+    testWidgets('off, picking a stopped session by name opens it', (
+      tester,
+    ) async {
+      final container = await open(tester);
+      turnOff(container);
+
+      await type(tester, 'login');
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(resumer.resumed, isEmpty);
+      expect(explorer.opened, ['s1']);
+    });
+
+    testWidgets('on, a start opens no tab; off, it opens one', (tester) async {
+      final container = await open(tester);
+
+      await type(tester, 'new karma');
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(explorer.openTabs, [false]);
+      expect(container.read(selectedProjectIdProvider), 'p1');
+
+      turnOff(container);
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await type(tester, 'new karma');
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(explorer.openTabs, [false, true]);
+    });
+
+    testWidgets('"New session…" starts ticked to keep working here as the '
+        'setting says', (tester) async {
+      final container = await open(tester);
+
+      await type(tester, 'new karma: fix it');
+      await tester.tap(find.text('New session…').first);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NewSessionDialog>(find.byType(NewSessionDialog)).keepHere,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      turnOff(container);
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await type(tester, 'new karma: fix it');
+      await tester.tap(find.text('New session…').first);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NewSessionDialog>(find.byType(NewSessionDialog)).keepHere,
+        isFalse,
+      );
+    });
   });
 
   testWidgets('an empty box offers history first; Enter runs it again', (
@@ -256,7 +396,10 @@ void main() {
 
     await type(tester, 'login');
     await press(tester, LogicalKeyboardKey.enter);
-    expect(container.read(selectedSessionIdProvider), 's1');
+    // The same first result. Stopped, it is resumed where the person is
+    // (the setting's default) rather than selected.
+    expect(resumer.resumed, [('s1', null)]);
+    expect(container.read(selectedSessionIdProvider), isNull);
     expect(explorer.starts, isEmpty);
   });
 

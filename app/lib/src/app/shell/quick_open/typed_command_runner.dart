@@ -57,12 +57,27 @@ Repository? commandDefaultCheckout(
 /// here decides anything those actions do not. Reads through a container, so
 /// it keeps working after the palette that started it has closed.
 class TypedCommandRunner {
-  TypedCommandRunner(this._container, {required this.say});
+  TypedCommandRunner(this._container, {required this.say, this.announce});
 
   final ProviderContainer _container;
 
   /// Tells the user what happened when the screen alone would not.
   final void Function(String message) say;
+
+  /// Points at a session resumed or started with no tab: its card peeked
+  /// when the dashboard shows, else a notice with Open. Null says it in
+  /// words instead.
+  final void Function(String sessionId, {bool started})? announce;
+
+  /// The "Resume and start sessions in the background" setting.
+  bool get _inBackground => _container.read(launchInBackgroundProvider);
+
+  /// [sessionId], resumed or started with no tab, pointed at.
+  void _announce(String sessionId, {bool started = false}) {
+    final announce = this.announce;
+    if (announce != null) return announce(sessionId, started: started);
+    say('${started ? 'Started' : 'Resuming'} "${_title(sessionId)}".');
+  }
 
   Future<void> run(CommandAction action) => switch (action) {
     StartCommand() => _start(action),
@@ -179,17 +194,39 @@ class TypedCommandRunner {
     }
   }
 
-  /// Round 43's Resume from the dashboard: at the server, with no tab.
+  /// Round 43's Resume from the dashboard: at the server, with no tab — or,
+  /// with the background setting off, into its tab.
   Future<void> _resume(BackgroundResumeCommand command) async {
+    final id = command.sessionId;
+    if (!_inBackground) {
+      final message = command.message;
+      if (message != null) {
+        try {
+          await _container
+              .read(sessionActionsProvider)
+              .continueSession(id, message);
+        } on Object catch (error) {
+          say(
+            'Could not resume: ${error is StateError ? error.message : error}',
+          );
+        }
+        return;
+      }
+      final result = await _container
+          .read(explorerActionsProvider)
+          .openNative(id);
+      if (result.message case final message?) say(message);
+      return;
+    }
     final result = await _container
         .read(overviewResumerProvider)
-        .resume(command.sessionId, message: command.message);
-    say(
-      result.message ??
-          (result.isFailure
-              ? 'Could not resume "${_title(command.sessionId)}".'
-              : 'Resuming "${_title(command.sessionId)}".'),
-    );
+        .resume(id, message: command.message);
+    if (result.isFailure) {
+      say(result.message ?? 'Could not resume "${_title(id)}".');
+      return;
+    }
+    if (result.message case final message?) say(message);
+    _announce(id);
   }
 
   /// The row's Archive, keeping any worktree: deleting one is asked for
@@ -269,8 +306,11 @@ class TypedCommandRunner {
       say('That agent is no longer installed where this project runs.');
       return;
     }
-    // The card the session appears on has to be on screen, as the `+` does.
-    if (_container.read(selectedProjectIdProvider) != projectId) {
+    final background = _inBackground;
+    // The card the session appears on has to be on screen, as the `+` does —
+    // unless it starts where the person is, which moves nothing.
+    if (!background &&
+        _container.read(selectedProjectIdProvider) != projectId) {
       _container.read(selectedProjectIdProvider.notifier).select(projectId);
     }
     final explorer = _container.read(explorerActionsProvider);
@@ -279,8 +319,9 @@ class TypedCommandRunner {
         repository: repository,
         installation: installation,
         firstMessage: command.firstMessage,
+        openTab: !background,
       );
-      if (result.message case final message?) say(message);
+      _said(result, background: background);
       return;
     }
     // The dialog's worktree path: the same launcher, asked the same way, after
@@ -305,12 +346,17 @@ class TypedCommandRunner {
           purpose: SessionPurpose.newSession,
           useWorktree: true,
           firstMessage: command.firstMessage,
+          openTab: !background,
         ),
       );
       _container
           .read(newSessionMemoryProvider)
           .remember(projectId: projectId, installationId: installation.id);
-      explorer.selectNative(launched.session);
+      if (background) {
+        _announce(launched.session.id, started: true);
+      } else {
+        explorer.selectNative(launched.session);
+      }
     } on WorktreeCreationCancelled catch (error) {
       say('Cancelled. ${error.cleanup}');
     } catch (error) {
@@ -340,7 +386,9 @@ class TypedCommandRunner {
       say('Could not make a scratch folder: $error');
       return;
     }
-    if (_container.read(selectedProjectIdProvider) != repository.projectId) {
+    final background = _inBackground;
+    if (!background &&
+        _container.read(selectedProjectIdProvider) != repository.projectId) {
       _container
           .read(selectedProjectIdProvider.notifier)
           .select(repository.projectId);
@@ -351,8 +399,18 @@ class TypedCommandRunner {
           repository: repository,
           installation: installation,
           firstMessage: command.firstMessage,
+          openTab: !background,
         );
+    _said(result, background: background);
+  }
+
+  /// A start's result: its words, and a session started with no tab pointed
+  /// at.
+  void _said(ExplorerResult result, {required bool background}) {
     if (result.message case final message?) say(message);
+    if (background && !result.isFailure) {
+      if (result.sessionId case final id?) _announce(id, started: true);
+    }
   }
 
   /// The terminal controller the tab bar and the Explorer's "Open terminal"

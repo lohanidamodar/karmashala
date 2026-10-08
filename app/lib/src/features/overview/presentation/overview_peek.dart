@@ -386,7 +386,7 @@ class _PeekHeader extends ConsumerWidget {
                 if (resumable)
                   FilledButton.tonalIcon(
                     key: const ValueKey('overview-peek-resume'),
-                    onPressed: () => resumeOnDashboard(context, ref, id),
+                    onPressed: () => resumeFromDashboard(context, ref, entry),
                     icon: const Icon(AppIcons.play),
                     label: const Text('Resume'),
                   ),

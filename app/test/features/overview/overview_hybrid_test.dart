@@ -649,14 +649,30 @@ void main() {
       await tester.pump();
       expect(c.read(overviewFocusProvider).peeked, 'ks-r30');
       expect(c.read(overviewFocusProvider).selected, 'ks-r30');
-      expect(c.read(overviewPrefsProvider).newSessionKeepsHere, isTrue);
 
-      // Unticked: today's behaviour, and the choice is remembered.
+      // Unticked: a tab, this once. The setting is what the tick starts
+      // from, and the dialog does not rewrite it.
       c.read(overviewFocusProvider.notifier).closePeek();
       dialog.onStarted!(started.native!, keptHere: false);
       await tester.pump();
       expect(c.read(overviewFocusProvider).peeked, isNull);
-      expect(c.read(overviewPrefsProvider).newSessionKeepsHere, isFalse);
+      expect(c.read(overviewPrefsProvider).launchInBackground, isTrue);
+      await unmountMission(tester);
+    });
+
+    testWidgets('with the setting off, the dialog starts unticked', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      c.read(overviewPrefsProvider.notifier).setLaunchInBackground(false);
+      await tester.tap(find.byKey(const ValueKey('overview-new-session')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        tester.widget<NewSessionDialog>(find.byType(NewSessionDialog)).keepHere,
+        isFalse,
+      );
       await unmountMission(tester);
     });
   });

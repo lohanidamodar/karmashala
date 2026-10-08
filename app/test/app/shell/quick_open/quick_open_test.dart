@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open_list.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
@@ -55,14 +58,21 @@ void main() {
     // own return type inferred.
     ExplorerActions Function(Ref ref)? explorerActions,
   }) async {
+    final prefs = Directory.systemTemp.createTempSync('ks-quick-open');
+    addTearDown(() => prefs.deleteSync(recursive: true));
     final container = ProviderContainer(
       overrides: [
         data,
         ...fakeTerminalOverrides(machine: db),
+        overviewPrefsDirectoryProvider.overrideWithValue(() async => prefs),
         if (explorerActions != null)
           explorerActionsProvider.overrideWith(explorerActions),
       ],
     );
+    // What is under test here is opening a session from the palette; with
+    // "Resume and start sessions in the background" on, a stopped one is
+    // resumed where the person is instead — typed_command_widget_test.
+    container.read(overviewPrefsProvider.notifier).setLaunchInBackground(false);
     addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(

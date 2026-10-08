@@ -9,6 +9,8 @@ import 'package:karmashala_git/git.dart';
 
 import '../../../features/cli_detection/data/conversation_search.dart';
 import '../../../features/git/application/changes_providers.dart';
+import '../../../features/overview/application/overview_prefs.dart';
+import '../../../features/overview/presentation/background_launch_notice.dart';
 import '../../../features/remote/application/remote_approval_bindings.dart';
 import '../../../features/sessions/presentation/new_session_dialog.dart';
 import '../../../features/sessions/presentation/session_destination_picker.dart'
@@ -648,6 +650,16 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
                   checkout: commandDefaultCheckout(container, projectId),
                 ),
           firstPrompt: action.firstMessage,
+          keepHere: container.read(launchInBackgroundProvider),
+          onStarted: (session, {required keptHere}) {
+            if (!keptHere) return;
+            announceBackgroundLaunch(
+              container,
+              sessionId: session.id,
+              messenger: messenger,
+              started: true,
+            );
+          },
         );
         return;
       }
@@ -665,6 +677,12 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         container,
         say: (message) =>
             messenger?.showSnackBar(SnackBar(content: Text(message))),
+        announce: (sessionId, {started = false}) => announceBackgroundLaunch(
+          container,
+          sessionId: sessionId,
+          messenger: messenger,
+          started: started,
+        ),
       );
       if (plan.confirm case final confirm?) {
         unawaited(

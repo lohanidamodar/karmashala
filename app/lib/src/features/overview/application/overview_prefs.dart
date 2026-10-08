@@ -24,8 +24,7 @@ class OverviewPrefs {
     this.groupBy = OverviewGroupBy.project,
     this.density = OverviewDensity.cards,
     this.view = OverviewView.board,
-    this.newSessionKeepsHere = true,
-    this.resumeKeepsHere = true,
+    this.launchInBackground = true,
     this.pinned = const [],
   });
 
@@ -38,27 +37,26 @@ class OverviewPrefs {
   final OverviewDensity density;
   final OverviewView view;
 
-  /// Whether New session from here starts ticked to keep working here.
-  final bool newSessionKeepsHere;
-
-  /// Whether Resume… from here starts ticked to keep working here.
-  final bool resumeKeepsHere;
+  /// Whether resuming or starting a session from the command palette, the
+  /// dashboard or a session's menu keeps the person where they are: no tab,
+  /// focus unmoved, the card peeked or a notice with Open. Settings › General
+  /// › Session view. What the New session and Resume… dialogs' "Keep working
+  /// here" starts as; a choice made there is for that launch only.
+  final bool launchInBackground;
 
   OverviewPrefs copyWith({
     OverviewFilter? filter,
     OverviewGroupBy? groupBy,
     OverviewDensity? density,
     OverviewView? view,
-    bool? newSessionKeepsHere,
-    bool? resumeKeepsHere,
+    bool? launchInBackground,
     List<String>? pinned,
   }) => OverviewPrefs(
     filter: filter ?? this.filter,
     groupBy: groupBy ?? this.groupBy,
     density: density ?? this.density,
     view: view ?? this.view,
-    newSessionKeepsHere: newSessionKeepsHere ?? this.newSessionKeepsHere,
-    resumeKeepsHere: resumeKeepsHere ?? this.resumeKeepsHere,
+    launchInBackground: launchInBackground ?? this.launchInBackground,
     pinned: pinned ?? this.pinned,
   );
 
@@ -71,8 +69,7 @@ class OverviewPrefs {
     'groupBy': groupBy.name,
     'density': density.name,
     'view': view.name,
-    'newSessionKeepsHere': newSessionKeepsHere,
-    'resumeKeepsHere': resumeKeepsHere,
+    'launchInBackground': launchInBackground,
     if (pinned.isNotEmpty) 'pinned': pinned,
   };
 
@@ -113,8 +110,7 @@ class OverviewPrefs {
         OverviewDensity.cards,
       ),
       view: named(OverviewView.values, json['view'], OverviewView.board),
-      newSessionKeepsHere: json['newSessionKeepsHere'] != false,
-      resumeKeepsHere: json['resumeKeepsHere'] != false,
+      launchInBackground: json['launchInBackground'] != false,
       pinned: switch (json['pinned']) {
         final List<Object?> ids => [
           ...ids.whereType<String>().toSet().take(kOverviewPinLimit),
@@ -201,15 +197,9 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
     if (state.density != density) _set(state.copyWith(density: density));
   }
 
-  void setNewSessionKeepsHere(bool keeps) {
-    if (state.newSessionKeepsHere != keeps) {
-      _set(state.copyWith(newSessionKeepsHere: keeps));
-    }
-  }
-
-  void setResumeKeepsHere(bool keeps) {
-    if (state.resumeKeepsHere != keeps) {
-      _set(state.copyWith(resumeKeepsHere: keeps));
+  void setLaunchInBackground(bool background) {
+    if (state.launchInBackground != background) {
+      _set(state.copyWith(launchInBackground: background));
     }
   }
 
@@ -276,6 +266,11 @@ final overviewPrefsProvider =
     NotifierProvider<OverviewPrefsController, OverviewPrefs>(
       OverviewPrefsController.new,
     );
+
+/// [OverviewPrefs.launchInBackground], for the launch paths that only need it.
+final launchInBackgroundProvider = Provider<bool>(
+  (ref) => ref.watch(overviewPrefsProvider.select((p) => p.launchInBackground)),
+);
 
 /// [shown] with [value] flipped, where null is "every one of [all]": picking
 /// the last one back returns null, so one added later shows too.
