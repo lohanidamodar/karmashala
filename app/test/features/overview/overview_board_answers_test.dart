@@ -27,7 +27,7 @@ import 'mission_fixture.dart';
 /// Records what the board sends, and sends nothing — answering, when given
 /// [reply], as the server would through the one send path.
 class _SpyActions extends SessionActions {
-  _SpyActions(Ref ref, this.sent) : _r = ref, super(ref);
+  _SpyActions(super.ref, this.sent) : _r = ref;
 
   final Ref _r;
   final List<(String, String)> sent;
