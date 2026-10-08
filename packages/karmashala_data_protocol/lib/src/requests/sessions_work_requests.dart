@@ -24,6 +24,7 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     rows: args.optionalInt('rows') ?? 40,
   ),
   SessionEndRequest.name => SessionEndRequest(args.string('sessionId')),
+  SessionDetachRequest.name => SessionDetachRequest(args.string('sessionId')),
   SessionSourceBrief.name => SessionSourceBrief(
     args.string('sessionId'),
     timeoutSeconds: args.optionalInt('timeoutSeconds'),
@@ -249,6 +250,31 @@ final class SessionEndRequest extends SessionWorkRequest<DataAck> {
   const SessionEndRequest(this.sessionId);
 
   static const String name = 'sessions.end';
+
+  final String sessionId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Detaches session [sessionId] from the session that started it: it becomes
+/// a top-level session, and nothing is delivered between the two any more —
+/// no reports, no turn results. It keeps its transcript, worktree and
+/// project; the parent's thread gets a line saying so. Refused `notFound` for
+/// a session that is gone, `invalid` for one with no parent.
+final class SessionDetachRequest extends SessionWorkRequest<DataAck> {
+  const SessionDetachRequest(this.sessionId);
+
+  static const String name = 'sessions.detach';
 
   final String sessionId;
 

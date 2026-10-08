@@ -49,12 +49,21 @@ class VisualCard extends StatelessWidget {
     VisualKind.metric => AppIcons.squaresFour,
     VisualKind.progress => AppIcons.listChecks,
     VisualKind.tree || null => AppIcons.code,
+    VisualKind.note => AppIcons.info,
   };
 
   @override
   Widget build(BuildContext context) {
     final visualKind = VisualKind.parse(kind);
     final scheme = Theme.of(context).colorScheme;
+    // A note is a line in the conversation, not a card.
+    if (visualKind == VisualKind.note) {
+      try {
+        return VisualNoteLine(parseNoteVisual(data).text);
+      } on FormatException {
+        // Drawn in the frame below, which says why.
+      }
+    }
     return VisualFrame(
       key: ValueKey('visual-card-$kind'),
       label: title ?? kind,
@@ -83,8 +92,35 @@ class VisualCard extends StatelessWidget {
           final MetricVisual metrics => _Metrics(metrics),
           final ProgressVisual progress => ProgressVisualView(progress),
           final TreeVisual tree => JsonTreeView(tree.value, openDepth: 2),
+          final NoteVisual note => VisualNoteLine(note.text),
         };
       },
+    );
+  }
+}
+
+/// A [NoteVisual]: one muted line with a mark, quieter than any message.
+class VisualNoteLine extends StatelessWidget {
+  const VisualNoteLine(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Row(
+      key: const ValueKey('visual-note'),
+      children: [
+        Icon(AppIcons.info, size: Chrome.iconSmall, color: muted),
+        const SizedBox(width: Insets.sm),
+        Flexible(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1283,6 +1283,103 @@ void main() {
       expect(SessionDelegationDao(database).awaiting(), isEmpty);
     });
   });
+
+  group('a detached child', () {
+    test('pushes nothing more: the turn it was on, the next one, and a '
+        "parent's follow-up arms nothing", () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+
+      delegations.detach('c1');
+      expect(SessionDelegationDao(database).byChild('c1'), isNull);
+      expect(delegations.watching('parent'), isEmpty);
+      answers['c1'] = 'Finished after the detach.';
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], isNull);
+
+      delegations.sent('parent', 'c1');
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      hook('c1', 'Stop');
+      await settle();
+      expect(delivered['parent'], isNull);
+      expect(SessionDelegationDao(database).awaiting(), isEmpty);
+    });
+
+    test('takes back a result already queued for its busy parent', () async {
+      await runTerminal('parent');
+      hook('parent', 'UserPromptSubmit');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Done.';
+      hook('c1', 'Stop');
+      await settle();
+      expect(queue.list('parent'), hasLength(1));
+
+      delegations.detach('c1');
+      expect(queue.list('parent'), isEmpty);
+      hook('parent', 'Stop');
+      await settle();
+      expect(delivered['parent'], isNull);
+    });
+
+    test('takes back its own report still waiting in the queue', () async {
+      await runTerminal('parent');
+      hook('parent', 'UserPromptSubmit');
+      await runTerminal('c1');
+      delegations.watch(child('c1'));
+      delegations.report(
+        const ParentReport(
+          childId: 'c1',
+          parentId: 'parent',
+          title: 'Task c1',
+          agent: 'Claude Code',
+          status: ReportStatus.done,
+          text: 'All five fixed.',
+        ),
+      );
+      await pumpEventQueue();
+      expect(queue.list('parent').single.originId, 'c1');
+
+      delegations.detach('c1');
+      expect(queue.list('parent'), isEmpty);
+    });
+
+    test("leaves a sibling's result in a batch they shared, and drops its "
+        'own', () async {
+      await runTerminal('parent');
+      hook('parent', 'UserPromptSubmit');
+      await runTerminal('c1');
+      final acp = await runAcp('ACP says hello.');
+      delegations
+        ..watch(child('c1'))
+        ..watch(child('c2', agent: 'Claude (ACP)'));
+      hook('c1', 'UserPromptSubmit');
+      await pumpEventQueue();
+      answers['c1'] = 'Terminal says hi.';
+      hook('c1', 'Stop');
+      await settle();
+      await acp.send('task');
+      await acp.awaitTurn();
+      answers['c2'] = 'ACP says hello.';
+      await settle();
+      expect(queue.list('parent'), hasLength(1));
+
+      delegations.detach('c1');
+      hook('parent', 'Stop');
+      await settle();
+      final message = delivered['parent']!.single;
+      expect(message, contains('ACP says hello.'));
+      expect(message, isNot(contains('Terminal says hi.')));
+    });
+  });
 }
 
 /// The server's host for a runtime, cut to what these cases observe.

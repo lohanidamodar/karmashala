@@ -273,6 +273,10 @@ class DelegationResults {
 
   /// Per parent: the queued row its batch is in, and every result in it.
   final _batches = <String, ({String rowId, List<DelegationResult> results})>{};
+
+  /// Children [detach]ed since the server started: a result of theirs still
+  /// in a batch is dropped before it goes.
+  final _detached = <String>{};
   var _closed = false;
 
   /// The children of [parentId] still watched, oldest first.
@@ -417,6 +421,41 @@ class DelegationResults {
     if (store.byChild(childId)?.isOpen != true && !had) return;
     store.close(childId, at: _now());
     log?.call('delegation $childId: stopped; nothing more is pushed');
+  }
+
+  /// [childId] was detached from its parent: **nothing goes either way any
+  /// more.** Its follow is dropped, its results waiting on a batch or in the
+  /// parent's queue are taken back, and its delegation row goes, so neither
+  /// a `session_send` nor a restart arms it again.
+  void detach(String childId, {String? parentId}) {
+    parentId = store.byChild(childId)?.parentSessionId ?? parentId;
+    _watched.remove(childId);
+    _detached.add(childId);
+    for (final pending in _pending.values) {
+      pending.removeWhere((entry) => entry.$1.child.childId == childId);
+    }
+    if (parentId != null) {
+      final batch = _batches[parentId];
+      for (final message in queue.list(parentId)) {
+        if (message.origin != QueuedMessageOrigin.delegation ||
+            message.state != QueuedMessageState.queued) {
+          continue;
+        }
+        final ours = batch != null && batch.rowId == message.id
+            // A batch that also carries others is restated as it goes.
+            ? batch.results.every((r) => r.child.childId == childId)
+            : message.originId == childId;
+        if (!ours) continue;
+        if (batch?.rowId == message.id) _batches.remove(parentId);
+        try {
+          queue.cancel(parentId, message.id, by: 'detach');
+        } on Object catch (error) {
+          log?.call('delegation $childId: a queued result stayed: $error');
+        }
+      }
+    }
+    store.remove(childId);
+    log?.call('delegation $childId: detached; nothing more goes either way');
   }
 
   /// A child's own [report], put in its parent's queue at once — never
@@ -697,8 +736,10 @@ class DelegationResults {
   }
 
   /// Whether [result] says a child is blocked on a prompt it no longer has
-  /// open: answered, or replaced by another, since it was read.
+  /// open: answered, or replaced by another, since it was read — or comes
+  /// from a child detached since.
   bool _stale(DelegationResult result) {
+    if (_detached.contains(result.child.childId)) return true;
     if (result.outcome.state != ChildTurnState.blocked) return false;
     final askOf = openAskOf;
     if (askOf == null) return false;

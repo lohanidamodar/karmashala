@@ -272,6 +272,22 @@ class FakeSessionWork {
           throw const DataRefused.notFound('Nothing is running that session.');
         }
         return const DataAck();
+      case SessionDetachRequest(:final sessionId):
+        final row =
+            _server.sessionRows.getById(sessionId) ??
+            (throw const DataRefused.notFound('no such session'));
+        if (row.parentSessionId == null) {
+          throw const DataRefused.invalid('it has no parent');
+        }
+        // As the server does: the link goes, nothing else on the row.
+        _server.sessionRows.put(
+          Session.fromJson(
+            row.toJson()
+              ..remove('parentSessionId')
+              ..remove('parentLink'),
+          ),
+        );
+        return const DataAck();
       case SessionSourceBrief():
         return const HandoffSourceBrief.notWritten('nobody is there to ask.');
       case final SessionHandoffPreview r:

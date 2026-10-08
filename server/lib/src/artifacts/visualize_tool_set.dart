@@ -36,10 +36,12 @@ class VisualizeToolSet extends ServerToolSet {
       );
     }
     final kindName = args['kind'] as String?;
-    final kind = kindName == null ? null : VisualKind.parse(kindName.trim());
+    final parsed = kindName == null ? null : VisualKind.parse(kindName.trim());
+    // A note is Karmashala's own line in a thread, not an agent's to draw.
+    final kind = parsed == VisualKind.note ? null : parsed;
     if (kindName != null && kind == null) {
       throw ArgumentError(
-        'kind is ${VisualKind.values.map((k) => k.name).join(', ')} — not '
+        'kind is ${VisualKind.drawable.map((k) => k.name).join(', ')} — not '
         '"$kindName".',
       );
     }

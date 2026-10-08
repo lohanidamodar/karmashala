@@ -497,3 +497,29 @@ TreeVisual parseTreeVisual(Object? data) {
   walk(data, 0, r'$');
   return TreeVisual(data);
 }
+
+/// One quiet line Karmashala writes in a thread itself — "Fix the parser was
+/// detached" — never offered to an agent's `visualize`: `{"text"}` or the
+/// text alone.
+final class NoteVisual extends VisualSpec {
+  const NoteVisual(this.text);
+
+  final String text;
+
+  @override
+  VisualKind get kind => VisualKind.note;
+
+  @override
+  Map<String, Object?> toJson() => {'text': text};
+}
+
+NoteVisual parseNoteVisual(Object? data) {
+  final text = switch (data) {
+    final String s => s,
+    _ => visualText(visualObject(data, 'data'), 'text'),
+  };
+  if (text == null || text.trim().isEmpty) {
+    visualFieldError('text', 'is required');
+  }
+  return NoteVisual(capVisualText(text.trim()));
+}

@@ -189,6 +189,11 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     idempotent: true,
     movesAttention: false,
   ),
+  // The link goes, with no way to make it again.
+  'delegation_detach': McpToolAnnotations(
+    destructive: true,
+    movesAttention: false,
+  ),
   // Reveals or resumes; for an imported CLI session it opens an external
   // window, one per call — a driver once opened one per `list_sessions` row.
   'open_session': McpToolAnnotations(movesAttention: true),
@@ -678,6 +683,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'delegation_set_report': McpToolListing(
     McpToolCategory.sessions,
     'Change what you hear of a session you started: final, each turn, none.',
+  ),
+  'delegation_detach': McpToolListing(
+    McpToolCategory.sessions,
+    'Let go of a session you started: nothing goes between you after.',
   ),
   'report_to_parent': McpToolListing(
     McpToolCategory.sessions,

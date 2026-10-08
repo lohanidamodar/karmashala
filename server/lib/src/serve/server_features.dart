@@ -48,6 +48,9 @@ const Set<String> kServerFeatures = <String>{
   // typed here as host keys, once per `requestId` (Stage 2 step 2).
   'sessions.send',
   'sessions.interrupt',
+  // `sessions.detach`: a sub-session unlinked from its parent, nothing
+  // delivered between them after.
+  'sessions.detach',
 
   // `quickAccess.*`: folders pinned to every file browser, kept here for
   // every client and greeted with `quickAccessChanged`.

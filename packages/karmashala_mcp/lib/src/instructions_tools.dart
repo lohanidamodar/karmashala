@@ -98,6 +98,7 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
       'report_to_parent',
       'delegations',
       'delegation_set_report',
+      'delegation_detach',
       'open_session',
     ],
     body: '''
@@ -257,6 +258,14 @@ a session that has ended or been archived, and nothing resumes one: a report
 it missed waits on the child's row in `delegations`. A child a person stops
 reports nothing. `delegation_capabilities` lists the agents and models you can
 choose from.
+
+**A child that has become its own work can be let go: `delegation_detach`.**
+It becomes a top-level session and nothing goes between you any more — none of
+its turns or reports reach you, and its `report_to_parent` is refused. It keeps
+running with its own transcript, worktree and project, leaves your
+`delegations` and your depth, and no longer holds you out of Done; your thread
+notes it. There is no undo. A person can detach one from the app too, and the
+same holds: once detached it is no longer yours to manage or archive.
 
 **If a session started you, report to it.** Your opening message names it.
 When you are done, blocked, or need its answer, call `report_to_parent` with

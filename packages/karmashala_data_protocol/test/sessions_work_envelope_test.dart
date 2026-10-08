@@ -70,6 +70,7 @@ void main() {
     final requests = <DataRequest<Object?>>[
       const SessionResume('s1', restart: true, columns: 90, rows: 20),
       const SessionEndRequest('s1'),
+      const SessionDetachRequest('s1'),
       const SessionSourceBrief('s1', timeoutSeconds: 30),
       const SessionHandoffPreview(
         sessionId: 's1',

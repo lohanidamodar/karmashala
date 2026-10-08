@@ -99,6 +99,7 @@ class LaunchToolSet extends ServerToolSet {
     this.reportToParent,
     this.delegationOf,
     this.setReport,
+    this.detach,
     this.defaultReportMode,
   }) : _repositories = RepositoryDao(_context.database),
        _reach = reach,
@@ -155,6 +156,10 @@ class LaunchToolSet extends ServerToolSet {
   /// null where this server follows nothing.
   final bool Function(DelegatedChild child, String parentId)? setReport;
 
+  /// Detaches child [String] of caller [String] (`SessionDetacher.detach`);
+  /// null where this server cannot, and the tool is refused in words.
+  final Future<Session> Function(String childId, String parentId)? detach;
+
   /// What Settings say a session hears of a child it starts; null unset.
   final String? Function()? defaultReportMode;
 
@@ -182,6 +187,9 @@ class LaunchToolSet extends ServerToolSet {
     }
     if (tool == 'delegation_set_report') {
       return runTool(() async => _setReport(arguments, callerSessionId));
+    }
+    if (tool == 'delegation_detach') {
+      return runTool(() => _detach(arguments, callerSessionId));
     }
     if (tool != 'open_new_session' && tool != 'subagent_run') return null;
     return _launches.run(
@@ -424,6 +432,40 @@ class LaunchToolSet extends ServerToolSet {
       'sessionId': child.id,
       'report': report,
       'note': _reportNote(report, child.id),
+    };
+  }
+
+  /// `delegation_detach`: the caller lets go of a session it started. Any
+  /// child of the caller's — spawned, handed off or forked — may go.
+  Future<Map<String, Object?>> _detach(
+    Map<String, dynamic> args,
+    String? callerSessionId,
+  ) async {
+    final childId = (args['sessionId'] as String?)?.trim() ?? '';
+    if (callerSessionId == null) {
+      throw StateError(
+        'delegation_detach lets go of a session you started, and this call '
+        'came from no session.',
+      );
+    }
+    if (childId.isEmpty) {
+      throw ArgumentError(
+        'sessionId is required: the child, from delegations.',
+      );
+    }
+    final detach =
+        this.detach ?? (throw StateError('This server detaches nothing.'));
+    final child = await detach(childId, callerSessionId);
+    return {
+      'sessionId': child.id,
+      'detached': true,
+      'note':
+          'Session ${child.id} is on its own now: nothing it does is pushed to '
+          'you, report_to_parent from it is refused, and it no longer counts '
+          'toward your depth or holds you out of Done. It keeps running, with '
+          'its own transcript and worktree; end or archive it yourself only '
+          'if you still mean to. session_send to it is an ordinary message '
+          'from another session.',
     };
   }
 
@@ -1389,6 +1431,27 @@ const List<Map<String, Object?>> launchToolSchemas = [
         'report': {'type': 'string', 'enum': kReportModes},
       },
       'required': <String>['sessionId', 'report'],
+    },
+  },
+  {
+    'name': 'delegation_detach',
+    'description':
+        'Let go of a session you started: it becomes a top-level session and '
+        'nothing goes between you any more — none of its turns or reports '
+        'reach you, and its report_to_parent is refused. It keeps running, '
+        'with its transcript, worktree and project; it leaves your '
+        'delegations, your nesting depth and your card on the dashboard, '
+        'and your thread notes it was detached. There is no undo. Use it for '
+        'a session that has become its own piece of work.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'The child, from delegations.',
+        },
+      },
+      'required': <String>['sessionId'],
     },
   },
   {
