@@ -31,6 +31,7 @@ import '../application/session_input.dart';
 import '../application/secret_requests.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_status_providers.dart';
+import 'prompt_cards/checklist_prompt_card.dart';
 import 'prompt_cards/menu_prompt_card.dart';
 import 'prompt_cards/question_prompt_card.dart';
 import 'chat_cards/chat_tool_ask.dart' show ChatToolAsk, chatInlineAsksProvider;
@@ -364,27 +365,28 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
   AgentScreenMenu? _read() =>
       ref.read(sessionPromptAnswersProvider).menuOnScreen(widget.sessionId);
 
-  Future<void> _choose(AgentScreenMenu menu, int option) async {
-    final said = _AnswerSaid.of(context);
+  Future<void> _choose(AgentScreenMenu menu, int option) => _send(
+    MenuAnswerRequest(
+      sessionId: widget.sessionId,
+      menuId: menu.id,
+      option: option,
+    ),
+    said: 'Chosen.',
+  );
+
+  Future<void> _send(MenuAnswerRequest request, {required String said}) async {
+    final answerSaid = _AnswerSaid.of(context);
     try {
-      await ref
-          .read(sessionPromptAnswersProvider)
-          .answer(
-            MenuAnswerRequest(
-              sessionId: widget.sessionId,
-              menuId: menu.id,
-              option: option,
-            ),
-          );
+      await ref.read(sessionPromptAnswersProvider).answer(request);
     } on SessionPromptRefusal catch (refusal) {
       // Worded for the card's own snack bar, which reads a gateway refusal.
       throw GatewayException(
-        said == null
+        answerSaid == null
             ? refusal.message
             : _approvalRefusalText(refusal, touch: true),
       );
     }
-    said?.say('Chosen.');
+    answerSaid?.say(said);
     if (mounted) setState(() => _menu = _read());
   }
 
@@ -392,6 +394,39 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
   Widget build(BuildContext context) {
     final menu = _menu;
     if (menu == null) return widget.orElse;
+    final submit = menu.submit;
+    if (menu.isChecklist && submit != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ChecklistPromptCard(
+            agentName: widget.agentName,
+            menu: remoteMenuOf(menu),
+            onSubmit: (ticks) => _send(
+              MenuAnswerRequest.checklist(
+                sessionId: widget.sessionId,
+                menuId: menu.id,
+                submit: submit,
+                ticks: ticks,
+              ),
+              said: 'Submitted.',
+            ),
+            onReject: () => _send(
+              MenuAnswerRequest.dismiss(
+                sessionId: widget.sessionId,
+                menuId: menu.id,
+              ),
+              said: 'Rejected.',
+            ),
+            onOpenTerminal: _hasTerminal(ref, widget.sessionId)
+                ? () => _openTerminal(ref, widget.sessionId)
+                : null,
+          ),
+          _TerminalLink(sessionId: widget.sessionId),
+        ],
+      );
+    }
     if (widget.docked) {
       final asked = widget.dockedAsk?.call(
         menu,
