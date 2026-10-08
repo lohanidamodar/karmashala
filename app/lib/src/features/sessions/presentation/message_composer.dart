@@ -223,8 +223,18 @@ class MessageComposer extends StatefulWidget {
     this.takeServerFiles,
     this.serverFilesWaiting,
     this.focusRequests,
+    this.working = false,
+    this.onStop,
     super.key,
   });
+
+  /// Whether the agent's turn runs. While it does, the round button is Stop
+  /// (■) with the box empty, and Stop stands beside Send once something is
+  /// typed — Send still queues. Without [onStop] Stop is never offered.
+  final bool working;
+
+  /// Stops the running turn.
+  final VoidCallback? onStop;
 
   /// Whether files may be attached at all: false hides Attach and ignores a
   /// pasted or keyboard-inserted image (a phone not granted `send_attachment`).
@@ -1216,14 +1226,7 @@ class _MessageComposerState extends State<MessageComposer> {
                           touch: touch,
                           onPicked: canType ? _insertSnippet : null,
                         ),
-                  send: _SendButton(
-                    input: _input,
-                    attachments: _attachments,
-                    busy: _busy,
-                    touch: touch,
-                    queued: _uploads.isNotEmpty,
-                    onSend: canType && _readyToSend ? _send : null,
-                  ),
+                  send: _sendOrStop(canType: canType, touch: touch),
                 ),
               ),
             ],
@@ -1271,6 +1274,41 @@ class _MessageComposerState extends State<MessageComposer> {
   /// under a one-line field left a band of nothing twice its height (owner,
   /// 2026-10-01). The buttons stay at the bottom as the text grows, where the
   /// thumb already is; any chips go on a line of their own under it.
+  /// Send, or Stop while the agent works: Stop alone with nothing typed, the
+  /// two side by side once something is. Stop ignores [canType]: a held box
+  /// must not hold the way to stop the turn.
+  Widget _sendOrStop({required bool canType, required bool touch}) {
+    final send = _SendButton(
+      input: _input,
+      attachments: _attachments,
+      busy: _busy,
+      touch: touch,
+      queued: _uploads.isNotEmpty,
+      onSend: canType && _readyToSend ? _send : null,
+    );
+    final onStop = widget.onStop;
+    if (!widget.working || onStop == null) return send;
+    return ListenableBuilder(
+      listenable: _input,
+      builder: (context, _) {
+        final stop = _StopButton(touch: touch, onStop: onStop);
+        final typed =
+            _input.text.trim().isNotEmpty ||
+            _attachments.isNotEmpty ||
+            _uploads.isNotEmpty;
+        if (!typed) return stop;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            stop,
+            const SizedBox(width: Insets.xs),
+            send,
+          ],
+        );
+      },
+    );
+  }
+
   Widget _touchRow(Widget field, {required bool canType}) {
     final snippets = widget.snippets;
     final tools = widget.attaches || snippets != null;
@@ -1315,14 +1353,7 @@ class _MessageComposerState extends State<MessageComposer> {
                   ),
                 ),
               ),
-              _SendButton(
-                input: _input,
-                attachments: _attachments,
-                busy: _busy,
-                touch: true,
-                queued: _uploads.isNotEmpty,
-                onSend: canType && _readyToSend ? _send : null,
-              ),
+              _sendOrStop(canType: canType, touch: true),
             ],
           ),
           if (widget.chips.isNotEmpty)
@@ -2059,6 +2090,43 @@ class _SendButton extends StatelessWidget {
           icon: busy ? const InlineSpinner() : const Icon(AppIcons.arrowUp),
         );
       },
+    );
+  }
+}
+
+/// Stop (■) in Send's place while the agent works, as Claude, ChatGPT and
+/// Codex draw it; the same circle, so the box does not jump.
+class _StopButton extends StatelessWidget {
+  const _StopButton({required this.touch, required this.onStop});
+
+  final bool touch;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final diameter = _SendButton.diameterFor(touch: touch);
+    return Semantics(
+      button: true,
+      label: 'Stop the running turn',
+      excludeSemantics: true,
+      child: IconButton.filled(
+        key: const ValueKey('composer-stop'),
+        // A phone has no Esc to name.
+        tooltip: touch ? 'Stop' : 'Stop · Esc',
+        onPressed: onStop,
+        iconSize: touch ? Touch.icon : Chrome.iconAction,
+        style: IconButton.styleFrom(
+          visualDensity: VisualDensity.standard,
+          padding: EdgeInsets.zero,
+          fixedSize: Size.square(diameter),
+          minimumSize: Size.square(diameter),
+          shape: const CircleBorder(),
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+        ),
+        icon: const Icon(AppIcons.stopFill),
+      ),
     );
   }
 }

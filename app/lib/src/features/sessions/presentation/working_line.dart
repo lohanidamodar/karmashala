@@ -44,8 +44,8 @@ class WorkingLine extends ConsumerStatefulWidget {
 
   final String sessionId;
 
-  /// Stops the running turn — board N2's `Stop · Esc` pill, offered while a
-  /// call is in flight, which is when Esc stops it. Null draws no pill.
+  /// Stops the running turn — board N2's `Stop · Esc` pill, offered for as
+  /// long as the line shows, tool call or not. Null draws no pill.
   final VoidCallback? onStop;
 
   @override
@@ -148,7 +148,7 @@ class _WorkingLineState extends ConsumerState<WorkingLine> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final onStop = running.isEmpty ? null : widget.onStop;
+    final onStop = widget.onStop;
     final spot = activity.blindSpot;
     final tooltip = [
       for (final call in running)
@@ -249,7 +249,7 @@ class _StopPill extends StatelessWidget {
       child: Tooltip(
         message: touch
             ? 'Stop the running turn'
-            : 'Stop the running turn — types Esc into its terminal',
+            : 'Stop the running turn · Esc',
         child: InkWell(
           onTap: onPressed,
           borderRadius: BorderRadius.circular(Radii.sm),

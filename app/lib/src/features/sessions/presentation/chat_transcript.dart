@@ -195,6 +195,7 @@ class ChatTranscriptView extends StatefulWidget {
     this.workingLine,
     this.lastTurnVerb,
     this.lastTurnTokens,
+    this.lastTurnStoppedAt,
     this.emptyHint = 'No messages yet.',
     this.onSaveNote,
     this.resolveHostPath,
@@ -268,6 +269,10 @@ class ChatTranscriptView extends StatefulWidget {
   /// for its footer; null where the agent left none.
   final String? lastTurnVerb;
   final int? lastTurnTokens;
+
+  /// When Stop was pressed in the last turn, once it has ended: that turn's
+  /// footer reads "Stopped". Null when it was not stopped from here.
+  final DateTime? lastTurnStoppedAt;
   final String emptyHint;
 
   /// Turns a path an agent wrote into one this process can open — a WSL
@@ -346,22 +351,28 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 
   List<ChatMessage>? _footerMessages;
   TranscriptTurn? _footerTurn;
+  DateTime? _footerStoppedAt;
   var _footers = const <int, TurnFooter>{};
 
-  /// [turnFooters], walked again only when the list or the turn moved: an
-  /// elapsed tick or a hover rebuild costs nothing here.
+  /// [turnFooters], walked again only when the list, the turn or its Stop
+  /// moved: an elapsed tick or a hover rebuild costs nothing here.
   Map<int, TurnFooter> _footersFor(
     List<ChatMessage> messages,
     TranscriptTurn turn,
   ) {
-    if (identical(messages, _footerMessages) && turn == _footerTurn) {
+    final stoppedAt = widget.lastTurnStoppedAt;
+    if (identical(messages, _footerMessages) &&
+        turn == _footerTurn &&
+        stoppedAt == _footerStoppedAt) {
       return _footers;
     }
     _footerMessages = messages;
     _footerTurn = turn;
+    _footerStoppedAt = stoppedAt;
     return _footers = turnFooters(
       messages,
       lastTurnOver: turn == TranscriptTurn.idle,
+      lastTurnStoppedAt: stoppedAt,
     );
   }
 

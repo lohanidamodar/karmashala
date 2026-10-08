@@ -81,6 +81,20 @@ void main() {
       call({'kind': 'sparkle', 'data': 1}),
       throwsArgumentError,
     );
+    // A note is Karmashala's own line, never an agent's.
+    await expectLater(
+      call({
+        'kind': 'note',
+        'data': {'text': 'was detached'},
+      }),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          isNot(contains('note,')),
+        ),
+      ),
+    );
     await expectLater(
       call({'kind': 'progress', 'data': 1}, null),
       throwsArgumentError,

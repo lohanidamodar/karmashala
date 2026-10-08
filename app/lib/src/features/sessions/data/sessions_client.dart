@@ -48,6 +48,11 @@ class SessionsClient {
     }
   }
 
+  /// Detaches [sessionId] from the session that started it: it becomes a
+  /// top-level session, and nothing goes between the two any more.
+  Future<void> detach(String sessionId) =>
+      _send(SessionDetachRequest(sessionId));
+
   Future<HandoffSourceBrief> sourceBrief(String sessionId) =>
       _send(SessionSourceBrief(sessionId));
 

@@ -36,6 +36,9 @@ class FakeSessionWork {
   /// Every `sessions.send` taken, in order.
   final sent = <SessionSend>[];
 
+  /// The session of every `sessions.interrupt` taken, in order.
+  final interrupts = <String>[];
+
   /// A send to a session it does not run resumes it first, as a server that
   /// announces `sessions.send.resumes` does; off, it is refused `notFound`.
   bool resumesOnSend = false;
@@ -228,6 +231,7 @@ class FakeSessionWork {
       sent.add(send);
       return SessionSent(sent: true, via: 'protocol', resumed: resumed);
     }
+    if (request is SessionInterrupt) interrupts.add(sessionId);
     return const DataAck();
   }
 
@@ -267,6 +271,22 @@ class FakeSessionWork {
         if (!running.remove(sessionId)) {
           throw const DataRefused.notFound('Nothing is running that session.');
         }
+        return const DataAck();
+      case SessionDetachRequest(:final sessionId):
+        final row =
+            _server.sessionRows.getById(sessionId) ??
+            (throw const DataRefused.notFound('no such session'));
+        if (row.parentSessionId == null) {
+          throw const DataRefused.invalid('it has no parent');
+        }
+        // As the server does: the link goes, nothing else on the row.
+        _server.sessionRows.put(
+          Session.fromJson(
+            row.toJson()
+              ..remove('parentSessionId')
+              ..remove('parentLink'),
+          ),
+        );
         return const DataAck();
       case SessionSourceBrief():
         return const HandoffSourceBrief.notWritten('nobody is there to ask.');

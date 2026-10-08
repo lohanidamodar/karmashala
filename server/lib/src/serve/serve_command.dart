@@ -8,7 +8,8 @@ import 'package:agent_cli/process.dart'
         CommandRunnerFactory,
         EnvironmentKind,
         ExecutionEnvironment,
-        localHostEnvironment;
+        localHostEnvironment,
+        localHostEnvironmentId;
 import 'package:agent_cli/read.dart' show CliStoreLocator;
 import 'package:karmashala_git/github.dart' show GhCommandLogin, GithubClient;
 import 'package:karmashala_git/worktrees.dart' show WorktreeService;
@@ -57,6 +58,7 @@ import 'package:karmashala_session_engine/store.dart'
         SessionQueueDao,
         SessionRepositoryDao,
         SessionUsageDao;
+import 'package:karmashala_core/visuals.dart' show VisualKind;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
@@ -93,6 +95,7 @@ import '../sessions/interrupted_turns.dart';
 import '../sessions/session_input.dart';
 import '../sessions/delegation_results.dart';
 import '../sessions/session_active_models.dart';
+import '../sessions/session_detach.dart';
 import '../sessions/session_queue.dart';
 import '../status/turn_settlement.dart';
 import '../sessions/session_ends_with_server.dart';
@@ -1694,6 +1697,22 @@ Future<int> _serve(
   )..start();
   sessionQueue.restate = delegations.restate;
   sessionInput.interrupted = delegations.stopped;
+  // A person's Detach and a parent's `delegation_detach`: one path, which
+  // leaves a line in the parent's thread.
+  final detacher = SessionDetacher(
+    database: database,
+    announce: data.announceSessions,
+    delegations: delegations,
+    note: (parentId, child) => artifacts.visuals.draw(
+      sessionId: parentId,
+      environmentId: localHostEnvironmentId,
+      id: 'detached-${child.id}',
+      kind: VisualKind.note,
+      data: {'text': detachedNote(child.title)},
+    ),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  sessionWork.detach = detacher.detach;
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
@@ -1787,6 +1806,7 @@ Future<int> _serve(
         reportToParent: delegations.report,
         delegationOf: delegations.viewOf,
         setReport: delegations.setMode,
+        detach: (childId, by) => detacher.detach(childId, by: by),
         defaultReportMode: () => launchSettings().childReportMode,
       ),
     )

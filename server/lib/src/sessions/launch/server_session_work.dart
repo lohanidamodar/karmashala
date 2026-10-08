@@ -17,6 +17,10 @@ class ServerSessionWork implements SessionWork {
   /// Told before a person's End stops row [String]: what waits is cancelled.
   void Function(String sessionId)? ending;
 
+  /// Detaches row [String] from its parent (`SessionDetacher.detach`); null
+  /// where this server cannot, and the request is refused.
+  Future<Object?> Function(String sessionId)? detach;
+
   @override
   Future<Object?> handle(SessionWorkRequest<Object?> request) async {
     try {
@@ -29,6 +33,7 @@ class ServerSessionWork implements SessionWork {
           rows: r.rows,
         ),
         SessionEndRequest(:final sessionId) => await _end(sessionId),
+        SessionDetachRequest(:final sessionId) => await _detach(sessionId),
         final SessionSourceBrief r => await continuations.sourceBrief(
           r.sessionId,
           timeoutSeconds: r.timeoutSeconds,
@@ -86,6 +91,14 @@ class ServerSessionWork implements SessionWork {
     } on ArgumentError catch (error) {
       throw DataRefused.invalid('${error.message}');
     }
+  }
+
+  Future<DataAck> _detach(String sessionId) async {
+    final detach =
+        this.detach ??
+        (throw const DataRefused.unavailable('this server detaches nothing'));
+    await detach(sessionId);
+    return const DataAck();
   }
 
   Future<DataAck> _end(String sessionId) async {

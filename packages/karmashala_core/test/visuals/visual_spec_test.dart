@@ -380,6 +380,23 @@ void main() {
     });
   });
 
+  test('a note is one line of text, given whole or as its text', () {
+    final note = parseVisualSpec(VisualKind.note, {
+      'text': '  "Fix" was detached ',
+    });
+    expect((note as NoteVisual).text, '"Fix" was detached');
+    expect(note.toJson(), {'text': '"Fix" was detached'});
+    expect(
+      (parseVisualSpec(VisualKind.note, 'plain') as NoteVisual).text,
+      'plain',
+    );
+    expect(
+      () => parseVisualSpec(VisualKind.note, {'text': ' '}),
+      throwsFormatException,
+    );
+    expect(VisualKind.drawable, isNot(contains(VisualKind.note)));
+  });
+
   test('a spec past the byte cap is refused', () {
     final cell = 'x' * VisualCaps.cellChars;
     expect(

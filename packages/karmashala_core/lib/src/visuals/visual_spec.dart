@@ -5,7 +5,8 @@ import 'mermaid_model.dart';
 part 'chart_visual.dart';
 part 'visual_kinds.dart';
 
-/// What a `visualize` call draws in a thread.
+/// What a `visualize` call draws in a thread, and [note], which only
+/// Karmashala writes.
 enum VisualKind {
   chart,
   table,
@@ -13,10 +14,15 @@ enum VisualKind {
   image,
   metric,
   progress,
-  tree;
+  tree,
+  note;
 
   static VisualKind? parse(String? value) =>
       values.where((k) => k.name == value).firstOrNull;
+
+  /// The kinds an agent's `visualize` may draw.
+  static List<VisualKind> get drawable =>
+      values.where((k) => k != note).toList();
 }
 
 /// The most one visual holds. A spec past them is refused; one appended to
@@ -69,6 +75,7 @@ VisualSpec parseVisualSpec(VisualKind kind, Object? data) {
     VisualKind.metric => parseMetricVisual(value),
     VisualKind.progress => parseProgressVisual(value),
     VisualKind.tree => parseTreeVisual(value),
+    VisualKind.note => parseNoteVisual(value),
   };
   final bytes = utf8.encode(jsonEncode(spec.toJson())).length;
   if (bytes > VisualCaps.specBytes) {

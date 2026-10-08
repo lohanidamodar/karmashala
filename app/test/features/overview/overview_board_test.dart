@@ -149,6 +149,35 @@ void main() {
       expect(needs.firstWhere((c) => c.entry.id == 'g').breadcrumb, 'T c');
     });
 
+    test('a detached child is a card of its own, and its parent is held out '
+        'of Done no more', () {
+      final linked = build(
+        groups({
+          AgentState.ended: [entry('p')],
+          AgentState.working: [entry('c', parent: 'p')],
+        }),
+      ).lanes.single;
+      expect(ids(linked, BoardColumn.working), ['p']);
+
+      // Detached: the server cleared the row's parent, and nothing else.
+      final detached = build(
+        groups({
+          AgentState.ended: [entry('p')],
+          AgentState.working: [entry('c')],
+        }),
+      ).lanes.single;
+      expect(ids(detached, BoardColumn.working), ['c']);
+      final child = detached.cards(BoardColumn.working).single;
+      expect(child.parentId, isNull);
+      expect(child.breadcrumb, isNull);
+      expect(ids(detached, BoardColumn.done), contains('p'));
+      final parent = detached
+          .cards(BoardColumn.done)
+          .firstWhere((card) => card.id == 'p');
+      expect(parent.waitingOn, isNull);
+      expect(parent.children, isNull);
+    });
+
     test('an ended parent whose child works stays at work, carrying it', () {
       // Round 56: a parent is not done while its sub-sessions work.
       final board = build(

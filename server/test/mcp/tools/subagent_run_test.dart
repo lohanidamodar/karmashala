@@ -8,6 +8,8 @@ import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/store.dart'
     show CheckoutRows, ScheduledResumeDao;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show DataRefused;
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
@@ -25,6 +27,7 @@ import 'package:karmashala_host/src/sessions/delegation_results.dart'
         ReportDelivery,
         ReportStatus;
 import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
+import 'package:karmashala_host/src/sessions/session_detach.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
 import 'package:karmashala_host/src/status/child_turn_wait.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
@@ -172,6 +175,10 @@ void main() {
         modeChanges.add((child, parentId));
         return true;
       },
+      detach: (childId, by) => SessionDetacher(
+        database: database,
+        announce: (_) {},
+      ).detach(childId, by: by),
       defaultReportMode: () => defaultReport,
       delegationOf: (id) =>
           views[id] ?? const DelegationView(state: 'ended', followed: false),
@@ -706,6 +713,48 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
       expect(modeChanges, hasLength(1));
+    });
+
+    test('delegation_detach lets go of the caller\'s own child, and of no '
+        'other; the child cannot report to it after', () async {
+      insertCaller('caller');
+      insertCaller('child', parent: 'caller');
+      insertCaller('stranger', parent: 'someone-else');
+      await expectLater(
+        tools.call('delegation_detach', {'sessionId': 'stranger'}, 'caller'),
+        throwsA(isA<DataRefused>()),
+      );
+      expect(
+        SessionDao(database).getById('stranger')!.parentSessionId,
+        'someone-else',
+      );
+
+      final answer =
+          (await tools.call('delegation_detach', {
+                'sessionId': 'child',
+              }, 'caller'))!
+              as Map<String, Object?>;
+      expect(answer['detached'], isTrue);
+      expect(SessionDao(database).getById('child')!.parentSessionId, isNull);
+      expect(SessionDao(database).childrenOf('caller'), isEmpty);
+      await expectLater(
+        tools.call('report_to_parent', {'text': 'Done.'}, 'child'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('no parent'),
+          ),
+        ),
+      );
+      expect(reports, isEmpty);
+      await expectLater(
+        tools.call('delegation_set_report', {
+          'sessionId': 'child',
+          'report': 'each_turn',
+        }, 'caller'),
+        throwsA(isA<StateError>()),
+      );
     });
 
     test('subagent_run still waits by default', () async {

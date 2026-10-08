@@ -313,6 +313,10 @@ final class Capabilities {
   /// its transcript names the agent of each turn.
   bool get switchAgent => serverOffers('sessions.switchAgent');
 
+  /// A sub-session can be detached from its parent, and a phone may do it
+  /// where it may start sessions.
+  bool get detachSessions => serverOffers('sessions.detach') && mayStart;
+
   /// New Project can make a missing folder and record a root without a scan;
   /// an older server ignores both and scans.
   bool get createsProjectFolders => serverOffers(ProjectFoldersCreate.feature);

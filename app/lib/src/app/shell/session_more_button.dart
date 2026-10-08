@@ -6,6 +6,9 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_signals.dart';
+import '../../core/capabilities/capabilities.dart';
+import '../../features/sessions/presentation/detach_session_action.dart';
+import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/sessions/presentation/operator_chip.dart';
 import '../../features/automations/presentation/session_origin_label.dart';
 import '../../features/sessions/presentation/session_repositories_bar.dart';
@@ -160,6 +163,8 @@ class SessionMoreBody extends StatelessWidget {
             SessionRecapButton(sessionId: sessionId),
             SessionSubagentsButton(sessionId: sessionId),
             OpenSessionInSystemTerminalButton(sessionId: sessionId),
+            _NewSubSessionButton(sessionId: sessionId),
+            DetachSessionButton(sessionId: sessionId),
             StopSessionButton(sessionId: sessionId),
           ],
         ),
@@ -169,6 +174,28 @@ class SessionMoreBody extends StatelessWidget {
         const SizedBox(height: Insets.xs),
         SessionRepositoriesBar(sessionId: sessionId),
       ],
+    );
+  }
+}
+
+/// **New sub-session…**: the New-session dialog with "Link to" this session
+/// ticked — any project, machine and agent, or none.
+class _NewSubSessionButton extends ConsumerWidget {
+  const _NewSubSessionButton({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(capabilitiesProvider.select((c) => c.mayStart))) {
+      return const SizedBox.shrink();
+    }
+    return IconButton(
+      key: const ValueKey('session-new-sub-session'),
+      tooltip: 'New sub-session…',
+      icon: const Icon(AppIcons.plusCircle),
+      onPressed: () =>
+          NewSessionDialog.show(context, parentSessionId: sessionId),
     );
   }
 }

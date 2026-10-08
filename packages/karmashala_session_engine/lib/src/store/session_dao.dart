@@ -206,6 +206,14 @@ class SessionDao implements SessionStatusStore {
     return rows.map(_fromRow).toList();
   }
 
+  /// Unlinks row [id] from its parent — a detach: it becomes a root session,
+  /// and nothing on it but the link moves.
+  void clearParent(String id) => _db.execute(
+    'UPDATE sessions SET parent_session_id = NULL, parent_link_kind = NULL '
+    'WHERE id = ?;',
+    [id],
+  );
+
   /// Points row [id] at another agent and that agent's conversation (null for
   /// a new one) — a switch in place. Nothing else on the row moves.
   void switchAgent(

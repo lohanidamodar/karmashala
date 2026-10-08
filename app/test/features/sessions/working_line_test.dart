@@ -438,17 +438,21 @@ void main() {
       expect(stopped, 1);
     });
 
-    testWidgets('...and not where it does not', (tester) async {
+    testWidgets('...and while the agent thinks with no call in flight', (
+      tester,
+    ) async {
+      var stopped = 0;
       await pumpLine(
         tester,
         messages: const [],
-        onStop: () {},
+        onStop: () => stopped++,
         statuses: Stream.value(
           report(working: AgentWorkingDetail(since: issued)),
         ),
       );
       expect(find.text('Working…'), findsOneWidget);
-      expect(find.text('Stop · Esc'), findsNothing);
+      await tester.tap(find.text('Stop · Esc'));
+      expect(stopped, 1);
     });
 
     testWidgets('under reduced motion the mark is still', (tester) async {
