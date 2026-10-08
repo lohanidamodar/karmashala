@@ -148,6 +148,9 @@ class SessionPromptAnswers implements PromptAnswering {
       );
     }
     final menu = menus.onScreen(sessionId);
+    if (request.dismiss || request.ticks != null) {
+      return _answerChecklist(sessionId, request, menu);
+    }
     final chosen = await menus.choose(
       sessionId,
       menuId: request.menuId,
@@ -158,6 +161,54 @@ class SessionPromptAnswers implements PromptAnswering {
         '${menu == null ? '' : ' (options ${menu.options.map((o) => '"$o"').join(', ')})'}'
         ': moved the highlight there and pressed Enter.';
     return SessionApprovalAnswer(answered: chosen, effect: effect);
+  }
+
+  /// A checklist — which of a project's MCP servers to enable — submitted
+  /// with the ticks chosen, or left by the agent's cancel. Filed as a
+  /// decision: it grants, or refuses, what the boxes name.
+  Future<SessionApprovalAnswer> _answerChecklist(
+    String sessionId,
+    MenuAnswerRequest request,
+    AgentScreenMenu? menu,
+  ) async {
+    final String answered;
+    final String effect;
+    final bool granted;
+    if (request.dismiss) {
+      await menus.dismiss(sessionId, menuId: request.menuId);
+      final names = menu == null
+          ? ''
+          : ' (${[for (final b in menu.boxes) '"${menu.options[b]}"'].join(', ')})';
+      answered = 'Rejected all';
+      effect =
+          'Pressed Esc on the checklist: none of its choices$names was '
+          'enabled, and the prompt closed.';
+      granted = false;
+    } else {
+      final ticked = await menus.submitChecklist(
+        sessionId,
+        menuId: request.menuId,
+        ticks: request.ticks!,
+      );
+      answered = ticked.isEmpty
+          ? 'Enabled none'
+          : 'Enabled ${ticked.join(', ')}';
+      effect = ticked.isEmpty
+          ? 'Unticked every box and submitted the checklist: nothing was '
+                'enabled, and the prompt closed.'
+          : 'Ticked ${ticked.map((t) => '"$t"').join(', ')} and nothing else, '
+                'then submitted the checklist; the prompt closed.';
+      granted = ticked.isNotEmpty;
+    }
+    _recordMenuAnswer(
+      sessionId,
+      granted: granted,
+      option: answered,
+      effect: effect,
+      decidedBy: request.decidedBy,
+      decidedBySessionId: request.decidedBySessionId,
+    );
+    return SessionApprovalAnswer(answered: answered, effect: effect);
   }
 
   Future<SessionApprovalAnswer> _answerQuestion(
