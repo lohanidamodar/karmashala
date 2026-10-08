@@ -100,6 +100,26 @@ class RestoreOutcome {
   final bool alreadyThere;
 }
 
+/// What a restore would do, asked before it is made
+/// ([CheckpointService.restorePreview]).
+class RestorePreview {
+  const RestorePreview({
+    required this.files,
+    required this.outside,
+    required this.headMoved,
+  });
+
+  /// The paths the restore would change.
+  final List<String> files;
+
+  /// The paths changed since the checkpoint while no turn of its session ran.
+  final List<String> outside;
+
+  /// A commit was made since the checkpoint; the restored files then show as
+  /// changes against it.
+  final bool headMoved;
+}
+
 /// Capturing and restoring per-turn snapshots of a repository's working tree.
 /// A `git write-tree` over a **private index**, so nothing the user owns moves.
 class CheckpointService {
@@ -392,6 +412,58 @@ class CheckpointService {
     return refusal == null
         ? null
         : CheckpointConflict(refusal, safetyCheckpoint: safety);
+  }
+
+  /// What restoring [checkpoint] would do, writing no file of the working
+  /// tree: the paths it would change, and those changed since it by no turn
+  /// of its session — a person's edits between turns or since the last
+  /// checkpoint — which it would also undo.
+  Future<RestorePreview> restorePreview(Checkpoint checkpoint) async {
+    final repo = checkpoint.repository;
+    final git = _gitFor(repo);
+    final dirs = await git.checkpointDirs(repo);
+    final current = await _exclusive(repo, () async {
+      await git.ensureCheckpointDirs(repo, dirs);
+      return git.writeWorkingTree(repo, dirs);
+    });
+    Future<List<String>> changed(String from, String to) async => from == to
+        ? const []
+        : [
+            for (final file in await git.diffNameStatus(
+              repo,
+              from: from,
+              to: to,
+            ))
+              file.path,
+          ];
+    final chain = checkpointChainIn(
+      await records.forSession(checkpoint.sessionId),
+      repo,
+    );
+    final outside = <String>{};
+    var headMoved = false;
+    Checkpoint? before;
+    for (final later in chain) {
+      if (later.sequence <= checkpoint.sequence) {
+        before = later;
+        continue;
+      }
+      if (later.headSha != null && later.headSha != checkpoint.headSha) {
+        headMoved = true;
+      }
+      // A turn's own checkpoint records the agent's work; any other records
+      // what changed while no turn ran.
+      if (before != null && later.reason != CheckpointReason.turn) {
+        outside.addAll(await changed(before.treeSha, later.treeSha));
+      }
+      before = later;
+    }
+    if (before != null) outside.addAll(await changed(before.treeSha, current));
+    return RestorePreview(
+      files: await changed(checkpoint.treeSha, current),
+      outside: outside.toList()..sort(),
+      headMoved: headMoved,
+    );
   }
 
   /// Puts [repo]'s working tree back to what [checkpoint] holds. A safety
