@@ -1051,6 +1051,42 @@ void main() {
       expect(shown(tester, 'idle'), 1);
     });
 
+    testBoard('a session whose state nobody read asks first, as rows do', (
+      tester,
+    ) async {
+      await pump(tester, const Size(1440, 900));
+      await hover(tester, card('idle'));
+      await tester.tap(end('idle'));
+      await settle(tester);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.textContaining('cannot tell'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      expect(server.sessionWork.running, contains('idle'));
+    });
+
+    testBoard('a waiting session asks first, saying its question is dropped', (
+      tester,
+    ) async {
+      await pump(tester, const Size(1440, 900));
+      final queued = find.byKey(const ValueKey('overview-card:ask'));
+      await hover(tester, queued);
+      await tester.tap(end('ask'));
+      await settle(tester);
+      expect(find.text('End "Chat ask"?'), findsOneWidget);
+      expect(
+        find.text(
+          'It is waiting for you, and its question is dropped. '
+          'The conversation stays.',
+        ),
+        findsOneWidget,
+      );
+      // Cancelled, nothing ends.
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      expect(server.sessionWork.running, contains('ask'));
+    });
+
     testBoard('a working session asks first, then ends at the server', (
       tester,
     ) async {
@@ -1078,6 +1114,15 @@ void main() {
       tester,
     ) async {
       final c = await pump(tester, const Size(1440, 900));
+      // Known idle at its prompt: the one state that ends without asking.
+      server.attention.statusOf(
+        'idle',
+        AgentActivityStatus.idle,
+        sessionId: 'cli-idle',
+        label: 'idle',
+        source: AgentStatusSource.terminalGrid,
+      );
+      await settle(tester);
       await hover(tester, card('idle'));
       await tester.tap(end('idle'));
       await settle(tester);

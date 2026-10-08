@@ -7,6 +7,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../explorer/application/agent_state_providers.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/presentation/end_session_action.dart';
@@ -85,18 +86,34 @@ class _HoverInherited extends InheritedNotifier<ValueNotifier<bool>> {
   const _HoverInherited({required super.notifier, required super.child});
 }
 
-/// Whether ending [card] now asks first: its agent is mid-turn, and ending
-/// loses the turn in flight.
-bool overviewEndAsks(WidgetRef ref, OverviewCard card) =>
-    card.state == AgentState.working ||
-    card.state == AgentState.quiet ||
-    ref.read(sessionActivityLookupProvider)(card.id) ==
-        AgentActivityStatus.working;
+/// What ending [card] now would lose, in one sentence for the confirm; null
+/// only for a session known to be idle, which ends at once. The shared rule
+/// ([endSessionWarning]) decides, with the board's own reading on top.
+String? overviewEndWarning(WidgetRef ref, OverviewCard card) {
+  const stays = 'The conversation stays.';
+  final waiting =
+      card.state == AgentState.needsYou ||
+      ref.read(sessionActivityLookupProvider)(card.id) ==
+          AgentActivityStatus.awaitingApproval ||
+      ref.read(needsYouProvider).containsKey(card.id);
+  if (waiting) {
+    return 'It is waiting for you, and its question is dropped. $stays';
+  }
+  if (card.state == AgentState.working || card.state == AgentState.quiet) {
+    return 'It is mid-turn: that turn is lost. $stays';
+  }
+  if (endSessionWarning(ref, card.id) != null) {
+    return 'Karmashala cannot tell whether it is mid-turn; a turn in flight '
+        'is lost. $stays';
+  }
+  return null;
+}
 
 /// **End**, from a card: through [endSessionProcess], the verb the status
-/// line's Stop and the session rows' End share. A session mid-turn asks
-/// first, in one line; an idle or waiting one ends at once with Undo, which
-/// resumes it here — its conversation is kept, so resuming is cheap.
+/// line's Stop and the session rows' End share. A session working or waiting
+/// on the person asks first, in one line, as the rows' End does; an idle one
+/// ends at once with Undo, which resumes it here — its conversation is kept,
+/// so resuming is cheap.
 Future<void> endFromDashboard(
   BuildContext context,
   WidgetRef ref,
@@ -104,12 +121,13 @@ Future<void> endFromDashboard(
 ) async {
   final id = card.id;
   final title = card.entry.title;
-  final asks = overviewEndAsks(ref, card);
-  if (asks) {
+  final warning = overviewEndWarning(ref, card);
+  final asks = warning != null;
+  if (warning != null) {
     final confirmed = await showConfirmDialog(
       context,
       title: 'End "$title"?',
-      message: 'It is mid-turn: that turn is lost. The conversation stays.',
+      message: warning,
       confirmLabel: 'End session',
     );
     if (!confirmed || !context.mounted) return;
