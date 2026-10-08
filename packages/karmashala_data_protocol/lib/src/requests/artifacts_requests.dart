@@ -1,23 +1,30 @@
 part of '../data_request.dart';
 
-DataRequest<Object?>? _artifactsRequestFromJson(
-  String kind,
-  _Arguments args,
-) => switch (kind) {
-  SessionArtifactsRead.name => SessionArtifactsRead(args.string('sessionId')),
-  ArtifactRevisionsRead.name => ArtifactRevisionsRead(args.string('id')),
-  ArtifactContentRead.name => ArtifactContentRead(
-    args.string('id'),
-    revision: args.optionalInt('revision'),
-    offset: args.optionalInt('offset') ?? 0,
-    length: args.optionalInt('length') ?? kFileChunkBytes,
-  ),
-  ArtifactSetNetwork.name => ArtifactSetNetwork(
-    args.string('id'),
-    allowed: args.boolean('allowed'),
-  ),
-  _ => null,
-};
+DataRequest<Object?>? _artifactsRequestFromJson(String kind, _Arguments args) =>
+    switch (kind) {
+      SessionArtifactsRead.name => SessionArtifactsRead(
+        args.string('sessionId'),
+      ),
+      ArtifactRevisionsRead.name => ArtifactRevisionsRead(args.string('id')),
+      ArtifactContentRead.name => ArtifactContentRead(
+        args.string('id'),
+        revision: args.optionalInt('revision'),
+        offset: args.optionalInt('offset') ?? 0,
+        length: args.optionalInt('length') ?? kFileChunkBytes,
+      ),
+      ArtifactSetNetwork.name => ArtifactSetNetwork(
+        args.string('id'),
+        allowed: args.boolean('allowed'),
+      ),
+      SessionVisualsRead.name => SessionVisualsRead(args.string('sessionId')),
+      VisualImageRead.name => VisualImageRead(
+        args.string('sessionId'),
+        args.string('id'),
+        offset: args.optionalInt('offset') ?? 0,
+        length: args.optionalInt('length') ?? kFileChunkBytes,
+      ),
+      _ => null,
+    };
 
 /// A request about what agents showed in their threads. Content is the
 /// server's snapshot of a revision, served in chunks like `files.read` — a
@@ -141,4 +148,69 @@ final class ArtifactSetNetwork extends ArtifactsRequest<Artifact> {
   @override
   Artifact resultFromJson(Object? json) =>
       _decode(kind, () => artifactFromJson(_object(json, kind)));
+}
+
+/// [sessionId]'s visuals — what its agent drew with `visualize` — in the
+/// order they were first drawn.
+final class SessionVisualsRead extends ArtifactsRequest<List<SessionVisual>> {
+  const SessionVisualsRead(this.sessionId);
+
+  static const String name = 'visuals.forSession';
+
+  final String sessionId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(List<SessionVisual> result) => [
+    for (final v in result) sessionVisualToJson(v),
+  ];
+
+  @override
+  List<SessionVisual> resultFromJson(Object? json) => _decode(
+    kind,
+    () => [
+      for (final item in _objects(json, kind)) sessionVisualFromJson(item),
+    ],
+  );
+}
+
+/// Up to [length] bytes of image visual [id] from [offset]: the server's
+/// copy of the file, never the host path it came from.
+final class VisualImageRead extends ArtifactsRequest<FileChunk> {
+  const VisualImageRead(
+    this.sessionId,
+    this.id, {
+    this.offset = 0,
+    this.length = kFileChunkBytes,
+  });
+
+  static const String name = 'visuals.image';
+
+  final String sessionId;
+  final String id;
+  final int offset;
+  final int length;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'id': id,
+    'offset': offset,
+    'length': length,
+  };
+
+  @override
+  Object? resultToJson(FileChunk result) => result.toJson();
+
+  @override
+  FileChunk resultFromJson(Object? json) =>
+      _decode(kind, () => FileChunk.fromJson(_object(json, kind)));
 }

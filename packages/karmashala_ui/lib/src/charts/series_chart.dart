@@ -435,9 +435,8 @@ class SeriesChartGeometry {
     String two(int n) => n.toString().padLeft(2, '0');
     final time = '${two(at.hour)}:${two(at.minute)}';
     final midnight = at.hour == 0 && at.minute == 0 && at.second == 0;
-    if (_dated)
-      return midnight ? '${at.month}/${at.day}' : '${at.month}/${at.day} $time';
-    return time;
+    if (!_dated) return time;
+    return midnight ? '${at.month}/${at.day}' : '${at.month}/${at.day} $time';
   }
 
   List<(double, TextPainter)> _xLabels(TextStyle style, TextScaler scaler) {

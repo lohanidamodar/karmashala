@@ -26,7 +26,11 @@ import '../../artifacts/application/artifact_providers.dart';
 import '../../artifacts/domain/artifact_placement.dart';
 import '../../artifacts/presentation/artifact_card.dart';
 import '../../artifacts/presentation/unplaced_artifacts_strip.dart';
-import 'package:karmashala_artifacts/karmashala_artifacts.dart' show Artifact;
+import 'package:karmashala_artifacts/karmashala_artifacts.dart'
+    show Artifact, SessionVisual;
+import '../../artifacts/application/visual_providers.dart';
+import '../../artifacts/domain/visual_placement.dart';
+import '../../artifacts/presentation/session_visual_block.dart';
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -178,16 +182,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   MessageDetailBuilder? _artifactsBase;
   String? _artifactsKey;
   ArtifactPlacement _placement = ArtifactPlacement.empty;
+  VisualPlacement _visualPlacement = VisualPlacement.empty;
 
   MessageDetailBuilder _detailWithArtifacts(
     List<ChatMessage> messages,
     List<Artifact> artifacts,
+    List<SessionVisual> visuals,
   ) {
     final placement = placeArtifacts(messages, artifacts);
+    final visualPlacement = placeVisuals(messages, visuals);
     final key = [
       for (final entry in placement.byOrdinal.entries)
         '${entry.key}:${entry.value.map((a) => a.id).join(',')}',
       'u:${placement.unplaced.map((a) => a.id).join(',')}',
+      'v:${visualPlacement.key}',
     ].join(';');
     if (_withArtifacts != null &&
         identical(_artifactsBase, _detailBuilder) &&
@@ -197,20 +205,27 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _artifactsBase = _detailBuilder;
     _artifactsKey = key;
     _placement = placement;
+    _visualPlacement = visualPlacement;
     final base = _detailBuilder;
     final placed = placement.byOrdinal;
-    return _withArtifacts = placed.isEmpty
+    final drawn = visualPlacement.byOrdinal;
+    final sessionId = widget.sessionId;
+    return _withArtifacts = placed.isEmpty && drawn.isEmpty
         ? base
         : (message, ordinal) {
             final lead = base(message, ordinal);
             final cards = placed[ordinal];
-            if (cards == null) return lead;
+            final visuals = drawn[ordinal];
+            if (cards == null && visuals == null) return lead;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
                 ?lead,
-                for (final artifact in cards) ArtifactCard(artifact: artifact),
+                for (final artifact in cards ?? const <Artifact>[])
+                  ArtifactCard(artifact: artifact),
+                if (visuals != null)
+                  SessionVisualBlocks(sessionId: sessionId, visualIds: visuals),
               ],
             );
           };
@@ -843,13 +858,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final artifacts =
         ref.watch(sessionArtifactsProvider(widget.sessionId)).value ??
         const <Artifact>[];
+    final visuals =
+        ref.watch(sessionVisualsProvider(widget.sessionId)).value ??
+        const <SessionVisual>[];
     return transcript.when(
       loading: () =>
           const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
       error: (e, _) => Center(child: Text('$e')),
       data: (messages) {
-        final detail = _detailWithArtifacts(messages, artifacts);
+        final detail = _detailWithArtifacts(messages, artifacts, visuals);
         final unplaced = _placement.unplaced;
+        final trailingVisuals = [
+          if (earlier == 0) ..._visualPlacement.earlier,
+          ..._visualPlacement.trailing,
+        ];
         return ChatTranscriptView(
           // Per session: this view outlives a switch within its group, and an
           // unkeyed list kept the last session's scroll offset.
@@ -894,6 +916,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             }),
           ),
           lastTurnTokens: _turnTokens,
+          trailing: trailingVisuals.isEmpty
+              ? null
+              : SessionVisualBlocks(
+                  key: const ValueKey('session-visuals-trailing'),
+                  sessionId: widget.sessionId,
+                  visualIds: trailingVisuals,
+                ),
           footer: unplaced.isEmpty
               ? footer
               : Column(

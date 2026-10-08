@@ -7,6 +7,7 @@ import 'package:karmashala_artifacts/store.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_files/karmashala_files.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:path/path.dart' as p;
 
 /// What answers the artifact requests a client asks of the server.
 abstract interface class ArtifactsWork {
@@ -22,9 +23,11 @@ class ServerArtifacts implements ArtifactsWork {
   ServerArtifacts({
     required this.library,
     required this.watcher,
+    required this.visuals,
     required void Function(List<DataChange> changes) tell,
   }) {
     library.onChanged = (artifact) => tell([ArtifactChanged(artifact)]);
+    visuals.onChanged = (visual) => tell([VisualChanged(visual)]);
   }
 
   /// The library over [database], snapshots in [directory], sources read
@@ -45,6 +48,11 @@ class ServerArtifacts implements ArtifactsWork {
     );
     return ServerArtifacts(
       library: library,
+      visuals: VisualBoard(
+        dao: VisualDao(database),
+        directory: p.join(directory, 'visuals'),
+        sources: sources,
+      ),
       watcher: ArtifactWatcher(
         library,
         sources: sources,
@@ -58,6 +66,9 @@ class ServerArtifacts implements ArtifactsWork {
 
   final ArtifactLibrary library;
   final ArtifactWatcher watcher;
+
+  /// What agents drew with `visualize`; image bytes beside the snapshots.
+  final VisualBoard visuals;
 
   void start() => watcher.start();
 
@@ -81,7 +92,9 @@ class ServerArtifacts implements ArtifactsWork {
       ):
         _known(id);
         if (offset < 0 || length < 0) {
-          throw const DataRefused.invalid('artifacts.content: a negative range');
+          throw const DataRefused.invalid(
+            'artifacts.content: a negative range',
+          );
         }
         final Uint8List bytes;
         try {
@@ -89,17 +102,39 @@ class ServerArtifacts implements ArtifactsWork {
         } on StateError catch (error) {
           throw DataRefused.notFound(error.message);
         }
-        final start = offset > bytes.length ? bytes.length : offset;
-        final want = length > kFileChunkBytes ? kFileChunkBytes : length;
-        final end = start + want > bytes.length ? bytes.length : start + want;
-        return FileChunk(
-          Uint8List.sublistView(bytes, start, end),
-          fileSize: bytes.length,
-        );
+        return _chunk(bytes, offset, length);
       case ArtifactSetNetwork(:final id, :final allowed):
         _known(id);
         return library.update(id, networkAllowed: allowed);
+      case SessionVisualsRead(:final sessionId):
+        return visuals.forSession(sessionId);
+      case VisualImageRead(
+        :final sessionId,
+        :final id,
+        :final offset,
+        :final length,
+      ):
+        if (offset < 0 || length < 0) {
+          throw const DataRefused.invalid('visuals.image: a negative range');
+        }
+        final Uint8List bytes;
+        try {
+          bytes = await visuals.image(sessionId, id);
+        } on StateError catch (error) {
+          throw DataRefused.notFound(error.message);
+        }
+        return _chunk(bytes, offset, length);
     }
+  }
+
+  static FileChunk _chunk(Uint8List bytes, int offset, int length) {
+    final start = offset > bytes.length ? bytes.length : offset;
+    final want = length > kFileChunkBytes ? kFileChunkBytes : length;
+    final end = start + want > bytes.length ? bytes.length : start + want;
+    return FileChunk(
+      Uint8List.sublistView(bytes, start, end),
+      fileSize: bytes.length,
+    );
   }
 
   void _known(String id) {

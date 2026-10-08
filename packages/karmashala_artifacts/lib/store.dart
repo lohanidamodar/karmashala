@@ -3,3 +3,4 @@
 library;
 
 export 'src/store/artifact_dao.dart';
+export 'src/store/visual_dao.dart';

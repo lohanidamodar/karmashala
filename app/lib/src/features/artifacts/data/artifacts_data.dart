@@ -39,6 +39,9 @@ class ArtifactsData {
           _sessions[artifact.sessionId] = _with(kept, artifact);
         }
         if (!_changes.isClosed) _changes.add(artifact);
+      case VisualChanged():
+        // VisualsData's.
+        break;
     }
   }
 
@@ -73,7 +76,9 @@ class ArtifactsData {
   /// which this starts — for a caller that cannot wait, as quick open.
   List<Artifact> held(String sessionId) {
     final kept = _sessions[sessionId];
-    if (kept == null) unawaited(forSession(sessionId).then((_) {}, onError: (_) {}));
+    if (kept == null) {
+      unawaited(forSession(sessionId).then((_) {}, onError: (_) {}));
+    }
     return kept ?? const [];
   }
 

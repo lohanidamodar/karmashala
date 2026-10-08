@@ -2,6 +2,7 @@ import 'package:karmashala_browser/tools.dart' show browserToolSchemas;
 import 'package:karmashala_mcp/instructions.dart';
 
 import '../../artifacts/artifact_tool_set.dart' show artifactToolSchemas;
+import '../../artifacts/visualize_tool_set.dart' show visualizeToolSchemas;
 import '../../automations/checks_tool_set.dart';
 import '../../checkpoints/checkpoint_screenshot_tool_set.dart'
     show checkpointScreenshotToolSchemas;
@@ -61,6 +62,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...checkpointToolSchemas,
   ...checkpointScreenshotToolSchemas,
   ...artifactToolSchemas,
+  ...visualizeToolSchemas,
   ...checksToolSchemas,
   ...webhookToolSchemas,
   ...sessionControlToolSchemas,

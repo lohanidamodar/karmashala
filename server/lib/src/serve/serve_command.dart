@@ -68,6 +68,7 @@ import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
 import '../artifacts/artifact_tool_set.dart';
+import '../artifacts/visualize_tool_set.dart';
 import '../artifacts/server_artifact_markers.dart';
 import '../artifacts/server_artifacts.dart';
 import '../automations/github/daemon_github.dart'
@@ -818,6 +819,7 @@ Future<int> _serve(
   // What an agent shows in its thread, after the checkpoint families as
   // serverToolSchemas lists them.
   mcpTools.tools.add(ArtifactToolSet(artifacts, database: database));
+  mcpTools.tools.add(VisualizeToolSet(artifacts.visuals, database: database));
   // Folders of checkpoints dropped without their files, by any path.
   unawaited(
     sweepCheckpointScreenshotFolders(
