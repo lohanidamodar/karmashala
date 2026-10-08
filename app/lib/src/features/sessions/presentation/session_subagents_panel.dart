@@ -322,7 +322,8 @@ String formatSubagentDuration(Duration span) {
   return '${span.inHours}h ${(span.inMinutes % 60).toString().padLeft(2, '0')}m';
 }
 
-({IconData icon, String label}) _stateLook(SubagentState state) =>
+/// A subagent state's glyph and word, wherever a child session is listed.
+({IconData icon, String label}) subagentStateLook(SubagentState state) =>
     switch (state) {
       SubagentState.running => (icon: AppIcons.circleHalf, label: 'Running'),
       SubagentState.blocked => (
@@ -359,7 +360,7 @@ class _EntryRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final look = _stateLook(entry.state);
+    final look = subagentStateLook(entry.state);
     final duration = subagentDuration(entry, ref.read(clockProvider).nowUtc());
     final tokens = entry.tokens;
     final facts = [
