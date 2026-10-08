@@ -5,7 +5,11 @@ import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/transcript.dart'
+    show TranscriptImageActions, TranscriptImageTarget;
 import 'package:agent_cli/stream.dart';
+
+import 'chat_target_menu.dart' show keepTranscriptTargetMenu;
 
 /// How big a file may be before we refuse to hand it to the decoder: a decode
 /// allocates `width * height * 4` bytes whatever the file weighs.
@@ -186,10 +190,11 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
   void _open() {
     final file = _file;
     if (file == null) return;
-    showDialog<void>(
-      context: context,
-      builder: (context) => _ImageViewerDialog(file: file, label: widget.path),
+    final viewer = keepTranscriptTargetMenu(
+      context,
+      _ImageViewerDialog(file: file, label: widget.path),
     );
+    showDialog<void>(context: context, builder: (_) => viewer);
   }
 
   @override
@@ -202,34 +207,38 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
     final name = widget.path.split(RegExp(r'[\\/]')).last;
     return Align(
       alignment: Alignment.centerLeft,
-      child: Semantics(
-        button: true,
-        label: 'Open image $name',
-        child: Tooltip(
-          message: 'Open $name',
-          child: InkWell(
-            onTap: _open,
-            borderRadius: BorderRadius.circular(Radii.sm),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minWidth: kInlineImageMinWidth,
-                minHeight: kInlineImageMinHeight,
-                maxHeight: kInlineImageMaxHeight,
-              ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border.all(color: scheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(Radii.sm),
+      child: TranscriptImageActions(
+        target: _imageTarget(widget.path, file),
+        child: Semantics(
+          button: true,
+          label: 'Open image $name',
+          child: Tooltip(
+            message: 'Open $name',
+            child: InkWell(
+              onTap: _open,
+              borderRadius: BorderRadius.circular(Radii.sm),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minWidth: kInlineImageMinWidth,
+                  minHeight: kInlineImageMinHeight,
+                  maxHeight: kInlineImageMaxHeight,
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(Radii.sm),
-                  child: Image.file(
-                    file,
-                    fit: BoxFit.contain,
-                    // A file that exists and still will not decode: a truncated
-                    // screenshot, a `.png` that is really something else.
-                    errorBuilder: (context, _, _) =>
-                        const _Note(text: 'That image could not be displayed.'),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: scheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                    child: Image.file(
+                      file,
+                      fit: BoxFit.contain,
+                      // A file that exists and still will not decode: a truncated
+                      // screenshot, a `.png` that is really something else.
+                      errorBuilder: (context, _, _) => const _Note(
+                        text: 'That image could not be displayed.',
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -240,6 +249,10 @@ class _TranscriptImagePreviewState extends State<TranscriptImagePreview> {
     );
   }
 }
+
+/// A fetched picture as its menu's target, read from the copy on this disk.
+TranscriptImageTarget _imageTarget(String path, File file) =>
+    TranscriptImageTarget(path: path, bytes: file.readAsBytes);
 
 /// The degraded form: one quiet line in place of the picture. It never repeats
 /// the file name — the row above already carries the path.
@@ -314,7 +327,13 @@ class _ImageViewerDialog extends StatelessWidget {
               ),
               TextButton(
                 key: const ValueKey('image-viewer-copy'),
-                onPressed: () => Clipboard.setData(ClipboardData(text: label)),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.maybeOf(context);
+                  await Clipboard.setData(ClipboardData(text: label));
+                  messenger?.showSnackBar(
+                    const SnackBar(content: Text('Path copied to clipboard')),
+                  );
+                },
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   textStyle: theme.textTheme.labelSmall,
@@ -331,14 +350,17 @@ class _ImageViewerDialog extends StatelessWidget {
         ),
         const Divider(height: 1),
         Flexible(
-          child: InteractiveViewer(
-            maxScale: 8,
-            child: Image.file(
-              file,
-              fit: BoxFit.contain,
-              errorBuilder: (context, _, _) => const Padding(
-                padding: EdgeInsets.all(Insets.lg),
-                child: _Note(text: 'That image could not be displayed.'),
+          child: TranscriptImageActions(
+            target: _imageTarget(label, file),
+            child: InteractiveViewer(
+              maxScale: 8,
+              child: Image.file(
+                file,
+                fit: BoxFit.contain,
+                errorBuilder: (context, _, _) => const Padding(
+                  padding: EdgeInsets.all(Insets.lg),
+                  child: _Note(text: 'That image could not be displayed.'),
+                ),
               ),
             ),
           ),

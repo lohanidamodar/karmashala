@@ -448,13 +448,26 @@ class _PathLinkTextState extends State<_PathLinkText> {
   Widget build(BuildContext context) {
     // An ellipsis with no line limit cuts at the first line, so only a
     // limited text asks for one.
-    return Text.rich(
+    final text = Text.rich(
       _span(context),
       maxLines: widget.maxLines,
       overflow: widget.maxLines == null
           ? TextOverflow.clip
           : TextOverflow.ellipsis,
     );
+    if (_links.isEmpty) return text;
+    return TranscriptTargetPress(targetAt: _pathAt, child: text);
+  }
+
+  TranscriptTarget? _pathAt(Offset position) {
+    final recognizer = transcriptSpanAt(context, position)?.recognizer;
+    if (recognizer == null) return null;
+    for (final (start, end, link) in _links) {
+      if (identical(link, recognizer)) {
+        return TranscriptPathLink(widget.text.substring(start, end));
+      }
+    }
+    return null;
   }
 }
 

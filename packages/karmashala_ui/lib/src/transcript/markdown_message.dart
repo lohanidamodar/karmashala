@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
@@ -13,6 +14,7 @@ import 'code_block.dart';
 import 'fence_visuals.dart';
 import 'markdown_image.dart';
 import 'transcript_selection.dart';
+import 'transcript_target_menu.dart';
 
 /// What tells a link this app made out of a bare path from one the author
 /// wrote. Carried in the element's `title`, which nothing else here uses.
@@ -128,6 +130,10 @@ class MarkdownMessage extends StatelessWidget {
           ? _mathSyntaxes
           : [..._mathSyntaxes, ...kPathLinkSyntaxes],
       onTapLink: (text, href, title) {
+        if (_LinkProbe.asking) {
+          _LinkProbe.found = (text: text, href: href, title: title);
+          return;
+        }
         if (href == null) return;
         if (title == kPathLinkTitle) {
           onPathTap?.call(href);
@@ -156,8 +162,143 @@ class MarkdownMessage extends StatelessWidget {
                     : markdown(run.text),
             ],
           );
-    return selectable ? body : TranscriptSelectionGroup(child: body);
+    final pressable = TranscriptTargetPress(
+      targetAt: (position) => _targetAt(context, position, codeBg),
+      child: body,
+    );
+    return selectable ? pressable : TranscriptSelectionGroup(child: pressable);
   }
+
+  /// The link, path or code span drawn at [position]. A link's recognizer is
+  /// asked through [_LinkProbe], since only its tap knows the href.
+  static TranscriptTarget? _targetAt(
+    BuildContext context,
+    Offset position,
+    Color codeBg,
+  ) {
+    final span = transcriptSpanAt(context, position);
+    if (span == null) return null;
+    final recognizer = span.recognizer;
+    if (recognizer is TapGestureRecognizer) {
+      final link = _LinkProbe.ask(recognizer);
+      final href = link?.href;
+      if (link == null || href == null) return null;
+      return link.title == kPathLinkTitle
+          ? TranscriptPathLink(href)
+          : TranscriptWebLink(href, text: link.text);
+    }
+    final code = span.text;
+    if (recognizer == null &&
+        code != null &&
+        code.isNotEmpty &&
+        span.style?.backgroundColor == codeBg) {
+      return TranscriptCodeSpan(code);
+    }
+    return null;
+  }
+}
+
+/// Reads what a markdown link points at by running its tap while [asking]:
+/// the link's handler then records instead of acting. Synchronous, so one
+/// probe cannot see another's answer.
+abstract final class _LinkProbe {
+  static bool asking = false;
+  static ({String text, String? href, String title})? found;
+
+  static ({String text, String? href, String title})? ask(
+    TapGestureRecognizer recognizer,
+  ) {
+    final tap = recognizer.onTap;
+    if (tap == null) return null;
+    asking = true;
+    found = null;
+    try {
+      tap();
+      return found;
+    } finally {
+      asking = false;
+      found = null;
+    }
+  }
+}
+
+/// [source] as a reader sees it, without the markdown: blocks a blank line
+/// apart, list items one a line, a table's cells split by tabs.
+String markdownPlainText(String source) {
+  final nodes = md.Document(
+    extensionSet: md.ExtensionSet.gitHubFlavored,
+    encodeHtml: false,
+  ).parseLines(source.replaceAll('\r\n', '\n').split('\n'));
+  String text(md.Node node) => switch (node) {
+    md.Element(tag: 'img') => node.attributes['alt'] ?? '',
+    md.Element(tag: 'br') => '\n',
+    md.Element(:final children?) => children.map(text).join(),
+    _ => node.textContent,
+  };
+  final blocks = <String>[];
+  void block(md.Node node, String indent) {
+    if (node is! md.Element) {
+      blocks.add(node.textContent.trim());
+      return;
+    }
+    switch (node.tag) {
+      case 'hr':
+        return;
+      case 'pre':
+        blocks.add(node.textContent.replaceFirst(RegExp(r'\n$'), ''));
+      case 'ul' || 'ol':
+        final ordered = node.tag == 'ol';
+        var n = int.tryParse(node.attributes['start'] ?? '') ?? 1;
+        final lines = <String>[];
+        for (final item in node.children ?? const <md.Node>[]) {
+          if (item is! md.Element) continue;
+          final own = <String>[];
+          final nested = <String>[];
+          for (final child in item.children ?? const <md.Node>[]) {
+            if (child is md.Element &&
+                (child.tag == 'ul' || child.tag == 'ol')) {
+              final before = blocks.length;
+              block(child, '$indent  ');
+              nested.addAll(blocks.sublist(before));
+              blocks.removeRange(before, blocks.length);
+            } else {
+              own.add(text(child).trim());
+            }
+          }
+          final mark = ordered ? '${n++}.' : '-';
+          lines.add('$indent$mark ${own.where((s) => s.isNotEmpty).join(' ')}');
+          lines.addAll(nested);
+        }
+        blocks.add(lines.join('\n'));
+      case 'table':
+        final rows = <String>[];
+        void visit(md.Node node) {
+          if (node is! md.Element) return;
+          if (node.tag == 'tr') {
+            rows.add(
+              (node.children ?? const <md.Node>[])
+                  .map((cell) => text(cell).trim())
+                  .join('\t'),
+            );
+            return;
+          }
+          node.children?.forEach(visit);
+        }
+        visit(node);
+        blocks.add(rows.join('\n'));
+      case 'blockquote':
+        for (final child in node.children ?? const <md.Node>[]) {
+          block(child, indent);
+        }
+      default:
+        blocks.add(text(node).trim());
+    }
+  }
+
+  for (final node in nodes) {
+    block(node, '');
+  }
+  return blocks.where((b) => b.isNotEmpty).join('\n\n');
 }
 
 /// Lines a message may run to before it folds.
