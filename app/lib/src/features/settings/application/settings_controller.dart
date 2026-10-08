@@ -546,6 +546,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Minutes with nothing new before a working session reads quiet.
+  void setQuietAfterMinutes(int minutes) {
+    state = state.copyWith(quietAfterMinutes: minutes.clamp(1, 240));
+    _save();
+  }
+
   /// Days of the activity log to keep, 0 for all; the server sweeps daily.
   void setActivityLogKeepDays(int days) {
     state = state.copyWith(activityLogKeepDays: days < 0 ? 0 : days);

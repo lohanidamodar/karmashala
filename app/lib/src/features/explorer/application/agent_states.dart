@@ -175,27 +175,15 @@ int visibleRowCount(AgentStateGroup group, {required bool expanded}) =>
       AgentStateFold.folded => expanded ? group.length : 0,
     };
 
-/// How long a working session may go without new evidence before it reads as
-/// [AgentState.quiet]. Long enough that one slow test run is not flagged
-/// every time, short enough that a hung turn is noticed the same hour.
+/// The quiet threshold Settings offers first, as the server defaults it.
 const Duration kQuietAfter = Duration(minutes: 15);
 
-/// When [report]'s session reads as quiet, or null when it never can on this
-/// evidence: it is not working, or the evidence cannot show a stall.
-///
-/// Only a hook or the agent's state file counts. A terminal-screen reading is
-/// evidence produced at the moment it is polled, and a spinner redraws while a
-/// turn is hung, so its age is always near zero — quietness there is unknown,
-/// and an unknown is never shown as a stall.
+/// When [report]'s session last did anything, while it reads as
+/// [AgentState.quiet]; null otherwise. The server decides it — one clock, so
+/// every client agrees — and this only reads it off a working report.
 DateTime? quietAt(AgentStatusReport? report) {
   if (report == null || report.status != AgentActivityStatus.working) {
     return null;
   }
-  return switch (report.source) {
-    // A protocol report is the agent's own word, dated like a hook's.
-    AgentStatusSource.hook ||
-    AgentStatusSource.protocol ||
-    AgentStatusSource.stateFile => report.evidenceAt.add(kQuietAfter),
-    AgentStatusSource.terminalGrid || AgentStatusSource.none => null,
-  };
+  return report.quietSince;
 }

@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:riverpod/riverpod.dart';
-import '../../../core/util/clock_provider.dart';
 
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -206,34 +205,22 @@ final archivedSessionCountProvider = Provider.autoDispose<int>((ref) {
   return count;
 });
 
-/// Working sessions whose evidence has gone quiet ([quietAt]). Recomputed when
-/// a grouping status move arrives, and at the moment the next working session
-/// would turn quiet — one timer for that instant, not a tick.
-///
-/// A quiet session is re-read each minute while something shows one: new
-/// evidence that leaves its status at `working` raises no event, so nothing
-/// else would move it back.
+/// Working sessions the server reads as quiet ([quietAt]). A quiet mark
+/// coming or going leaves the status at `working`, which raises no grouping
+/// event, so each working session's own status is watched for its mark alone
+/// — no clock here: the server keeps the time.
 final quietSessionsProvider = Provider.autoDispose<Set<String>>((ref) {
   final live = ref.watch(liveAgentStatusesProvider);
-  final statusOf = ref.read(sessionStatusLookupProvider);
-  final now = ref.read(clockProvider).nowUtc();
-
-  final quiet = <String>{};
-  DateTime? nextWake;
-  for (final MapEntry(key: id, value: status) in live.entries) {
-    if (status != AgentActivityStatus.working) continue;
-    final at = quietAt(statusOf(id));
-    if (at == null) continue;
-    final isQuiet = !at.isAfter(now);
-    if (isQuiet) quiet.add(id);
-    final wake = isQuiet ? now.add(const Duration(minutes: 1)) : at;
-    if (nextWake == null || wake.isBefore(nextWake)) nextWake = wake;
-  }
-  if (nextWake != null) {
-    final timer = Timer(nextWake.difference(now), ref.invalidateSelf);
-    ref.onDispose(timer.cancel);
-  }
-  return Set.unmodifiable(quiet);
+  return Set.unmodifiable({
+    for (final MapEntry(key: id, value: status) in live.entries)
+      if (status == AgentActivityStatus.working &&
+          ref.watch(
+            agentSessionStatusProvider(
+              id,
+            ).select((report) => quietAt(report.value) != null),
+          ))
+        id,
+  });
 });
 
 /// The Agents page: every session by state. Recomputed when a session list

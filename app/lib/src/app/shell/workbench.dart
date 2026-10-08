@@ -48,6 +48,7 @@ import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_mode_picker.dart';
 import '../../features/sessions/presentation/operator_chip.dart';
+import '../../features/sessions/presentation/quiet_chip.dart';
 import '../../features/sessions/presentation/session_stats_dialog.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/browser_document_pane.dart';

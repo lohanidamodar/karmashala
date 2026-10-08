@@ -18,6 +18,7 @@ import '../../environments/application/environments_controller.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../../sessions/presentation/quiet_chip.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../application/agent_state_providers.dart';
@@ -90,7 +91,7 @@ class LensSessionRow extends ConsumerWidget {
     final branch = _knownBranch(ref, entry.directory);
     // Read fresh, not from [entry], whose time is the list's snapshot.
     final quietSince = state == AgentState.quiet
-        ? ref.read(sessionStatusLookupProvider)(id)?.evidenceAt
+        ? ref.read(sessionStatusLookupProvider)(id)?.quietSince
         : null;
     // The strip's own runs, watched only while the row reads working: the
     // hook's list of background work outlives a run whose end it missed.
@@ -164,6 +165,9 @@ class LensSessionRow extends ConsumerWidget {
               fontWeight: FontWeight.w600,
             ),
           )
+        // The server's warning, with what to do about it a click away.
+        : state == AgentState.quiet
+        ? QuietChip(sessionId: id, compact: true)
         : dated
         ? Text(compactAge(now.difference(entry.activityAt)), style: muted)
         : null;

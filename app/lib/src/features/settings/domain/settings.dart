@@ -136,6 +136,7 @@ class Settings {
     this.toolImageMaxMegabytes = defaultToolImageMaxMegabytes,
     this.endedSessionsOlderThanDays = defaultEndedSessionsOlderThanDays,
     this.activityLogKeepDays = defaultActivityLogKeepDays,
+    this.quietAfterMinutes = defaultQuietAfterMinutes,
     this.notesEnabled = true,
     this.hideEmptySections = true,
     this.explorerAgentFilter = const [],
@@ -160,6 +161,9 @@ class Settings {
 
   /// Zero keeps the activity log forever.
   static const int defaultActivityLogKeepDays = 0;
+
+  /// The server's own default quiet threshold.
+  static const int defaultQuietAfterMinutes = 15;
 
   /// Bounds for [uiTextScale] (90%–150%).
   static const double minUiTextScale = 0.9;
@@ -367,6 +371,10 @@ class Settings {
   /// keeps all of it. The server reads the key and sweeps daily.
   final int activityLogKeepDays;
 
+  /// Minutes a working session may go with nothing new before the server
+  /// reads it as quiet.
+  final int quietAfterMinutes;
+
   /// Whether Notes is offered at all. Off hides it and deletes nothing.
   final bool notesEnabled;
 
@@ -499,6 +507,7 @@ class Settings {
     int? toolImageMaxMegabytes,
     int? endedSessionsOlderThanDays,
     int? activityLogKeepDays,
+    int? quietAfterMinutes,
     bool? notesEnabled,
     bool? hideEmptySections,
     List<String>? explorerAgentFilter,
@@ -591,6 +600,7 @@ class Settings {
     endedSessionsOlderThanDays:
         endedSessionsOlderThanDays ?? this.endedSessionsOlderThanDays,
     activityLogKeepDays: activityLogKeepDays ?? this.activityLogKeepDays,
+    quietAfterMinutes: quietAfterMinutes ?? this.quietAfterMinutes,
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
@@ -699,6 +709,7 @@ class Settings {
     'toolImageMaxMegabytes',
     'endedSessionsOlderThanDays',
     'activityLogKeepDays',
+    'quietAfterMinutes',
     'notesEnabled',
     'hideEmptySections',
     'explorerAgentFilter',
@@ -782,6 +793,7 @@ class Settings {
     'toolImageMaxMegabytes': toolImageMaxMegabytes,
     'endedSessionsOlderThanDays': endedSessionsOlderThanDays,
     'activityLogKeepDays': activityLogKeepDays,
+    'quietAfterMinutes': quietAfterMinutes,
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
     'explorerAgentFilter': explorerAgentFilter,
@@ -1009,6 +1021,10 @@ class Settings {
         final int days when days > 0 => days,
         _ => defaultActivityLogKeepDays,
       },
+      quietAfterMinutes: switch (json['quietAfterMinutes']) {
+        final int minutes when minutes > 0 => minutes,
+        _ => defaultQuietAfterMinutes,
+      },
       notesEnabled: json['notesEnabled'] is bool
           ? json['notesEnabled'] as bool
           : true,
@@ -1107,6 +1123,7 @@ class Settings {
       other.toolImageMaxMegabytes == toolImageMaxMegabytes &&
       other.endedSessionsOlderThanDays == endedSessionsOlderThanDays &&
       other.activityLogKeepDays == activityLogKeepDays &&
+      other.quietAfterMinutes == quietAfterMinutes &&
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
@@ -1182,7 +1199,11 @@ class Settings {
           quitKeepsHostSessions,
           toolImageMaxAgeDays,
           toolImageMaxMegabytes,
-          Object.hash(endedSessionsOlderThanDays, activityLogKeepDays),
+          Object.hash(
+            endedSessionsOlderThanDays,
+            activityLogKeepDays,
+            quietAfterMinutes,
+          ),
           usageLimitBehavior,
           resumeMessage,
           continueInterruptedTurns,

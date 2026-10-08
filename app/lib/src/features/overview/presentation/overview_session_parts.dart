@@ -12,6 +12,7 @@ import '../../agents/presentation/agent_logo.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../../sessions/presentation/quiet_chip.dart';
 import '../application/overview_board.dart';
 import '../application/overview_card_line.dart';
 import '../application/overview_prefs.dart';
@@ -23,11 +24,11 @@ import 'overview_title_block.dart' show OverviewChipFit;
 Color? overviewStateColor(BuildContext context, AgentState state) {
   final semantic = SemanticColors.of(context);
   return switch (state) {
-    AgentState.needsYou => semantic.attention,
+    AgentState.needsYou || AgentState.quiet => semantic.attention,
     AgentState.failed => semantic.failure,
     AgentState.working => semantic.working,
     AgentState.ready => semantic.idle,
-    AgentState.quiet || AgentState.ended => null,
+    AgentState.ended => null,
   };
 }
 
@@ -128,7 +129,7 @@ class OverviewStateGlyph extends StatelessWidget {
       AgentState.working => WorkingSpinner(size: size, color: color!),
       AgentState.failed => Icon(AppIcons.xCircle, size: size, color: color),
       AgentState.ready => Icon(AppIcons.checkCircle, size: size, color: color),
-      AgentState.quiet => Icon(AppIcons.pauseCircle, size: size, color: muted),
+      AgentState.quiet => Icon(AppIcons.pauseCircle, size: size, color: color),
       AgentState.ended => Icon(AppIcons.checkCircle, size: size, color: muted),
     };
   }
@@ -184,6 +185,15 @@ class OverviewStatePill extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // "Quiet 15m", with Peek, Nudge, Stop and End a click away.
+    if (card.state == AgentState.quiet) {
+      return QuietChip(
+        sessionId: card.id,
+        onPeek: () => ref
+            .read(overviewFocusProvider.notifier)
+            .peek(card.id, tab: OverviewPeekTab.terminal),
+      );
+    }
     final theme = Theme.of(context);
     final color =
         overviewStateColor(context, card.state) ??

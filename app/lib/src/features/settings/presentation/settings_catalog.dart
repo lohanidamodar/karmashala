@@ -843,6 +843,12 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['density', 'compact', 'roomy'],
   ),
   SettingsEntry(
+    'Mark a session quiet after',
+    anchor: SettingsAnchor.notifications,
+    description: 'How long a working session may go with nothing new.',
+    keywords: ['quiet', 'stuck', 'hung', 'idle', 'stalled'],
+  ),
+  SettingsEntry(
     'One sentence per line in chat',
     anchor: SettingsAnchor.themeText,
     description: 'Each sentence of an agent’s reply on its own line.',

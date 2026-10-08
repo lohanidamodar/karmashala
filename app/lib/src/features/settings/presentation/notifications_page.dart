@@ -9,6 +9,7 @@ import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/phone_notifications.dart';
 import '../../notifications/presentation/notify_level_text.dart';
+import '../application/settings_controller.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
@@ -62,6 +63,7 @@ class NotificationsSection extends ConsumerWidget {
             value: settings.chime,
             onChanged: controller.setChime,
           ),
+          const _QuietAfterChoice(),
         ],
       ),
     );
@@ -172,4 +174,39 @@ class _QuietItemsLink extends ConsumerWidget {
       child: const Text('Show in the Inbox'),
     ),
   );
+}
+
+/// How long a working session may go with nothing new before it reads
+/// "Quiet": the server's threshold, so every window and phone agrees.
+class _QuietAfterChoice extends ConsumerWidget {
+  const _QuietAfterChoice();
+
+  static const _choices = [5, 10, 15, 30, 60];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final minutes = ref.watch(
+      settingsControllerProvider.select((s) => s.quietAfterMinutes),
+    );
+    return SettingsRow(
+      key: const ValueKey('settings-quiet-after'),
+      label: 'Mark a session quiet after',
+      help:
+          'A working session with nothing new for this long is marked '
+          'Quiet, and the inbox says so once.',
+      control: DropdownButtonFormField<int>(
+        initialValue: minutes,
+        isExpanded: true,
+        items: [
+          for (final choice in {..._choices, minutes}.toList()..sort())
+            DropdownMenuItem(value: choice, child: Text('$choice minutes')),
+        ],
+        onChanged: (value) => value == null
+            ? null
+            : ref
+                  .read(settingsControllerProvider.notifier)
+                  .setQuietAfterMinutes(value),
+      ),
+    );
+  }
 }

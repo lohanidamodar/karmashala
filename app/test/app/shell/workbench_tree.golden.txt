@@ -3066,6 +3066,11 @@ WorkbenchView
                                                                 ExcludeFocus
                                                                   Focus
                                                                     _FocusInheritedScope
+                                                                      QuietChip
+                                                                        SizedBox
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
                                                                       ScheduledResumeChip
                                                                         SizedBox
                                                                 ExcludeFocus
@@ -4326,6 +4331,11 @@ WorkbenchView
                                                                 ExcludeFocus
                                                                   Focus
                                                                     _FocusInheritedScope
+                                                                      QuietChip
+                                                                        SizedBox
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
                                                                       ScheduledResumeChip
                                                                         SizedBox
                                                                 ExcludeFocus
@@ -5170,6 +5180,11 @@ WorkbenchView
                                                                                             RemoteLink
                                                                                               Text text="work"
                                                                                                 RichText
+                                                                ExcludeFocus
+                                                                  Focus
+                                                                    _FocusInheritedScope
+                                                                      QuietChip
+                                                                        SizedBox
                                                                 ExcludeFocus
                                                                   Focus
                                                                     _FocusInheritedScope
@@ -6032,6 +6047,8 @@ WorkbenchView
                                                               RemoteLink
                                                                 Text text="work"
                                                                   RichText
+                                              QuietChip
+                                                SizedBox
                                               Flexible
                                                 ScheduledResumeChip
                                                   SizedBox

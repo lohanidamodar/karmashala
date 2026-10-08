@@ -22,6 +22,7 @@ void main() {
     List<String> inFlight = const [],
     List<String> evidence = const [],
     DateTime? evidenceAt,
+    DateTime? quietSince,
   }) => AgentStatusReport(
     agentId: 'claude-code',
     sessionId: 'cli-1',
@@ -34,6 +35,7 @@ void main() {
     waitingSince: waitingSince,
     inFlight: inFlight,
     evidence: evidence,
+    quietSince: quietSince,
   );
 
   OverviewActivity activity(
@@ -228,7 +230,7 @@ void main() {
         AgentState.quiet,
         status: report(
           AgentActivityStatus.working,
-          evidenceAt: now.subtract(const Duration(minutes: 22)),
+          quietSince: now.subtract(const Duration(minutes: 22)),
         ),
       ),
       'Nothing new for 22m',
@@ -314,7 +316,10 @@ void main() {
                 5,
                 call(
                   'Bash',
-                  const {'command': 'k6 run load.js', 'run_in_background': true},
+                  const {
+                    'command': 'k6 run load.js',
+                    'run_in_background': true,
+                  },
                   background: const BackgroundRun(
                     id: 'b1',
                     kind: BackgroundRunKind.command,
