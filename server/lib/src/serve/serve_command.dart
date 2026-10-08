@@ -1858,7 +1858,13 @@ Future<int> _serve(
     // What the app's own tools did, the server's since slice 5b: a window
     // is only asked to show the result.
     ..add(OpenSessionToolSet(tools, launches: launches))
-    ..add(ContinuationToolSet(tools, continuations: continuations))
+    ..add(
+      ContinuationToolSet(
+        tools,
+        continuations: continuations,
+        rewinds: sessionWork.rewinds,
+      ),
+    )
     ..add(TerminalToolSet(terminals: terminals, registry: registry, data: data))
     ..add(DevServerToolSet(terminals))
     ..add(recordings)

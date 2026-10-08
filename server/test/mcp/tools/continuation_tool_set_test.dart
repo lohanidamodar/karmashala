@@ -267,4 +267,24 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
   });
+
+  test(
+    'session_rewind names its session, and never rewinds the caller',
+    () async {
+      await expectLater(
+        tools.call('session_rewind', {'turnIndex': 0}, null),
+        throwsA(isA<ArgumentError>()),
+      );
+      await expectLater(
+        tools.call('session_rewind', {'sessionId': 's1', 'turnIndex': 0}, 's1'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'why',
+            contains('cannot rewind itself'),
+          ),
+        ),
+      );
+    },
+  );
 }

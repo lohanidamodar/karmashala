@@ -196,11 +196,18 @@ stay, its ended descendants go with it (live ones are left and named in
 
 **`session_fork_from_checkpoint` delivers two halves, and only one is a
 rewind.** The files go back to the checkpoint you named; the conversation is
-carried **whole**. No agent CLI here can resume a conversation at a turn, so
+carried **whole**: a fork never resumes it at a turn, so
 the fork still remembers making edits its files no longer hold, and it will
 carry on from there unless you say otherwise in `instruction`. The result
 lists `delivered` and `notDelivered` separately for exactly this reason —
 read both, and never read a missing key as a half that happened.
+
+**`session_rewind` rewinds another session in place**, to before one of the
+person's messages: `code` (its files from that turn's checkpoint), `conversation`
+(Claude Code forgets that message and everything after) or `both`. It is the
+person's undo, not yours: it restarts the agent it rewinds, so it refuses your
+own session, and it refuses while that agent works. Run it with `preview: true`
+and show the person the turns, files and outside changes it names first.
 
 The file half is the destructive one, on `checkpoint_restore`'s terms: a safety
 checkpoint first, and a tree that has moved refused unless `confirm`. It is
