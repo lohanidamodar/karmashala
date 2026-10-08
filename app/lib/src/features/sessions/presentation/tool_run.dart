@@ -1,3 +1,4 @@
+import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:karmashala_ui/rows.dart' show formatElapsed;
 
 import 'chat_transcript.dart';
@@ -320,7 +321,7 @@ String describeToolRun(Iterable<ChatMessage> messages) {
   for (final message in messages) {
     final tool = message.tool;
     if (tool == null) continue;
-    if (tool.isError) failed++;
+    if (toolCallFailed(message)) failed++;
     final kind = toolKindOf(tool.name, kind: tool.kind);
     calls[kind] = (calls[kind] ?? 0) + 1;
     if (kind != ToolKind.read && kind != ToolKind.edit) continue;
@@ -368,4 +369,91 @@ String _phrase(ToolKind kind, int n, {required bool onlyOther}) {
           ? 'used ${counted('tool', 'tools')}'
           : 'used ${counted('other tool', 'other tools')}',
   };
+}
+
+final _exitLine = RegExp(r'^Exit code (-?\d+)$');
+
+/// Whether a call failed: the agent was told so, or its command exited
+/// non-zero.
+bool toolCallFailed(ChatMessage message) {
+  final tool = message.tool;
+  if (tool == null) return false;
+  if (tool.isError) return true;
+  final first = tool.output?.trimLeft().split('\n').first.trim() ?? '';
+  final code = _exitLine.firstMatch(first)?[1];
+  return code != null && code != '0';
+}
+
+/// The most a failure's headline says; the opened card has the rest.
+const int kErrorHeadlineChars = 160;
+
+/// A failed call's first words worth reading: `exit 1 · Expected: "/home"`.
+/// The `Exit code N` line becomes its prefix; null when the call said nothing.
+String? toolErrorHeadline(ToolActivity tool) {
+  String? code;
+  for (final raw in (tool.output ?? '').split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    final exit = _exitLine.firstMatch(line);
+    if (exit != null) {
+      code ??= exit[1];
+      continue;
+    }
+    final head = line.length > kErrorHeadlineChars
+        ? '${line.substring(0, kErrorHeadlineChars - 1)}…'
+        : line;
+    return code == null ? head : 'exit $code · $head';
+  }
+  return code == null ? null : 'exit $code';
+}
+
+/// The word a call's line opens with, for the kinds named by what they
+/// touched; null for those named by the tool itself.
+String? toolVerb(ToolKind kind) => switch (kind) {
+  ToolKind.command => 'Ran',
+  ToolKind.read => 'Read',
+  ToolKind.edit => 'Edited',
+  ToolKind.patch => 'Patched',
+  ToolKind.search => 'Searched',
+  ToolKind.webSearch => 'Searched the web',
+  ToolKind.webFetch => 'Fetched',
+  _ => null,
+};
+
+/// Whether a call is a look around — a read or a search — that went fine,
+/// so it can share a line with the ones beside it.
+bool _isLookup(ChatMessage message) {
+  final tool = message.tool;
+  if (tool == null || message.pending || toolCallFailed(message)) return false;
+  if (tool.edits.isNotEmpty || tool.imagePath != null) return false;
+  final kind = toolKindOf(tool.name, kind: tool.kind);
+  return kind == ToolKind.read || kind == ToolKind.search;
+}
+
+/// Calls `[from, to)` of an opened run as the lines they are drawn on: two or
+/// more reads and searches in a row share one, everything else has its own.
+/// A run that is all lookups gets a line each: its own line already says it.
+List<(int, int)> toolCallLines(List<ChatMessage> messages, int from, int to) {
+  final lines = _groupedLines(messages, from, to);
+  if (lines.length > 1 || to - from < 2) return lines;
+  return [for (var i = from; i < to; i++) (i, i + 1)];
+}
+
+List<(int, int)> _groupedLines(List<ChatMessage> messages, int from, int to) {
+  final lines = <(int, int)>[];
+  var i = from;
+  while (i < to) {
+    var end = i;
+    while (end < to && _isLookup(messages[end])) {
+      end++;
+    }
+    if (end - i >= 2) {
+      lines.add((i, end));
+      i = end;
+    } else {
+      lines.add((i, i + 1));
+      i++;
+    }
+  }
+  return lines;
 }

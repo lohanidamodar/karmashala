@@ -843,6 +843,12 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['density', 'compact', 'roomy'],
   ),
   SettingsEntry(
+    'One sentence per line in chat',
+    anchor: SettingsAnchor.themeText,
+    description: 'Each sentence of an agent’s reply on its own line.',
+    keywords: ['sentence', 'readability', 'chat', 'line breaks'],
+  ),
+  SettingsEntry(
     'Tools in the More menu',
     anchor: SettingsAnchor.sidePanel,
     description: 'Which tools the context panel’s More menu lists.',

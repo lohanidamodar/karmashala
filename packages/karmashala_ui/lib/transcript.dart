@@ -13,6 +13,7 @@ export 'src/transcript/fence_visuals.dart';
 export 'src/transcript/json_tree.dart';
 export 'src/transcript/message_boundary.dart';
 export 'src/transcript/numbered_code.dart';
+export 'src/transcript/sentence_lines.dart';
 export 'src/transcript/thinking_accordion.dart';
 export 'src/transcript/transcript_selection.dart';
 export 'src/transcript/transcript_target_menu.dart';

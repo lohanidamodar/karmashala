@@ -21,7 +21,13 @@ class _MessageRow extends StatefulWidget {
     this.previewBuilder,
     this.turnActions,
     this.place,
+    this.prose,
+    this.sentencePerLine = false,
   });
+
+  /// How an agent row is weighted in its turn; null draws it plainly.
+  final AgentProse? prose;
+  final bool sentencePerLine;
 
   /// What this row's turn may do, and where the row stands in it; either
   /// null offers none of the turn's actions.
@@ -75,7 +81,9 @@ class _MessageRowState extends State<_MessageRow> {
         old.onClosePreview != widget.onClosePreview ||
         old.previewBuilder != widget.previewBuilder ||
         old.turnActions != widget.turnActions ||
-        old.place != widget.place) {
+        old.place != widget.place ||
+        old.prose != widget.prose ||
+        old.sentencePerLine != widget.sentencePerLine) {
       _tile = null;
     }
   }
@@ -112,6 +120,8 @@ class _MessageRowState extends State<_MessageRow> {
         onSaveNote: save == null ? null : () => save(message, ordinal),
         onCopyTurn: turn == null ? null : () => turn(ordinal),
         turn: _turnHere(message, ordinal),
+        prose: widget.prose,
+        sentencePerLine: widget.sentencePerLine,
       ),
     );
   }
@@ -141,9 +151,13 @@ class _ChatMessageTile extends StatelessWidget {
     this.detail,
     this.preview,
     this.turn = const [],
+    this.prose,
+    this.sentencePerLine = false,
   });
   final ChatMessage message;
   final AgentPlan? previousPlan;
+  final AgentProse? prose;
+  final bool sentencePerLine;
 
   /// The turn's actions this row offers.
   final List<_TurnAction> turn;
@@ -226,6 +240,8 @@ class _ChatMessageTile extends StatelessWidget {
       onLinkTap: onLinkTap,
       detail: detail,
       turn: turn,
+      prose: prose,
+      sentencePerLine: sentencePerLine,
     ),
     kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),
     kTranscriptNoticeRole => _TranscriptNote(text: message.text),
@@ -427,6 +443,8 @@ class _AgentMessageBlock extends StatelessWidget {
     required this.detail,
     this.onCopyTurn,
     this.turn = const [],
+    this.prose,
+    this.sentencePerLine = false,
   });
 
   final ChatMessage message;
@@ -436,6 +454,8 @@ class _AgentMessageBlock extends StatelessWidget {
   final Widget? detail;
   final String Function()? onCopyTurn;
   final List<_TurnAction> turn;
+  final AgentProse? prose;
+  final bool sentencePerLine;
 
   @override
   Widget build(BuildContext context) {
@@ -443,8 +463,44 @@ class _AgentMessageBlock extends StatelessWidget {
       message.text,
       explicit: message.thinking,
     );
+    final scheme = Theme.of(context).colorScheme;
+    final quiet = prose == AgentProse.quiet;
+    final body = Column(
+      key: switch (prose) {
+        AgentProse.quiet => const ValueKey('chat-narration-quiet'),
+        AgentProse.finalAnswer => const ValueKey('chat-final-answer'),
+        null => null,
+      },
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (message.agentName case final name?) ...[
+          _AgentByline(name: name, agentId: message.agentId),
+          const SizedBox(height: Insets.xs),
+        ],
+        if (message.model case final model?) ...[
+          _TurnModel(label: model),
+          const SizedBox(height: Insets.xs),
+        ],
+        if (thinking != null && thinking.isNotEmpty) ...[
+          ThinkingAccordion(thinking: thinking),
+          const SizedBox(height: Insets.xs),
+        ],
+        MarkdownMessage(
+          cleanText,
+          onPathTap: onPathTap,
+          onLinkTap: onLinkTap,
+          selectable: false,
+          foldLong: true,
+          color: quiet ? scheme.onSurfaceVariant : null,
+          sentencePerLine: sentencePerLine,
+        ),
+        TranscriptImageStrip(paths: inlineImagePaths(cleanText)),
+        ?detail,
+      ],
+    );
     // Plain text, no bubble and no name row (board N2): the agent's words are
-    // the page, and the user's tinted bubbles are what mark the turns.
+    // the page, and the user's tinted bubbles are what mark the turns. The
+    // answer a turn of work ends on hangs off an accent rule.
     return _TurnWithMeta(
       at: message.at,
       actions: _messageActions(
@@ -453,32 +509,26 @@ class _AgentMessageBlock extends StatelessWidget {
         copyTurn: onCopyTurn,
         turn: turn,
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (message.agentName case final name?) ...[
-            _AgentByline(name: name, agentId: message.agentId),
-            const SizedBox(height: Insets.xs),
-          ],
-          if (message.model case final model?) ...[
-            _TurnModel(label: model),
-            const SizedBox(height: Insets.xs),
-          ],
-          if (thinking != null && thinking.isNotEmpty) ...[
-            ThinkingAccordion(thinking: thinking),
-            const SizedBox(height: Insets.xs),
-          ],
-          MarkdownMessage(
-            cleanText,
-            onPathTap: onPathTap,
-            onLinkTap: onLinkTap,
-            selectable: false,
-            foldLong: true,
-          ),
-          TranscriptImageStrip(paths: inlineImagePaths(cleanText)),
-          ?detail,
-        ],
-      ),
+      body: prose != AgentProse.finalAnswer
+          ? body
+          : Semantics(
+              container: true,
+              label: 'Final answer',
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: BorderDirectional(
+                    start: BorderSide(
+                      color: scheme.primary,
+                      width: Chrome.answerRule,
+                    ),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: Insets.md),
+                  child: body,
+                ),
+              ),
+            ),
     );
   }
 }

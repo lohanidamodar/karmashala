@@ -265,6 +265,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setChatSentencePerLine(bool value) {
+    state = state.copyWith(chatSentencePerLine: value);
+    _save();
+  }
+
   void setUsageLimitBehavior(UsageLimitBehavior value) {
     state = state.copyWith(usageLimitBehavior: value);
     _save();

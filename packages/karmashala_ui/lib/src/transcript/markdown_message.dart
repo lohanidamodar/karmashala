@@ -13,6 +13,7 @@ import 'package:karmashala_session/transcript.dart';
 import 'code_block.dart';
 import 'fence_visuals.dart';
 import 'markdown_image.dart';
+import 'sentence_lines.dart';
 import 'transcript_selection.dart';
 import 'transcript_target_menu.dart';
 
@@ -42,10 +43,19 @@ class MarkdownMessage extends StatelessWidget {
     this.foldLong = false,
     this.foldAt = kMessageFoldLines,
     this.foldTo = kMessageHeadLines,
+    this.color,
+    this.sentencePerLine = false,
     super.key,
   });
 
   final String data;
+
+  /// The prose's colour, when not the body's: quiet narration is muted.
+  /// Links and code keep their own.
+  final Color? color;
+
+  /// Starts each sentence of the prose on its own line ([oneSentencePerLine]).
+  final bool sentencePerLine;
 
   /// Where a clicked path goes. Null renders the paths as plain prose — a link
   /// nobody can follow is worse than no link.
@@ -69,18 +79,19 @@ class MarkdownMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final data = sentencePerLine ? oneSentencePerLine(this.data) : this.data;
     if (!foldLong) return _render(context, data);
     final lines = '\n'.allMatches(data).length + 1;
     if (lines <= foldAt) return _render(context, data);
     return _FoldedMarkdown(
       lines: lines,
       head: markdownHead(data, foldTo),
-      render: (context, all) => _render(context, all ? data : null),
+      render: (context, all) =>
+          _render(context, all ? data : markdownHead(data, foldTo)),
     );
   }
 
-  Widget _render(BuildContext context, String? text) {
-    final data = text ?? markdownHead(this.data, foldTo);
+  Widget _render(BuildContext context, String data) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
@@ -91,7 +102,10 @@ class MarkdownMessage extends StatelessWidget {
         : scheme.surfaceContainerLow;
 
     final sheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
-      p: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
+      p: theme.textTheme.bodyMedium?.copyWith(height: 1.45, color: color),
+      listBullet: color == null
+          ? null
+          : theme.textTheme.bodyMedium?.copyWith(color: color),
       code: MonoStyles.label.copyWith(
         color: scheme.onSurface,
         backgroundColor: codeBg,
