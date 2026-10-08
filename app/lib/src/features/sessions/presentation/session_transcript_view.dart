@@ -93,6 +93,7 @@ import 'stop_children_offer.dart';
 import 'delegation_card.dart';
 import 'session_failed_state.dart';
 import 'background_runs_strip.dart';
+import '../../git/application/remote_links.dart';
 
 /// Whether the agent in [String] session has a prompt or question open.
 final _promptOpenProvider = Provider.autoDispose.family<bool, String>(
@@ -739,14 +740,21 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       _say('Only web links open from here: $href');
       return;
     }
-    final go = await showAdaptiveModal<bool>(
-      context: context,
-      title: 'Open in the browser?',
-      builder: (context) => _OpenLinkBody(uri: uri),
-    );
-    if (go != true || !mounted) return;
+    // A click is deliberate; a tap while scrolling a phone is easily not, so
+    // only touch asks first.
+    if (UiDensity.of(context).isTouch) {
+      final go = await showAdaptiveModal<bool>(
+        context: context,
+        title: 'Open in the browser?',
+        builder: (context) => _OpenLinkBody(uri: uri),
+      );
+      if (go != true || !mounted) return;
+    }
     try {
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      final opened = uri.isScheme('mailto')
+          ? await launchUrl(uri, mode: LaunchMode.externalApplication)
+          : await ref.read(openExternalUrlProvider)(uri.toString());
+      if (!opened) {
         _say('Nothing on this device could open $href.');
       }
     } on Exception {
@@ -809,8 +817,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final recapShare = CompactWorkbenchScope.of(context)
         ? _recapShareCompact
         : _recapShare;
-    // Links stay inert under a pointer, as they were; on touch they ask.
-    final onLinkTap = UiDensity.of(context).isTouch ? _openLink : null;
+    // A click opens a web link in the browser; on touch it asks first.
+    final onLinkTap = _openLink;
 
     // **No header** (board N2, owner 2026-09-28): the conversation starts right
     // under the tab strip. The tab already names the session and shows its
