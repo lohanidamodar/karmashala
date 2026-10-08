@@ -210,12 +210,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             .read(sessionHandoffServiceProvider)
             .forkPlanFor(widget.sessionId)
             .isRefused;
-    final chain = canFork
+    final rewindable = ref.watch(sessionRewindableProvider(widget.sessionId));
+    // A rewind restores files from the same checkpoints a fork would.
+    final chain = canFork || rewindable
         ? ref.watch(sessionCheckpointsProvider(widget.sessionId)).value
         : null;
     final running =
         turn == TranscriptTurn.working || turn == TranscriptTurn.awaitingUser;
-    final rewindable = ref.watch(sessionRewindableProvider(widget.sessionId));
     return TranscriptTurnActions(
       onRetry: canSend ? _retry : null,
       onEdit: canSend ? _editAndResend : null,
