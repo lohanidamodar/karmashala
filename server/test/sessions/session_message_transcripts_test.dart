@@ -123,6 +123,24 @@ void main() {
       expect(agent.images, isEmpty, reason: 'only the person attaches');
     });
 
+    test('a rewind row is drawn as one, with its marker as its words', () {
+      final marker = SessionMessageTranscriptSource.project(
+        dao.append(
+          SessionMessage(
+            id: 'r',
+            sessionId: 'acp',
+            role: SessionMessageRole.notice,
+            text: 'Rewound 2 turns · Code and conversation',
+            messageId: '_karmashala/rewound',
+            createdAt: at,
+            updatedAt: at,
+          ),
+        ),
+      );
+      expect(marker.role, 'rewound');
+      expect(marker.text, 'Rewound 2 turns · Code and conversation');
+    });
+
     test('roles, text, thinking and time come through', () {
       final user = SessionMessageTranscriptSource.project(
         dao.append(row('u', role: SessionMessageRole.user, text: 'hi')),

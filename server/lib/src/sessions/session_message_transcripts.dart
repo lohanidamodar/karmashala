@@ -2,7 +2,8 @@ import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart' show AgentPlan, AgentPlanItem;
 import 'package:agent_cli/descriptors.dart' show AgentPlanItemState;
-import 'package:agent_cli/read.dart' show CompactionBoundary, TranscriptMessage;
+import 'package:agent_cli/read.dart'
+    show CompactionBoundary, TranscriptMessage, kTranscriptRewindRole;
 import 'package:agent_cli/stream.dart'
     show
         FileEditKind,
@@ -81,7 +82,9 @@ class SessionMessageTranscriptSource {
         ? splitAttachedImages(row.text).paths
         : const <String>[];
     return TranscriptMessage(
-      role: row.role.name,
+      role: row.messageId == AcpExtensions.rewoundMessageId
+          ? kTranscriptRewindRole
+          : row.role.name,
       text: attached.isEmpty
           ? row.text
           : splitAttachedImages(row.text).textWithout(attached.toSet()),
