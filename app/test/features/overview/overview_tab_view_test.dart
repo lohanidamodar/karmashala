@@ -898,6 +898,106 @@ void main() {
       });
     });
   });
+
+  group('a click outside the peek closes it, as Esc does', () {
+    Finder byKey(String key) => find.byKey(ValueKey(key));
+
+    Future<ProviderContainer> peekBusy(
+      WidgetTester tester, {
+      Size size = const Size(1440, 900),
+    }) async {
+      final c = await pump(tester, size);
+      await tester.tap(find.text('Chat busy').first);
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+      return c;
+    }
+
+    /// The board's empty space: the foot of its list, under the last card.
+    Future<void> tapBoardSpace(WidgetTester tester) async {
+      final list = tester.getRect(hybridList.first);
+      await tester.tapAt(Offset(list.left + 8, list.bottom - 8));
+      await settle(tester);
+    }
+
+    testBoard('docked: the board\'s space closes it', (tester) async {
+      final c = await peekBusy(tester);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(byKey('overview-peek:busy'), findsNothing);
+    });
+
+    testBoard('overlay, below 1280 px: the board beside it closes it', (
+      tester,
+    ) async {
+      final c = await peekBusy(tester, size: const Size(1100, 900));
+      expect(byKey('overview-peek-overlay'), findsOneWidget);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+    });
+
+    testBoard('another card switches it instead', (tester) async {
+      final c = await peekBusy(tester);
+      await tester.tap(find.text('Chat idle').first);
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'idle');
+    });
+
+    testBoard('the peek itself, the header and the filters never close it', (
+      tester,
+    ) async {
+      final c = await peekBusy(tester);
+      await tester.tap(
+        find
+            .descendant(
+              of: byKey('overview-peek:busy'),
+              matching: find.text('Chat busy'),
+            )
+            .first,
+      );
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+
+      await tester.tap(byKey('overview-filter-button'));
+      await settle(tester);
+      expect(byKey('overview-filter-panel'), findsOneWidget);
+      await tester.tap(byKey('overview-filter-archived'));
+      await settle(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+    });
+
+    testBoard('side by side, both close', (tester) async {
+      final c = await pump(tester, const Size(1900, 1000));
+      c.read(overviewFocusProvider.notifier).peekSideBySide('busy', 'idle');
+      await settle(tester);
+      expect(byKey('overview-side-by-side-peeks'), findsOneWidget);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(c.read(overviewFocusProvider).beside, isNull);
+    });
+
+    testBoard('not while its box holds an unsent message, which is kept', (
+      tester,
+    ) async {
+      final c = await peekBusy(tester);
+      final box = find
+          .descendant(
+            of: byKey('overview-peek:busy'),
+            matching: find.byType(EditableText),
+          )
+          .last;
+      await tester.enterText(box, 'half a thought');
+      await settle(tester);
+
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'busy');
+
+      await tester.enterText(box, '');
+      await settle(tester);
+      await tapBoardSpace(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+    });
+  });
 }
 
 /// Bounded: an ask's shield breathes for ever.

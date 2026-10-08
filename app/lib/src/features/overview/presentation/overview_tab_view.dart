@@ -10,6 +10,8 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../explorer/application/explorer_actions.dart';
+import '../../sessions/application/session_chat_source.dart'
+    show composersHoldingTextProvider;
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_batch.dart';
@@ -610,6 +612,19 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     );
   }
 
+  /// The board's space clicked: the peek — both, side by side — closes,
+  /// unless a box in it holds a message not yet sent. Closing would keep it
+  /// (the draft is parked per session), but a stray click is not taken as
+  /// leaving it.
+  void _closePeekFromBoard() {
+    final focus = ref.read(overviewFocusProvider);
+    final holding = ref.read(composersHoldingTextProvider);
+    if (holding.contains(focus.peeked) || holding.contains(focus.beside)) {
+      return;
+    }
+    ref.read(overviewFocusProvider.notifier).closePeek();
+  }
+
   Widget _laidOut() => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.maxWidth;
@@ -625,12 +640,20 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         children: [
           const OverviewBatchBar(),
           Expanded(
-            child: OverviewHybrid(
-              onOpen: _open,
-              onEdit: (card) => _open(card, editing: true),
-              onTerminal: _terminal,
-              onAnswered: _advance,
-              questionControllerOf: _questionOf,
+            // A click on the board's own space closes the peek, as Esc does.
+            // A card, a button or a field clicked wins the tap — the
+            // innermost recognizer does — so a card still switches the peek.
+            child: GestureDetector(
+              key: const ValueKey('overview-board-space'),
+              behavior: HitTestBehavior.translucent,
+              onTap: peeked == null ? null : _closePeekFromBoard,
+              child: OverviewHybrid(
+                onOpen: _open,
+                onEdit: (card) => _open(card, editing: true),
+                onTerminal: _terminal,
+                onAnswered: _advance,
+                questionControllerOf: _questionOf,
+              ),
             ),
           ),
         ],

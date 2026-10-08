@@ -35,12 +35,37 @@ class ChatsShownOutsideGroups extends Notifier<int> {
   void add() => state++;
 
   void remove() {
+    // Called a microtask after a peek closes, by when the container may have
+    // let this go.
+    if (!ref.mounted) return;
     if (state > 0) state--;
   }
 }
 
 final chatsShownOutsideGroupsProvider =
     NotifierProvider<ChatsShownOutsideGroups, int>(ChatsShownOutsideGroups.new);
+
+/// The sessions whose open message box holds text not yet sent — what keeps
+/// the Agent dashboard's peek open when the board is clicked.
+class ComposersHoldingText extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void mark(String sessionId, {required bool holding}) {
+    if (!ref.mounted || state.contains(sessionId) == holding) return;
+    state = holding
+        ? {...state, sessionId}
+        : {
+            for (final id in state)
+              if (id != sessionId) id,
+          };
+  }
+}
+
+final composersHoldingTextProvider =
+    NotifierProvider<ComposersHoldingText, Set<String>>(
+      ComposersHoldingText.new,
+    );
 
 /// Whether a mounted conversation is the surface on screen, and so whether its
 /// transcript is worth re-reading: one 43.8 MB parse costs 888 ms on the UI.

@@ -236,11 +236,37 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   DateTime? _turnSince;
   int? _turnTokens;
 
+  /// Told whether the box holds unsent text, held for the same reason.
+  late final ComposersHoldingText _holding;
+
+  /// The session [_holding] was last told about, and what it was told.
+  String? _heldFor;
+  var _held = false;
+
   @override
   void initState() {
     super.initState();
     _drafts = ref.read(composerDraftProvider.notifier);
     _queuedFiles = ref.read(composerAttachmentsProvider.notifier);
+    _holding = ref.read(composersHoldingTextProvider.notifier);
+    _composer.addListener(_tellHolding);
+  }
+
+  /// Whether the box holds text not yet sent, for the dashboard's peek to
+  /// stay open over. After the frame: text set while the tree builds may not
+  /// change a provider then.
+  void _tellHolding() {
+    final holding = _composer.text.trim().isNotEmpty;
+    final id = widget.sessionId;
+    if (holding == _held && id == _heldFor) return;
+    final was = _heldFor;
+    _held = holding;
+    _heldFor = id;
+    final tell = _holding;
+    Future.microtask(() {
+      if (was != null && was != id) tell.mark(was, holding: false);
+      tell.mark(id, holding: holding);
+    });
   }
 
   @override
@@ -264,6 +290,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _leaving = true;
     final draft = _composer.text;
     if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
+    _composer.removeListener(_tellHolding);
+    if (_heldFor case final id? when _held) {
+      final tell = _holding;
+      Future.microtask(() => tell.mark(id, holding: false));
+    }
     _composer.dispose();
     unawaited(_dropped.close());
     _filesQueued.dispose();
