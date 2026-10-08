@@ -32,6 +32,7 @@ import '../sessions/launch/session_handoffs.dart';
 import '../sessions/launch/launch_settings.dart';
 import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
+import '../sessions/rewind/rewind_cuts.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_session/lineage.dart';
 
@@ -231,6 +232,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.links,
     this.acpRuntimes,
     this.acpAuth,
+    this.rewindCuts,
     Map<String, String>? hostEnvironment,
     bool? windows,
   }) : _hostEnvironment = hostEnvironment ?? Platform.environment,
@@ -296,6 +298,10 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     AcpLaunchSpec spec,
   )?
   acpAuth;
+
+  /// Each session's pending rewind cut, applied to an ACP resume; null keeps
+  /// none.
+  final RewindCuts? rewindCuts;
 
   final Map<String, String> _hostEnvironment;
   final bool _windows;
@@ -793,6 +799,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
           removed: removed,
           mcpUrl: access?.url,
           resumeSessionId: resumeId,
+          resumeAt: resumeId == null ? null : rewindCuts?.cutOf(id),
+          onCutTaken: () => rewindCuts?.taken(id),
           risk: risk,
         ),
       );

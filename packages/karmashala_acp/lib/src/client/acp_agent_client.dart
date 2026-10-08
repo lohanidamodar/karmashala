@@ -88,15 +88,18 @@ class AcpAgentClient {
   );
 
   /// The agent replays the session's updates on [updates] before answering.
+  /// [meta] goes as the request's `_meta`, for an agent that reads one.
   Future<LoadSessionResult> loadSession({
     required String sessionId,
     required String cwd,
     List<McpServerEntry> mcpServers = const [],
+    Map<String, Object?>? meta,
   }) async => LoadSessionResult.fromJson(
     await _call(AcpMethods.sessionLoad, {
       'sessionId': sessionId,
       'cwd': cwd,
       'mcpServers': [for (final s in mcpServers) s.toJson()],
+      '_meta': ?meta,
     }),
   );
 

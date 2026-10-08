@@ -83,6 +83,7 @@ import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
 import '../mcp/tools/window_tool_sets.dart';
 import '../sessions/launch/conversation_presence.dart';
+import '../sessions/rewind/rewind_cuts.dart';
 import '../sessions/launch/handoff_delivery.dart';
 import '../sessions/launch/launch_settings.dart';
 import '../sessions/launch/session_handoffs.dart';
@@ -1144,6 +1145,10 @@ Future<int> _serve(
     now: () => DateTime.now().toUtc(),
     legacy: Directory(p.join(dataDirectory, 'handoff')),
   );
+  final rewindCuts = RewindCuts(
+    read: () => database.readMetadata(kRewindCutsKey),
+    write: (value) => database.writeMetadata(kRewindCutsKey, value),
+  );
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     agents: liveAgents,
@@ -1172,6 +1177,7 @@ Future<int> _serve(
     links: SessionRepositoryDao(database),
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
+    rewindCuts: rewindCuts,
     hostEnvironment: hostEnvironment,
   );
   final checkoutFacts = DaemonCheckoutFacts(

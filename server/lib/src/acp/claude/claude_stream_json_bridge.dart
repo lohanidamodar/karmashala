@@ -371,6 +371,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     await _open(['--session-id', id], params);
     _openParams = params;
     _sessionId = id;
+    _resumeAt = null;
     _announceCommands();
     _announceModel();
     return {
@@ -388,13 +389,26 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         'session/load needs a sessionId',
       );
     }
-    await _open(['--resume', id], params);
+    final at = jsonObject(params['_meta'])?[AcpExtensions.resumeAt];
+    final resumeAt = at is String && at.isNotEmpty ? at : null;
+    await _open(_resumeArguments(id, resumeAt), params);
     _openParams = params;
     _sessionId = id;
+    _resumeAt = resumeAt;
     _announceCommands();
     _announceModel();
     return {'modes': _modes(), 'configOptions': _configOptions()};
   }
+
+  /// A rewind's cut, kept until a prompt lands on it: a cut with nothing
+  /// sent after it does not hold, so a resume before then cuts again.
+  String? _resumeAt;
+
+  static List<String> _resumeArguments(String id, String? resumeAt) => [
+    '--resume',
+    id,
+    if (resumeAt != null) ...['--resume-session-at', resumeAt],
+  ];
 
   /// What `default` resolves to, before Claude has replied with it. After the
   /// answer that names the session, so it is the session's.
@@ -448,6 +462,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       'parent_tool_use_id': null,
       'session_id': _sessionId,
     });
+    _resumeAt = null;
     return {'stopReason': await turn.future};
   }
 
@@ -516,7 +531,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   Future<void> _resume() async {
     final mode = _mode;
     final model = _model;
-    final claude = await _open(['--resume', _sessionId], _openParams);
+    final claude = await _open(
+      _resumeArguments(_sessionId, _resumeAt),
+      _openParams,
+    );
     _abandoned = false;
     if (_mode != mode) {
       await claude.control('set_permission_mode', {'mode': mode});

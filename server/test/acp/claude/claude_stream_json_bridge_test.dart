@@ -85,6 +85,8 @@ void main() {
     FakeClaudeMachine machine, {
     PermissionRisk? risk,
     String? resumeSessionId,
+    String? resumeAt,
+    void Function()? onCutTaken,
     String? mcpUrl,
     Duration? interruptPatience,
   }) {
@@ -116,6 +118,8 @@ void main() {
       mcpUrl: mcpUrl,
       risk: risk,
       resumeSessionId: resumeSessionId,
+      resumeAt: resumeAt,
+      onCutTaken: onCutTaken,
       newId: () => 'm${++ids}',
       coalesce: const Duration(milliseconds: 10),
       stopPatience: const Duration(milliseconds: 300),
@@ -247,6 +251,50 @@ void main() {
       expect(outcome.resumed, isTrue);
       expect(outcome.agentSessionId, 'conv-1');
       expect(machine.current.args, ['--resume', 'conv-1']);
+      await rt.stop();
+    });
+
+    test('a rewind\'s cut loads the conversation only up to its entry, and '
+        'holds until a prompt is sent: a resume after that is a plain one, '
+        'and the server is told once', () async {
+      final machine = FakeClaudeMachine(
+        conversations: {'conv-1'},
+        ignoreInterrupt: true,
+        turns: [
+          (c, user) async => c.streamText('m1', ['stuck ']),
+          (c, user) async {
+            c.assistant('m2', [
+              {'type': 'text', 'text': 'Back.'},
+            ]);
+            c.result();
+          },
+        ],
+      );
+      var taken = 0;
+      final rt = runtime(
+        machine,
+        resumeSessionId: 'conv-1',
+        resumeAt: 'entry-7',
+        onCutTaken: () => taken++,
+        interruptPatience: const Duration(milliseconds: 100),
+      );
+      await rt.start();
+      expect(machine.current.args, [
+        '--resume',
+        'conv-1',
+        '--resume-session-at',
+        'entry-7',
+      ]);
+      expect(taken, 0);
+      await rt.send('Hang');
+      expect(taken, 1);
+      await until(() => rows().any((r) => r.text.contains('stuck')));
+      rt.cancel();
+      expect(await rt.awaitTurn(), StopReason.cancelled);
+      await rt.send('Again');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      expect(machine.current.args, ['--resume', 'conv-1']);
+      expect(taken, 1);
       await rt.stop();
     });
 

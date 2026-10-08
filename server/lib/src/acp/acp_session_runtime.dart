@@ -90,6 +90,8 @@ class AcpSessionRuntime implements ScreenSession {
     this.mcpUrl,
     this.risk,
     this.resumeSessionId,
+    this.resumeAt,
+    this.onCutTaken,
     this.clientVersion = kHostVersion,
     String Function()? newId,
     DateTime Function()? now,
@@ -140,6 +142,14 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// The agent's session to `session/load`, when it can.
   final String? resumeSessionId;
+
+  /// A rewind's cut: the entry of the agent's record to keep the loaded
+  /// conversation up to ([AcpExtensions.resumeAt]).
+  final String? resumeAt;
+
+  /// Told once the first prompt after a cut is sent: the cut holds from then.
+  final void Function()? onCutTaken;
+  var _cutPending = false;
   final String clientVersion;
 
   /// How long a stop waits for the exit before killing, and after killing.
@@ -346,9 +356,13 @@ class AcpSessionRuntime implements ScreenSession {
                 sessionId: resume,
                 cwd: workingDirectory,
                 mcpServers: servers,
+                meta: resumeAt == null
+                    ? null
+                    : {AcpExtensions.resumeAt: resumeAt},
               ),
             ),
           );
+          _cutPending = resumeAt != null;
           modes = loaded.modes;
           options = loaded.configOptions;
           _agentSessionId = resume;
@@ -441,6 +455,10 @@ class AcpSessionRuntime implements ScreenSession {
     final settled = _turnSettled = Completer<StopReason?>();
     final turn = _turn = client.prompt(agent, prompt);
     unawaited(_settle(turn, settled));
+    if (_cutPending) {
+      _cutPending = false;
+      onCutTaken?.call();
+    }
     if (notice != null) {
       host.log('session $sessionId: $notice');
       host.notice(sessionId, notice);
