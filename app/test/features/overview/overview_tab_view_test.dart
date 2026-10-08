@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -789,6 +791,67 @@ void main() {
         expect(spec.prompt, 'and the docs');
         expectStayedPut(c);
       });
+
+      // The box is disabled while a message goes, and a disabled field gives
+      // the keys up; after the send they have to come back to it, while the
+      // card moves on — at work, then waiting.
+      for (final how in ['Enter', 'the send button']) {
+        testBoard('after a send by $how the peek keeps the keys in its box, '
+            'as the card moves group', (tester) async {
+          await pump(tester, const Size(1440, 900));
+          await peekPaused(tester);
+          Finder box() => find
+              .descendant(
+                of: byKey('overview-peek:paused'),
+                matching: find.byType(EditableText),
+              )
+              .last;
+          await tester.tap(box());
+          await settle(tester);
+          await tester.enterText(box(), 'and the docs');
+          // A server that takes a moment, as a real one does: the box draws
+          // disabled while it waits.
+          final slow = server.hold = Completer<void>();
+          if (how == 'Enter') {
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          } else {
+            await tester.tap(
+              find
+                  .descendant(
+                    of: byKey('overview-peek:paused'),
+                    matching: find.byTooltip(
+                      'Send (Enter) · Shift + Enter for a new line',
+                    ),
+                  )
+                  .last,
+            );
+          }
+          for (var i = 0; i < 3; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          server.hold = null;
+          slow.complete();
+          await settle(tester);
+          expect(starts().single.prompt, 'and the docs');
+
+          bool boxHasKeys() =>
+              tester.widget<EditableText>(box()).focusNode.hasFocus;
+          expect(boxHasKeys(), isTrue, reason: 'right after the send');
+
+          server.attention.statusOf('paused', AgentActivityStatus.working);
+          await settle(tester);
+          expect(boxHasKeys(), isTrue, reason: 'at work');
+
+          server.attention.statusOf(
+            'paused',
+            AgentActivityStatus.idle,
+            waiting: AgentWaitKind.input,
+          );
+          await settle(tester);
+          expect(boxHasKeys(), isTrue, reason: 'waiting');
+          expect(byKey('overview-peek:paused'), findsOneWidget);
+        });
+      }
 
       testBoard('"Resuming…" shows while it comes back', (tester) async {
         final c = await pump(tester, const Size(1440, 900));
