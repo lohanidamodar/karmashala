@@ -1623,8 +1623,26 @@ Future<int> _serve(
     agentOf: (id) => checkoutRows.installation(id)?.agentId,
     registry: () => agentRegistry.current,
     messages: sessionMessages,
+    // A chat form's record is its terminal form's: Claude Code chat keeps
+    // its conversation in Claude Code's own store.
     transcriptLines: (sessionId) async {
-      final path = (await sessionTranscripts.lookUp(sessionId)).path;
+      final row = sessionRows.getById(sessionId);
+      final agentId = row == null
+          ? null
+          : checkoutRows.installation(row.agentInstallationId)?.agentId;
+      final conversation = row?.externalSessionId;
+      if (agentId == null || conversation == null || conversation.isEmpty) {
+        return null;
+      }
+      final String? path;
+      try {
+        path = await transcripts.recordFor(
+          agentRegistry.current.foldedIdOf(agentId),
+          conversation,
+        );
+      } on Object {
+        return null;
+      }
       if (path == null) return null;
       try {
         return await File(path).readAsLines();
