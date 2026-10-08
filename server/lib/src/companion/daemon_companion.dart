@@ -688,7 +688,8 @@ class DaemonCompanion implements CompanionHandler {
         InboxItemKind.readyToMerge ||
         InboxItemKind.followUp ||
         InboxItemKind.turnCutOff ||
-        InboxItemKind.automationProposed => null,
+        InboxItemKind.automationProposed ||
+        InboxItemKind.wentQuiet => null,
       };
       if (kind == null) continue;
       if (item.kind == InboxItemKind.usageLimit) limitFiled = true;

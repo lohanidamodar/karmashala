@@ -55,7 +55,11 @@ enum InboxItemKind {
 
   /// An agent proposed an automation; it does nothing until a person turns
   /// it on.
-  automationProposed;
+  automationProposed,
+
+  /// A working session with nothing new for its quiet threshold: once per
+  /// quiet spell.
+  wentQuiet;
 
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
@@ -69,7 +73,8 @@ enum InboxItemKind {
     InboxItemKind.changesRequested ||
     InboxItemKind.readyToMerge ||
     InboxItemKind.usageLimit ||
-    InboxItemKind.turnCutOff => InboxRetirement.viewing,
+    InboxItemKind.turnCutOff ||
+    InboxItemKind.wentQuiet => InboxRetirement.viewing,
     // Neither: the watcher would sweep this away on its next poll, and glancing
     // at a crashed session does not deal with what it left.
     InboxItemKind.followUp ||
@@ -97,7 +102,8 @@ enum InboxItemKind {
     InboxItemKind.followUp ||
     InboxItemKind.usageLimit ||
     InboxItemKind.turnCutOff ||
-    InboxItemKind.automationProposed => null,
+    InboxItemKind.automationProposed ||
+    InboxItemKind.wentQuiet => null,
   };
 
   String get label => switch (this) {
@@ -111,6 +117,7 @@ enum InboxItemKind {
     InboxItemKind.usageLimit => 'Usage limit reached',
     InboxItemKind.turnCutOff => 'Turn cut off',
     InboxItemKind.automationProposed => 'Proposed automation',
+    InboxItemKind.wentQuiet => 'Gone quiet',
   };
 
   /// The kind written on the wire. A kind added after 1.31 travels as
@@ -118,7 +125,8 @@ enum InboxItemKind {
   /// kind it does not know, and that loses the whole batch it came in.
   String get wireName => switch (this) {
     InboxItemKind.turnCutOff ||
-    InboxItemKind.automationProposed => InboxItemKind.followUp.name,
+    InboxItemKind.automationProposed ||
+    InboxItemKind.wentQuiet => InboxItemKind.followUp.name,
     _ => name,
   };
 

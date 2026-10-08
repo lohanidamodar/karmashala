@@ -622,4 +622,35 @@ void main() {
       );
     });
   });
+
+  group('when it last did anything', () {
+    setUp(() => keeper.track('row-1', agentId: claude.id));
+
+    DateTime? activeAt() => keeper.statusOf('row-1')!.activeAt;
+
+    test('a hook is activity, even one repeating the word', () {
+      hook('UserPromptSubmit');
+      expect(activeAt(), clock.now);
+      clock.now = clock.now.add(const Duration(minutes: 3));
+      hook('PreToolUse');
+      expect(activeAt(), clock.now);
+    });
+
+    test('a spinner counting is not; output that changes is', () {
+      final start = clock.now;
+      keeper.screen('row-1', ['✻ Sautéing… (12s · ↓ 1.2k tokens)']);
+      expect(activeAt(), start);
+
+      clock.now = start.add(const Duration(minutes: 5));
+      keeper.screen('row-1', ['✻ Sautéing… (312s · ↓ 1.4k tokens)']);
+      expect(activeAt(), start, reason: 'only its numbers moved');
+
+      clock.now = start.add(const Duration(minutes: 6));
+      keeper.screen('row-1', [
+        'PASS test/auth_test.dart',
+        '✻ Sautéing… (372s · ↓ 1.4k tokens)',
+      ]);
+      expect(activeAt(), clock.now);
+    });
+  });
 }

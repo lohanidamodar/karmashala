@@ -9,7 +9,12 @@ class HostedAgentStatus {
     required this.sessionId,
     required this.report,
     this.question,
+    this.activeAt,
   });
+
+  /// When the agent last did anything the host saw — a hook, its own report,
+  /// or a screen that changed beyond a counting clock. Null before the first.
+  final DateTime? activeAt;
 
   /// The session row's id (not the CLI's own conversation id, which the
   /// report carries).
@@ -26,6 +31,7 @@ class HostedAgentStatus {
     'sessionId': sessionId,
     'report': reportToJson(report),
     if (question case final question?) 'question': questionToJson(question),
+    if (activeAt case final at?) 'activeAt': at.toUtc().toIso8601String(),
   };
 
   /// Null for a shape this build cannot read — never a guessed status.
@@ -38,6 +44,7 @@ class HostedAgentStatus {
       sessionId: sessionId,
       report: report,
       question: questionFromJson(json['question']),
+      activeAt: _time(json['activeAt']),
     );
   }
 
@@ -66,6 +73,8 @@ Map<String, Object?> reportToJson(AgentStatusReport report) => {
   if (report.inFlight.isNotEmpty) 'inFlight': report.inFlight,
   if (report.backgroundOnly) 'backgroundOnly': true,
   if (report.working case final working?) 'working': working.toJson(),
+  if (report.quietSince case final since?)
+    'quietSince': since.toUtc().toIso8601String(),
 };
 
 AgentStatusReport? reportFromJson(Object? json) {
@@ -103,6 +112,7 @@ AgentStatusReport? reportFromJson(Object? json) {
     inFlight: inFlight is List ? inFlight.whereType<String>().toList() : [],
     backgroundOnly: json['backgroundOnly'] == true,
     working: AgentWorkingDetail.fromJson(json['working']),
+    quietSince: _time(json['quietSince']),
   );
 }
 

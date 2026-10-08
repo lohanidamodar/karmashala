@@ -148,6 +148,7 @@ import '../activity/activity_backfill.dart';
 import '../activity/server_activity.dart';
 import '../attention/daemon_attention.dart';
 import '../attention/delivery_watch.dart';
+import '../attention/quiet_threshold.dart';
 import 'package:karmashala_notifications/attention.dart' show InboxItem;
 import '../mcp/tools/server_tool_schemas.dart';
 import '../browser/server_browser.dart';
@@ -683,6 +684,11 @@ Future<int> _serve(
     onApprovalRequested: companion.approvalRequested,
     onStatusMoved: companion.sessionsMoved,
     log: (message) => errSink.writeln('karmashala_host: $message'),
+    quietAfter: QuietThreshold(
+      readSettings: () => database.readMetadata('settings.v1'),
+      now: () => DateTime.now().toUtc(),
+      overrideSeconds: hostEnvironment[kQuietAfterVariable],
+    ).call,
   );
   data.attentionWork = attention.attention;
   companion
@@ -800,7 +806,10 @@ Future<int> _serve(
         grantRows.getById(sessionId)?.operatorGranted ?? false,
     tools: ServerTools([
       const InstructionsToolSet(),
-      InventoryToolSet(tools),
+      InventoryToolSet(
+        tools,
+        quietSinceOf: (id) => attention.status.reportForOpenId(id)?.quietSince,
+      ),
       NotesTodosToolSet(tools),
       DecisionToolSet(tools),
       ReviewThreadToolSet(

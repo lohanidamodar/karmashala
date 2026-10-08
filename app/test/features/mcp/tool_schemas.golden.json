@@ -38,7 +38,7 @@
     },
     {
       "name": "list_sessions",
-      "description": "List coding-agent sessions — both the ones running in Karmashala (\"kind\": \"native\", with a status and, when an agent started it, a parentSessionId) and ones imported from a CLI store (\"kind\": \"imported\"). Optionally filter by a case-insensitive substring (matched against project, repository, title, and preview) and by CLI (\"claude\" or \"codex\").",
+      "description": "List coding-agent sessions — both the ones running in Karmashala (\"kind\": \"native\", with a status, a quietSince while it has done nothing new for a while and, when an agent started it, a parentSessionId) and ones imported from a CLI store (\"kind\": \"imported\"). Optionally filter by a case-insensitive substring (matched against project, repository, title, and preview) and by CLI (\"claude\" or \"codex\").",
       "inputSchema": {
         "type": "object",
         "properties": {
