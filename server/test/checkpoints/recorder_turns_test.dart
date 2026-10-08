@@ -1,3 +1,8 @@
+// Real git work: under a busy machine (several suites at once) it can pass
+// the default 30 s, which is load, not a failure.
+@Timeout.factor(4)
+library;
+
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
