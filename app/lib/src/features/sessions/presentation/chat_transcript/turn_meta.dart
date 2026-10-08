@@ -44,23 +44,91 @@ String messageMoment(DateTime at) =>
     '${at.year}, ${at.hour.toString().padLeft(2, '0')}:'
     '${at.minute.toString().padLeft(2, '0')}';
 
-/// Save-as-note, when notes are on, then Copy, then Copy turn where offered.
+/// Save-as-note, when notes are on, then Copy, then Copy turn where offered,
+/// then the [turn]'s own actions. On touch a turn's actions, Copy turn and
+/// Save as note go behind one ⋯ beside Copy.
 List<Widget> _messageActions(
   VoidCallback? onSaveNote,
   String copyText, {
   String Function()? copyTurn,
+  List<_TurnAction> turn = const [],
 }) => [
-  if (onSaveNote != null) _SaveNoteButton(onSave: onSaveNote),
-  _CopyButton(text: copyText),
-  if (copyTurn != null)
-    _ConfirmingIconButton(
-      key: const ValueKey('chat-copy-turn'),
-      icon: AppIcons.clipboardText,
-      tooltip: 'Copy turn',
-      confirmedTooltip: 'Copied',
-      onPressed: () => Clipboard.setData(ClipboardData(text: copyTurn())),
-    ),
+  _MessageActions(
+    onSaveNote: onSaveNote,
+    copyText: copyText,
+    copyTurn: copyTurn,
+    turn: turn,
+  ),
 ];
+
+class _MessageActions extends StatelessWidget {
+  const _MessageActions({
+    required this.onSaveNote,
+    required this.copyText,
+    required this.copyTurn,
+    required this.turn,
+  });
+
+  final VoidCallback? onSaveNote;
+  final String copyText;
+  final String Function()? copyTurn;
+  final List<_TurnAction> turn;
+
+  @override
+  Widget build(BuildContext context) {
+    final save = onSaveNote;
+    final copyTurn = this.copyTurn;
+    if (turn.isNotEmpty && UiDensity.of(context).isTouch) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _CopyButton(text: copyText),
+          _TurnMoreButton(
+            actions: turn,
+            extra: [
+              if (copyTurn != null)
+                _TurnAction(
+                  id: 'copy-turn',
+                  label: 'Copy turn',
+                  icon: AppIcons.clipboardText,
+                  run: (context) async {
+                    final messenger = ScaffoldMessenger.maybeOf(context);
+                    await Clipboard.setData(ClipboardData(text: copyTurn()));
+                    messenger?.showSnackBar(
+                      const SnackBar(content: Text('Turn copied.')),
+                    );
+                  },
+                ),
+              if (save != null)
+                _TurnAction(
+                  id: 'save-note',
+                  label: 'Save as note',
+                  icon: AppIcons.notePencil,
+                  run: (_) async => save(),
+                ),
+            ],
+          ),
+        ],
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (save != null) _SaveNoteButton(onSave: save),
+        _CopyButton(text: copyText),
+        if (copyTurn != null)
+          _ConfirmingIconButton(
+            key: const ValueKey('chat-copy-turn'),
+            icon: AppIcons.clipboardText,
+            tooltip: 'Copy turn',
+            confirmedTooltip: 'Copied',
+            onPressed: () => Clipboard.setData(ClipboardData(text: copyTurn())),
+          ),
+        for (final action in turn) _TurnIconButton(action: action),
+      ],
+    );
+  }
+}
 
 /// Glyph, eyebrow and actions: a tool card's header row. The user's and the
 /// agent's turns have none (board N2); their age and actions show on hover.

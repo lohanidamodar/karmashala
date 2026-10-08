@@ -6,8 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 
+import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart'
+    show DesktopMenuDetailItem, DesktopMenuItem;
+import '../../../app/widgets/row_menu_sheet.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../application/turn_fork_points.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/rows.dart'
@@ -29,12 +34,15 @@ import 'transcript_image_preview.dart';
 import 'turn_changed_files.dart';
 
 export 'tool_run.dart' show TranscriptTurn;
+export '../application/turn_fork_points.dart'
+    show TranscriptTurnStart, TurnForkPoints, TurnForkTarget, turnForkPoints;
 
 part 'chat_transcript/agent_switch_rows.dart';
 part 'chat_transcript/command_time.dart';
 part 'chat_transcript/message_rows.dart';
 part 'chat_transcript/tool_batch.dart';
 part 'chat_transcript/turn_footer.dart';
+part 'chat_transcript/turn_actions.dart';
 part 'chat_transcript/turn_meta.dart';
 
 /// The row the transcript view writes itself, saying a compaction happened
@@ -201,10 +209,15 @@ class ChatTranscriptView extends StatefulWidget {
     this.filePreviewBuilder,
     this.seenUntil,
     this.now,
+    this.turnActions,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// Retry, Edit and resend and Fork from here on each turn; null offers
+  /// none of them.
+  final TranscriptTurnActions? turnActions;
 
   /// What a running command's time counts up to; null is the wall clock.
   final DateTime Function()? now;
@@ -451,7 +464,29 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       setState(() => _previews.remove(widget.firstOrdinal + ordinal));
 
   String _turnTextAt(int ordinal) =>
-      transcriptTurnText(widget.messages, ordinal);
+      transcriptTurnMarkdown(widget.messages, ordinal);
+
+  List<ChatMessage>? _placedMessages;
+  var _starts = const <int?>[];
+
+  /// Where the row at [ordinal] stands in its turn; the starts are walked
+  /// again only when the list moved.
+  _TurnPlace? _placeOf(int ordinal) {
+    final messages = widget.messages;
+    if (!identical(messages, _placedMessages)) {
+      _placedMessages = messages;
+      _starts = _turnStartsOf(messages);
+    }
+    final start = _starts[ordinal];
+    if (start == null) return null;
+    return _TurnPlace(
+      start: start,
+      words: _personsWords(messages[start]),
+      isLatest: _isLatestTurn,
+    );
+  }
+
+  bool _isLatestTurn(int start) => _starts.isNotEmpty && _starts.last == start;
 
   void _showMoreHeld() {
     _anchorAtFirstRow();
@@ -600,6 +635,8 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         onPathTap: widget.onPathTap,
         onLinkTap: widget.onLinkTap,
         detailBuilder: widget.detailBuilder,
+        turnActions: widget.turnActions,
+        place: widget.turnActions == null ? null : _placeOf(ordinal),
       );
       if (footers[ordinal] case final footer?) {
         final own = latestIsLast && ordinal == latest;

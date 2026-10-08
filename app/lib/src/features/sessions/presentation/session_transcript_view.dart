@@ -18,7 +18,12 @@ import '../../editor/application/editor_tab_actions.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart' show Checkpoint;
+import '../../checkpoints/application/checkpoint_providers.dart';
+import '../application/session_handoff_service.dart';
+import '../application/turn_forks.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/installation_labels.dart';
@@ -155,6 +160,105 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Ticks to take the conversation to its newest message.
   final _toLatest = ValueNotifier<int>(0);
 
+  /// Ticks to hand the composer the keyboard: a message put back to edit.
+  final _composerFocus = ValueNotifier<int>(0);
+
+  List<ChatMessage>? _pointsMessages;
+  List<Checkpoint>? _pointsChain;
+  var _forkPoints = const <int, TurnForkPoints>{};
+
+  /// Each turn's fork targets, matched again only when the conversation or
+  /// the checkpoints moved.
+  Map<int, TurnForkPoints> _forkPointsFor(
+    List<ChatMessage> messages,
+    List<Checkpoint> newestFirst,
+  ) {
+    if (identical(messages, _pointsMessages) &&
+        identical(newestFirst, _pointsChain)) {
+      return _forkPoints;
+    }
+    _pointsMessages = messages;
+    _pointsChain = newestFirst;
+    return _forkPoints = turnForkPoints(
+      transcriptTurnStarts(messages),
+      newestFirst.reversed.toList(),
+    );
+  }
+
+  /// What each turn's actions may do here: Retry and Edit only where a
+  /// message can be sent, Fork only where the session can be forked; all
+  /// three wait while a turn runs.
+  TranscriptTurnActions _turnActionsFor(
+    List<ChatMessage> messages,
+    TranscriptTurn turn, {
+    required bool active,
+  }) {
+    final caps = ref.watch(capabilitiesProvider);
+    final canSend = caps.maySend && (active || caps.mayStart);
+    final canFork =
+        caps.mayStart &&
+        !ref
+            .read(sessionHandoffServiceProvider)
+            .forkPlanFor(widget.sessionId)
+            .isRefused;
+    final chain = canFork
+        ? ref.watch(sessionCheckpointsProvider(widget.sessionId)).value
+        : null;
+    final running =
+        turn == TranscriptTurn.working || turn == TranscriptTurn.awaitingUser;
+    return TranscriptTurnActions(
+      onRetry: canSend ? _retry : null,
+      onEdit: canSend ? _editAndResend : null,
+      onFork: canFork ? _forkFrom : null,
+      busy: running ? 'A turn is running: wait for it to end.' : null,
+      forkPoints: chain == null ? const {} : _forkPointsFor(messages, chain),
+      noForkPoint: canFork
+          ? ref.watch(checkpointSkipReasonProvider(widget.sessionId)) ??
+                kNoTurnCheckpoint
+          : kNoTurnCheckpoint,
+    );
+  }
+
+  /// Retry: the person's words again, as a new turn.
+  void _retry(String words) => unawaited(
+    _send(words).catchError((Object error) {
+      _say(error is StateError ? error.message : '$error');
+    }),
+  );
+
+  /// Edit and resend: the words back in the box, which takes the keyboard.
+  void _editAndResend(String words) {
+    _backToComposer(words);
+    _composerFocus.value++;
+  }
+
+  /// Fork from here: the server's preview, the person's yes, then the fork,
+  /// which opens the new session.
+  Future<void> _forkFrom(TurnForkTarget target) async {
+    final forks = ref.read(turnForksProvider);
+    String why(Object error) => error is StateError ? error.message : '$error';
+    final TurnForkPreview preview;
+    try {
+      preview = await forks.preview(widget.sessionId, target);
+    } on Object catch (error) {
+      _say(why(error));
+      return;
+    }
+    if (!mounted) return;
+    final go = await showConfirmDialog(
+      context,
+      title: 'Fork from this turn?',
+      message: forkPreviewMessage(preview),
+      confirmLabel: 'Fork',
+    );
+    if (!go || !mounted) return;
+    try {
+      await forks.fork(widget.sessionId, target);
+    } on Object catch (error) {
+      _say(why(error));
+    }
+  }
+
   /// The key of the message last sent and not yet taken, kept so a retry of
   /// the same words is the same request to the server; a new message mints
   /// its own.
@@ -268,6 +372,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     unawaited(_dropped.close());
     _filesQueued.dispose();
     _toLatest.dispose();
+    _composerFocus.dispose();
     super.dispose();
   }
 
@@ -868,6 +973,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           firstOrdinal: firstOrdinal,
           agentId: _agentId(),
           turn: turn,
+          turnActions: _turnActionsFor(messages, turn, active: active),
           resolveHostPath: resolveHostPath,
           // Paths in the conversation are clickable, and a click reveals
           // rather than opens — see [_openPath].
@@ -1045,6 +1151,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           droppedFiles: _dropped.stream,
           takeServerFiles: _takeQueuedFiles,
           serverFilesWaiting: _filesQueued,
+          focusRequests: _composerFocus,
           attaches: caps.mayAttach,
           camera: () => devicePhotosFor(context, ref),
           enabled: !prompted && refusal == null,
@@ -1373,6 +1480,22 @@ class OpenSessionInSystemTerminalButton extends ConsumerWidget {
     );
   }
 }
+
+/// What a fork from a turn will do, as one paragraph per part: the files in
+/// each repository, the conversation, and how the agent continues.
+@visibleForTesting
+String forkPreviewMessage(TurnForkPreview preview) => [
+  for (final files in preview.repositories)
+    files.restores
+        ? 'The files in ${files.repository} go back to how they were at that '
+              'turn. Their state now stays in Checkpoints, so this can be '
+              'undone there.'
+        : 'The files in ${files.repository} stay as they are. '
+                  '${files.reason ?? ''}'
+              .trim(),
+  if (preview.conversation.isNotEmpty) preview.conversation,
+  if (preview.explanation.isNotEmpty) preview.explanation,
+].join('\n\n');
 
 /// The link in full, so the reader sees where it goes, and the two answers.
 class _OpenLinkBody extends StatelessWidget {
