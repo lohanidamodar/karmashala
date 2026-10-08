@@ -2125,7 +2125,7 @@ class _StopButton extends StatelessWidget {
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
         ),
-        icon: const Icon(AppIcons.stop),
+        icon: const Icon(AppIcons.stopFill),
       ),
     );
   }
