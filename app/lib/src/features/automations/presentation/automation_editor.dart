@@ -31,6 +31,7 @@ import 'automation_run_actions.dart';
 import 'automation_run_status.dart';
 import 'automation_editor_parts.dart';
 import 'project_checks_section.dart' show addProjectCheck;
+import 'turn_on_confirm_dialog.dart' show confirmTurnOn;
 import 'webhook_parts.dart';
 
 /// **The one editor** for every kind of automation: its name, what starts it,
@@ -1572,6 +1573,21 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     );
     if (automation == null) return;
     final created = _draft.isNew;
+    // Asked on save, not on the switch, so it describes what is armed.
+    final before = _draft.original;
+    if (automation.enabled && before != null && !before.enabled) {
+      final confirmed = await confirmTurnOn(
+        context,
+        ref,
+        automation,
+        proposedBy: before.proposedBy,
+      );
+      if (!mounted) return;
+      if (!confirmed) {
+        _update(_draft.copyWith(enabled: false));
+        return;
+      }
+    }
     setState(() {
       _saving = true;
       _failure = null;

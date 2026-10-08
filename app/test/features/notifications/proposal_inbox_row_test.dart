@@ -103,6 +103,9 @@ void main() {
 
     await tester.tap(find.text('Turn on'));
     await tester.pumpAndSettle();
+    expect(find.textContaining('Proposed by Claude Code'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('turn-on-confirm-button')));
+    await tester.pumpAndSettle();
     final stored = server.automationRows.getAll().single;
     expect(stored.enabled, isTrue);
     expect(stored.isProposed, isFalse);

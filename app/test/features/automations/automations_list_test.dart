@@ -149,6 +149,8 @@ void main() {
     await pump(tester);
     await tester.tap(find.byKey(const ValueKey('proposal-on-hook1')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('turn-on-confirm-button')));
+    await tester.pumpAndSettle();
     final stored = server.automationRows.getAll().single;
     expect(stored.enabled, isTrue);
     expect(stored.isProposed, isFalse);
@@ -259,6 +261,8 @@ void main() {
     await pump(tester);
     expect(find.text('Paused'), findsOneWidget);
     await tester.tap(_rowSwitches);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('turn-on-confirm-button')));
     await tester.pumpAndSettle();
     expect(server.automationRows.getById('auto1')!.enabled, isTrue);
   });
