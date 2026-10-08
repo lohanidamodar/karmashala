@@ -148,6 +148,35 @@ void main() {
     });
   });
 
+  test('a stale host with nothing newer never blames "this build"', () {
+    // The server searches every folder it reads bundles from, so "this build
+    // carries no newer host" was false whenever another folder held one.
+    final deployment = HostDeployment(
+      status: HostDeploymentStatus.protocolMismatch,
+      observedAt: DateTime.utc(2026, 10, 8),
+      reason: 'The host speaks an older protocol.',
+      platform: arm,
+      noNewerHost: true,
+      offeredVersion: '1.29.0',
+      bundleFolder: '/data/host-bundles',
+    );
+
+    final said = explainHostDeployment(deployment, hostName: 'do-box');
+    final short = hostDeploymentInShort(deployment, hostName: 'do-box');
+
+    expect(said.remedy, isNot(contains('This build')));
+    expect(
+      said.remedy,
+      contains(
+        'No folder the Karmashala server reads host bundles from holds a '
+        'host for linux-arm64 newer than the 1.29.0 on do-box',
+      ),
+    );
+    expect(said.remedy, contains('/data/host-bundles'));
+    expect(short, isNot(contains('this Karmashala has no newer one')));
+    expect(short, contains('the server has no newer one'));
+  });
+
   test('every failure is a sentence, a remedy and a button — never a dump', () {
     for (final status in HostDeploymentStatus.values) {
       if (status == HostDeploymentStatus.ready) continue;

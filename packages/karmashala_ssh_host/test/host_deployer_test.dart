@@ -201,9 +201,13 @@ class FakeBinaries implements HostBinarySource {
   FakeBinaries({
     this.targets = const {'linux-x64': 1024},
     this.isBundleArchive = false,
+    this.olderBundlesIn,
   });
 
   final Map<String, int> targets;
+
+  /// A folder searched before the chosen bundle's that holds older ones.
+  final String? olderBundlesIn;
 
   /// What every current build ships; false is a host from before the store.
   final bool isBundleArchive;
@@ -227,6 +231,7 @@ class FakeBinaries implements HostBinarySource {
       source:
           'fake/karmashala_host-$kHostVersion-${platform.targetKey}'
           '${isBundleArchive ? '.tar.gz' : ''}',
+      olderBundlesIn: olderBundlesIn,
     );
   }
 

@@ -12,6 +12,8 @@ class HostBinary {
     required this.source,
     this.candidates = 1,
     this.isBundleArchive = false,
+    this.folder,
+    this.olderBundlesIn,
   });
 
   /// How big it is, which is all the deployer needs to decide whether the
@@ -35,7 +37,16 @@ class HostBinary {
   /// Where it came from, so a failure names a path a person can look at.
   final String source;
 
-  /// How many files matched this target where [source] was found. More than one
-  /// means older builds sit beside it, so a notice can say which was taken.
+  /// How many files matched this target across every folder searched. More
+  /// than one means other builds sit about, so a notice can say which was
+  /// taken.
   final int candidates;
+
+  /// The searched folder [source] is in, as it was named to the search.
+  final String? folder;
+
+  /// A folder searched *before* [folder] whose bundles for this target are
+  /// all older than the one taken — an operator's drop folder left with an
+  /// earlier release's. Named so a person can tidy it; nothing deletes it.
+  final String? olderBundlesIn;
 }

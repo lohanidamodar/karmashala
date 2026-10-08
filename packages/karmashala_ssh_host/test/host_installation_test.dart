@@ -240,12 +240,50 @@ void main() {
       // Older than this app, and nothing newer carried to put there.
       expect(reading.label, 'installed 0.0.9 (stopped; older than this app)');
       expect(reading.noNewerHost, isTrue);
+      // Not "this build carries": the server looked in every folder.
       expect(
         reading.reason,
-        contains('carries no host bundle for linux-arm64'),
+        contains(
+          'no folder the server reads host bundles from holds a host for '
+          'linux-arm64',
+        ),
       );
+      expect(reading.reason, isNot(contains('This build')));
       expect(reading.canInstall, isFalse);
     });
+
+    test('the reading names the bundle it would install, and where', () async {
+      box.installed.add(_this);
+
+      final reading = await installer().check();
+
+      const source = 'fake/karmashala_host-$kHostVersion-linux-x64.tar.gz';
+      expect(reading.offeredSource, source);
+      expect(reading.reason, contains('The server would install $source.'));
+      expect(
+        HostInstallReading.fromJson(reading.toJson()).offeredSource,
+        source,
+      );
+    });
+
+    test(
+      'a folder of older bundles searched first is named, and left alone',
+      () async {
+        box.installed.add(_this);
+
+        final reading = await installer(
+          binaries: FakeBinaries(
+            isBundleArchive: true,
+            olderBundlesIn: '/drop',
+          ),
+        ).check();
+
+        expect(
+          reading.reason,
+          contains('Older host bundles in /drop were passed over'),
+        );
+      },
+    );
   });
 
   group('install, update, reinstall', () {
