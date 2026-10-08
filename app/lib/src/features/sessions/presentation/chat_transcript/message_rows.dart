@@ -813,7 +813,23 @@ class _ToolMessageCardState extends State<_ToolMessageCard> {
             label: shown,
             fullLabel: activity == null ? null : eyebrow,
             color: accent,
-            badge: isToolError ? _FailedBadge(color: failure) : null,
+            badge: !isCommandCall(message)
+                ? (isToolError ? _FailedBadge(color: failure) : null)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isToolError) ...[
+                        _FailedBadge(color: failure),
+                        const SizedBox(width: Insets.xs),
+                      ],
+                      _CommandTime(
+                        message: message,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
             actions: _messageActions(
               widget.onSaveNote,
               activity?.output ?? message.text,

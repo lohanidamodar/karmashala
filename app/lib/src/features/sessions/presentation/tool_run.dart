@@ -1,3 +1,5 @@
+import 'package:karmashala_ui/rows.dart' show formatElapsed;
+
 import 'chat_transcript.dart';
 
 /// Where the session's current turn stands, as the view was told. [unknown]
@@ -280,6 +282,31 @@ String? describeWorkedFor(Iterable<ChatMessage> messages) {
       ? '${minutes}m ${seconds}s'
       : '${seconds}s';
   return 'Worked for $text';
+}
+
+/// Whether [message] is a call that ran a command: Run, Shell, Bash, exec.
+bool isCommandCall(ChatMessage message) {
+  final tool = message.tool;
+  return tool != null &&
+      toolKindOf(tool.name, kind: tool.kind) == ToolKind.command;
+}
+
+/// How long a finished command took, from its call to its answer. Null while
+/// it runs, and when either end went unrecorded.
+Duration? commandDuration(ChatMessage message) {
+  if (message.pending || !isCommandCall(message)) return null;
+  final start = message.at;
+  final end = message.tool!.endedAt;
+  if (start == null || end == null || end.isBefore(start)) return null;
+  return end.difference(start);
+}
+
+/// `0.3s`, `2.4s`, `12s`, `1m 12s`: tenths only where they are a tenth of
+/// the whole.
+String formatCommandDuration(Duration took) {
+  final ms = took.inMilliseconds;
+  if (ms < 10000) return '${(ms / 1000).toStringAsFixed(1)}s';
+  return formatElapsed(took);
 }
 
 /// `Ran 8 commands, read 12 files, edited 3 files · 1 failed` — what a run did,

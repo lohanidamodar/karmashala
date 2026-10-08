@@ -34,6 +34,7 @@ class ToolActivity {
     this.proposedPlan,
     this.questions = const [],
     this.description,
+    this.endedAt,
   });
 
   /// The tool's own name: `Bash`, `Read`, `Edit`, `mcp__…`.
@@ -96,6 +97,11 @@ class ToolActivity {
   /// (Claude's `description`); null otherwise. Never the command itself.
   final String? description;
 
+  /// When the answer arrived, as its own record stamps it; null while the
+  /// call runs and wherever the record carried no time. The call's start is
+  /// its row's own time.
+  final DateTime? endedAt;
+
   /// The one-line form: what Copy puts on the clipboard, and what the remote
   /// and companion payloads carry. Deliberately the same shape the CLIs print.
   String get summary {
@@ -137,6 +143,7 @@ class ToolActivity {
     if (questions.isNotEmpty)
       'questions': [for (final q in questions) q.toJson()],
     'description': ?description,
+    'endedAt': ?endedAt?.toUtc().toIso8601String(),
   };
 
   /// Throws [FormatException] when `name` is not a string; any other field
@@ -173,6 +180,10 @@ class ToolActivity {
         _ => const [],
       },
       description: _stringOrNull(json['description']),
+      endedAt: switch (json['endedAt']) {
+        final String at => DateTime.tryParse(at)?.toUtc(),
+        _ => null,
+      },
     );
   }
 
@@ -193,12 +204,14 @@ class ToolActivity {
     proposedPlan: proposedPlan,
     questions: questions,
     description: description,
+    endedAt: endedAt,
   );
 
   /// This call with the answer it eventually got. [edits] replaces the call's
   /// own when the result recorded better ones; null keeps them. [answers]
   /// (question text to answer) answer [questions]. [imagePath], the image
   /// the result carried, is kept only when the call named none itself.
+  /// [endedAt] is when the answer was written; null keeps the call's own.
   ToolActivity withResult({
     String? output,
     bool outputTruncated = false,
@@ -206,6 +219,7 @@ class ToolActivity {
     List<FileEditRecord>? edits,
     Map<String, String>? answers,
     String? imagePath,
+    DateTime? endedAt,
   }) {
     final (kept, cut) = edits == null
         ? (this.edits, editsTruncated)
@@ -232,6 +246,7 @@ class ToolActivity {
                 ),
             ],
       description: description,
+      endedAt: endedAt ?? this.endedAt,
     );
   }
 }
