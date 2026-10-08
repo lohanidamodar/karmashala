@@ -97,7 +97,7 @@ class PaneHeader extends StatelessWidget {
         Container(
           height: height,
           color: scheme.surfaceContainerLow,
-          padding: const EdgeInsets.only(left: Insets.md, right: 2),
+          padding: const EdgeInsets.only(left: Insets.md, right: Insets.xxs),
           child: Row(
             children: [
               if (override == null) ...[

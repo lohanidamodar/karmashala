@@ -716,7 +716,7 @@ class _LinkHint extends StatelessWidget {
             margin: const EdgeInsets.all(Insets.xs),
             padding: const EdgeInsets.symmetric(
               horizontal: Insets.sm,
-              vertical: 2,
+              vertical: Insets.xxs,
             ),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHighest,

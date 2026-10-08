@@ -94,7 +94,7 @@ class NeedsYouPill extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       key: const ValueKey('agents-needs-you-pill'),
-      padding: const EdgeInsets.symmetric(horizontal: Insets.xs + 2),
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs + Insets.xxs),
       decoration: BoxDecoration(
         // The one amber rest every needs-you fill draws.
         color: SurfaceTones.of(context).attentionSurface,

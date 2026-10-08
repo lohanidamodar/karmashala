@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -11,6 +12,7 @@ import 'package:karmashala/src/features/sessions/application/session_ui_provider
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
+import 'package:karmashala/src/features/git/application/remote_links.dart';
 
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
@@ -30,6 +32,8 @@ void main() {
   Future<void> pump(
     WidgetTester tester, {
     List<SystemTerminal> terminals = const [wt],
+    List<TranscriptMessage> messages = const [],
+    List<String>? opened,
   }) async {
     final db = TestMachine();
     final server = FakeDataServer()..runsOn(db);
@@ -60,8 +64,13 @@ void main() {
           availableSystemTerminalsProvider.overrideWith(
             (ref) async => terminals,
           ),
+          if (opened != null)
+            openExternalUrlProvider.overrideWithValue((url) async {
+              opened.add(url);
+              return true;
+            }),
           importedTranscriptProvider.overrideWith(
-            (ref, id) => Stream.value([]),
+            (ref, id) => Stream.value(messages),
           ),
         ],
         child: const MaterialApp(
@@ -94,5 +103,34 @@ void main() {
   testWidgets('no terminals installed, no menu to open', (tester) async {
     await pump(tester, terminals: const []);
     expect(find.byIcon(AppIcons.arrowSquareOut), findsNothing);
+  });
+
+  testWidgets('a link in an imported chat opens, as in every transcript', (
+    tester,
+  ) async {
+    final opened = <String>[];
+    await pump(
+      tester,
+      opened: opened,
+      messages: [
+        TranscriptMessage(
+          role: 'agent',
+          text: 'See [the docs](https://example.com/docs).',
+          at: testTime,
+        ),
+      ],
+    );
+    TapGestureRecognizer? link;
+    for (final widget in tester.widgetList<RichText>(find.byType(RichText))) {
+      widget.text.visitChildren((span) {
+        if (span is TextSpan && span.recognizer is TapGestureRecognizer) {
+          link ??= span.recognizer! as TapGestureRecognizer;
+        }
+        return true;
+      });
+    }
+    link!.onTap!();
+    await tester.pumpAndSettle();
+    expect(opened, ['https://example.com/docs']);
   });
 }

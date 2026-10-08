@@ -178,9 +178,9 @@ class _NoteCard extends ConsumerWidget {
             onTap: () => _openNote(context, ref, note.id),
             child: Padding(
               padding: EdgeInsets.fromLTRB(
-                density.padX + 2,
+                density.padX + Insets.xxs,
                 density.padY,
-                2,
+                Insets.xxs,
                 density.padY,
               ),
               child: Row(

@@ -297,7 +297,7 @@ class _NeedsYouCount extends ConsumerWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: Insets.sm,
-                  vertical: 2,
+                  vertical: Insets.xxs,
                 ),
                 decoration: BoxDecoration(
                   color: attention,

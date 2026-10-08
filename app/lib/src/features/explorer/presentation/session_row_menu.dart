@@ -9,6 +9,7 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart';
 import '../../../core/capabilities/capabilities.dart';
@@ -605,7 +606,7 @@ Future<bool?> _confirmDelete(
                     : 'Remove "$title" and its conversation from Karmashala.',
               ),
               if (hasCliStore) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: Insets.md),
                 CheckboxListTile(
                   value: deleteFromCli,
                   contentPadding: EdgeInsets.zero,

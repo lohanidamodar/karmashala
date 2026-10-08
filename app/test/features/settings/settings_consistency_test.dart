@@ -79,6 +79,7 @@ void main() {
     // live as `static const` on their widget.
     const swept = {
       'lib/src/features/projects/presentation/new_project_dialog.dart',
+      'lib/src/features/projects/presentation/new_project_dialog/source_section.dart',
       'lib/src/features/cli_detection/presentation/detected_projects_view.dart',
       'lib/src/features/settings/presentation/settings_row.dart',
       'lib/src/features/settings/presentation/settings_screen.dart',

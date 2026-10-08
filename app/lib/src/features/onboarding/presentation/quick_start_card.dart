@@ -95,7 +95,12 @@ class _Header extends ConsumerWidget {
     final count = state.done.length;
     final total = QuickStartStep.values.length;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Sidebar.labelPadX, 2, 2, 0),
+      padding: const EdgeInsets.fromLTRB(
+        Sidebar.labelPadX,
+        Insets.xxs,
+        Insets.xxs,
+        0,
+      ),
       child: Row(
         children: [
           Icon(
@@ -301,7 +306,7 @@ class _StepRow extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: Insets.xs + 2,
+            horizontal: Insets.xs + Insets.xxs,
             vertical: Insets.xs,
           ),
           child: Row(
@@ -380,14 +385,14 @@ class _TipRow extends StatelessWidget {
     );
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: Insets.xs + 2,
-        vertical: 2,
+        horizontal: Insets.xs + Insets.xxs,
+        vertical: Insets.xxs,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(
               icon,
               size: Chrome.icon,
@@ -433,7 +438,7 @@ class _MachineReview extends ConsumerWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.xs + 2),
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs + Insets.xxs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -521,7 +526,10 @@ class _Doing extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(padding: EdgeInsets.only(top: 2), child: InlineSpinner()),
+        const Padding(
+          padding: EdgeInsets.only(top: Insets.xxs),
+          child: InlineSpinner(),
+        ),
         const SizedBox(width: Insets.xs),
         Expanded(
           child: Semantics(liveRegion: true, child: Text(text, style: style)),
@@ -554,12 +562,12 @@ class _EnvironmentLine extends StatelessWidget {
           '${_levelWord(environment.git)}',
       excludeSemantics: true,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: Insets.xxs),
               child: Icon(
                 healthIcon(environment.git),
                 size: Chrome.iconSmall,
@@ -610,7 +618,7 @@ class _GapLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(
               gap.optional ? AppIcons.info : AppIcons.warningCircle,
               size: Chrome.iconSmall,

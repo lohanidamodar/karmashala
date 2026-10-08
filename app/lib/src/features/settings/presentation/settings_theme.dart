@@ -9,10 +9,12 @@ import 'settings_layout.dart';
 /// here instead of guessing at a `textTheme` role.
 abstract final class SettingsStyles {
   /// A row's label (board `.t1`: 13, medium).
-  static TextStyle? rowLabel(BuildContext context) => Theme.of(context)
-      .textTheme
-      .bodyMedium
-      ?.copyWith(fontSize: TypeSizes.body, fontWeight: FontWeight.w500, height: 1.35);
+  static TextStyle? rowLabel(BuildContext context) =>
+      Theme.of(context).textTheme.bodyMedium?.copyWith(
+        fontSize: TypeSizes.body,
+        fontWeight: FontWeight.w500,
+        height: 1.35,
+      );
 
   /// The quiet sentence under a label (board `.t2`: 12 on a 17 line, muted).
   static TextStyle? rowHelp(BuildContext context) {
@@ -87,7 +89,7 @@ class SettingsControlsTheme extends StatelessWidget {
       borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
     );
     const minSize = Size(0, SettingsLayout.controlHeight);
-    const padding = EdgeInsets.symmetric(horizontal: Insets.md - 2);
+    const padding = EdgeInsets.symmetric(horizontal: Insets.md - Insets.xxs);
     OutlineInputBorder border(Color color, [double width = 1]) =>
         OutlineInputBorder(
           borderRadius: BorderRadius.circular(Radii.sm),
@@ -136,8 +138,8 @@ class SettingsControlsTheme extends StatelessWidget {
           disabledBorder: border(Colors.transparent),
           focusedBorder: border(scheme.primary),
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: Insets.md - 2,
-            vertical: Insets.xs + 2,
+            horizontal: Insets.md - Insets.xxs,
+            vertical: Insets.xs + Insets.xxs,
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(style: quietButton),

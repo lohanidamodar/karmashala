@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_session/session.dart' show QueuedMessageState;
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
+import '../../../core/capabilities/capabilities.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_input.dart' show newSessionInputId;
 import '../../sessions/application/session_queue_providers.dart';
@@ -122,7 +124,17 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
     // Watched for the hint only: the send decides again when it goes.
     ref.watch(agentSessionStatusProvider(card.id));
     final queues = ref.read(overviewQuickMessageProvider).wouldQueue(card.id);
+    // Gated as the session's own composer is: a send this phone may not make
+    // is refused up front, not after it is typed.
+    final caps = ref.watch(capabilitiesProvider);
+    final refused = !caps.maySend
+        ? kPromptNotGranted
+        : card.state == AgentState.ended && !caps.mayStart
+        ? kStartNotGranted
+        : null;
+    final idle = !_sending && refused == null;
     final hint = switch (card.state) {
+      _ when refused != null => refused,
       AgentState.needsYou => 'Or reply in words…',
       AgentState.ended => 'Message to resume…',
       _ when queues => 'Message · queues until the turn ends',
@@ -139,7 +151,7 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
           focusNode: _focus,
           minLines: 1,
           maxLines: 4,
-          enabled: !_sending,
+          enabled: idle,
           textInputAction: TextInputAction.newline,
           keyboardType: TextInputType.multiline,
           style: theme.textTheme.bodySmall,
@@ -179,12 +191,9 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
               tooltip: 'Send to ${card.entry.title}',
               visualDensity: VisualDensity.compact,
               iconSize: density.icon,
-              onPressed: _sending ? null : _send,
+              onPressed: idle ? _send : null,
               icon: _sending
-                  ? SizedBox.square(
-                      dimension: density.iconSmall,
-                      child: const CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const InlineSpinner()
                   : Icon(AppIcons.paperPlaneRight, color: scheme.primary),
             ),
           ),

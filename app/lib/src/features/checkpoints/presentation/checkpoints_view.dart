@@ -368,7 +368,7 @@ class _FileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(left: Insets.lg, right: 2),
+      padding: const EdgeInsets.only(left: Insets.lg, right: Insets.xxs),
       child: Row(
         children: [
           Expanded(

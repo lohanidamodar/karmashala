@@ -281,7 +281,7 @@ class ExplorerSearchField extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: height),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: Insets.sm,
-              vertical: 7,
+              vertical: Insets.xsm + Insets.hair,
             ),
             prefixIcon: Icon(
               AppIcons.magnifyingGlass,

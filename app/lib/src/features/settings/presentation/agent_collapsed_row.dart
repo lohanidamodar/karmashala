@@ -50,7 +50,7 @@ class AgentCollapsedRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 2, right: Insets.sm),
+          padding: const EdgeInsets.only(top: Insets.xxs, right: Insets.sm),
           child: AgentHealthGlyph(reading: health),
         ),
         Expanded(
@@ -70,7 +70,7 @@ class AgentCollapsedRow extends StatelessWidget {
               ),
               if (detail != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.only(top: Insets.xxs),
                   child: DefaultTextStyle.merge(
                     style: SettingsStyles.rowHelp(context),
                     child: detail,

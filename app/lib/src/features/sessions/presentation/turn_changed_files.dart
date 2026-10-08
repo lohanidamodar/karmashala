@@ -4,6 +4,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'chat_transcript.dart';
 import 'tool_edit_diff_card.dart';
 import 'tool_run.dart';
@@ -178,18 +179,15 @@ class _TurnChangedFilesLineState extends State<TurnChangedFilesLine> {
                         ),
                       ),
                       const SizedBox(width: Insets.sm),
-                      Text(
-                        '+$added',
-                        style: MonoStyles.small.copyWith(
-                          color: semantic.diffAdded,
+                      Text.rich(
+                        TextSpan(
+                          children: diffStatSpans(
+                            semantic,
+                            added: added,
+                            removed: removed,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: Insets.xs),
-                      Text(
-                        '−$removed',
-                        style: MonoStyles.small.copyWith(
-                          color: semantic.diffRemoved,
-                        ),
+                        style: MonoStyles.small,
                       ),
                     ],
                   ),

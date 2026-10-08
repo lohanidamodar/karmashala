@@ -412,9 +412,9 @@ class _CapturePreview extends ConsumerWidget {
           ),
         const SizedBox(height: Insets.sm),
         SelectableText(capture.description, style: theme.textTheme.titleSmall),
-        const SizedBox(height: 2),
+        const SizedBox(height: Insets.xxs),
         SelectableText(capture.selector, style: MonoStyles.small),
-        const SizedBox(height: 2),
+        const SizedBox(height: Insets.xxs),
         Text(
           '${capture.box} · ${capture.computedStyles.length} computed '
           'properties',

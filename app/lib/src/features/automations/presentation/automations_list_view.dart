@@ -4,6 +4,7 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -456,34 +457,54 @@ class _CardMenu extends ConsumerWidget {
   final Automation automation;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      PopupMenuButton<_CardAction>(
-        key: ValueKey('automation-menu-${automation.id}'),
-        tooltip: 'More for ${automation.name}',
-        icon: const Icon(AppIcons.dotsThree),
-        onSelected: (action) {
-          switch (action) {
-            case _CardAction.runNow:
-              runAutomationNow(context, ref, automation);
-            case _CardAction.edit:
-              ref.read(automationEditorProvider.notifier).edit(automation);
-            case _CardAction.duplicate:
-              // Opened to create, not saved: saving a copy is arming it.
-              ref
-                  .read(automationEditorProvider.notifier)
-                  .open(AutomationDraft.from(automation).asNewCopy());
-            case _CardAction.runs:
-              showRunsOf(ref, automation.id);
-            case _CardAction.delete:
-              confirmDeleteAutomation(context, ref, automation);
-          }
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: _CardAction.runNow, child: Text('Run now')),
-          PopupMenuItem(value: _CardAction.edit, child: Text('Edit')),
-          PopupMenuItem(value: _CardAction.duplicate, child: Text('Duplicate')),
-          PopupMenuItem(value: _CardAction.runs, child: Text('See its runs')),
-          PopupMenuItem(value: _CardAction.delete, child: Text('Delete…')),
-        ],
-      );
+  Widget build(BuildContext context, WidgetRef ref) => RowMenuButton(
+    key: ValueKey('automation-menu-${automation.id}'),
+    tooltip: 'More for ${automation.name}',
+    onSelected: (value) {
+      switch (_CardAction.values.byName(value)) {
+        case _CardAction.runNow:
+          runAutomationNow(context, ref, automation);
+        case _CardAction.edit:
+          ref.read(automationEditorProvider.notifier).edit(automation);
+        case _CardAction.duplicate:
+          // Opened to create, not saved: saving a copy is arming it.
+          ref
+              .read(automationEditorProvider.notifier)
+              .open(AutomationDraft.from(automation).asNewCopy());
+        case _CardAction.runs:
+          showRunsOf(ref, automation.id);
+        case _CardAction.delete:
+          confirmDeleteAutomation(context, ref, automation);
+      }
+    },
+    itemBuilder: () => [
+      DesktopMenuItem(
+        value: _CardAction.runNow.name,
+        label: 'Run now',
+        icon: AppIcons.play,
+      ),
+      DesktopMenuItem(
+        value: _CardAction.edit.name,
+        label: 'Edit',
+        icon: AppIcons.pencilSimple,
+      ),
+      DesktopMenuItem(
+        value: _CardAction.duplicate.name,
+        label: 'Duplicate',
+        icon: AppIcons.copy,
+      ),
+      DesktopMenuItem(
+        value: _CardAction.runs.name,
+        label: 'See its runs',
+        icon: AppIcons.clockCounterClockwise,
+      ),
+      const DesktopMenuDivider(),
+      DesktopMenuItem(
+        value: _CardAction.delete.name,
+        label: 'Delete…',
+        icon: AppIcons.trash,
+        destructive: true,
+      ),
+    ],
+  );
 }

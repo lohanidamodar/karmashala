@@ -7,6 +7,7 @@ import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart' show PanePlaceholder;
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/shell/side_panel_state.dart';
@@ -116,7 +117,7 @@ class SessionSubagentsBadge extends ConsumerWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: Insets.sm,
-                vertical: 3,
+                vertical: Insets.tight,
               ),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Radii.sm),
@@ -170,7 +171,7 @@ class SessionSubagentsPanel extends ConsumerWidget {
             ? error.message
             : kSubagentsUnreadable,
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
     };
   }
 }
@@ -321,7 +322,8 @@ String formatSubagentDuration(Duration span) {
   return '${span.inHours}h ${(span.inMinutes % 60).toString().padLeft(2, '0')}m';
 }
 
-({IconData icon, String label}) _stateLook(SubagentState state) =>
+/// A subagent state's glyph and word, wherever a child session is listed.
+({IconData icon, String label}) subagentStateLook(SubagentState state) =>
     switch (state) {
       SubagentState.running => (icon: AppIcons.circleHalf, label: 'Running'),
       SubagentState.blocked => (
@@ -358,7 +360,7 @@ class _EntryRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final look = _stateLook(entry.state);
+    final look = subagentStateLook(entry.state);
     final duration = subagentDuration(entry, ref.read(clockProvider).nowUtc());
     final tokens = entry.tokens;
     final facts = [
@@ -424,7 +426,7 @@ class _EntryRow extends ConsumerWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Padding(
-        padding: const EdgeInsets.only(top: 2),
+        padding: const EdgeInsets.only(top: Insets.xxs),
         child: Icon(
           look.icon,
           size: Chrome.iconSmall,

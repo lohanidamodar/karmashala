@@ -45,7 +45,7 @@ class ShellTabSwitcher extends ConsumerWidget {
           onTap: () => TabPicker.show(context, terminalTabEntries),
           child: Container(
             constraints: const BoxConstraints(minHeight: _switcherHeight),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: Insets.smd),
             child: Row(
               children: [
                 const ShellActiveTabGlyph(),

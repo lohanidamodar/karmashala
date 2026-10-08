@@ -43,7 +43,7 @@ class AutomationSentLabel extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: Insets.xs,
-            vertical: 2,
+            vertical: Insets.xxs,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

@@ -5,7 +5,7 @@ import 'design_tokens.dart';
 
 /// The gutter every menu row shares, so a one-line row and a two-line row line
 /// their labels up in the same menu.
-const EdgeInsets _menuRowPadding = EdgeInsets.symmetric(horizontal: 10);
+const EdgeInsets _menuRowPadding = EdgeInsets.symmetric(horizontal: Insets.smd);
 const double _menuGlyphGap = 10;
 
 /// A popup row's body grown to [Touch.target] under a thumb: a popup that

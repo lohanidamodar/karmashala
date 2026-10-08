@@ -58,13 +58,13 @@ class _PullRequestDialogState extends State<PullRequestDialog> {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Insets.md),
             TextField(
               controller: _title,
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Title'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Insets.md),
             TextField(
               controller: _body,
               minLines: 3,

@@ -236,7 +236,7 @@ class _Line extends StatelessWidget {
       label: label,
       labelWidth: 62,
       labelStyle: theme.textTheme.bodySmall,
-      padding: const EdgeInsets.only(top: 1),
+      padding: const EdgeInsets.only(top: Insets.hair),
       value: Text(
         value,
         style: theme.textTheme.bodySmall?.copyWith(

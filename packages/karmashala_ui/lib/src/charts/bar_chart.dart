@@ -313,7 +313,7 @@ class RankedBars extends StatelessWidget {
       children: [
         for (final bar in bars)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
             child: MergeSemantics(
               child: Row(
                 children: [

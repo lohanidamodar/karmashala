@@ -140,7 +140,7 @@ class _EnvironmentCard extends ConsumerWidget {
           else
             for (final installation in installations)
               Padding(
-                padding: const EdgeInsets.only(bottom: 2),
+                padding: const EdgeInsets.only(bottom: Insets.xxs),
                 child: Row(
                   children: [
                     AgentLogo(

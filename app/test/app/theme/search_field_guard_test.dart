@@ -113,7 +113,7 @@ void main() {
       'lib/src/features/stores/presentation/store_combine.dart': 'store apps',
       '../packages/karmashala_ui/lib/src/log_filter_controls.dart':
           'log, logcat, Flutter console and code find',
-      '../packages/karmashala_ui/lib/src/file_browser_view.dart':
+      '../packages/karmashala_ui/lib/src/file_browser_view/file_browser_rows.dart':
           'file browser filter',
     };
     final all = sources();

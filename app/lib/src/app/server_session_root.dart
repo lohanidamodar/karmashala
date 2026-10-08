@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_remote/client.dart' show CompanionPairing;
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../core/capabilities/capabilities.dart';
 import '../core/lifecycle/server_switcher.dart';
@@ -50,7 +51,10 @@ class ServerSessionRoot extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
+            const InlineSpinner(
+              size: InlineSpinnerSize.large,
+              semanticsLabel: 'Switching servers',
+            ),
             const SizedBox(height: Insets.lg),
             Text('Switching to $name…'),
           ],

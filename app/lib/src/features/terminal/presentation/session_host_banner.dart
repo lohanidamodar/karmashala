@@ -4,7 +4,8 @@ import 'package:karmashala_terminal_runtime/host_link.dart'
     show HostSupervision, HostSupervisionPhase;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart' show Chrome, WidthClass;
+import 'package:karmashala_ui/tokens.dart' show Chrome, Insets, WidthClass;
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../core/server/remote_server_access.dart';
 import '../../../core/server/server_link.dart';
@@ -75,11 +76,14 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
       key: const ValueKey('session_host_banner'),
       color: scheme.errorContainer,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.xs,
+        ),
         child: Row(
           children: [
             Icon(AppIcons.warning, color: scheme.onErrorContainer),
-            const SizedBox(width: 8),
+            const SizedBox(width: Insets.sm),
             Expanded(
               child: Text(
                 '${outdated ? '' : 'MCP, hooks, the companion and '
@@ -90,7 +94,7 @@ class _SessionHostBannerState extends ConsumerState<SessionHostBanner> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: Insets.sm),
             TextButton(
               key: const ValueKey('session_host_banner_restart'),
               onPressed: _busy ? null : () => _restart(supervision),
@@ -200,20 +204,17 @@ class _ResumingStrip extends ConsumerWidget {
           key: const ValueKey('remote_resuming_banner'),
           color: scheme.secondaryContainer,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.md,
+              vertical: Insets.xs,
+            ),
             child: Row(
               children: [
                 if (resuming)
-                  SizedBox.square(
-                    dimension: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: fore,
-                    ),
-                  )
+                  InlineSpinner(color: fore)
                 else
                   Icon(AppIcons.warningCircle, size: Chrome.icon, color: fore),
-                const SizedBox(width: 8),
+                const SizedBox(width: Insets.sm),
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

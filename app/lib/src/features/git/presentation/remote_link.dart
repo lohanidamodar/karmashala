@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../application/remote_links.dart';
 
 /// A piece of text that opens a page on the forge — a commit sha, a pull
@@ -53,7 +54,7 @@ class RemoteLink extends ConsumerWidget {
               child: Text(text, style: linked, overflow: TextOverflow.ellipsis),
             ),
             if (icon) ...[
-              const SizedBox(width: 2),
+              const SizedBox(width: Insets.xxs),
               // Subordinate to the link: at Chrome.iconSmall this mark competes
               // with the text instead of qualifying it.
               Icon(

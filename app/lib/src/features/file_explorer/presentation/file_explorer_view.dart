@@ -412,7 +412,7 @@ class FileRowTile extends StatelessWidget {
               )
             else
               const SizedBox(width: Chrome.iconAction),
-            const SizedBox(width: 2),
+            const SizedBox(width: Insets.xxs),
             Icon(
               isDirectory
                   ? (expanded ? AppIcons.folderOpen : AppIcons.folder)

@@ -135,12 +135,12 @@ class PlanChecklistRow extends StatelessWidget {
     final (glyph, colour) = planItemGlyph(item.state, scheme, semantic);
     final done = item.state == AgentPlanItemState.completed;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(glyph, size: Chrome.iconSmall, color: colour),
           ),
           const SizedBox(width: Insets.sm),
@@ -197,7 +197,11 @@ class _ChangeRow extends StatelessWidget {
         AppIcons.checkCircle,
         semantic.idle,
       ),
-      PlanChangeKind.started => ('Started', AppIcons.circleHalf, semantic.working),
+      PlanChangeKind.started => (
+        'Started',
+        AppIcons.circleHalf,
+        semantic.working,
+      ),
       PlanChangeKind.added => ('Added', AppIcons.plus, scheme.onSurfaceVariant),
       PlanChangeKind.dropped => (
         'Dropped',
@@ -207,12 +211,12 @@ class _ChangeRow extends StatelessWidget {
     };
     final style = theme.textTheme.bodySmall;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: Insets.xxs),
             child: Icon(glyph, size: Chrome.iconSmall, color: colour),
           ),
           const SizedBox(width: Insets.sm),

@@ -120,7 +120,7 @@ class _SettingsNavState extends ConsumerState<SettingsNav> {
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: Insets.sm,
-                vertical: Insets.xs + 2,
+                vertical: Insets.xs + Insets.xxs,
               ),
               hintText: 'Search settings',
               hintStyle: theme.textTheme.bodySmall?.copyWith(color: muted),
@@ -209,9 +209,9 @@ class SettingsNavGroupHeader extends StatelessWidget {
       header: true,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
-          Insets.md - 2,
+          Insets.md - Insets.xxs,
           Insets.md,
-          Insets.md - 2,
+          Insets.md - Insets.xxs,
           Insets.xs,
         ),
         child: Text(
@@ -249,7 +249,7 @@ class SettingsSearchHitRow extends StatelessWidget {
       button: true,
       label: '${entry.label}, in ${entry.page.label}, ${entry.anchor.title}',
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 2),
+        padding: const EdgeInsets.only(bottom: Insets.xxs),
         child: InkWell(
           borderRadius: BorderRadius.circular(Radii.sm),
           onTap: onTap,
@@ -315,7 +315,7 @@ class _NavRow extends StatelessWidget {
       selected: selected,
       label: page.label,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 1),
+        padding: const EdgeInsets.only(bottom: Insets.hair),
         child: Material(
           color: selected ? tones.selected : Colors.transparent,
           borderRadius: BorderRadius.circular(Radii.sm),
@@ -325,7 +325,9 @@ class _NavRow extends StatelessWidget {
             onTap: onTap,
             child: Container(
               constraints: const BoxConstraints(minHeight: Chrome.row + 2),
-              padding: const EdgeInsets.symmetric(horizontal: Insets.md - 2),
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.md - Insets.xxs,
+              ),
               alignment: Alignment.centerLeft,
               child: ExcludeSemantics(
                 child: Text(

@@ -161,7 +161,10 @@ class QuickOpenKeyChip extends StatelessWidget {
     final theme = Theme.of(context);
     final tones = SurfaceTones.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: Insets.hair),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.xs + Insets.hair,
+        vertical: Insets.hair,
+      ),
       decoration: BoxDecoration(
         color: tones.selected,
         borderRadius: BorderRadius.circular(Radii.sm),

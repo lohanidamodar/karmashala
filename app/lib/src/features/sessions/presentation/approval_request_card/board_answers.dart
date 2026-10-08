@@ -124,7 +124,7 @@ Future<String?> answerBoardApprovalBy(
     await send();
     return null;
   } on SessionPromptRefusal catch (refusal) {
-    return _approvalRefusalText(refusal);
+    return approvalRefusalText(refusal);
   }
 }
 

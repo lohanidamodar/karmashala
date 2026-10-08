@@ -2,6 +2,7 @@ import 'about_page.dart';
 import 'notifications_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/capabilities/capabilities.dart';
 
@@ -87,7 +88,7 @@ class SettingsPageBody extends StatelessWidget {
                     style: SettingsStyles.pageTitle(context, narrow: narrow),
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: Insets.xxs),
                 Text(
                   page.description,
                   style: SettingsStyles.pageBlurb(context),

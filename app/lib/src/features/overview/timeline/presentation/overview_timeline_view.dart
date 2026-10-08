@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../../app/shell/workbench_tabs.dart' show openSettingsTab;
 import '../../../../core/capabilities/capabilities.dart';
@@ -138,7 +139,9 @@ class _OverviewTimelineViewState extends ConsumerState<OverviewTimelineView> {
                 ),
                 // Riverpod retries a failure as loading-with-error.
                 AsyncValue(:final error?) => _failure(error),
-                _ => const Center(child: CircularProgressIndicator()),
+                _ => const Center(
+                  child: InlineSpinner(size: InlineSpinnerSize.large),
+                ),
               },
             ),
           ],
@@ -220,8 +223,18 @@ class _Message extends StatelessWidget {
 
 String _rangeLabel(TimelineRange range) {
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   String day(DateTime d) => '${d.day} ${months[d.month - 1]} ${d.year}';
   if (range.isOneDay) return day(range.from);
@@ -230,7 +243,11 @@ String _rangeLabel(TimelineRange range) {
 }
 
 class _Toolbar extends ConsumerWidget {
-  const _Toolbar({required this.range, required this.phone, required this.zoom});
+  const _Toolbar({
+    required this.range,
+    required this.phone,
+    required this.zoom,
+  });
 
   final TimelineRange range;
   final bool phone;

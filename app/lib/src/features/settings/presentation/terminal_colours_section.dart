@@ -96,7 +96,7 @@ class _SchemeGroup extends StatelessWidget {
           Text(label, style: SettingsStyles.rowLabel(context)),
           if (help != null)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: Insets.xxs),
               child: Text(help, style: SettingsStyles.rowHelp(context)),
             ),
           const SizedBox(height: Insets.sm),
@@ -163,7 +163,7 @@ class _SchemeCard extends StatelessWidget {
             onTap: onTap,
             hoverColor: tones.hover,
             child: Padding(
-              padding: const EdgeInsets.all(Insets.xs + 2),
+              padding: const EdgeInsets.all(Insets.xs + Insets.xxs),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

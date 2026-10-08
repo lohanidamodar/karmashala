@@ -455,13 +455,8 @@ class _SessionTile extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: Insets.sm),
-          PopupMenuButton<String>(
+          RowMenuButton(
             tooltip: 'Session actions',
-            icon: const Icon(
-              AppIcons.dotsThreeVertical,
-              size: Chrome.iconAction,
-            ),
-            padding: EdgeInsets.zero,
             onSelected: (action) async {
               if (action == 'rename') {
                 final name = await _promptRename(context, session.displayTitle);
@@ -471,7 +466,7 @@ class _SessionTile extends ConsumerWidget {
                 if (ok) await controller.deleteSession(session);
               }
             },
-            itemBuilder: (context) => [
+            itemBuilder: () => [
               DesktopMenuItem(
                 value: 'rename',
                 label: 'Rename',

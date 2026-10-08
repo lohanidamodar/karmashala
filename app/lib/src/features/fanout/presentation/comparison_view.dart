@@ -14,6 +14,7 @@ import '../../automations/application/automation_check_runner.dart';
 import '../application/comparison_providers.dart';
 import '../application/fanout_service.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'comparison_chrome.dart';
 
 /// One comparison, side by side. Everything drawn comes from the stored
@@ -163,10 +164,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
         ? null
         : () => _runChecks(comparison);
     final icon = _checking
-        ? const SizedBox.square(
-            dimension: Chrome.iconSmall,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
+        ? const InlineSpinner()
         : const Icon(AppIcons.listChecks, size: Chrome.iconSmall);
     if (MediaQuery.sizeOf(context).width < 900) {
       return IconButton(

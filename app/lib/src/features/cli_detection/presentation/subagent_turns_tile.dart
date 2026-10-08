@@ -285,7 +285,7 @@ class _SubagentTurn extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: Insets.xxs),
                 if (activity != null)
                   ToolActivityBody(
                     activity: activity,

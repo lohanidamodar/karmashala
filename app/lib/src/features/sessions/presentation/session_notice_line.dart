@@ -61,7 +61,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
       container: true,
       liveRegion: true,
       child: Padding(
-        padding: const EdgeInsets.only(top: 2, bottom: Insets.xs),
+        padding: const EdgeInsets.only(top: Insets.xxs, bottom: Insets.xs),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest,
@@ -112,7 +112,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                           MediaQuery.textScalerOf(context),
                         );
                 final message = Padding(
-                  padding: const EdgeInsets.only(top: 1),
+                  padding: const EdgeInsets.only(top: Insets.hair),
                   child: Text(
                     notice.message,
                     style: theme.textTheme.bodySmall?.copyWith(

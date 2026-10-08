@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agent_cli/usage.dart' show kUsageCriticalPercent;
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../../app/widgets/truncated_text.dart';
 import '../../../core/util/clock_provider.dart';
@@ -130,17 +131,7 @@ class OverviewMetaLine extends ConsumerWidget {
                   ? ''
                   : ' · ${plan.current!.text}'}';
     final diff = <InlineSpan>[
-      if (added != null)
-        TextSpan(
-          text: '+$added',
-          style: TextStyle(color: semantic.diffAdded),
-        ),
-      if (added != null && removed != null) const TextSpan(text: ' '),
-      if (removed != null)
-        TextSpan(
-          text: '−$removed',
-          style: TextStyle(color: semantic.diffRemoved),
-        ),
+      ...diffStatSpans(semantic, added: added, removed: removed),
       if (fileCount != null && fileCount > 0) ...[
         if (added != null || removed != null) const TextSpan(text: ' · '),
         TextSpan(text: fileCount == 1 ? '1 file' : '$fileCount files'),

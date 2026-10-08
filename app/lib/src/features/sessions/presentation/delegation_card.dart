@@ -11,7 +11,7 @@ import '../../explorer/application/explorer_actions.dart';
 import '../application/session_subagents_providers.dart';
 import 'chat_transcript.dart';
 import 'session_subagents_panel.dart'
-    show formatSubagentDuration, subagentDuration;
+    show formatSubagentDuration, subagentDuration, subagentStateLook;
 
 /// One child-starting call in a parent's chat: the child it started, once
 /// the call answered, and what it was asked.
@@ -116,7 +116,9 @@ class _DelegationGroupCardState extends ConsumerState<DelegationGroupCard> {
     ];
     final counts = <String, int>{};
     for (final state in states) {
-      final label = state == null ? 'starting' : _label(state).toLowerCase();
+      final label = state == null
+          ? 'starting'
+          : subagentStateLook(state).label.toLowerCase();
       counts[label] = (counts[label] ?? 0) + 1;
     }
     final summary = [
@@ -199,15 +201,6 @@ class _DelegationGroupCardState extends ConsumerState<DelegationGroupCard> {
   }
 }
 
-String _label(SubagentState state) => switch (state) {
-  SubagentState.running => 'Running',
-  SubagentState.blocked => 'Waiting on you',
-  SubagentState.done => 'Done',
-  SubagentState.failed => 'Failed',
-  SubagentState.stopped => 'Stopped',
-  SubagentState.unknown => 'Unknown',
-};
-
 class _ChildLine extends ConsumerWidget {
   const _ChildLine({required this.call, required this.entry});
 
@@ -227,7 +220,7 @@ class _ChildLine extends ConsumerWidget {
         : [
             entry.agent ?? 'session',
             ?entry.model,
-            _label(entry.state),
+            subagentStateLook(entry.state).label,
             if (duration != null) formatSubagentDuration(duration),
           ].join(' · ');
     final result = entry?.finalResult;

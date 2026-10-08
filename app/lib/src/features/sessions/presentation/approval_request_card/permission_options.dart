@@ -17,8 +17,7 @@ class _PermissionOptions extends ConsumerStatefulWidget {
   final Widget? command;
 
   @override
-  ConsumerState<_PermissionOptions> createState() =>
-      _PermissionOptionsState();
+  ConsumerState<_PermissionOptions> createState() => _PermissionOptionsState();
 }
 
 class _PermissionOptionsState extends ConsumerState<_PermissionOptions> {
@@ -43,7 +42,7 @@ class _PermissionOptionsState extends ConsumerState<_PermissionOptions> {
     } on SessionPromptRefusal catch (refusal) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(_approvalRefusalText(refusal, touch: said != null)),
+          content: Text(approvalRefusalText(refusal, touch: said != null)),
         ),
       );
     } finally {

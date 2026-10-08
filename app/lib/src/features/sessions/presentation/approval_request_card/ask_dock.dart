@@ -203,7 +203,10 @@ class _AskDock extends ConsumerWidget {
               horizontal: Insets.md,
               vertical: Insets.sm,
             )
-          : const EdgeInsets.symmetric(horizontal: 14, vertical: Insets.md),
+          : const EdgeInsets.symmetric(
+              horizontal: Insets.md + Insets.xxs,
+              vertical: Insets.md,
+            ),
       // Amber, the one colour that means "needs you" (spec §5): the ask is
       // the thing on screen that is blocking the session. The edge is drawn
       // inside, as the board's inset ring, so the panel keeps its size.
@@ -319,7 +322,10 @@ class _DockBox extends StatelessWidget {
       ),
     );
     final box = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: Insets.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.smd,
+        vertical: Insets.sm,
+      ),
       decoration: BoxDecoration(
         color: SurfaceTones.of(context).term,
         borderRadius: BorderRadius.circular(_dockInnerRadius),
@@ -443,7 +449,7 @@ class _DockAnswers extends ConsumerWidget {
       // acknowledgement of one that did.
       messenger.showSnackBar(
         SnackBar(
-          content: Text(_approvalRefusalText(refusal, touch: said != null)),
+          content: Text(approvalRefusalText(refusal, touch: said != null)),
         ),
       );
       return;

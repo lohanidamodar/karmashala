@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_queue_card.dart';
@@ -169,6 +170,7 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(1440, 900),
     bool phone = false,
+    CapabilitySet? grants,
   }) async {
     final recorder = _Recorder(menu: alwaysMenu);
     final container = await pumpMission(
@@ -198,6 +200,10 @@ void main() {
       size: size,
       phone: phone,
       overrides: [
+        if (grants != null)
+          serverOfferProvider.overrideWithValue(
+            ServerOffer(sameMachine: false, grants: grants),
+          ),
         sessionActionsProvider.overrideWith((ref) => _SpyActions(ref, sent)),
         sessionQueueProvider.overrideWith((ref, id) => queues[id] ?? const []),
         recentlyDeliveredProvider.overrideWith(
@@ -266,8 +272,11 @@ void main() {
   });
 
   group('reply in words', () {
-    Future<Finder> composer(WidgetTester tester) async {
-      await pump(tester);
+    Future<Finder> composer(
+      WidgetTester tester, {
+      CapabilitySet? grants,
+    }) async {
+      await pump(tester, grants: grants);
       await tester.ensureVisible(queueCard('ask-q'));
       await settleMission(tester);
       await tester.tap(find.byKey(const ValueKey('question-reply-in-words')));
@@ -288,6 +297,23 @@ void main() {
       expect(sent, [('ask-q', 'Merge it into feat/acp')]);
       expect(find.text('Sent'), findsOneWidget);
       expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+      await unmountMission(tester);
+    });
+
+    testWidgets('a phone without prompt rights is told so, and cannot send', (
+      tester,
+    ) async {
+      final field = await composer(
+        tester,
+        grants: CapabilitySet.of(
+          Capability.values.where(
+            (c) => c != Capability.sendPrompt && c != Capability.desktopClient,
+          ),
+        ),
+      );
+      expect(tester.widget<TextField>(field).enabled, isFalse);
+      expect(find.text(kPromptNotGranted), findsOneWidget);
+      expect(sent, isEmpty);
       await unmountMission(tester);
     });
 

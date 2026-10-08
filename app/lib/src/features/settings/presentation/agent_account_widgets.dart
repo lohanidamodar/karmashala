@@ -204,7 +204,7 @@ class SavedAccountRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
       child: Row(
         children: [
           const Icon(AppIcons.circle, size: bulletSize),

@@ -65,7 +65,10 @@ class PickerFace extends StatelessWidget {
     TextStyle? style,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.sm,
+        vertical: Insets.tight,
+      ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(color: scheme.outlineVariant),

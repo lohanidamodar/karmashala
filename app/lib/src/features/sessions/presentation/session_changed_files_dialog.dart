@@ -125,7 +125,12 @@ class _FileTable extends StatelessWidget {
           TableRow(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(0, 2, Insets.sm, 2),
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  Insets.xxs,
+                  Insets.sm,
+                  Insets.xxs,
+                ),
                 child: Text(
                   file.kind.label,
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -134,7 +139,7 @@ class _FileTable extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
+                padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
                 child: SelectableText(switch (file.movedTo) {
                   null => file.display,
                   final movedTo => '${file.display} → $movedTo',

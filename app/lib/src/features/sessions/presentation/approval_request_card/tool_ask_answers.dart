@@ -191,7 +191,7 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
   );
 
   static String _refused(SessionPromptRefusal refusal, {bool touch = false}) =>
-      _approvalRefusalText(refusal, touch: touch);
+      approvalRefusalText(refusal, touch: touch);
 
   /// *Deny and say why…* on a phone: the reason is typed in a sheet over the
   /// keyboard, not in a field squeezed into the dock. The sheet only collects

@@ -11,6 +11,7 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../settings/presentation/settings_theme.dart';
 import 'package:karmashala_git/cleanup.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../application/worktree_cleanup_providers.dart';
 
 /// Settings → Projects and files → Worktree setup → Automatic cleanup: the
@@ -153,11 +154,7 @@ class _WorktreeCleanupSectionState
                 onPressed: _busy || !settings.anyEnabled ? null : _cleanUpNow,
                 child: const Text('Clean up now'),
               ),
-              if (_busy)
-                const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+              if (_busy) const InlineSpinner(size: InlineSpinnerSize.medium),
             ],
           ),
           if (last != null)
@@ -282,7 +279,7 @@ class _RulesEditorState extends State<_RulesEditor> {
           ],
         ),
         Padding(
-          padding: const EdgeInsets.only(left: 40),
+          padding: const EdgeInsets.only(left: Insets.xxl + Insets.sm),
           child: Text(
             'Since HEAD last moved or a session last ran in it.',
             style: small,
@@ -522,7 +519,7 @@ class _VerdictLine extends StatelessWidget {
             ],
           ),
           Padding(
-            padding: const EdgeInsets.only(left: 20),
+            padding: const EdgeInsets.only(left: Insets.lg + Insets.xs),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

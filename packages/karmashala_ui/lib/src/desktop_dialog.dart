@@ -25,7 +25,7 @@ class DesktopDialogTitle extends StatelessWidget {
         Padding(
           // 2px, and deliberately not an `Insets` step: optical alignment of the
           // glyph's cap height, which the 4-pt scale would drop below the title.
-          padding: const EdgeInsets.only(top: 2),
+          padding: const EdgeInsets.only(top: Insets.xxs),
           child: Icon(
             icon,
             size: Chrome.iconTitle,
