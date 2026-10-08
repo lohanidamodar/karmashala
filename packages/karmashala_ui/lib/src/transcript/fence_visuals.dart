@@ -2,13 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:karmashala_core/visuals.dart';
 
 import '../app_icons.dart';
-import '../charts/bar_chart.dart';
-import '../charts/time_series_chart.dart';
+import '../charts/series_chart.dart';
 import '../design_tokens.dart';
 import 'ansi_text.dart';
 import 'code_block.dart';
+import 'diff_text.dart';
 import 'json_tree.dart';
 
 /// What a fence's language draws as, rather than as code.
@@ -53,95 +54,93 @@ class VisualFenceBlock extends StatefulWidget {
 }
 
 class _VisualFenceBlockState extends State<VisualFenceBlock> {
-  bool _source = false;
+  bool _wrap = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
-    final copyText = widget.visual == FenceVisual.ansi
+    final source = widget.visual == FenceVisual.ansi
         ? stripAnsi(widget.source)
         : widget.source;
-    Widget body;
-    if (_source) {
-      body = _sourceText(context);
-    } else {
-      try {
-        body = _drawn(context);
-      } on Object catch (error) {
-        body = _failed(context, '$error');
-      }
-    }
-    return DecoratedBox(
+    return VisualFrame(
       key: ValueKey('fence-${widget.visual.name}'),
-      decoration: BoxDecoration(
-        color: theme.brightness == Brightness.dark
-            ? scheme.surfaceContainerLowest
-            : scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.sm),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SelectionContainer.disabled(
-            child: Padding(
-              padding: const EdgeInsets.only(left: Insets.sm),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.language ?? widget.visual.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: muted,
-                    ),
-                  ),
-                  TextButton(
-                    key: const ValueKey('fence-source'),
-                    onPressed: () => setState(() => _source = !_source),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      textStyle: theme.textTheme.labelSmall,
-                    ),
-                    child: Text(_source ? 'Visual' : 'Source'),
-                  ),
-                  CopyTextButton(text: copyText, tooltip: 'Copy source'),
-                ],
-              ),
-            ),
+      label: widget.language ?? widget.visual.name,
+      source: source,
+      actions: [
+        if (widget.visual == FenceVisual.diff)
+          TextButton(
+            key: const ValueKey('diff-wrap'),
+            onPressed: () => setState(() => _wrap = !_wrap),
+            style: VisualFrame.actionStyle(context),
+            child: Text(_wrap ? 'No wrap' : 'Wrap'),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.sm,
-              0,
-              Insets.sm,
-              Insets.sm,
-            ),
-            child: body,
-          ),
-        ],
-      ),
+      ],
+      draw: _drawn,
     );
   }
 
-  Widget _sourceText(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: Text(
-      widget.visual == FenceVisual.ansi
-          ? stripAnsi(widget.source)
-          : widget.source,
-      style: MonoStyles.label.copyWith(
-        color: Theme.of(context).colorScheme.onSurface,
+  Widget _drawn(BuildContext context) => switch (widget.visual) {
+    FenceVisual.json => JsonTreeView(jsonDecode(widget.source), openDepth: 2),
+    FenceVisual.ansi => SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: AnsiText(widget.source, softWrap: false),
+    ),
+    FenceVisual.diff => DiffText(widget.source, wrap: _wrap),
+    FenceVisual.math => SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Math.tex(
+        widget.source.trim(),
+        mathStyle: MathStyle.display,
+        textStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+        onErrorFallback: (error) =>
+            VisualFrame.failure(context, error.message, widget.source),
       ),
     ),
+    FenceVisual.chart => ChartFence(spec: parseChartSpec(widget.source)),
+  };
+}
+
+/// The box every drawn block sits in: a [label], the block's own [actions],
+/// Source and Copy, and what [draw] builds — or, when it throws, why and the
+/// source.
+class VisualFrame extends StatefulWidget {
+  const VisualFrame({
+    required this.label,
+    required this.source,
+    required this.draw,
+    this.actions = const [],
+    this.leading,
+    super.key,
+  });
+
+  final String label;
+
+  /// What Source shows and Copy copies.
+  final String source;
+  final WidgetBuilder draw;
+  final List<Widget> actions;
+
+  /// Drawn before [label], as an icon saying what kind of block it is.
+  final Widget? leading;
+
+  /// How a header action looks, so a block's own matches Source.
+  static ButtonStyle actionStyle(BuildContext context) => TextButton.styleFrom(
+    visualDensity: VisualDensity.compact,
+    textStyle: Theme.of(context).textTheme.labelSmall,
   );
 
-  Widget _failed(BuildContext context, String reason) {
+  static Widget sourceText(BuildContext context, String source) =>
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Text(
+          source,
+          style: MonoStyles.label.copyWith(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      );
+
+  /// Why [source] could not be drawn, above it.
+  static Widget failure(BuildContext context, String reason, String source) {
     final failure = SemanticColors.of(context).failure;
     return Column(
       key: const ValueKey('fence-failed'),
@@ -167,226 +166,120 @@ class _VisualFenceBlockState extends State<VisualFenceBlock> {
           ],
         ),
         const SizedBox(height: Insets.xs),
-        _sourceText(context),
+        sourceText(context, source),
       ],
     );
   }
 
-  Widget _drawn(BuildContext context) => switch (widget.visual) {
-    FenceVisual.json => JsonTreeView(jsonDecode(widget.source), openDepth: 2),
-    FenceVisual.ansi => SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: AnsiText(widget.source, softWrap: false),
-    ),
-    FenceVisual.diff => DiffText(widget.source),
-    FenceVisual.math => SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Math.tex(
-        widget.source.trim(),
-        mathStyle: MathStyle.display,
-        textStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-        onErrorFallback: (error) => _failed(context, error.message),
-      ),
-    ),
-    FenceVisual.chart => ChartFence(spec: parseChartSpec(widget.source)),
-  };
+  @override
+  State<VisualFrame> createState() => _VisualFrameState();
 }
 
-/// A unified diff, each line tinted by what it does.
-class DiffText extends StatelessWidget {
-  const DiffText(this.source, {super.key});
-
-  final String source;
+class _VisualFrameState extends State<VisualFrame> {
+  bool _source = false;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final semantic = SemanticColors.of(context);
-    final mono = MonoStyles.label.copyWith(color: scheme.onSurface);
-    TextStyle styleOf(String line) {
-      if (line.startsWith('+++') || line.startsWith('---')) {
-        return mono.copyWith(fontWeight: FontWeight.w700);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    Widget body;
+    if (_source) {
+      body = VisualFrame.sourceText(context, widget.source);
+    } else {
+      try {
+        body = widget.draw(context);
+      } on Object catch (error) {
+        final reason = error is FormatException ? error.message : '$error';
+        body = VisualFrame.failure(context, reason, widget.source);
       }
-      if (line.startsWith('@@')) {
-        return mono.copyWith(color: scheme.tertiary);
-      }
-      if (line.startsWith('+')) {
-        return mono.copyWith(
-          color: semantic.diffAdded,
-          backgroundColor: semantic.diffAdded.withValues(
-            alpha: SemanticColors.surfaceEdgeAlpha,
-          ),
-        );
-      }
-      if (line.startsWith('-')) {
-        return mono.copyWith(
-          color: semantic.diffRemoved,
-          backgroundColor: semantic.diffRemoved.withValues(
-            alpha: SemanticColors.surfaceEdgeAlpha,
-          ),
-        );
-      }
-      return mono.copyWith(color: scheme.onSurfaceVariant);
     }
-
-    final lines = source.split('\n');
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Text.rich(
-        TextSpan(
-          children: [
-            for (var i = 0; i < lines.length; i++)
-              TextSpan(
-                text: i == lines.length - 1 ? lines[i] : '${lines[i]}\n',
-                style: styleOf(lines[i]),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.brightness == Brightness.dark
+            ? scheme.surfaceContainerLowest
+            : scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SelectionContainer.disabled(
+            child: Padding(
+              padding: const EdgeInsets.only(left: Insets.sm),
+              child: Row(
+                children: [
+                  if (widget.leading case final leading?) ...[
+                    leading,
+                    const SizedBox(width: Insets.xs),
+                  ],
+                  Expanded(
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
+                  ),
+                  if (!_source) ...widget.actions,
+                  TextButton(
+                    key: const ValueKey('fence-source'),
+                    onPressed: () => setState(() => _source = !_source),
+                    style: VisualFrame.actionStyle(context),
+                    child: Text(_source ? 'Visual' : 'Source'),
+                  ),
+                  CopyTextButton(text: widget.source, tooltip: 'Copy source'),
+                ],
               ),
-          ],
-        ),
-        softWrap: false,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Insets.sm,
+              0,
+              Insets.sm,
+              Insets.sm,
+            ),
+            child: body,
+          ),
+        ],
       ),
     );
   }
 }
 
-/// A `chart` fence's spec: `{"type": "bar" | "line", "title": "…", "unit":
-/// "…", "data": [...]}`. A bar's datum is `{"label", "value"}`; a line's is
-/// `{"x": "<ISO date or time>", "y": <number>}`.
-class ChartSpec {
-  const ChartSpec({
-    required this.type,
-    required this.bars,
-    required this.points,
-    this.title,
-    this.unit,
-  });
+/// A `chart` fence's source as a [ChartVisual] — the shape `visualize` takes;
+/// throws a [FormatException] saying what is wrong.
+ChartVisual parseChartSpec(String source) =>
+    parseChartVisual(jsonDecode(source));
 
-  final String type;
-  final String? title;
-  final String? unit;
-  final List<BarDatum> bars;
-  final List<TimeSeriesPoint> points;
-}
-
-/// [source] as a [ChartSpec]; throws a [FormatException] saying what is wrong.
-ChartSpec parseChartSpec(String source) {
-  final Object? json = jsonDecode(source);
-  if (json is! Map<String, Object?>) {
-    throw const FormatException('a chart is a JSON object');
-  }
-  final type = json['type'];
-  final data = json['data'];
-  if (type != 'bar' && type != 'line') {
-    throw const FormatException('"type" must be "bar" or "line"');
-  }
-  if (data is! List<Object?> || data.isEmpty) {
-    throw const FormatException('"data" must be a non-empty list');
-  }
-  double number(Object? value, String field) => switch (value) {
-    final num n => n.toDouble(),
-    _ => throw FormatException('"$field" must be a number'),
-  };
-  final bars = <BarDatum>[];
-  final points = <TimeSeriesPoint>[];
-  for (final datum in data) {
-    if (datum is! Map<String, Object?>) {
-      throw const FormatException('each datum is an object');
-    }
-    if (type == 'bar') {
-      bars.add(
-        BarDatum(
-          label: '${datum['label'] ?? ''}',
-          value: number(datum['value'], 'value'),
-        ),
-      );
-    } else {
-      final at = DateTime.tryParse('${datum['x']}');
-      if (at == null) {
-        throw const FormatException('"x" must be an ISO date or time');
-      }
-      points.add(TimeSeriesPoint(at, number(datum['y'], 'y')));
-    }
-  }
-  points.sort((a, b) => a.at.compareTo(b.at));
-  return ChartSpec(
-    type: type! as String,
-    title: json['title'] as String?,
-    unit: json['unit'] as String?,
-    bars: bars,
-    points: points,
-  );
-}
-
-/// A [ChartSpec] drawn with the app's own charts.
+/// A [ChartVisual] under its title.
 class ChartFence extends StatelessWidget {
-  const ChartFence({required this.spec, super.key});
+  const ChartFence({required this.spec, this.showTitle = true, super.key});
 
-  final ChartSpec spec;
+  final ChartVisual spec;
+
+  /// False where a frame above already names it.
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme.primary;
-    final unit = spec.unit == null ? '' : ' ${spec.unit}';
-    String value(double v) =>
-        '${v == v.roundToDouble() ? v.round() : v.toStringAsFixed(2)}$unit';
-    final title = spec.title;
-    final chart = spec.type == 'bar'
-        ? BarChart(
-            bars: [
-              for (final b in spec.bars)
-                BarDatum(
-                  label: b.label,
-                  value: b.value,
-                  valueLabel: value(b.value),
-                ),
-            ],
-            color: color,
-            semanticsLabel: title ?? 'Bar chart',
-            height: 160,
-          )
-        : _line(spec, color, value, title);
+    final title = showTitle ? spec.title : null;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         if (title != null)
           Padding(
             padding: const EdgeInsets.only(bottom: Insets.xs),
-            child: Text(title, style: theme.textTheme.titleSmall),
+            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
           ),
-        chart,
+        SeriesChart(chart: spec),
       ],
-    );
-  }
-
-  static Widget _line(
-    ChartSpec spec,
-    Color color,
-    String Function(double) value,
-    String? title,
-  ) {
-    final ys = spec.points.map((p) => p.value);
-    final lo = ys.reduce((a, b) => a < b ? a : b);
-    final hi = ys.reduce((a, b) => a > b ? a : b);
-    final pad = hi == lo ? 1.0 : (hi - lo) * 0.1;
-    final start = spec.points.first.at;
-    final end = spec.points.length == 1
-        ? start.add(const Duration(days: 1))
-        : spec.points.last.at;
-    final dated = end.difference(start) >= const Duration(days: 2);
-    return TimeSeriesChart(
-      points: spec.points,
-      start: start,
-      end: end,
-      minY: lo < 0 ? lo - pad : 0,
-      maxY: hi + pad,
-      color: color,
-      semanticsLabel: title ?? 'Line chart',
-      valueLabel: value,
-      timeLabel: (at) => dated
-          ? '${at.month}/${at.day}'
-          : '${at.hour.toString().padLeft(2, '0')}:'
-                '${at.minute.toString().padLeft(2, '0')}',
     );
   }
 }

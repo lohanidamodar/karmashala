@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_icons.dart';
+import '../charts/chart_support.dart';
 import '../design_tokens.dart';
 import 'flowchart_layout.dart';
 import 'mermaid_model.dart';
@@ -17,27 +18,11 @@ class MermaidDiagramView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = (theme.textTheme.bodySmall ?? const TextStyle()).copyWith(
-      color: theme.colorScheme.onSurface,
-      height: 1.25,
-    );
-    final scaler = MediaQuery.textScalerOf(context);
-    final colors = _Colors(theme.colorScheme);
-    final picture = switch (diagram) {
-      final MermaidFlowchart chart => _FlowchartPicture(
-        chart,
-        style,
-        scaler,
-        colors,
-      ),
-      final MermaidSequence seq => _SequencePicture(seq, style, scaler, colors),
-      _ => null,
-    };
+    final picture = MermaidPicture.of(context, diagram);
     if (picture == null) return const SizedBox.shrink();
     final painted = SizedBox.fromSize(
       size: picture.size,
-      child: CustomPaint(painter: picture),
+      child: CustomPaint(painter: MermaidPainter(picture)),
     );
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -45,6 +30,148 @@ class MermaidDiagramView extends StatelessWidget {
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: painted,
+        );
+      },
+    );
+  }
+}
+
+/// A diagram fitted to the width it is given, never below [minFitScale]
+/// (past that it scrolls), with zoom controls once it is too big to read
+/// whole. Tapping a node or participant lights up its edges or messages.
+class MermaidCanvas extends StatefulWidget {
+  const MermaidCanvas(this.diagram, {super.key});
+
+  final MermaidParse diagram;
+
+  /// The smallest a fitted diagram is drawn; text below it stops being read.
+  static const double minFitScale = 0.55;
+
+  /// A diagram taller than this is big enough for zoom controls.
+  static const double bigHeight = 480;
+
+  @override
+  State<MermaidCanvas> createState() => _MermaidCanvasState();
+}
+
+class _MermaidCanvasState extends State<MermaidCanvas> {
+  static const _zoomStep = 1.25;
+  static const _zoomMin = 0.25;
+  static const _zoomMax = 3.0;
+
+  /// Null while the diagram is fitted to the width.
+  double? _zoom;
+  String? _selected;
+
+  @override
+  void didUpdateWidget(MermaidCanvas old) {
+    super.didUpdateWidget(old);
+    if (old.diagram != widget.diagram) _selected = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final picture = MermaidPicture.of(context, widget.diagram);
+    if (picture == null) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : picture.size.width;
+        final fit = math.max(
+          MermaidCanvas.minFitScale,
+          math.min(1.0, room / math.max(1, picture.size.width)),
+        );
+        final scale = _zoom ?? fit;
+        final shown = picture.size * scale;
+        final big =
+            picture.size.width > room ||
+            picture.size.height > MermaidCanvas.bigHeight;
+        Widget canvas = GestureDetector(
+          key: const ValueKey('mermaid-canvas'),
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (details) {
+            final hit = picture.hit(details.localPosition / scale);
+            setState(() => _selected = hit == _selected ? null : hit);
+          },
+          child: SizedBox.fromSize(
+            size: shown,
+            child: FittedBox(
+              fit: BoxFit.fill,
+              child: SizedBox.fromSize(
+                size: picture.size,
+                child: CustomPaint(
+                  painter: MermaidPainter(picture, selected: _selected),
+                ),
+              ),
+            ),
+          ),
+        );
+        if (shown.width > room) {
+          canvas = SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: canvas,
+          );
+        }
+        final theme = Theme.of(context);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (big)
+              SelectionContainer.disabled(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      key: const ValueKey('mermaid-zoom-out'),
+                      tooltip: 'Zoom out',
+                      visualDensity: VisualDensity.compact,
+                      iconSize: Chrome.iconAction,
+                      onPressed: scale <= _zoomMin
+                          ? null
+                          : () => setState(
+                              () =>
+                                  _zoom = math.max(_zoomMin, scale / _zoomStep),
+                            ),
+                      icon: const Icon(AppIcons.magnifyingGlassMinus),
+                    ),
+                    TextButton(
+                      key: const ValueKey('mermaid-zoom-fit'),
+                      onPressed: _zoom == null
+                          ? null
+                          : () => setState(() => _zoom = null),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        textStyle: theme.textTheme.labelSmall,
+                      ),
+                      child: Text(
+                        _zoom == null ? 'Fit' : '${(scale * 100).round()}%',
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('mermaid-zoom-in'),
+                      tooltip: 'Zoom in',
+                      visualDensity: VisualDensity.compact,
+                      iconSize: Chrome.iconAction,
+                      onPressed: scale >= _zoomMax
+                          ? null
+                          : () => setState(
+                              () =>
+                                  _zoom = math.min(_zoomMax, scale * _zoomStep),
+                            ),
+                      icon: const Icon(AppIcons.magnifyingGlassPlus),
+                    ),
+                  ],
+                ),
+              ),
+            Semantics(
+              label: _selected == null
+                  ? 'Mermaid diagram'
+                  : 'Mermaid diagram, $_selected selected',
+              child: canvas,
+            ),
+          ],
         );
       },
     );
@@ -74,49 +201,6 @@ class _MermaidBlockState extends State<MermaidBlock> {
   }
 
   bool get _drawable => _parse is MermaidFlowchart || _parse is MermaidSequence;
-
-  /// The diagram on the whole screen, to pinch, wheel and drag around.
-  Future<void> _openZoom() => showDialog<void>(
-    context: context,
-    builder: (context) => Dialog.fullscreen(
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  tooltip: 'Close',
-                  icon: const Icon(AppIcons.x),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                const SizedBox(width: Insets.xs),
-                Expanded(
-                  child: Text(
-                    'Mermaid diagram',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ],
-            ),
-            Expanded(
-              child: InteractiveViewer(
-                key: const ValueKey('mermaid-zoom-view'),
-                constrained: false,
-                boundaryMargin: const EdgeInsets.all(Insets.xxl * 4),
-                minScale: 0.25,
-                maxScale: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(Insets.xl),
-                  child: MermaidDiagramView(_parse),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +235,11 @@ class _MermaidBlockState extends State<MermaidBlock> {
             padding: const EdgeInsets.only(left: Insets.sm),
             child: Row(
               children: [
-                Icon(AppIcons.treeStructure, size: 14, color: scheme.outline),
+                Icon(
+                  AppIcons.treeStructure,
+                  size: Chrome.iconSmall,
+                  color: scheme.outline,
+                ),
                 const SizedBox(width: Insets.xs),
                 Expanded(
                   child: Text(
@@ -164,10 +252,10 @@ class _MermaidBlockState extends State<MermaidBlock> {
                 if (_drawable && !_showSource)
                   IconButton(
                     key: const ValueKey('mermaid-zoom'),
-                    tooltip: 'Zoom and pan',
+                    tooltip: 'Full screen',
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(AppIcons.magnifyingGlassPlus),
-                    onPressed: _openZoom,
+                    onPressed: () => showMermaidFullScreen(context, _parse),
                   ),
                 if (_drawable)
                   IconButton(
@@ -214,10 +302,7 @@ class _MermaidBlockState extends State<MermaidBlock> {
                 Insets.sm,
                 Insets.sm,
               ),
-              child: Semantics(
-                label: 'Mermaid diagram',
-                child: MermaidDiagramView(_parse),
-              ),
+              child: MermaidCanvas(_parse),
             ),
         ],
       ),
@@ -225,26 +310,124 @@ class _MermaidBlockState extends State<MermaidBlock> {
   }
 }
 
-class _Colors {
-  _Colors(ColorScheme scheme)
+/// [diagram] on the whole screen, to pinch, wheel and drag around.
+Future<void> showMermaidFullScreen(
+  BuildContext context,
+  MermaidParse diagram,
+) => showDialog<void>(
+  context: context,
+  builder: (context) => Dialog.fullscreen(
+    child: SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Close',
+                icon: const Icon(AppIcons.x),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(width: Insets.xs),
+              Expanded(
+                child: Text(
+                  'Mermaid diagram',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ],
+          ),
+          Expanded(
+            child: InteractiveViewer(
+              key: const ValueKey('mermaid-zoom-view'),
+              constrained: false,
+              boundaryMargin: const EdgeInsets.all(Insets.xxl * 4),
+              minScale: 0.25,
+              maxScale: 4,
+              child: Padding(
+                padding: const EdgeInsets.all(Insets.xl),
+                child: MermaidDiagramView(diagram),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+);
+
+/// Paints a [MermaidPicture], lighting up what touches [selected].
+class MermaidPainter extends CustomPainter {
+  MermaidPainter(this.picture, {this.selected});
+
+  final MermaidPicture picture;
+
+  /// A node's or participant's id.
+  final String? selected;
+
+  @override
+  void paint(Canvas canvas, Size size) => picture.draw(canvas, size, selected);
+
+  @override
+  bool shouldRepaint(MermaidPainter old) =>
+      old.picture != picture || old.selected != selected;
+}
+
+class _DiagramInk {
+  _DiagramInk(ColorScheme scheme)
     : fill = scheme.surfaceContainerHigh,
       stroke = scheme.outline,
       line = scheme.onSurfaceVariant,
       note = scheme.tertiaryContainer,
-      ground = scheme.surface;
+      ground = scheme.surface,
+      lit = scheme.primary;
 
   final Color fill;
   final Color stroke;
   final Color line;
   final Color note;
   final Color ground;
+
+  /// What a selected node and its edges are drawn in.
+  final Color lit;
+
+  /// [color] faded, for what a selection leaves out.
+  static Color dim(Color color) =>
+      color.withValues(alpha: color.a * ChartAlphas.inferred);
 }
 
-abstract class _Picture extends CustomPainter {
+/// A diagram laid out once, ready to paint at its natural [size].
+abstract class MermaidPicture {
+  /// [diagram] laid out with the theme's text, or null for one not drawn.
+  static MermaidPicture? of(BuildContext context, MermaidParse diagram) {
+    final theme = Theme.of(context);
+    final style = (theme.textTheme.bodySmall ?? const TextStyle()).copyWith(
+      color: theme.colorScheme.onSurface,
+      height: 1.25,
+    );
+    final scaler = MediaQuery.textScalerOf(context);
+    final colors = _DiagramInk(theme.colorScheme);
+    return switch (diagram) {
+      final MermaidFlowchart chart => _FlowchartPicture(
+        chart,
+        style,
+        scaler,
+        colors,
+      ),
+      final MermaidSequence seq => _SequencePicture(seq, style, scaler, colors),
+      _ => null,
+    };
+  }
+
   Size get size;
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  /// The id of the node or participant at [point], in natural coordinates.
+  String? hit(Offset point);
+
+  /// Indexes of the edges or messages touching [id].
+  Set<int> linksOf(String id);
+
+  void draw(Canvas canvas, Size size, String? selected);
 }
 
 TextPainter _text(
@@ -312,7 +495,7 @@ void _paintArrowHead(
   );
 }
 
-class _FlowchartPicture extends _Picture {
+class _FlowchartPicture extends MermaidPicture {
   _FlowchartPicture(this.chart, TextStyle style, TextScaler scaler, this.colors)
     : _labels = {
         for (final n in chart.nodes) n.id: _text(n.label, style, scaler),
@@ -331,7 +514,7 @@ class _FlowchartPicture extends _Picture {
   }
 
   final MermaidFlowchart chart;
-  final _Colors colors;
+  final _DiagramInk colors;
   final Map<String, TextPainter> _labels;
   final List<TextPainter?> _edgeLabels;
   late final FlowchartLayout _layout;
@@ -341,6 +524,21 @@ class _FlowchartPicture extends _Picture {
   @override
   Size get size =>
       Size(_layout.size.width + _pad * 2, _layout.size.height + _pad * 2);
+
+  @override
+  String? hit(Offset point) {
+    final at = point - const Offset(_pad, _pad);
+    for (final node in chart.nodes.reversed) {
+      if (_layout.nodes[node.id]!.inflate(2).contains(at)) return node.id;
+    }
+    return null;
+  }
+
+  @override
+  Set<int> linksOf(String id) => {
+    for (final (i, e) in chart.edges.indexed)
+      if (e.from == id || e.to == id) i,
+  };
 
   static Size _nodeSize(MermaidShape shape, Size text) {
     final w = text.width + 24;
@@ -355,27 +553,42 @@ class _FlowchartPicture extends _Picture {
   }
 
   @override
-  void paint(Canvas canvas, Size size) {
+  void draw(Canvas canvas, Size size, String? selected) {
     canvas.translate(_pad, _pad);
+    final lit = selected == null ? const <int>{} : linksOf(selected);
+    final near = <String>{
+      ?selected,
+      for (final i in lit) ...[chart.edges[i].from, chart.edges[i].to],
+    };
+    Color edgeColor(int i) => selected == null
+        ? colors.line
+        : lit.contains(i)
+        ? colors.lit
+        : _DiagramInk.dim(colors.line);
     for (final (i, edge) in chart.edges.indexed) {
       final route = _layout.edges[i];
+      final color = edgeColor(i);
       final paint = Paint()
-        ..color = colors.line
+        ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = edge.line == MermaidLine.thick ? 2.5 : 1.2;
+        ..strokeWidth =
+            (edge.line == MermaidLine.thick ? 2.5 : 1.2) +
+            (lit.contains(i) ? 1 : 0);
       _paintLine(canvas, route, paint, dashed: edge.line == MermaidLine.dotted);
       if (edge.arrow && route.length >= 2) {
-        _paintArrowHead(
-          canvas,
-          route.last,
-          route[route.length - 2],
-          colors.line,
-        );
+        _paintArrowHead(canvas, route.last, route[route.length - 2], color);
       }
     }
     for (final node in chart.nodes) {
       final box = _layout.nodes[node.id]!;
-      _paintShape(canvas, node.shape, box);
+      final state = selected == null
+          ? null
+          : node.id == selected
+          ? true
+          : near.contains(node.id)
+          ? null
+          : false;
+      _paintShape(canvas, node.shape, box, state);
       final label = _labels[node.id]!;
       label.paint(
         canvas,
@@ -398,12 +611,18 @@ class _FlowchartPicture extends _Picture {
     }
   }
 
-  void _paintShape(Canvas canvas, MermaidShape shape, Rect r) {
-    final fill = Paint()..color = colors.fill;
+  /// [lit] true for the selected node, false for one a selection leaves out.
+  void _paintShape(Canvas canvas, MermaidShape shape, Rect r, bool? lit) {
+    final fill = Paint()
+      ..color = lit == false ? _DiagramInk.dim(colors.fill) : colors.fill;
     final stroke = Paint()
-      ..color = colors.stroke
+      ..color = switch (lit) {
+        true => colors.lit,
+        false => _DiagramInk.dim(colors.stroke),
+        null => colors.stroke,
+      }
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = lit == true ? 2.2 : 1.2;
     void both(Path path) {
       canvas
         ..drawPath(path, fill)
@@ -516,7 +735,7 @@ class _FlowchartPicture extends _Picture {
   }
 }
 
-class _SequencePicture extends _Picture {
+class _SequencePicture extends MermaidPicture {
   _SequencePicture(this.seq, this.style, this.scaler, this.colors) {
     _measure();
   }
@@ -524,7 +743,7 @@ class _SequencePicture extends _Picture {
   final MermaidSequence seq;
   final TextStyle style;
   final TextScaler scaler;
-  final _Colors colors;
+  final _DiagramInk colors;
 
   late final Map<String, double> _x;
   late final List<TextPainter> _heads;
@@ -536,6 +755,30 @@ class _SequencePicture extends _Picture {
 
   @override
   Size get size => _size;
+
+  @override
+  String? hit(Offset point) {
+    String? best;
+    var distance = double.infinity;
+    for (final p in seq.participants) {
+      final d = (point.dx - _x[p.id]!).abs();
+      if (d < distance) {
+        distance = d;
+        best = p.id;
+      }
+    }
+    return distance <= 40 ? best : null;
+  }
+
+  @override
+  Set<int> linksOf(String id) => {
+    for (final (i, step) in seq.steps.indexed)
+      if (step case MermaidMessage(
+        :final from,
+        :final to,
+      ) when from == id || to == id)
+        i,
+  };
 
   void _measure() {
     _heads = [for (final p in seq.participants) _text(p.label, style, scaler)];
@@ -600,13 +843,11 @@ class _SequencePicture extends _Picture {
   }
 
   @override
-  void paint(Canvas canvas, Size size) {
+  void draw(Canvas canvas, Size size, String? selected) {
+    final lit = selected == null ? const <int>{} : linksOf(selected);
     final stroke = Paint()
       ..color = colors.stroke
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final line = Paint()
-      ..color = colors.line
       ..strokeWidth = 1.2;
     final top = _pad;
     final lifeTop = top + _headHeight;
@@ -631,18 +872,35 @@ class _SequencePicture extends _Picture {
         box,
         Radius.circular(p.actor ? _headHeight / 2 : 3),
       );
+      final chosen = p.id == selected;
       canvas
         ..drawRRect(rrect, Paint()..color = colors.fill)
-        ..drawRRect(rrect, stroke);
+        ..drawRRect(
+          rrect,
+          chosen
+              ? (Paint()
+                  ..color = colors.lit
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 2.2)
+              : stroke,
+        );
       head.paint(canvas, box.center - Offset(head.width / 2, head.height / 2));
     }
     final left = _x.values.reduce(math.min) - 60;
     final right = _x.values.reduce(math.max) + 60;
     final frames = <double>[];
     var y = lifeTop + 16;
-    for (final (step, height, label) in _rows) {
+    for (final (index, (step, height, label)) in _rows.indexed) {
       switch (step) {
         case MermaidMessage(:final from, :final to, :final dashed, :final end):
+          final color = selected == null
+              ? colors.line
+              : lit.contains(index)
+              ? colors.lit
+              : _DiagramInk.dim(colors.line);
+          final line = Paint()
+            ..color = color
+            ..strokeWidth = lit.contains(index) ? 2.2 : 1.2;
           final x1 = _x[from]!;
           final x2 = _x[to]!;
           final lineY = y + height - 8;
@@ -663,9 +921,9 @@ class _SequencePicture extends _Picture {
           final from0 = points[points.length - 2];
           switch (end) {
             case MermaidMessageEnd.arrow:
-              _paintArrowHead(canvas, tip, from0, colors.line);
+              _paintArrowHead(canvas, tip, from0, color);
             case MermaidMessageEnd.async:
-              _paintArrowHead(canvas, tip, from0, colors.line, open: true);
+              _paintArrowHead(canvas, tip, from0, color, open: true);
             case MermaidMessageEnd.cross:
               canvas
                 ..drawLine(tip.translate(-5, -5), tip.translate(5, 5), line)

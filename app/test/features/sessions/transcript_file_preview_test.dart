@@ -271,7 +271,7 @@ void main() {
         '/repo/data.csv',
         text(FilePreviewKind.delimited, 'name,count\nalpha,1\nbeta,2'),
       );
-      expect(find.byType(Table), findsOneWidget);
+      expect(find.byType(DataTableView), findsOneWidget);
       expect(find.text('beta'), findsOneWidget);
     });
 

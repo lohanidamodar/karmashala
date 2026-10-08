@@ -362,6 +362,21 @@ class FakeDataServer {
     _tell(null, [ArtifactChanged(artifact)]);
   }
 
+  /// What agents drew with `visualize`, by session and id, and an image
+  /// visual's bytes — seeded through [drawVisual].
+  final visuals = <(String, String), SessionVisual>{};
+  final visualImages = <(String, String), Uint8List>{};
+
+  /// [visual] drawn or updated, told to every client as the server's board
+  /// tells it.
+  void drawVisual(SessionVisual visual, {List<int>? image}) {
+    visuals[(visual.sessionId, visual.id)] = visual;
+    if (image != null) {
+      visualImages[(visual.sessionId, visual.id)] = Uint8List.fromList(image);
+    }
+    _tell(null, [VisualChanged(visual)]);
+  }
+
   Object? _handleArtifacts(ArtifactsRequest<Object?> request) {
     Artifact known(String id) =>
         artifacts[id] ?? (throw DataRefused.notFound('no artifact has id $id'));
@@ -406,6 +421,20 @@ class FakeDataServer {
         // The server's library announces it, to the asking client too.
         _tell(null, [ArtifactChanged(next)]);
         return next;
+      case SessionVisualsRead(:final sessionId):
+        return [
+          for (final v in visuals.values)
+            if (v.sessionId == sessionId) v,
+        ]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      case VisualImageRead(:final sessionId, :final id, :final offset):
+        final bytes =
+            visualImages[(sessionId, id)] ??
+            (throw DataRefused.notFound('no image visual "$id"'));
+        final start = offset.clamp(0, bytes.length);
+        return FileChunk(
+          Uint8List.sublistView(bytes, start),
+          fileSize: bytes.length,
+        );
     }
   }
 

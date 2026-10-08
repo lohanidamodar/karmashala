@@ -24,6 +24,8 @@ const Set<String> kMcpUngatedWrites = {
   // Only the caller's own thread: an artifact belongs to its session.
   'artifact_show',
   'artifact_update',
+  // Only the caller's own thread, as an artifact.
+  'visualize',
   'session_rename',
   'session_draft',
   // Only the caller's own ended descendants, and undone by unarchive.
@@ -127,6 +129,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     idempotent: true,
     movesAttention: false,
   ),
+  // Draws in the caller's own thread; append makes a repeat a change.
+  'visualize': McpToolAnnotations(movesAttention: false),
   // The only tool here that can throw away work nobody recorded elsewhere.
   'checkpoint_restore': McpToolAnnotations(
     destructive: true,
@@ -877,6 +881,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'artifact_update': McpToolListing(
     McpToolCategory.artifacts,
     'Rename, resize or revise an artifact; re-read a file you rewrote.',
+  ),
+  'visualize': McpToolListing(
+    McpToolCategory.artifacts,
+    'Draw a chart, table, diagram, image or progress in your thread; by id.',
   ),
 
   // Notes, todos and the inbox.

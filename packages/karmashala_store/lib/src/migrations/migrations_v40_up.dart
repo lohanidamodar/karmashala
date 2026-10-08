@@ -1241,3 +1241,26 @@ void _migrateToV89(Database db) {
   db.execute('ALTER TABLE automations ADD COLUMN proposed_by TEXT;');
   db.execute('ALTER TABLE automations ADD COLUMN proposed_session TEXT;');
 }
+
+/// What an agent drew in its thread with `visualize`: the newest spec of
+/// each, by the id the agent updates it by. An image's bytes are a file
+/// beside the database, never a host path.
+void _migrateToV90(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_visuals (
+      session_id TEXT NOT NULL,
+      id         TEXT NOT NULL,
+      kind       TEXT NOT NULL,
+      title      TEXT,
+      spec       TEXT NOT NULL,
+      revision   INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (session_id, id)
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_visuals_created '
+    'ON session_visuals (session_id, created_at);',
+  );
+}

@@ -17,6 +17,9 @@ dependencies:
     path: ../agent_cli
   # A revision's digest, so a rewrite with the same bytes is not a revision.
   crypto: ^3.0.6
+  # A visual's spec, checked and read as every client reads it.
+  karmashala_core:
+    path: ../karmashala_core
   # The `session_artifacts` tables.
   karmashala_store:
     path: ../karmashala_store

@@ -178,6 +178,7 @@ class ChatTranscriptView extends StatefulWidget {
   const ChatTranscriptView({
     required this.messages,
     this.footer,
+    this.trailing,
     this.workingLine,
     this.lastTurnVerb,
     this.lastTurnTokens,
@@ -232,6 +233,9 @@ class ChatTranscriptView extends StatefulWidget {
   /// key (and its open state) when [onLoadEarlier] puts older ones above it.
   final int firstOrdinal;
   final Widget? footer;
+
+  /// Scrolls with the conversation, after its last row.
+  final Widget? trailing;
 
   /// The live line under the last message while [turn] is working — outside
   /// the scroll, so it and its Stop stay in sight as the terminal's spinner
@@ -657,6 +661,11 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
             ),
           ),
         ),
+        if (widget.trailing case final trailing?)
+          SliverPadding(
+            padding: pad,
+            sliver: SliverToBoxAdapter(child: trailing),
+          ),
         const SliverToBoxAdapter(child: SizedBox(height: Insets.xl)),
       ];
       return CustomScrollView(

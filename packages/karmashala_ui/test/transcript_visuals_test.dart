@@ -47,11 +47,11 @@ void main() {
               '"data":[{"label":"app","value":420},{"label":"ui","value":11}]}',
         ),
       );
-      expect(find.byType(BarChart), findsOneWidget);
+      expect(find.byType(SeriesChart), findsOneWidget);
       expect(find.text('Suites'), findsOneWidget);
     });
 
-    testWidgets('a line spec draws a time series', (tester) async {
+    testWidgets('a line spec draws a line chart', (tester) async {
       await show(
         tester,
         fence(
@@ -60,25 +60,26 @@ void main() {
               '{"x":"2026-10-03","y":7},{"x":"2026-10-05","y":5}]}',
         ),
       );
-      expect(find.byType(TimeSeriesChart), findsOneWidget);
+      expect(find.byType(SeriesChart), findsOneWidget);
     });
 
     testWidgets('a bad spec shows why, and its source', (tester) async {
       await show(tester, fence('chart', '{"type":"pie","data":[]}'));
       expect(find.byKey(const ValueKey('fence-failed')), findsOneWidget);
       expect(find.textContaining('"type" must be'), findsOneWidget);
-      expect(find.textContaining('"pie"'), findsOneWidget);
+      expect(find.textContaining('"pie"'), findsWidgets);
     });
 
     test('the spec parser names what is wrong', () {
       expect(
-        () => parseChartSpec('{"type":"line","data":[{"x":"soon","y":1}]}'),
+        () =>
+            parseChartSpec('{"type":"line","data":[{"x":"soon","y":"lots"}]}'),
         throwsA(isA<FormatException>()),
       );
       final spec = parseChartSpec(
         '{"type":"bar","data":[{"label":"a","value":2}]}',
       );
-      expect(spec.bars.single.value, 2);
+      expect(spec.series.single.points.single.y, 2);
     });
   });
 

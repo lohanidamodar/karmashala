@@ -10,6 +10,7 @@ export 'src/charts/chart_support.dart'
 export 'src/charts/meters.dart';
 export 'src/charts/number_format.dart';
 export 'src/charts/segmented_bar.dart';
+export 'src/charts/series_chart.dart';
 export 'src/charts/sparkline.dart';
 export 'src/charts/stat_tile.dart';
 export 'src/charts/time_series_chart.dart';
