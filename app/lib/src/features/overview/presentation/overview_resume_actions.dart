@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/workspace_session_entry.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/presentation/detach_session_action.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
@@ -130,6 +131,8 @@ class OverviewCardMenu extends ConsumerWidget {
     final pinned = ref.watch(
       overviewPrefsProvider.select((p) => p.pinned.contains(card.id)),
     );
+    final detachable =
+        card.entry.native != null && watchCanDetach(ref, card.id);
     final density = UiDensity.of(context);
     return Builder(
       builder: (button) => IconButton(
@@ -159,6 +162,12 @@ class OverviewCardMenu extends ConsumerWidget {
                 icon: AppIcons.arrowSquareOut,
               ),
             ],
+            if (detachable)
+              DesktopMenuItem(
+                value: 'detach',
+                label: kDetachLabel,
+                icon: AppIcons.linkBreak,
+              ),
           ]);
           if (!button.mounted) return;
           switch (picked) {
@@ -168,6 +177,8 @@ class OverviewCardMenu extends ConsumerWidget {
               await resumeFromDashboard(button, ref, card.entry);
             case 'open':
               await openOverviewSession(button, ref, card.entry);
+            case 'detach':
+              await detachSessionFromUi(button, ref, card.id);
           }
         },
       ),

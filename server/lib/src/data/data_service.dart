@@ -1216,7 +1216,9 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionFork() ||
     SessionForkFromCheckpoint() ||
     SessionHandoff() ||
-    SessionSwitchAgent() => Capability.startSession,
+    SessionSwitchAgent() ||
+    // Who reports to whom is a session's shape, as its start is.
+    SessionDetachRequest() => Capability.startSession,
     FilesUploadBegin() => Capability.sendAttachment,
     ProjectCreate() ||
     ProjectFoldersCreate() ||

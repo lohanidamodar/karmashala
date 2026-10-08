@@ -116,6 +116,10 @@ SessionChange? sessionChangeOf(ReplicaChange<Session> change) {
   if (before == null) return SessionChange.created(change.key);
   if (after == null) return SessionChange.removed(change.key);
   final kinds = <SessionChangeKind>{
+    // A detach: the row leaves its parent's nest, so the lists' shape moves.
+    if (before.parentSessionId != after.parentSessionId ||
+        before.parentLink != after.parentLink)
+      SessionChangeKind.membership,
     if (before.title != after.title || before.titleByUser != after.titleByUser)
       SessionChangeKind.title,
     if (before.status != after.status || before.archivedAt != after.archivedAt)

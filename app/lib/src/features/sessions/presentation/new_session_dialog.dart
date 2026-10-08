@@ -37,8 +37,10 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/new_session_memory.dart';
 import '../application/session_defaults.dart';
 import '../application/session_launcher.dart';
+import '../application/session_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala_session/lineage.dart' show SessionDepth, SessionLink;
 import 'package:karmashala_session/session.dart' show Session;
 import 'session_destination_picker.dart';
 import 'slow_start_note.dart';
@@ -84,6 +86,8 @@ class NewSessionDialog extends ConsumerStatefulWidget {
     this.keepHere = false,
     this.preferChat = false,
     this.onStarted,
+    this.parentSessionId,
+    this.linkToParent = true,
     super.key,
   });
 
@@ -100,6 +104,8 @@ class NewSessionDialog extends ConsumerStatefulWidget {
     bool keepHere = false,
     bool preferChat = false,
     NewSessionStarted? onStarted,
+    String? parentSessionId,
+    bool linkToParent = true,
   }) {
     final container = ProviderScope.containerOf(context, listen: false);
     if (!container.read(capabilitiesProvider).mayStart) {
@@ -118,9 +124,18 @@ class NewSessionDialog extends ConsumerStatefulWidget {
         keepHere: keepHere,
         preferChat: preferChat,
         onStarted: onStarted,
+        parentSessionId: parentSessionId,
+        linkToParent: linkToParent,
       ),
     );
   }
+
+  /// The session this one may be started under. Null offers no link.
+  final String? parentSessionId;
+
+  /// Whether "Link to …" starts ticked: on from a session's own ⋯, off from
+  /// the dashboard, where the session in view is only a suggestion.
+  final bool linkToParent;
 
   final String? targetPaneId;
 
@@ -193,6 +208,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   String? _existingPick;
   bool _external = false;
   late bool _keepHere = widget.keepHere;
+  late bool _linkParent = widget.parentSessionId != null && widget.linkToParent;
   SystemTerminal? _terminal;
   bool _busy = false;
   String? _error;
@@ -750,6 +766,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               worktreeExistingBranch: existingBranch,
               existingWorktree: existing,
               targetPaneId: widget.targetPaneId,
+              parentSessionId: _linkedParent(),
+              parentLink: _linkedParent() == null ? null : SessionLink.spawn,
               firstMessage: _promptController.text.trim().isEmpty
                   ? null
                   : _promptController.text.trim(),
@@ -870,6 +888,52 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       ),
     ],
   );
+
+  /// The parent the session starts under: ticked, and still allowed one more
+  /// level. Null starts it on its own.
+  String? _linkedParent() {
+    final parent = widget.parentSessionId;
+    if (parent == null || !_linkParent) return null;
+    return _parentDepth(parent).isAllowed ? parent : null;
+  }
+
+  SessionDepth _parentDepth(String parentId) =>
+      ref.read(sessionLauncherProvider).depthForChildOf(parentId);
+
+  /// **"Link to …"**: whether the session starts as the current one's
+  /// sub-session — under it on the dashboard, able to report back — or on its
+  /// own. Said plainly, and withdrawn where one more level is refused.
+  Widget _parentChoice(String parentId) {
+    final title =
+        ref.watch(sessionsDataProvider).getById(parentId)?.title ??
+        'this session';
+    final depth = _parentDepth(parentId);
+    final theme = Theme.of(context);
+    return CheckboxListTile(
+      key: const ValueKey('new-session-link-parent'),
+      value: _linkParent && depth.isAllowed,
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      visualDensity: UiDensity.of(context).controlDensity,
+      title: Text('Link to "$title"'),
+      subtitle: Text(
+        !depth.isAllowed
+            ? 'Sessions nest at most ${SessionDepth.maxDepth} levels deep, so '
+                  'this one starts on its own.'
+            : _linkParent
+            ? 'A sub-session: it sits under that session and can report back '
+                  'to it. Detach it later to let it go.'
+            : 'A session of its own: nothing goes between the two.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      onChanged: _busy || !depth.isAllowed
+          ? null
+          : (value) => setState(() => _linkParent = value ?? false),
+    );
+  }
 
   /// "Keep working here": start it at the server and open no tab.
   Widget _keepHereChoice() => CheckboxListTile(
@@ -1145,9 +1209,15 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (widget.parentSessionId case final parent?)
+              NewDialogSection(
+                label: 'Sub-session',
+                first: true,
+                child: _parentChoice(parent),
+              ),
             NewDialogSection(
               label: 'Project & machine',
-              first: true,
+              first: widget.parentSessionId == null,
               child: SessionDestinationPicker(
                 destination: destination,
                 enabled: !_busy,

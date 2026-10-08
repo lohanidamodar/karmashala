@@ -28,6 +28,7 @@ import '../../sessions/application/session_chat_source.dart'
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/delivery_strip.dart';
+import '../../sessions/presentation/detach_session_action.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/operator_chip.dart';
 import '../../sessions/application/acp_session_providers.dart';
@@ -853,6 +854,7 @@ class _PeekBar extends ConsumerWidget {
         ? null
         : overviewCardOf(ref.watch(overviewBoardProvider), parentId);
     final subSessions = this.subSessions;
+    final detachable = native != null && watchCanDetach(ref, id);
     PopupMenuItem<VoidCallback> item(
       String key,
       String label,
@@ -948,6 +950,13 @@ class _PeekBar extends ConsumerWidget {
                   'Sub-session of ${parent.entry.title}',
                   AppIcons.caretUp,
                   onPeek == null ? null : () => onPeek!(parent),
+                ),
+              if (detachable)
+                item(
+                  'detach',
+                  kDetachLabel,
+                  AppIcons.linkBreak,
+                  () => detachSessionFromUi(context, ref, id),
                 ),
               if (archivable)
                 item(

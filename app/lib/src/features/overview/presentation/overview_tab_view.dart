@@ -160,6 +160,10 @@ class _NewSessionButton extends ConsumerWidget {
           // start only.
           keepHere: ref.read(launchInBackgroundProvider),
           preferChat: true,
+          // The session in view may be its parent, but only if the person
+          // ticks it: from here a session starts on its own.
+          parentSessionId: ref.read(overviewFocusProvider).peeked,
+          linkToParent: false,
           onStarted: (session, {required keptHere}) {
             if (keptHere) {
               prefs.setView(OverviewView.board);

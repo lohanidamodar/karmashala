@@ -3367,6 +3367,29 @@
       }
     },
     {
+      "name": "delegation_detach",
+      "description": "Let go of a session you started: it becomes a top-level session and nothing goes between you any more — none of its turns or reports reach you, and its report_to_parent is refused. It keeps running, with its transcript, worktree and project; it leaves your delegations, your nesting depth and your card on the dashboard, and your thread notes it was detached. There is no undo. Use it for a session that has become its own piece of work.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "The child, from delegations."
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "report_to_parent",
       "description": "Report to the session that started you (open_new_session or subagent_run): it gets your text at once as a message naming you — after its turn if it is working. Use it when you are done, blocked, or need its answer, then end your turn. The end of the turn you report in is not pushed to it as well. Needs no \"Operate Karmashala\". When your parent has ended, or asked to hear nothing, the report is kept on your session instead, and nothing resumes it. Refused when no session started yours.",
       "inputSchema": {
@@ -6223,6 +6246,10 @@
     "delegation_set_report": {
       "category": "sessions",
       "summary": "Change what you hear of a session you started: final, each turn, none."
+    },
+    "delegation_detach": {
+      "category": "sessions",
+      "summary": "Let go of a session you started: nothing goes between you after."
     },
     "report_to_parent": {
       "category": "sessions",
