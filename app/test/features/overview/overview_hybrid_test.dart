@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
@@ -760,6 +761,92 @@ void main() {
   });
 
   group('the phone', () {
+    // The owner, on a Pixel: the sheet's header took 40% of the screen before
+    // any chat — a drag handle, two-line title, three lines of meta with the
+    // raw model id, usage and limit lines, a row of buttons, and a tab row
+    // whose last tab was cut off.
+    for (final size in const [Size(360, 640), Size(390, 844)]) {
+      for (final scale in const [1.0, 1.6]) {
+        testWidgets('the peek at ${size.width.toInt()}×${size.height.toInt()} '
+            'and text ×$scale is a page whose chat has the room', (
+          tester,
+        ) async {
+          final c = await pump(
+            tester,
+            size: size,
+            phone: true,
+            textScale: scale,
+          );
+          final row = find.byKey(const ValueKey('overview-phone-row:ks-r32'));
+          await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
+          await tester.tap(row);
+          await settleMission(tester);
+
+          // A page with a slim bar, not a sheet with a drag handle.
+          expect(find.byType(BottomSheet), findsNothing);
+          expect(find.byKey(const ValueKey('overview-peek-bar')), findsOne);
+          expect(tester.takeException(), isNull);
+
+          final body = tester.getRect(
+            find.byKey(const ValueKey('overview-peek-body')),
+          );
+          expect(body.height, greaterThanOrEqualTo(size.height * 0.6));
+
+          // One muted line of meta, the model by its name.
+          final place = tester.widget<Text>(
+            find.byKey(const ValueKey('overview-peek-place')),
+          );
+          expect(place.maxLines, 1);
+          expect(place.data, isNot(contains('claude-')));
+
+          // No tab label is cut short.
+          for (final label in tester.widgetList<Text>(
+            find.descendant(
+              of: find.byKey(const ValueKey('overview-peek-tabs')),
+              matching: find.byType(Text),
+            ),
+          )) {
+            final paragraph = tester.renderObject<RenderParagraph>(
+              find.text(label.data!).last,
+            );
+            expect(paragraph.didExceedMaxLines, isFalse, reason: label.data);
+          }
+
+          // Every action in reach: back and Open tab in the bar, the rest
+          // in ⋯, and the session's own controls under the chat.
+          expect(find.byKey(const ValueKey('overview-peek-close')), findsOne);
+          expect(find.byKey(const ValueKey('overview-peek-open')), findsOne);
+          expect(
+            find.byKey(const ValueKey('overview-peek-controls')),
+            findsOne,
+          );
+          await tester.tap(find.byKey(const ValueKey('overview-peek-more')));
+          await settleMission(tester);
+          for (final item in const ['pin', 'previous', 'next', 'usage']) {
+            expect(
+              find.byKey(ValueKey('overview-peek-menu:$item')),
+              findsOne,
+              reason: item,
+            );
+          }
+          expect(tester.takeException(), isNull);
+          // An item does what it says, and closes the menu.
+          await tester.tap(
+            find.byKey(const ValueKey('overview-peek-menu:pin')),
+          );
+          await settleMission(tester);
+          expect(c.read(overviewPrefsProvider).pinned, contains('ks-r32'));
+
+          await tester.tap(find.byKey(const ValueKey('overview-peek-close')));
+          await settleMission(tester);
+          await tester.pump(const Duration(seconds: 1));
+          expect(c.read(overviewFocusProvider).peeked, isNull);
+          expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
+          await unmountMission(tester);
+        });
+      }
+    }
+
     for (final (name, size) in [
       ('390', const Size(390, 844)),
       ('360', const Size(360, 800)),

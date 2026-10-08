@@ -52,12 +52,14 @@ void main() {
     final labels = <String>[];
     final watched = container.listen(
       sessionModelLabelerProvider('s1'),
-      (_, labelOf) => labels.add(labelOf('claude-opus-5-5')),
+      // The alias: a full Claude id reads as its name with no catalogue at
+      // all (round 56), so what the catalogue adds shows on this one.
+      (_, labelOf) => labels.add(labelOf('opus')),
       fireImmediately: true,
     );
     addTearDown(watched.close);
 
-    expect(labels.last, 'claude-opus-5-5', reason: 'no catalogue yet');
+    expect(labels.last, isNot('Opus 5.5'), reason: 'no catalogue yet');
 
     listed.complete(const [
       AgentModel(

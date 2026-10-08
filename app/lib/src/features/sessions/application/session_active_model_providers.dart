@@ -81,7 +81,8 @@ AgentModelSupport? _catalogueOf(Ref ref, String sessionId) {
 }
 
 /// [modelId]'s label: its ACP agent's own choice name in [options], else the
-/// list its CLI reported ([support]), else the raw id.
+/// list its CLI reported ([support]), else a Claude id read as its name, else
+/// the raw id.
 String modelLabelIn(
   String modelId, {
   SessionConfigOptionsChanged? options,
@@ -93,7 +94,30 @@ String modelLabelIn(
       if (choice.value == modelId) return choice.name;
     }
   }
-  return support?.modelFor(modelId)?.label ?? modelId;
+  return support?.modelFor(modelId)?.label ??
+      claudeModelName(modelId) ??
+      modelId;
+}
+
+// The families only: an id this does not know is left as it was written.
+final _claudeId = RegExp(
+  r'^claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?'
+  r'(\[1m\])?$',
+);
+
+/// `Opus 5.5` for `claude-opus-5-5`, with or without its date, and
+/// `(1M context)` for `[1m]`; null for anything that is not a Claude id.
+///
+/// Claude Code's model list leaves its `default` row out, and that row is
+/// what resolves to the model a session on the default runs — so the id
+/// such a session reports is one the list never names, and was shown raw.
+String? claudeModelName(String modelId) {
+  final match = _claudeId.firstMatch(modelId);
+  if (match == null) return null;
+  final family = match.group(1)!;
+  final version = [match.group(2)!, ?match.group(3)].join('.');
+  return '${family[0].toUpperCase()}${family.substring(1)} $version'
+      '${match.group(4) == null ? '' : ' (1M context)'}';
 }
 
 /// **How [sessionId]'s transcript names a model**: [modelLabelIn] over its

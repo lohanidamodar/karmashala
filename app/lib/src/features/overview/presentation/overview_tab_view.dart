@@ -341,29 +341,44 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   void _showSheet(OverviewCard card) {
     if (_sheetOpen) return;
     _sheetOpen = true;
+    // A page of its own, not a sheet: a sheet's handle and header took 40%
+    // of a phone before any chat (owner, 2026-10-08).
     unawaited(
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        showDragHandle: true,
-        builder: (sheet) => Consumer(
-          builder: (context, ref, _) {
-            final board = ref.watch(overviewBoardProvider);
-            final id = ref.watch(overviewFocusProvider.select((f) => f.peeked));
-            final live = overviewCardOf(board, id) ?? card;
-            return OverviewPeek(
-              key: ValueKey('overview-peek:${live.id}'),
-              card: live,
-              onClose: () => Navigator.of(sheet).pop(),
-              onPeek: _open,
-            );
-          },
-        ),
-      ).whenComplete(() {
-        _sheetOpen = false;
-        if (mounted) ref.read(overviewFocusProvider.notifier).closePeek();
-      }),
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute(
+              builder: (page) => Scaffold(
+                body: SafeArea(
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final board = ref.watch(overviewBoardProvider);
+                      final id = ref.watch(
+                        overviewFocusProvider.select((f) => f.peeked),
+                      );
+                      final live = overviewCardOf(board, id) ?? card;
+                      final previous = _stepFrom(live.id, -1);
+                      final next = _stepFrom(live.id, 1);
+                      return OverviewPeek(
+                        key: ValueKey('overview-peek:${live.id}'),
+                        card: live,
+                        compact: true,
+                        onClose: () => Navigator.of(page).pop(),
+                        onPeek: _open,
+                        onPrevious: previous == null
+                            ? null
+                            : () => _goTo(previous),
+                        onNext: next == null ? null : () => _goTo(next),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          )
+          .whenComplete(() {
+            _sheetOpen = false;
+            if (mounted) ref.read(overviewFocusProvider.notifier).closePeek();
+          }),
     );
   }
 

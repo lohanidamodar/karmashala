@@ -1047,7 +1047,8 @@ void main() {
     ]);
     await tester.pumpAndSettle();
     expect(find.byIcon(AppIcons.robot), findsOneWidget);
-    expect(find.text('claude-opus-5-5'), findsOneWidget);
+    // By its name, read from the id: never the raw id (round 56).
+    expect(find.text('Opus 5.5'), findsOneWidget);
     expect(modelTooltip(tester), contains('last said it runs'));
   });
 
