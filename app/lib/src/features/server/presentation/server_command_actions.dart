@@ -13,15 +13,15 @@ import '../application/server_overview.dart';
 
 /// Runs [command] on this machine's server, Restart and Stop confirmed first
 /// with what they end. Refuses what the server's overview does not offer.
-/// [confirmStop] false stops at once: the tray's Stop is already the person's
-/// word, and its window may be hidden behind the confirm.
+/// [confirm] false acts at once: the tray's Restart and Stop are already the
+/// person's word, and its window may be hidden behind the confirm.
 ///
 /// [context] must outlive the call: quick open passes its navigator's, since
 /// its own route is gone before the confirm is answered.
 Future<void> runServerCommand(
   BuildContext context,
   ServerCommand command, {
-  bool confirmStop = true,
+  bool confirm = true,
 }) async {
   final container = ProviderScope.containerOf(context, listen: false);
   final ServerOverview overview;
@@ -37,9 +37,11 @@ Future<void> runServerCommand(
     case ServerCommand.start:
       await container.read(localHostStatusProvider.notifier).start();
       container.invalidate(serverOverviewProvider);
+    case ServerCommand.restart when !confirm:
+      await _restart(container, overview);
     case ServerCommand.restart:
       await confirmServerRestart(context, overview);
-    case ServerCommand.stop when !confirmStop:
+    case ServerCommand.stop when !confirm:
       await _stop(container, overview);
     case ServerCommand.stop:
       await confirmServerStop(context, overview);
@@ -79,9 +81,17 @@ Future<void> confirmServerRestart(
     destructive: live != 0,
   );
   if (!confirmed) return;
+  await _restart(container, overview);
+}
+
+/// Restarts the server, forcing it when it holds sessions (or will not say).
+Future<void> _restart(
+  ProviderContainer container,
+  ServerOverview overview,
+) async {
   await container
       .read(localHostStatusProvider.notifier)
-      .restart(force: live != 0);
+      .restart(force: overview.liveSessions != 0);
   container.invalidate(serverOverviewProvider);
 }
 
@@ -135,7 +145,7 @@ void listenForServerCommandRequests(BuildContext context, WidgetRef ref) {
     if (command == null) {
       openSettingsTab(ref, anchor: SettingsAnchor.serverStatus);
     } else {
-      unawaited(runServerCommand(context, command, confirmStop: false));
+      unawaited(runServerCommand(context, command, confirm: false));
     }
   });
 }

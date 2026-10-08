@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -198,8 +199,9 @@ void main() {
       return (container, status);
     }
 
-    // The owner (2026-10-08): the tray's Stop is the person's word already;
-    // asking again in the window, which may be hidden, is a second click.
+    // The owner (2026-10-08): the tray's Stop and Restart are the person's
+    // word already; asking again in the window, which may be hidden, is a
+    // second click.
     testWidgets('Stop from the tray stops at once, asking nothing', (
       tester,
     ) async {
@@ -213,12 +215,43 @@ void main() {
       expect(status.calls, ['stop(force: true)']);
     });
 
-    testWidgets('Restart confirms, and Cancel does nothing', (tester) async {
-      final (container, status) = await pump(tester, overview(live: 1));
+    testWidgets('Restart from the tray restarts at once, asking nothing', (
+      tester,
+    ) async {
+      final (container, status) = await pump(tester, overview(live: 2));
 
       container
           .read(serverCommandRequestProvider.notifier)
           .ask(ServerCommand.restart);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(status.calls, ['restart(force: true)']);
+    });
+
+    testWidgets('an idle server restarts from the tray without force', (
+      tester,
+    ) async {
+      final (container, status) = await pump(tester, overview(live: 0));
+
+      container
+          .read(serverCommandRequestProvider.notifier)
+          .ask(ServerCommand.restart);
+      await tester.pumpAndSettle();
+      expect(status.calls, ['restart(force: false)']);
+    });
+
+    // Ctrl+K calls runServerCommand with its default, as Settings confirms.
+    testWidgets('Restart from Ctrl+K confirms, and Cancel does nothing', (
+      tester,
+    ) async {
+      final (_, status) = await pump(tester, overview(live: 1));
+
+      unawaited(
+        runServerCommand(
+          tester.element(find.byType(_Listener)),
+          ServerCommand.restart,
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Restart the server?'), findsOneWidget);
       expect(find.textContaining('ends the 1 running session'), findsOneWidget);
