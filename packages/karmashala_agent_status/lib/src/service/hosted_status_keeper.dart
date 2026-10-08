@@ -120,6 +120,26 @@ class HostedStatusKeeper {
     return rules?.scanLines ?? const AgentGridRules().scanLines;
   }
 
+  /// Whether a hook fired in [sessionId]'s pane about [conversationId] is
+  /// that pane's agent's. An agent it runs (a nested `claude -p`) inherits
+  /// the pane's id and fires hooks of its own conversation mid-turn; a
+  /// conversation that changes at rest (`/clear`, `/resume`) is the pane's.
+  bool ownsConversation(String sessionId, String conversationId) {
+    final kept = _sessions[sessionId];
+    final current = kept?.conversationId;
+    if (kept == null ||
+        current == null ||
+        conversationId.isEmpty ||
+        conversationId == current) {
+      return true;
+    }
+    return switch (kept.status.report.status) {
+      AgentActivityStatus.working ||
+      AgentActivityStatus.awaitingApproval => false,
+      _ => true,
+    };
+  }
+
   /// Classifies one hook callback and remembers it for its conversation. Call
   /// [hookLanded] with the result once the row it is about is known.
   AgentStatusReport classify({

@@ -22,6 +22,10 @@ const int kDelegationAnswerMaxChars = 4000;
 /// it is still running.
 const Duration kDelegationBound = Duration(hours: 6);
 
+/// How long a `final` child's quiet turn end is held before it is pushed: a
+/// turn it goes on with by itself in that time says it was not finished.
+const Duration kDelegationSettleWindow = Duration(seconds: 90);
+
 /// How a delegation's last report came: the child's own, or a turn's end.
 const String kReportViaChild = 'report';
 const String kReportViaTurn = 'turn';
@@ -212,11 +216,13 @@ class DelegationResults {
     required this.isLive,
     bool Function(String parentId)? parentReachable,
     this.isWorking,
+    this.inBackground,
     this.isArchived,
     this.openAskOf,
     this.restoreGrace = const Duration(minutes: 2),
     this.endChild,
     this.batchWindow = const Duration(seconds: 2),
+    this.settleWindow = kDelegationSettleWindow,
     this.log,
     this.modelOf,
     DateTime Function()? now,
@@ -239,6 +245,10 @@ class DelegationResults {
 
   /// Whether row [String]'s turn is running now (`TurnSettlement.running`).
   final bool Function(String sessionId)? isWorking;
+
+  /// Whether row [String]'s own turn ended and only background work it
+  /// started runs (`AgentStatusReport.backgroundOnly`).
+  final bool Function(String sessionId)? inBackground;
 
   /// Whether row [String] is archived: its delegation then ends unreported.
   final bool Function(String sessionId)? isArchived;
@@ -264,10 +274,16 @@ class DelegationResults {
   /// report goes, a batch window after the turn ended.
   final String Function(String sessionId)? modelOf;
   final Duration batchWindow;
+
+  /// [kDelegationSettleWindow] but in tests.
+  final Duration settleWindow;
   final void Function(String message)? log;
   final DateTime Function() _now;
 
   final _watched = <String, _Follow>{};
+
+  /// Per child: the quiet turn end held for [settleWindow].
+  final _held = <String, Timer>{};
   final _pending = <String, List<(DelegationResult, _Follow)>>{};
   final _timers = <String, Timer>{};
 
@@ -413,6 +429,7 @@ class DelegationResults {
   /// [childId] was stopped by a person, or ended by its parent: what it says
   /// next is not pushed.
   void stopped(String childId) {
+    _held.remove(childId)?.cancel();
     final had = _watched.remove(childId) != null;
     if (store.byChild(childId)?.isOpen != true && !had) return;
     store.close(childId, at: _now());
@@ -425,6 +442,8 @@ class DelegationResults {
   /// closed delegation, so its parent's list still shows it.
   ReportDelivery report(ParentReport report) {
     final at = _now();
+    // Its own word says more than a quiet turn end before it.
+    _held.remove(report.childId)?.cancel();
     final row = store.byChild(report.childId);
     final delivery = row?.reportMode == kReportModeNone
         ? ReportDelivery.notWanted
@@ -473,13 +492,16 @@ class DelegationResults {
   }
 
   /// Where [childId] stands for its parent: ended when nothing runs it,
-  /// running while it works or before its first turn settles, else its last
-  /// report, or idle when it has none.
+  /// running while it works or before its first turn settles, running in the
+  /// background while only work it started does, else its last report, or
+  /// idle when it has none.
   DelegationView viewOf(String childId) {
     final row = store.byChild(childId);
     final String state;
     if (!isLive(childId)) {
       state = 'ended';
+    } else if (inBackground?.call(childId) ?? false) {
+      state = 'running (background)';
     } else if ((isWorking?.call(childId) ?? false) ||
         (row != null && row.awaiting && row.reportVia != kReportViaChild)) {
       state = 'running';
@@ -505,10 +527,11 @@ class DelegationResults {
 
   Future<void> close() async {
     _closed = true;
-    for (final timer in _timers.values) {
+    for (final timer in [..._timers.values, ..._held.values]) {
       timer.cancel();
     }
     _timers.clear();
+    _held.clear();
   }
 
   /// A restored turn: one already answered while nothing ran it is reported
@@ -553,6 +576,8 @@ class DelegationResults {
       log?.call('delegation $id: archived; nothing more is pushed');
       return;
     }
+    // A later turn settling says what a held quiet end would have.
+    _held.remove(id)?.cancel();
     final mode = store.byChild(id)?.reportMode ?? child.reportMode;
     if (outcome.idle) {
       _watched.remove(id);
@@ -637,6 +662,10 @@ class DelegationResults {
       store.turnReported(id, turn: settled.turn);
       return;
     }
+    if (unreported) {
+      _hold(settled, outcome);
+      return;
+    }
     final answer = switch (outcome.state) {
       ChildTurnState.running || ChildTurnState.blocked => null,
       _ => await _answer(settled),
@@ -646,7 +675,29 @@ class DelegationResults {
     final ended = child.endOnAnswer && outcome.state == ChildTurnState.done
         ? await _end(id)
         : null;
-    _report(settled, outcome, answer, ended: ended, unreported: unreported);
+    _report(settled, outcome, answer, ended: ended);
+  }
+
+  /// Holds [settled]'s quiet end for [settleWindow]: pushed then unless the
+  /// child reported, was stopped, settled another turn, or is working again.
+  void _hold(_Follow settled, ChildTurnOutcome outcome) {
+    final id = settled.child.childId;
+    final at = _now();
+    _held[id] = Timer(settleWindow, () async {
+      _held.remove(id);
+      if (_closed || store.byChild(id)?.isOpen != true) return;
+      if (isWorking?.call(id) ?? false) {
+        store.turnReported(id, turn: settled.turn);
+        log?.call(
+          'delegation $id: turn ${settled.turn} went on by itself; its quiet '
+          'end is not pushed',
+        );
+        return;
+      }
+      final answer = await _answer(settled);
+      if (_closed || store.byChild(id)?.isOpen != true) return;
+      _report(settled, outcome, answer, unreported: true, at: at);
+    });
   }
 
   void _report(
@@ -655,13 +706,14 @@ class DelegationResults {
     String? answer, {
     bool? ended,
     bool unreported = false,
+    DateTime? at,
   }) {
     final child = follow.child;
     final result = DelegationResult(
       child: child,
       outcome: outcome,
       answer: answer,
-      took: _now().difference(follow.since),
+      took: (at ?? _now()).difference(follow.since),
       ended: ended,
       turn: follow.turn,
       ask: outcome.state == ChildTurnState.blocked
@@ -894,6 +946,8 @@ String parentReportMessage(ParentReport report) {
 }
 
 String _stateWords(DelegationResult result) => switch (result.outcome.state) {
+  ChildTurnState.done when result.outcome.inBackground =>
+    'quiet while background work runs',
   ChildTurnState.done when result.unreported =>
     'finished its turn without reporting',
   ChildTurnState.done => 'done',
@@ -910,6 +964,10 @@ String _next(DelegationResult result) {
   final asked = said.isEmpty ? '' : ': "$said"';
   final transcript = 'Full transcript: session_transcript (sessionId: $id).';
   return switch (result.outcome.state) {
+    ChildTurnState.done when result.outcome.inBackground =>
+      '$transcript Its own turn ended; only work it started in the '
+          'background has run since, with nothing new for a long while. '
+          'Read what it did, or ask it with session_send (sessionId: $id).',
     ChildTurnState.done when result.unreported =>
       '$transcript It did not call report_to_parent: read what it did, or '
           'ask it with session_send (sessionId: $id).',

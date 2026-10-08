@@ -27,6 +27,7 @@ class ChildTurnOutcome {
     this.exitCode,
     this.exitCodeKnown = false,
     this.idle = false,
+    this.inBackground = false,
   });
 
   final ChildTurnState state;
@@ -36,7 +37,15 @@ class ChildTurnOutcome {
 
   /// Ended without a turn: [ChildTurnWait.nextTurn] saw no work before it.
   final bool idle;
+
+  /// Settled by [ChildTurnWait.backgroundCap]: the agent's own turn ended
+  /// and only background work it started has run since, with nothing new.
+  final bool inBackground;
 }
+
+/// How long a session whose own turn ended may sit on background work it
+/// started, with nothing new said, before its wait settles anyway.
+const Duration kBackgroundQuietCap = Duration(minutes: 30);
 
 /// **Waits for a session's first turn to settle** — the wait behind
 /// `subagent_run`. Unlike `session_wait` it is not satisfied by a session that
@@ -52,7 +61,11 @@ class ChildTurnWait {
     this.settled,
     WaitDeadline? deadline,
     this.recheck = const Duration(seconds: 2),
+    this.backgroundCap = kBackgroundQuietCap,
   }) : _deadline = deadline ?? ((bound) => Future<void>.delayed(bound));
+
+  /// [kBackgroundQuietCap] but in tests.
+  final Duration backgroundCap;
 
   final HostedSessionWait waits;
   final AnswerOf answerOf;
@@ -130,26 +143,42 @@ class ChildTurnWait {
       );
     }
 
+    // A turn handed off to background work that never ends still settles,
+    // once nothing new has been said for [backgroundCap]. Armed only by a
+    // move, so the wait after that settling is not settled again by it.
+    Timer? quietBackground;
+    void watchBackground(AgentStatusReport? report) {
+      quietBackground?.cancel();
+      quietBackground = report != null && report.backgroundOnly
+          ? Timer(backgroundCap, () {
+              settle(
+                const ChildTurnOutcome(ChildTurnState.done, inBackground: true),
+              );
+            })
+          : null;
+    }
+
     final changes = status.changes
         .where((moved) => moved.sessionId == sessionId)
-        .listen((moved) => unawaited(consider(moved.report)));
+        .listen((moved) {
+          watchBackground(moved.report);
+          unawaited(consider(moved.report));
+        });
     // Settled over a status that says nothing (unknown) is the quiet screen
     // of a turn seen working; any other status is read as it says.
-    final quiet = this.settled
-        ?.where((id) => id == sessionId)
-        .listen((_) {
-          final report = status.statusOf(sessionId)?.report;
-          if (report == null || report.status == AgentActivityStatus.unknown) {
-            if (afterWork && !worked) return;
-            worked = true;
-            if (waits.blockedOn(sessionId) == null &&
-                status.liveScreenOf(sessionId) != null) {
-              settle(const ChildTurnOutcome(ChildTurnState.done));
-            }
-            return;
-          }
-          unawaited(consider(report));
-        });
+    final quiet = this.settled?.where((id) => id == sessionId).listen((_) {
+      final report = status.statusOf(sessionId)?.report;
+      if (report == null || report.status == AgentActivityStatus.unknown) {
+        if (afterWork && !worked) return;
+        worked = true;
+        if (waits.blockedOn(sessionId) == null &&
+            status.liveScreenOf(sessionId) != null) {
+          settle(const ChildTurnOutcome(ChildTurnState.done));
+        }
+        return;
+      }
+      unawaited(consider(report));
+    });
     final again = Timer.periodic(recheck, (_) {
       unawaited(consider(status.statusOf(sessionId)?.report));
     });
@@ -176,6 +205,7 @@ class ChildTurnWait {
     try {
       return await settled.future;
     } finally {
+      quietBackground?.cancel();
       again.cancel();
       await changes.cancel();
       await quiet?.cancel();
