@@ -15,6 +15,7 @@ import '../../agents/presentation/agent_logo.dart';
 import '../application/turn_fork_points.dart';
 import '../application/turn_rewinds.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/panes.dart' show StatusDot;
 import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:karmashala_ui/rows.dart'
     show compactAge, formatElapsed, kActivityTickInterval;
@@ -48,6 +49,7 @@ export '../application/turn_rewinds.dart' show TurnRewindTarget;
 part 'chat_transcript/agent_switch_rows.dart';
 part 'chat_transcript/command_time.dart';
 part 'chat_transcript/message_rows.dart';
+part 'chat_transcript/prose_roles.dart';
 part 'chat_transcript/rewind_fold.dart';
 part 'chat_transcript/tool_batch.dart';
 part 'chat_transcript/turn_footer.dart';
@@ -221,10 +223,14 @@ class ChatTranscriptView extends StatefulWidget {
     this.seenUntil,
     this.now,
     this.turnActions,
+    this.sentencePerLine = false,
     super.key,
   });
 
   final List<ChatMessage> messages;
+
+  /// Starts each sentence of the agent's prose on a line of its own.
+  final bool sentencePerLine;
 
   /// Retry, Edit and resend and Fork from here on each turn; null offers
   /// none of them.
@@ -382,6 +388,28 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
       lastTurnOver: turn == TranscriptTurn.idle,
       lastTurnStoppedAt: stoppedAt,
     );
+  }
+
+  List<ChatMessage>? _proseMessages;
+  TranscriptTurn? _proseTurn;
+  var _prose = const <int, AgentProse>{};
+
+  /// [agentProse], walked again only when the list or the turn moved.
+  Map<int, AgentProse> _proseFor(
+    List<ChatMessage> messages,
+    TranscriptTurn turn,
+  ) {
+    if (identical(messages, _proseMessages) && turn == _proseTurn) {
+      return _prose;
+    }
+    _proseMessages = messages;
+    _proseTurn = turn;
+    final over = switch (turn) {
+      TranscriptTurn.idle => true,
+      TranscriptTurn.unknown => !messages.any((m) => m.pending),
+      _ => false,
+    };
+    return _prose = agentProse(messages, lastTurnOver: over);
   }
 
   /// Messages kept in sight above the "new since" line before the fold.
@@ -684,6 +712,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     final latest = footers.isEmpty ? null : footers.keys.reduce(math.max);
     final latestIsLast =
         latest != null && !widget.messages.skip(latest + 1).any(_opensTurn);
+    final prose = _proseFor(widget.messages, widget.turn);
 
     // Keyed at the top: the list finds a row by its item's own key.
     Widget rowAt(int offset) {
@@ -704,6 +733,8 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
         detailBuilder: widget.detailBuilder,
         turnActions: widget.turnActions,
         place: widget.turnActions == null ? null : _placeOf(ordinal),
+        prose: prose[ordinal],
+        sentencePerLine: widget.sentencePerLine,
       );
       if (footers[ordinal] case final footer?) {
         final own = latestIsLast && ordinal == latest;

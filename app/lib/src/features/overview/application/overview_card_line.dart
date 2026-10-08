@@ -17,7 +17,9 @@ class OverviewActivity {
 
   @override
   bool operator ==(Object other) =>
-      other is OverviewActivity && other.headline == headline && other.raw == raw;
+      other is OverviewActivity &&
+      other.headline == headline &&
+      other.raw == raw;
 
   @override
   int get hashCode => Object.hash(headline, raw);
@@ -90,13 +92,16 @@ OverviewActivity overviewActivity({
     case AgentState.working:
       return _working(report, glance, aged, activityAt);
     case AgentState.quiet:
-      final at = report?.evidenceAt;
+      final at = report?.quietSince;
       return OverviewActivity(
-        at == null ? 'Quiet: nothing new recorded' : 'Nothing new for ${age(at)}',
+        at == null
+            ? 'Quiet: nothing new recorded'
+            : 'Nothing new for ${age(at)}',
       );
     case AgentState.ready:
       return OverviewActivity(
-        detailOf(InboxItemKind.finished) ?? 'Finished its turn · waiting for you',
+        detailOf(InboxItemKind.finished) ??
+            'Finished its turn · waiting for you',
       );
     case AgentState.ended:
       final detail =
@@ -114,7 +119,10 @@ OverviewActivity _working(
   DateTime activityAt,
 ) {
   final open = glance?.open ?? const <OverviewOpenCall>[];
-  final worded = [for (final c in open) if (c.phrase != null) c];
+  final worded = [
+    for (final c in open)
+      if (c.phrase != null) c,
+  ];
   final unworded = open.where((c) => c.phrase == null && c.raw != null);
   if (worded.isNotEmpty) {
     // The newest call of the agent's own turn leads a background run.

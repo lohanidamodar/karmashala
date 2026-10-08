@@ -168,6 +168,7 @@ class HostedStatusKeeper {
   }) {
     final kept = _sessions[sessionId];
     if (kept == null) return null;
+    kept.activeAt = report.observedAt;
     if (report.sessionId.isNotEmpty) kept.conversationId = report.sessionId;
     // A hook repeating the word before it (Claude Code's idle nudge after its
     // `Stop`) is no news about the screen: a menu drawn in between stands.
@@ -195,6 +196,7 @@ class HostedStatusKeeper {
   }) {
     final kept = _sessions[sessionId];
     if (kept == null) return null;
+    kept.activeAt = report.observedAt;
     if (report.sessionId.isNotEmpty) kept.conversationId = report.sessionId;
     _reports.record(report);
     if (report.hasOpenQuestion && question != null) kept.question = question;
@@ -220,6 +222,11 @@ class HostedStatusKeeper {
     if (kept == null) return null;
     kept.tail = tailLines;
     kept.tailAt = clock.nowUtc();
+    final digest = _screenDigest(tailLines);
+    if (digest != kept.screenDigest) {
+      kept.activeAt = kept.tailAt;
+      kept.screenDigest = digest;
+    }
     return _recompose(kept);
   }
 
@@ -292,6 +299,7 @@ class HostedStatusKeeper {
       sessionId: kept.sessionId,
       report: decorated,
       question: kept.question,
+      activeAt: kept.activeAt,
     );
     return moved ? kept.status : null;
   }
@@ -388,4 +396,16 @@ class _Kept {
   /// The status the hooks last said, and since when they have said it.
   AgentActivityStatus? hookStatus;
   DateTime? hookSince;
+
+  /// When the agent last did anything: a hook, its own report, or a screen
+  /// that changed beyond its clock. Null before the first.
+  DateTime? activeAt;
+  String? screenDigest;
 }
+
+/// A screen as it reads with every number blanked: a spinner counting
+/// seconds or tokens on a hung turn is not news, output that scrolls is.
+String _screenDigest(List<String> tail) =>
+    tail.join('\n').replaceAll(_digits, '#');
+
+final _digits = RegExp(r'\d+');

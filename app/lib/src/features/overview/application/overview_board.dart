@@ -240,6 +240,9 @@ enum OverviewCounter {
   needsYou('needs you'),
   failed('failed'),
   working('working'),
+
+  /// Working with nothing new for the server's quiet threshold.
+  quiet('quiet'),
   ready('ready'),
   done('done today');
 
@@ -249,7 +252,7 @@ enum OverviewCounter {
 
   BoardColumn get column => switch (this) {
     needsYou || failed => BoardColumn.needsYou,
-    working => BoardColumn.working,
+    working || quiet => BoardColumn.working,
     ready => BoardColumn.ready,
     done => BoardColumn.done,
   };
@@ -258,6 +261,7 @@ enum OverviewCounter {
   AgentState? get state => switch (this) {
     needsYou => AgentState.needsYou,
     failed => AgentState.failed,
+    quiet => AgentState.quiet,
     _ => null,
   };
 
@@ -679,6 +683,7 @@ class OverviewStrip {
     required this.failingChecks,
     required this.usageLimitHits,
     required this.spend,
+    this.quiet = 0,
   });
 
   final int needsYou;
@@ -687,6 +692,9 @@ class OverviewStrip {
   /// How long the longest wait has run; null when no source dated one.
   final Duration? oldestWait;
   final int working;
+
+  /// Of [working], those the server reads as quiet.
+  final int quiet;
   final int ready;
   final int failingChecks;
   final int usageLimitHits;
@@ -709,7 +717,7 @@ OverviewStrip summarizeStrip(
   required SessionCost? Function(String sessionId) cost,
   DateTime? startOfToday,
 }) {
-  var needsYou = 0, failed = 0, working = 0, ready = 0;
+  var needsYou = 0, failed = 0, working = 0, quiet = 0, ready = 0;
   DateTime? oldest;
   for (final MapEntry(key: id, value: state) in board.states.entries) {
     switch (state) {
@@ -721,8 +729,11 @@ OverviewStrip summarizeStrip(
         }
       case AgentState.failed:
         failed++;
-      case AgentState.working || AgentState.quiet:
+      case AgentState.working:
         working++;
+      case AgentState.quiet:
+        working++;
+        quiet++;
       case AgentState.ready:
         ready++;
       case AgentState.ended:
@@ -746,6 +757,7 @@ OverviewStrip summarizeStrip(
     failed: failed,
     oldestWait: oldest == null ? null : now.difference(oldest),
     working: working,
+    quiet: quiet,
     ready: ready,
     failingChecks: failingChecks.where(board.states.containsKey).length,
     usageLimitHits: usageLimited.where(board.states.containsKey).length,

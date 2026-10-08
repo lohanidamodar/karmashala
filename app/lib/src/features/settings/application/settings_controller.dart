@@ -265,6 +265,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setChatSentencePerLine(bool value) {
+    state = state.copyWith(chatSentencePerLine: value);
+    _save();
+  }
+
   void setUsageLimitBehavior(UsageLimitBehavior value) {
     state = state.copyWith(usageLimitBehavior: value);
     _save();
@@ -538,6 +543,12 @@ class SettingsController extends Notifier<Settings> {
 
   void setEndedSessionsOlderThanDays(int days) {
     state = state.copyWith(endedSessionsOlderThanDays: days);
+    _save();
+  }
+
+  /// Minutes with nothing new before a working session reads quiet.
+  void setQuietAfterMinutes(int minutes) {
+    state = state.copyWith(quietAfterMinutes: minutes.clamp(1, 240));
     _save();
   }
 

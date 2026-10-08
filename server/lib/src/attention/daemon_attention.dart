@@ -11,6 +11,8 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/persistence.dart'
+    show NotificationSettingsRepository;
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/events.dart'
     show FollowUp, FollowUpResolution;
@@ -44,7 +46,10 @@ class DaemonAttention {
     void Function(String message)? log,
     Duration statusInterval = kStatusCycleInterval,
     Duration pollInterval = kAttentionPollInterval,
+    Duration Function()? quietAfter,
   }) : _data = data,
+       _database = database,
+       _clock = clock,
        _agentStatus = agentStatus,
        _sessions = SessionDao(database),
        _followUps = FollowUpDao(database) {
@@ -75,12 +80,14 @@ class DaemonAttention {
       clock: clock,
       resolveTranscripts: transcripts,
       visibleSessionIds: () => attention.lookingAt,
-      heldByHost: (session) =>
-          agentStatus.holds(session.openId),
+      heldByHost: (session) => agentStatus.holds(session.openId),
       hostStatusFor: (session) => agentStatus.statusOf(session.openId),
       interval: statusInterval,
       log: log,
       toolAsks: ToolAskTracker(agents: agents),
+      quietAfter: quietAfter,
+      quietExempt: _waitsOnOthers,
+      onQuiet: _wentQuiet,
     );
     attention = ServerAttention(
       status: status,
@@ -104,6 +111,8 @@ class DaemonAttention {
   }
 
   final DataService _data;
+  final AppDatabase _database;
+  final Clock _clock;
   final DaemonAgentStatus _agentStatus;
   final SessionDao _sessions;
   final FollowUpDao _followUps;
@@ -234,6 +243,46 @@ class DaemonAttention {
     );
   }
 
+  /// Whether [session] waits on something other than itself: a sub-session
+  /// at work or asking, or a usage limit whose reset is known.
+  bool _waitsOnOthers(WatchedSession session) {
+    if (usageLimitOf(session.openId) != null) return true;
+    for (final row in _sessions.getAll()) {
+      if (row.parentSessionId != session.openId || row.isArchived) continue;
+      switch (status.reportForOpenId(row.id)?.status) {
+        case AgentActivityStatus.working ||
+            AgentActivityStatus.awaitingApproval:
+          return true;
+        default:
+      }
+    }
+    return false;
+  }
+
+  /// Files a quiet spell's one inbox item, when notifications are on.
+  void _wentQuiet(SessionStatusEntry entry) {
+    final since = entry.report.quietSince;
+    if (since == null) return;
+    final settings = NotificationSettingsRepository(
+      read: _database.readMetadata,
+      write: (_, _) {},
+    ).load();
+    if (!settings.enabled) return;
+    final now = _clock.nowUtc();
+    final minutes = now.difference(since).inMinutes;
+    attention.raise(
+      InboxItem(
+        session: entry.session,
+        kind: InboxItemKind.wentQuiet,
+        at: now,
+        detail: [
+          'Nothing new for ${minutes < 1 ? 'under a minute' : '${minutes}m'}',
+          ?entry.report.working?.word ?? entry.report.detail,
+        ].join(' · '),
+      ),
+    );
+  }
+
   /// Row [sessionId] in the inbox's terms, keyed as its hooks key it.
   WatchedSession? _watchedSessionOf(String sessionId) {
     final session = _sessions.getById(sessionId);
@@ -276,8 +325,7 @@ class DaemonAttention {
   }
 
   /// Whether the server runs row [sessionId]'s agent itself.
-  bool runs(String sessionId) =>
-      _agentStatus.holds(sessionId);
+  bool runs(String sessionId) => _agentStatus.holds(sessionId);
 }
 
 /// The watch set's rows, read from the server's store.

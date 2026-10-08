@@ -64,7 +64,22 @@ class ServerSessionStatus {
     this.transcriptSearchInterval = kTranscriptSearchInterval,
     this.recentlyActiveWindow = kStatusRecentlyActiveWindow,
     this.hookCycleFloor = kHookCycleFloor,
+    this.quietAfter,
+    this.quietExempt,
+    this.onQuiet,
   });
+
+  /// How long a working session may go with nothing new before it reads
+  /// quiet, read each time it is judged; null never marks one quiet.
+  final Duration Function()? quietAfter;
+
+  /// Whether a session past [quietAfter] is waiting on something other than
+  /// itself — sub-sessions at work, a usage limit with a known reset — and so
+  /// is not quiet.
+  final bool Function(WatchedSession session)? quietExempt;
+
+  /// Told once per quiet spell, as it begins.
+  final void Function(SessionStatusEntry entry)? onQuiet;
 
   final AgentStatusService statusService;
   final AgentRegistry agents;
@@ -202,6 +217,7 @@ class ServerSessionStatus {
     // The server's own reading of a session it runs took this hook too.
     if (_isHosted(tracked.session)) return;
     final now = clock.nowUtc();
+    tracked.activeAt = now;
     final query =
         tracked.query ??
         AgentStatusQuery(
@@ -224,8 +240,36 @@ class ServerSessionStatus {
       ),
       now,
     );
+    _judgeQuiet(tracked, now);
     if (sameStatusEvidence(before, tracked.report)) return;
     if (!_hookChanges.isClosed) _hookChanges.add(tracked.entry());
+  }
+
+  /// Marks [tracked] quiet, or no longer quiet, by its last activity: a
+  /// working session with nothing new for [quietAfter] that waits on nothing
+  /// but itself. A change is told like any other move.
+  void _judgeQuiet(_Tracked tracked, DateTime now) {
+    final after = quietAfter?.call();
+    final due =
+        after != null &&
+        tracked.report.status == AgentActivityStatus.working &&
+        now.difference(tracked.activeAt) >= after &&
+        !(quietExempt?.call(tracked.session) ?? false);
+    final since = due ? tracked.quietSince ?? tracked.activeAt : null;
+    if (since == tracked.quietSince) return;
+    final began = tracked.quietSince == null;
+    tracked.quietSince = since;
+    tracked.report = tracked.report.withQuietSince(since);
+    _statusMoved(tracked);
+    if (since == null) {
+      log?.call('status: ${tracked.session.openId} is active again');
+      return;
+    }
+    log?.call(
+      'status: ${tracked.session.openId} quiet, nothing new since '
+      '${since.toIso8601String()}',
+    );
+    if (began) onQuiet?.call(tracked.entry());
   }
 
   /// The server's own reading of the agent in row [openId] moved: folded in
@@ -312,6 +356,7 @@ class ServerSessionStatus {
       tracked.session = session;
       tracked.statePath = session.stateFilePath ?? tracked.statePath;
       _observe(tracked, now);
+      _judgeQuiet(tracked, now);
     }
     // Only membership prunes. A session the rotation skipped keeps everything.
     final gone = [
@@ -432,7 +477,12 @@ class ServerSessionStatus {
   void _observeHosted(_Tracked tracked, DateTime now) {
     final key = tracked.session.key;
     tracked.hook = null;
-    final said = hostStatusFor?.call(tracked.session)?.report;
+    final hosted = hostStatusFor?.call(tracked.session);
+    if (hosted?.activeAt case final active?
+        when active.isAfter(tracked.activeAt)) {
+      tracked.activeAt = active;
+    }
+    final said = hosted?.report;
     // With no hook delivered, an agent whose screen has no idle marker (Codex)
     // reads `unknown` once its turn ends; its transcript still says so.
     if ((said == null || said.status == AgentActivityStatus.unknown) &&
@@ -757,6 +807,7 @@ class _Tracked {
         observedAt: now,
       ),
       changedAt = now,
+      activeAt = now,
       statePath = session.stateFilePath;
 
   WatchedSession session;
@@ -765,6 +816,13 @@ class _Tracked {
 
   /// When the status last actually changed — the input to "recently active".
   DateTime changedAt;
+
+  /// When the session last did anything: its evidence moved, a hook came,
+  /// or its host saw it act.
+  DateTime activeAt;
+
+  /// Its last activity, while it reads quiet; null otherwise.
+  DateTime? quietSince;
 
   String? statePath;
   StateFileSnapshot? snapshot;
@@ -792,11 +850,19 @@ class _Tracked {
   bool get isNamedByItsCli =>
       session.imported || session.key.sessionId != session.openId;
 
+  /// [next] in place of the report; any move in its evidence is activity and
+  /// ends a quiet spell. Sources never say quiet: it is carried over here.
   void publish(AgentStatusReport next, DateTime now) {
-    final moved = !sameStatusEvidence(report, next);
-    if (moved) changedAt = now;
-    report = next;
-    if (moved) _onMoved(this);
+    final moved = !sameStatusEvidence(report.withQuietSince(null), next);
+    if (moved) {
+      changedAt = now;
+      activeAt = now;
+      quietSince = null;
+    }
+    final shown = next.withQuietSince(quietSince);
+    final told = !sameStatusEvidence(report, shown);
+    report = shown;
+    if (told) _onMoved(this);
   }
 
   SessionStatusEntry entry() =>

@@ -20,7 +20,7 @@ import 'server_tool_set.dart';
 /// identity: they describe the machine, read from the store and the
 /// server's own conversation index.
 class InventoryToolSet extends ServerToolSet {
-  InventoryToolSet(this._context)
+  InventoryToolSet(this._context, {this.quietSinceOf})
     : _projects = ProjectDao(_context.database),
       _repositories = RepositoryDao(_context.database),
       _sessions = SessionDao(_context.database),
@@ -29,6 +29,10 @@ class InventoryToolSet extends ServerToolSet {
       _resumes = ScheduledResumeDao(_context.database);
 
   final ServerToolContext _context;
+
+  /// When a native session last did anything, while the server reads it
+  /// quiet; null when it is not.
+  final DateTime? Function(String sessionId)? quietSinceOf;
   final ProjectDao _projects;
   final RepositoryDao _repositories;
   final SessionDao _sessions;
@@ -126,6 +130,8 @@ class InventoryToolSet extends ServerToolSet {
             'view': session.view.name,
             if (session.parentSessionId != null)
               'parentSessionId': session.parentSessionId,
+            if (quietSinceOf?.call(session.id) case final since?)
+              'quietSince': since.toIso8601String(),
             'createdAt': session.createdAt.toIso8601String(),
             if (resumes[session.id] case final resume?)
               'scheduledResume': {
@@ -304,7 +310,8 @@ const List<Map<String, Object?>> inventoryToolSchemas = [
     'name': 'list_sessions',
     'description':
         'List coding-agent sessions — both the ones running in Karmashala '
-        '("kind": "native", with a status and, when an agent started it, a '
+        '("kind": "native", with a status, a quietSince while it has done '
+        'nothing new for a while and, when an agent started it, a '
         'parentSessionId) and ones imported from a CLI store ("kind": '
         '"imported"). Optionally filter by a case-insensitive substring '
         '(matched against project, repository, title, and preview) and by CLI '

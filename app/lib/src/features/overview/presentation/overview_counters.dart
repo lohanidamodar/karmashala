@@ -32,6 +32,7 @@ class OverviewCounters extends ConsumerWidget {
       OverviewCounter.needsYou => strip.needsYou,
       OverviewCounter.failed => strip.failed,
       OverviewCounter.working => strip.working,
+      OverviewCounter.quiet => strip.quiet,
       OverviewCounter.ready => strip.ready,
       OverviewCounter.done => doneToday,
     };
@@ -128,6 +129,7 @@ class _CounterChip extends StatelessWidget {
       OverviewCounter.needsYou => semantic.attention,
       OverviewCounter.failed => semantic.failure,
       OverviewCounter.working => semantic.working,
+      OverviewCounter.quiet => semantic.attention,
       OverviewCounter.ready => semantic.idle,
       OverviewCounter.done => scheme.onSurface,
     };

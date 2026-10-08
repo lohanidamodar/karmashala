@@ -79,6 +79,7 @@ void main() {
         InboxItemKind.usageLimit,
         InboxItemKind.turnCutOff,
         InboxItemKind.automationProposed,
+        InboxItemKind.wentQuiet,
       });
       for (final reason in NotificationReason.values) {
         expect(

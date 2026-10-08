@@ -838,6 +838,9 @@ class Chrome {
   /// `StatusDot` requires a label, because a colour is not a state.
   static const dot = 7.0;
 
+  /// The accent rule a turn's final answer hangs off in the transcript.
+  static const answerRule = 2.0;
+
   /// Icon sizes: [icon] in toolbars, [iconSmall] inline with text,
   /// [iconTitle] in a dialog's title row, where it sits against `titleMedium`
   /// rather than body text and a toolbar glyph reads as an afterthought.

@@ -311,6 +311,7 @@ class _SessionStatusLine extends StatelessWidget {
                   children: [
                     DeliveryStateLine(sessionId: sessionId, singleLine: true),
                     // The badges: each nothing, and no width, at its default.
+                    QuietChip(sessionId: sessionId),
                     ScheduledResumeChip(sessionId: sessionId),
                     QueuedCountChip(sessionId: sessionId),
                     SessionSubagentsBadge(sessionId: sessionId, compact: true),
@@ -395,6 +396,7 @@ class _SessionFactsRow extends StatelessWidget {
         ),
       ),
       // The badges: each nothing, and no width, at its default.
+      QuietChip(sessionId: sessionId),
       Flexible(child: ScheduledResumeChip(sessionId: sessionId)),
       QueuedCountChip(sessionId: sessionId),
       SessionSubagentsBadge(sessionId: sessionId, compact: true),

@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../snippets/application/snippet_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/side_panel_state.dart';
 import '../../../app/shell/workbench.dart' show CompactWorkbenchScope;
@@ -1147,6 +1148,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             // Per session: this view outlives a switch within its group, and an
             // unkeyed list kept the last session's scroll offset.
             key: ValueKey(widget.sessionId),
+            sentencePerLine: ref.watch(
+              settingsControllerProvider.select((s) => s.chatSentencePerLine),
+            ),
             toLatest: _toLatest,
             messages: messages,
             seenUntil: widget.seenUntil,

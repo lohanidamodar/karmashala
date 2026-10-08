@@ -359,6 +359,10 @@ class _ContinueAction extends StatelessWidget {
     color: semantic.attention,
   ),
   InboxItemKind.usageLimit => (icon: AppIcons.clock, color: semantic.attention),
+  InboxItemKind.wentQuiet => (
+    icon: AppIcons.pauseCircle,
+    color: semantic.attention,
+  ),
   InboxItemKind.turnCutOff => (
     icon: AppIcons.arrowClockwise,
     color: semantic.attention,

@@ -406,6 +406,10 @@ void main() {
       await tester.tap(find.text('Read 2 files, ran 1 command'));
       await tester.pumpAndSettle();
       expect(shown('flutter analyze'), findsWidgets);
+      // The two reads share a line, which opens into one each.
+      expect(shown('lib/one.dart'), findsNothing);
+      await tester.tap(find.text('Read 2 files'));
+      await tester.pumpAndSettle();
       expect(shown('lib/one.dart'), findsWidgets);
 
       await tester.tap(find.text('Read 2 files, ran 1 command'));
@@ -413,8 +417,9 @@ void main() {
       expect(shown('flutter analyze'), findsNothing);
     });
 
-    testWidgets('a settled run counts its failure on the line; a live run '
-        'draws it where it happened, above the calls after it', (tester) async {
+    testWidgets('a settled run counts its failure on the line and keeps it '
+        'in sight under it; a live run draws it where it happened, above the '
+        'calls after it', (tester) async {
       final calls = [
         tool('Read', subject: 'lib/one.dart'),
         tool('Bash', subject: 'flutter test', isError: true),
@@ -429,7 +434,8 @@ void main() {
         find.text('Read 4 files, ran 1 command · 1 failed'),
         findsOneWidget,
       );
-      expect(shown('flutter test'), findsNothing);
+      expect(shown('flutter test'), findsOneWidget);
+      expect(find.byKey(const ValueKey('chat-tool-error')), findsOneWidget);
       expect(shown('lib/two.dart'), findsNothing);
 
       await tester.pumpWidget(view(calls, turn: TranscriptTurn.working));
@@ -478,7 +484,7 @@ void main() {
       // Opened while live, it stays open as the run grows.
       await tester.tap(find.text('Working'));
       await tester.pumpAndSettle();
-      expect(shown('lib/one.dart'), findsWidgets);
+      expect(find.text('Read 2 files'), findsOneWidget);
 
       final grown = [
         ...calls.take(3),
@@ -488,7 +494,7 @@ void main() {
       await tester.pumpWidget(view(grown, turn: TranscriptTurn.working));
       await tester.pumpAndSettle();
       expect(find.text('Edit  lib/two.dart'), findsOneWidget);
-      expect(shown('lib/one.dart'), findsWidgets);
+      expect(find.text('Read 2 files'), findsOneWidget);
 
       // Settled, it is a different line with its own state: folded.
       final settled = [

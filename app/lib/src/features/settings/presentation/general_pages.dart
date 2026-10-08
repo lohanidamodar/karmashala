@@ -112,6 +112,13 @@ class ThemeTextSection extends ConsumerWidget {
               value: settings.compactDensity,
               onChanged: controller.setCompactDensity,
             ),
+          SettingsSwitchRow(
+            label: 'One sentence per line in chat',
+            help:
+                'Starts each sentence of the agent’s replies on its own line.',
+            value: settings.chatSentencePerLine,
+            onChanged: controller.setChatSentencePerLine,
+          ),
         ],
       ),
     );

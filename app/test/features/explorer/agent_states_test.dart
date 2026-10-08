@@ -354,24 +354,29 @@ void main() {
       status: status,
       observedAt: testTime,
       source: source,
+      quietSince: testTime,
     );
 
-    test('hook and state-file evidence can go quiet', () {
-      for (final source in [
-        AgentStatusSource.hook,
-        AgentStatusSource.stateFile,
-      ]) {
-        expect(quietAt(report(source)), testTime.add(kQuietAfter));
+    test('the server\'s mark is read off any source', () {
+      for (final source in AgentStatusSource.values) {
+        expect(quietAt(report(source)), testTime);
       }
     });
 
-    test(
-      'a screen reading never can: a spinner redraws while a turn hangs',
-      () {
-        expect(quietAt(report(AgentStatusSource.terminalGrid)), isNull);
-        expect(quietAt(report(AgentStatusSource.none)), isNull);
-      },
-    );
+    test('with no mark, however old the evidence, it is not quiet', () {
+      expect(
+        quietAt(
+          AgentStatusReport(
+            agentId: AgentIds.claudeCode,
+            sessionId: 's',
+            status: AgentActivityStatus.working,
+            observedAt: testTime.subtract(const Duration(hours: 3)),
+            source: AgentStatusSource.hook,
+          ),
+        ),
+        isNull,
+      );
+    });
 
     test('only a working session goes quiet', () {
       for (final status in [

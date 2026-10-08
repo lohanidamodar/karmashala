@@ -99,6 +99,7 @@ class Settings {
     this.separation = SurfaceSeparation.tones,
     this.sidebarArea,
     this.editorWordWrap = false,
+    this.chatSentencePerLine = false,
     this.editorAutoSave = kDefaultEditorAutoSave,
     this.editorAutoSaveDelayMs = kDefaultEditorAutoSaveDelayMs,
     this.usageLimitBehavior = UsageLimitBehavior.schedule,
@@ -135,6 +136,7 @@ class Settings {
     this.toolImageMaxMegabytes = defaultToolImageMaxMegabytes,
     this.endedSessionsOlderThanDays = defaultEndedSessionsOlderThanDays,
     this.activityLogKeepDays = defaultActivityLogKeepDays,
+    this.quietAfterMinutes = defaultQuietAfterMinutes,
     this.notesEnabled = true,
     this.hideEmptySections = true,
     this.explorerAgentFilter = const [],
@@ -159,6 +161,9 @@ class Settings {
 
   /// Zero keeps the activity log forever.
   static const int defaultActivityLogKeepDays = 0;
+
+  /// The server's own default quiet threshold.
+  static const int defaultQuietAfterMinutes = 15;
 
   /// Bounds for [uiTextScale] (90%–150%).
   static const double minUiTextScale = 0.9;
@@ -234,6 +239,10 @@ class Settings {
   /// numbers go with it: the gutter paints at a fixed row height, so a wrapped
   /// line would put every number below it against the wrong row.
   final bool editorWordWrap;
+
+  /// Whether the chat starts each sentence of the agent's prose on a line
+  /// of its own.
+  final bool chatSentencePerLine;
 
   /// When a file tab writes without being asked; see [EditorAutoSave].
   final EditorAutoSave editorAutoSave;
@@ -362,6 +371,10 @@ class Settings {
   /// keeps all of it. The server reads the key and sweeps daily.
   final int activityLogKeepDays;
 
+  /// Minutes a working session may go with nothing new before the server
+  /// reads it as quiet.
+  final int quietAfterMinutes;
+
   /// Whether Notes is offered at all. Off hides it and deletes nothing.
   final bool notesEnabled;
 
@@ -454,6 +467,7 @@ class Settings {
     SurfaceSeparation? separation,
     String? sidebarArea,
     bool? editorWordWrap,
+    bool? chatSentencePerLine,
     EditorAutoSave? editorAutoSave,
     int? editorAutoSaveDelayMs,
     UsageLimitBehavior? usageLimitBehavior,
@@ -493,6 +507,7 @@ class Settings {
     int? toolImageMaxMegabytes,
     int? endedSessionsOlderThanDays,
     int? activityLogKeepDays,
+    int? quietAfterMinutes,
     bool? notesEnabled,
     bool? hideEmptySections,
     List<String>? explorerAgentFilter,
@@ -535,6 +550,7 @@ class Settings {
     separation: separation ?? this.separation,
     sidebarArea: sidebarArea ?? this.sidebarArea,
     editorWordWrap: editorWordWrap ?? this.editorWordWrap,
+    chatSentencePerLine: chatSentencePerLine ?? this.chatSentencePerLine,
     editorAutoSave: editorAutoSave ?? this.editorAutoSave,
     editorAutoSaveDelayMs: editorAutoSaveDelayMs ?? this.editorAutoSaveDelayMs,
     usageLimitBehavior: usageLimitBehavior ?? this.usageLimitBehavior,
@@ -584,6 +600,7 @@ class Settings {
     endedSessionsOlderThanDays:
         endedSessionsOlderThanDays ?? this.endedSessionsOlderThanDays,
     activityLogKeepDays: activityLogKeepDays ?? this.activityLogKeepDays,
+    quietAfterMinutes: quietAfterMinutes ?? this.quietAfterMinutes,
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
@@ -654,6 +671,7 @@ class Settings {
     'separation',
     'sidebarArea',
     'editorWordWrap',
+    'chatSentencePerLine',
     'editorAutoSave',
     'editorAutoSaveDelayMs',
     kUsageLimitSettingKey,
@@ -691,6 +709,7 @@ class Settings {
     'toolImageMaxMegabytes',
     'endedSessionsOlderThanDays',
     'activityLogKeepDays',
+    'quietAfterMinutes',
     'notesEnabled',
     'hideEmptySections',
     'explorerAgentFilter',
@@ -734,6 +753,7 @@ class Settings {
     'separation': separation.name,
     'sidebarArea': ?sidebarArea,
     'editorWordWrap': editorWordWrap,
+    'chatSentencePerLine': chatSentencePerLine,
     'editorAutoSave': editorAutoSave.name,
     'editorAutoSaveDelayMs': editorAutoSaveDelayMs,
     kUsageLimitSettingKey: usageLimitBehavior.name,
@@ -773,6 +793,7 @@ class Settings {
     'toolImageMaxMegabytes': toolImageMaxMegabytes,
     'endedSessionsOlderThanDays': endedSessionsOlderThanDays,
     'activityLogKeepDays': activityLogKeepDays,
+    'quietAfterMinutes': quietAfterMinutes,
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
     'explorerAgentFilter': explorerAgentFilter,
@@ -897,6 +918,7 @@ class Settings {
       editorWordWrap: json['editorWordWrap'] is bool
           ? json['editorWordWrap'] as bool
           : false,
+      chatSentencePerLine: json['chatSentencePerLine'] == true,
       editorAutoSave: EditorAutoSave.fromName(json['editorAutoSave']),
       usageLimitBehavior: UsageLimitBehavior.fromSettingsJson(json),
       resumeMessage: json['resumeMessage'] is String
@@ -999,6 +1021,10 @@ class Settings {
         final int days when days > 0 => days,
         _ => defaultActivityLogKeepDays,
       },
+      quietAfterMinutes: switch (json['quietAfterMinutes']) {
+        final int minutes when minutes > 0 => minutes,
+        _ => defaultQuietAfterMinutes,
+      },
       notesEnabled: json['notesEnabled'] is bool
           ? json['notesEnabled'] as bool
           : true,
@@ -1063,6 +1089,7 @@ class Settings {
       other.separation == separation &&
       other.sidebarArea == sidebarArea &&
       other.editorWordWrap == editorWordWrap &&
+      other.chatSentencePerLine == chatSentencePerLine &&
       other.editorAutoSave == editorAutoSave &&
       other.editorAutoSaveDelayMs == editorAutoSaveDelayMs &&
       other.usageLimitBehavior == usageLimitBehavior &&
@@ -1096,6 +1123,7 @@ class Settings {
       other.toolImageMaxMegabytes == toolImageMaxMegabytes &&
       other.endedSessionsOlderThanDays == endedSessionsOlderThanDays &&
       other.activityLogKeepDays == activityLogKeepDays &&
+      other.quietAfterMinutes == quietAfterMinutes &&
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
@@ -1159,6 +1187,7 @@ class Settings {
         showHiddenFiles,
         androidSlimming,
         editorWordWrap,
+        chatSentencePerLine,
         editorAutoSave,
         editorAutoSaveDelayMs,
         Object.hash(
@@ -1170,7 +1199,11 @@ class Settings {
           quitKeepsHostSessions,
           toolImageMaxAgeDays,
           toolImageMaxMegabytes,
-          Object.hash(endedSessionsOlderThanDays, activityLogKeepDays),
+          Object.hash(
+            endedSessionsOlderThanDays,
+            activityLogKeepDays,
+            quietAfterMinutes,
+          ),
           usageLimitBehavior,
           resumeMessage,
           continueInterruptedTurns,

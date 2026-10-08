@@ -7,6 +7,7 @@ import 'package:karmashala_session/transcript.dart'
 
 import '../../../core/capabilities/capabilities.dart';
 import '../../sessions/data/server_transcripts.dart';
+import '../../settings/application/settings_controller.dart';
 
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -149,6 +150,11 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
               data: (messages) => ChatTranscriptView(
                 // Per session, or a switch keeps the last one's scroll offset.
                 key: ValueKey(widget.sessionId),
+                sentencePerLine: ref.watch(
+                  settingsControllerProvider.select(
+                    (s) => s.chatSentencePerLine,
+                  ),
+                ),
                 messages: [
                   for (final m in messages)
                     ChatMessage(

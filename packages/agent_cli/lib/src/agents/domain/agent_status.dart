@@ -105,6 +105,7 @@ class AgentStatusReport {
     this.inFlight = const [],
     this.backgroundOnly = false,
     this.working,
+    this.quietSince,
   });
 
   /// This report with the ask it is about and when the wait began — both
@@ -116,10 +117,19 @@ class AgentStatusReport {
   AgentStatusReport withWorking(AgentWorkingDetail? working) =>
       _copy(toolAsk: toolAsk, waitingSince: waitingSince, working: working);
 
+  /// This report marked quiet since [since], or not quiet when null.
+  AgentStatusReport withQuietSince(DateTime? since) => _copy(
+    toolAsk: toolAsk,
+    waitingSince: waitingSince,
+    working: working,
+    quietSince: since,
+  );
+
   AgentStatusReport _copy({
     required AgentToolAsk? toolAsk,
     required DateTime? waitingSince,
     required AgentWorkingDetail? working,
+    Object? quietSince = _keep,
   }) => AgentStatusReport(
     agentId: agentId,
     sessionId: sessionId,
@@ -137,7 +147,17 @@ class AgentStatusReport {
     inFlight: inFlight,
     backgroundOnly: backgroundOnly,
     working: working,
+    quietSince: identical(quietSince, _keep)
+        ? this.quietSince
+        : quietSince as DateTime?,
   );
+
+  static const Object _keep = Object();
+
+  /// **When a working session last did anything**, once the server has seen
+  /// nothing new from it for its quiet threshold; null while it is not quiet.
+  /// Decided by the server alone, so every client agrees.
+  final DateTime? quietSince;
 
   /// **What the agent's working line says** while its turn runs — its word,
   /// when the turn began and its tokens — and once the turn has ended, the

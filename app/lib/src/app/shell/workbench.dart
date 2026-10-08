@@ -46,6 +46,7 @@ import '../../features/sessions/presentation/session_notice_line.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/sessions/presentation/operator_chip.dart';
+import '../../features/sessions/presentation/quiet_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/browser_document_pane.dart';
 import '../../features/terminal/application/terminal_presets.dart';
