@@ -15,6 +15,7 @@ import '../application/review_threads.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../terminal/presentation/dense_icon_button.dart';
+import '../../sessions/presentation/hunk_review.dart';
 import 'diff_line_tile.dart';
 
 /// Renders one file's unified diff, with the review threads anchored to it.
@@ -26,10 +27,15 @@ class FileDiffView extends ConsumerStatefulWidget {
     required this.path,
     required this.checkout,
     this.repositoryId,
+    this.reviewHunks = false,
     super.key,
   });
 
   final String path;
+
+  /// Each hunk gets Keep and Revert, where a [HunkReviewScope] above says
+  /// what they do.
+  final bool reviewHunks;
 
   /// The checkout to diff [path] inside. A tab names its own, so it keeps
   /// showing the file it was opened on however the sidebar moves.
@@ -66,6 +72,16 @@ class _FileDiffViewState extends ConsumerState<FileDiffView> {
     _horizontal.dispose();
     _offset.dispose();
     super.dispose();
+  }
+
+  ParsedDiff? _hunksFor;
+  var _hunks = const <EditHunk>[];
+
+  /// [parsed]'s hunks, split once per diff.
+  List<EditHunk> _hunksOf(ParsedDiff parsed) {
+    if (identical(parsed, _hunksFor)) return _hunks;
+    _hunksFor = parsed;
+    return _hunks = diffHunks(widget.path, parsed.lines);
   }
 
   void _followHorizontal() {
@@ -128,6 +144,13 @@ class _FileDiffViewState extends ConsumerState<FileDiffView> {
         // Threads no line can carry, above the diff rather than lost inside it.
         final unplaced = threads.unplaced(path);
         final textScaler = MediaQuery.textScalerOf(context);
+        final review = widget.reviewHunks
+            ? HunkReviewScope.maybeOf(context)
+            : null;
+        final hunkAt = <int, EditHunk>{
+          if (review != null)
+            for (final hunk in _hunksOf(parsed)) hunk.firstChange: hunk,
+        };
 
         return LayoutBuilder(
           builder: (context, box) {
@@ -161,12 +184,22 @@ class _FileDiffViewState extends ConsumerState<FileDiffView> {
                   );
                 }
                 final row = index - unplaced.length;
-                return ReviewableDiffLine(
+                final line = ReviewableDiffLine(
                   path: path,
                   repositoryId: repositoryId,
                   lineNumber: numbers[row],
                   line: lines[row],
                   scroll: scroll,
+                );
+                final hunk = hunkAt[row];
+                if (hunk == null || review == null) return line;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HunkReviewBar(hunk: hunk, review: review),
+                    line,
+                  ],
                 );
               },
             );

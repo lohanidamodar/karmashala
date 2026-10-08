@@ -4,8 +4,10 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_ui/transcript.dart' show PathLinkCallback, pathLinkStyle;
+import 'package:karmashala_ui/transcript.dart'
+    show PathLinkCallback, pathLinkStyle;
 import '../../git/presentation/diff_line_tile.dart';
+import 'hunk_review.dart';
 
 /// How many rows an edit's diff draws before the reader asks for the rest.
 const int kDiffCardCollapsedRows = 8;
@@ -186,6 +188,10 @@ class _EditDiffState extends State<_EditDiff> {
   final Set<int> _openFolds = {};
   FileEditDiff? _diff;
   List<DiffCardRow> _rows = const [];
+  List<EditHunk> _hunks = const [];
+
+  /// Each hunk by its first changed line, which its bar sits above.
+  Map<DiffLine, EditHunk> _hunkAt = const {};
 
   @override
   void didUpdateWidget(_EditDiff old) {
@@ -209,7 +215,17 @@ class _EditDiffState extends State<_EditDiff> {
       _diff = diff;
       _rows = foldUnchangedLines(diff.lines);
       _openFolds.clear();
+      // Only a whole diff of a modified file can be put back a hunk at a time.
+      _hunks =
+          diff.status == FileEditDiffStatus.ok &&
+              !diff.truncated &&
+              widget.edit.kind == FileEditKind.modified
+          ? diffHunks(widget.edit.path, diff.lines)
+          : const [];
+      _hunkAt = Map<DiffLine, EditHunk>.identity()
+        ..addAll({for (final h in _hunks) diff.lines[h.firstChange]: h});
     }
+    final review = _hunks.isEmpty ? null : HunkReviewScope.maybeOf(context);
 
     final display = <DiffCardRow>[];
     for (var i = 0; i < _rows.length; i++) {
@@ -248,9 +264,30 @@ class _EditDiffState extends State<_EditDiff> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Header(edit: widget.edit, diff: diff, onPathTap: widget.onPathTap),
+          _Header(
+            edit: widget.edit,
+            diff: diff,
+            onPathTap: widget.onPathTap,
+            trailing: review == null
+                ? null
+                : RevertFileButton(
+                    path: widget.edit.path,
+                    hunks: _hunks,
+                    review: review,
+                  ),
+          ),
           for (var i = 0; i < shown.length; i++)
             switch (shown[i]) {
+              DiffShownRow(:final line)
+                  when review != null && _hunkAt[line] != null =>
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    HunkReviewBar(hunk: _hunkAt[line]!, review: review),
+                    DiffLineTile(line: line),
+                  ],
+                ),
               DiffShownRow(:final line) => DiffLineTile(line: line),
               final DiffFoldRow fold => _FoldTile(
                 count: fold.lines.length,
@@ -308,11 +345,19 @@ class _EditDiffState extends State<_EditDiff> {
 
 /// The edit's path, what happened to it in words, and its line counts.
 class _Header extends StatelessWidget {
-  const _Header({required this.edit, required this.diff, this.onPathTap});
+  const _Header({
+    required this.edit,
+    required this.diff,
+    this.onPathTap,
+    this.trailing,
+  });
 
   final FileEditRecord edit;
   final FileEditDiff diff;
   final PathLinkCallback? onPathTap;
+
+  /// At the row's end: Revert file, where the diff can be put back.
+  final Widget? trailing;
 
   /// The file's name, a link to its preview where taps go anywhere.
   Widget _name(String name, String path, ColorScheme scheme) {
@@ -372,16 +417,19 @@ class _Header extends StatelessWidget {
                     constraints: BoxConstraints(maxWidth: box.maxWidth * 0.7),
                     child: _name(name, path, scheme),
                   ),
-                  const SizedBox(width: Insets.sm),
+                  // The gap gives way with the folder in a narrow header.
                   Expanded(
-                    child: Tooltip(
-                      message: edit.path,
-                      child: Text(
-                        folder,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: MonoStyles.small.copyWith(
-                          color: scheme.onSurfaceVariant,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: Insets.sm),
+                      child: Tooltip(
+                        message: edit.path,
+                        child: Text(
+                          folder,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: MonoStyles.small.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
@@ -410,6 +458,10 @@ class _Header extends StatelessWidget {
                 style: MonoStyles.small,
               ),
             ),
+          ],
+          if (trailing case final trailing?) ...[
+            const SizedBox(width: Insets.xs),
+            SelectionContainer.disabled(child: trailing),
           ],
         ],
       ),

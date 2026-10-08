@@ -24,6 +24,7 @@ import 'package:karmashala_checkpoints/checkpoints.dart' show Checkpoint;
 import '../../checkpoints/application/checkpoint_providers.dart';
 import '../application/session_handoff_service.dart';
 import '../application/turn_forks.dart';
+import 'hunk_review.dart';
 import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/installation_labels.dart';
@@ -955,76 +956,95 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       data: (messages) {
         final detail = _detailWithArtifacts(messages, artifacts);
         final unplaced = _placement.unplaced;
-        return ChatTranscriptView(
-          // Per session: this view outlives a switch within its group, and an
-          // unkeyed list kept the last session's scroll offset.
-          key: ValueKey(widget.sessionId),
-          toLatest: _toLatest,
-          messages: messages,
-          seenUntil: widget.seenUntil,
-          earlier: earlier,
-          onLoadEarlier: earlier > 0
-              ? () => unawaited(
-                  ref
-                      .read(serverTranscriptsProvider)
-                      .loadOlder(widget.sessionId),
-                )
-              : null,
-          firstOrdinal: firstOrdinal,
-          agentId: _agentId(),
-          turn: turn,
-          turnActions: _turnActionsFor(messages, turn, active: active),
-          resolveHostPath: resolveHostPath,
-          // Paths in the conversation are clickable, and a click reveals
-          // rather than opens — see [_openPath].
-          onPathTap: _openPath,
-          filePreviewBuilder: _filePreview,
-          onLinkTap: onLinkTap,
-          // What the parent's `Task(…)` row never showed. Collapsed and
-          // unread until opened — one session's turns came to 1,485 MiB.
-          detailBuilder: detail,
-          // Null when Notes is off: the transcript never learns the
-          // feature exists, so there is nothing left behind to hide.
-          onSaveNote: notesEnabled ? _saveNote : null,
-          workingLine: WorkingLine(
-            sessionId: widget.sessionId,
-            onStop: _interruptTurn,
-          ),
-          // The word the agent left on its screen as the turn ended.
-          lastTurnVerb: ref.watch(
-            agentSessionStatusProvider(widget.sessionId).select((status) {
-              final report = status.asData?.value;
-              return report?.turnStatus == AgentActivityStatus.idle
-                  ? report?.working?.word
-                  : null;
-            }),
-          ),
-          lastTurnTokens: _turnTokens,
-          footer: unplaced.isEmpty
-              ? footer
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    UnplacedArtifactsStrip(artifacts: unplaced),
-                    footer,
-                  ],
-                ),
-          emptyBuilder: (standard) => SessionEmptyOrFailed(
-            sessionId: widget.sessionId,
-            otherwise: standard,
-          ),
-          emptyHint: _emptyHint(
-            chatAvailable: chatAvailable,
-            reading: reading,
-            fromPty: fromPty,
-            serverTooOld: serverTooOld,
-            active: active,
-            hasTerminal: hasTerminal,
+        return HunkReviewHost(
+          key: ValueKey('hunks-${widget.sessionId}'),
+          sessionId: widget.sessionId,
+          place: _placeEditedFile,
+          openFile: _openEditedFile,
+          child: ChatTranscriptView(
+            // Per session: this view outlives a switch within its group, and an
+            // unkeyed list kept the last session's scroll offset.
+            key: ValueKey(widget.sessionId),
+            toLatest: _toLatest,
+            messages: messages,
+            seenUntil: widget.seenUntil,
+            earlier: earlier,
+            onLoadEarlier: earlier > 0
+                ? () => unawaited(
+                    ref
+                        .read(serverTranscriptsProvider)
+                        .loadOlder(widget.sessionId),
+                  )
+                : null,
+            firstOrdinal: firstOrdinal,
+            agentId: _agentId(),
+            turn: turn,
+            turnActions: _turnActionsFor(messages, turn, active: active),
+            resolveHostPath: resolveHostPath,
+            // Paths in the conversation are clickable, and a click reveals
+            // rather than opens — see [_openPath].
+            onPathTap: _openPath,
+            filePreviewBuilder: _filePreview,
+            onLinkTap: onLinkTap,
+            // What the parent's `Task(…)` row never showed. Collapsed and
+            // unread until opened — one session's turns came to 1,485 MiB.
+            detailBuilder: detail,
+            // Null when Notes is off: the transcript never learns the
+            // feature exists, so there is nothing left behind to hide.
+            onSaveNote: notesEnabled ? _saveNote : null,
+            workingLine: WorkingLine(
+              sessionId: widget.sessionId,
+              onStop: _interruptTurn,
+            ),
+            // The word the agent left on its screen as the turn ended.
+            lastTurnVerb: ref.watch(
+              agentSessionStatusProvider(widget.sessionId).select((status) {
+                final report = status.asData?.value;
+                return report?.turnStatus == AgentActivityStatus.idle
+                    ? report?.working?.word
+                    : null;
+              }),
+            ),
+            lastTurnTokens: _turnTokens,
+            footer: unplaced.isEmpty
+                ? footer
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      UnplacedArtifactsStrip(artifacts: unplaced),
+                      footer,
+                    ],
+                  ),
+            emptyBuilder: (standard) => SessionEmptyOrFailed(
+              sessionId: widget.sessionId,
+              otherwise: standard,
+            ),
+            emptyHint: _emptyHint(
+              chatAvailable: chatAvailable,
+              reading: reading,
+              fromPty: fromPty,
+              serverTooOld: serverTooOld,
+              active: active,
+              hasTerminal: hasTerminal,
+            ),
           ),
         );
       },
     );
+  }
+
+  /// A file an agent's edit names, placed where the session runs.
+  EnvironmentPath? _placeEditedFile(String path) => _placeToken(path)?.$1;
+
+  /// Opens a file an edit names in the editor, at its place.
+  void _openEditedFile(String path) {
+    final placed = _placeToken(path);
+    if (placed == null) {
+      _say('Karmashala has no record of where this session runs.');
+      return;
+    }
+    ref.read(editorTabActionsProvider).openAt(placed.$1, line: placed.$2);
   }
 
   Widget? _footer;
