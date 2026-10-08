@@ -1123,6 +1123,107 @@ void main() {
       await unmountMission(tester);
     });
 
+    MissionSession child(
+      String id,
+      String parent,
+      AgentState state, {
+      Duration age = const Duration(minutes: 3),
+    }) => (
+      id: id,
+      title: 'Child $id',
+      project: 'p-ks',
+      machine: 'windows',
+      agent: AgentIds.claudeCode,
+      state: state,
+      age: age,
+      parent: parent,
+      report: null,
+    );
+
+    testWidgets('a parent whose sub-session works stays at work and says '
+        'what it waits on', (tester) async {
+      await pump(
+        tester,
+        fixture: MissionFixture(
+          sessions: [
+            ...MissionFixture.realisticSessions(),
+            child('ks-r30-a', 'ks-r30', AgentState.working),
+          ],
+        ),
+      );
+      final card = find.byKey(const ValueKey('overview-work-card:ks-r30'));
+      await tester.scrollUntilVisible(card, 200, scrollable: hybridList);
+      expect(
+        find.descendant(
+          of: card,
+          matching: find.text('Waiting on 1 sub-session'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('overview-ready-card:ks-r30')),
+        findsNothing,
+      );
+      await unmountMission(tester);
+    });
+
+    for (final mode in OverviewSubSessionMode.values) {
+      testWidgets('${mode.name}: a done parent\'s sub-sessions are seen from '
+          'the Done lane', (tester) async {
+        final c = await pump(
+          tester,
+          fixture: MissionFixture(
+            sessions: [
+              ...MissionFixture.realisticSessions(),
+              child('ks-r29-a', 'ks-r29', AgentState.ended),
+              child('ks-r29-b', 'ks-r29', AgentState.ended),
+            ],
+          ),
+        );
+        c.read(overviewPrefsProvider.notifier).setSubSessions(mode);
+        await settleMission(tester);
+        final fold = find.byKey(const ValueKey('overview-done-fold'));
+        await tester.scrollUntilVisible(fold, 200, scrollable: hybridList);
+        await tester.tap(fold);
+        await settleMission(tester);
+
+        if (mode == OverviewSubSessionMode.inside) {
+          final line = find.byKey(const ValueKey('overview-done-subs:ks-r29'));
+          await tester.scrollUntilVisible(line, 200, scrollable: hybridList);
+          expect(
+            find.descendant(of: line, matching: find.text('↳ 2 sub-sessions')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('overview-sub:ks-r29-a')),
+            findsNothing,
+          );
+          await tester.tap(line);
+          await settleMission(tester);
+          expect(
+            find.byKey(const ValueKey('overview-sub:ks-r29-a')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('overview-sub:ks-r29-b')),
+            findsOneWidget,
+          );
+        } else {
+          final tied = find.byKey(
+            const ValueKey('overview-child-link:ks-r29-a'),
+          );
+          await tester.scrollUntilVisible(tied, 200, scrollable: hybridList);
+          expect(tied, findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('overview-child-link:ks-r29-b')),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      });
+    }
+
     testWidgets("a ready card's Archive waits while it is resumed, and says "
         'why', (tester) async {
       final c = await pump(tester);

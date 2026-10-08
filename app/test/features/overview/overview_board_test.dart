@@ -149,7 +149,8 @@ void main() {
       expect(needs.firstWhere((c) => c.entry.id == 'g').breadcrumb, 'T c');
     });
 
-    test('a live child of an ended parent keeps a card of its own', () {
+    test('an ended parent whose child works stays at work, carrying it', () {
+      // Round 56: a parent is not done while its sub-sessions work.
       final board = build(
         groups({
           AgentState.ended: [entry('p')],
@@ -157,9 +158,70 @@ void main() {
         }),
       );
       final working = board.lanes.single.cards(BoardColumn.working).single;
-      expect(working.entry.id, 'c');
-      expect(working.breadcrumb, 'T p');
+      expect(working.entry.id, 'p');
+      expect(working.waitingOn, 1);
+      expect(working.children!.working, 1);
     });
+  });
+
+  group('a parent while its sub-sessions work', () {
+    for (final mode in OverviewSubSessionMode.values) {
+      group(mode.label, () {
+        OverviewBoard of(Map<AgentState, List<WorkspaceSessionEntry>> by) =>
+            build(groups(by), subSessions: mode);
+
+        test('a ready parent with a working child is at work, waiting on '
+            'it', () {
+          final lane = of({
+            AgentState.ready: [entry('p')],
+            AgentState.working: [entry('c', parent: 'p')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.working).first, 'p');
+          expect(ids(lane, BoardColumn.ready), isEmpty);
+          final parent = lane.cards(BoardColumn.working).first;
+          expect(parent.waitingOn, 1);
+        });
+
+        test('a child that needs you puts its parent in the waiting state '
+            'too', () {
+          final lane = of({
+            AgentState.ready: [entry('p')],
+            AgentState.needsYou: [entry('c', parent: 'p')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.needsYou), contains('p'));
+          expect(ids(lane, BoardColumn.ready), isEmpty);
+        });
+
+        test('a grandchild at work holds the top parent too', () {
+          final lane = of({
+            AgentState.ended: [entry('p'), entry('c', parent: 'p')],
+            AgentState.working: [entry('g', parent: 'c')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.working).first, 'p');
+          expect(ids(lane, BoardColumn.done), isNot(contains('p')));
+        });
+
+        test('only once every child is done or ended does it go to Done', () {
+          final lane = of({
+            AgentState.ended: [entry('p'), entry('c1', parent: 'p')],
+            AgentState.ready: [entry('c2', parent: 'p')],
+          }).lanes.single;
+          expect(ids(lane, BoardColumn.done), contains('p'));
+          expect(ids(lane, BoardColumn.working), isEmpty);
+          final parent = lane
+              .cards(BoardColumn.done)
+              .firstWhere((c) => c.id == 'p');
+          expect(parent.waitingOn, isNull);
+        });
+
+        test('a parent at work on its own is not said to wait', () {
+          final lane = of({
+            AgentState.working: [entry('p'), entry('c', parent: 'p')],
+          }).lanes.single;
+          expect(lane.cards(BoardColumn.working).first.waitingOn, isNull);
+        });
+      });
+    }
   });
 
   group('a sub-session an agent just started', () {

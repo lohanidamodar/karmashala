@@ -174,8 +174,37 @@ class OverviewStatePill extends ConsumerWidget {
       state: card.state,
       label: overviewIsStarting(card)
           ? 'Starting…'
+          // Held out of Done by its sub-sessions: waiting, not working itself.
+          // The card's own line says on what.
+          : card.waitingOn != null
+          ? 'Waiting'
           : '${card.state.label} · ${compactAge(now.difference(since))}',
       color: color,
+    );
+  }
+}
+
+/// "Waiting on 2 sub-sessions": why a card whose own turn is over is not in
+/// Done. Nothing for a card that is not held.
+class OverviewWaitingOnLine extends StatelessWidget {
+  const OverviewWaitingOnLine({required this.card, super.key});
+
+  final OverviewCard card;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = card.waitingOn;
+    if (n == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Text(
+      'Waiting on $n ${n == 1 ? 'sub-session' : 'sub-sessions'}',
+      key: ValueKey('overview-waiting-on:${card.id}'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: overviewStateColor(context, card.state),
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }

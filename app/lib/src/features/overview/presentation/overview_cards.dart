@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -211,7 +212,10 @@ class OverviewWorkCard extends ConsumerWidget {
       children: [
         OverviewCardHeader(card: card),
         const SizedBox(height: Insets.sm),
-        OverviewActivityLine(card: card),
+        if (card.waitingOn != null)
+          OverviewWaitingOnLine(card: card)
+        else
+          OverviewActivityLine(card: card),
         const SizedBox(height: Insets.xs),
         OverviewLatestMessage(sessionId: card.id),
         const SizedBox(height: Insets.xs),
@@ -239,7 +243,7 @@ class OverviewDoneRow extends ConsumerWidget {
     final muted = theme.colorScheme.onSurfaceVariant;
     final now = ref.read(clockProvider).nowUtc();
     final place = watchOverviewPlace(ref, card);
-    return InkWell(
+    final row = InkWell(
       key: ValueKey('overview-done:${card.id}'),
       borderRadius: BorderRadius.circular(Radii.sm),
       onTap: () => onOpen(card),
@@ -276,6 +280,81 @@ class OverviewDoneRow extends ConsumerWidget {
             OverviewCardMenu(card: card),
           ],
         ),
+      ),
+    );
+    final children = card.children;
+    if (children == null) return row;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        row,
+        _DoneRowSubSessions(card: card, total: children.total, onOpen: onOpen),
+      ],
+    );
+  }
+}
+
+/// "↳ 2 sub-sessions" under a done row, opening in place to the rows a
+/// working card shows: a done session's children seen without the peek.
+class _DoneRowSubSessions extends StatefulWidget {
+  const _DoneRowSubSessions({
+    required this.card,
+    required this.total,
+    required this.onOpen,
+  });
+
+  final OverviewCard card;
+  final int total;
+  final ValueChanged<OverviewCard> onOpen;
+
+  @override
+  State<_DoneRowSubSessions> createState() => _DoneRowSubSessionsState();
+}
+
+class _DoneRowSubSessionsState extends State<_DoneRowSubSessions> {
+  var _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final n = widget.total;
+    return Padding(
+      padding: const EdgeInsets.only(left: Insets.xl + Insets.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            key: ValueKey('overview-done-subs:${widget.card.id}'),
+            borderRadius: BorderRadius.circular(Radii.sm),
+            onTap: () => setState(() => _open = !_open),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      '↳ $n ${n == 1 ? 'sub-session' : 'sub-sessions'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _open ? AppIcons.caretUp : AppIcons.caretDown,
+                    size: UiDensity.of(context).iconSmall,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_open)
+            OverviewSubSessions(card: widget.card, onOpen: widget.onOpen),
+        ],
       ),
     );
   }

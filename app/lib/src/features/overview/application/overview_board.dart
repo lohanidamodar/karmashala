@@ -308,10 +308,18 @@ class OverviewCard {
     this.children,
     this.breadcrumb,
     this.parentId,
+    this.waitingOn,
   });
 
   final WorkspaceSessionEntry entry;
+
+  /// What the Board draws it as: its own state, or — while a sub-session of
+  /// it works or needs you and it would be ready or done — that.
   final AgentState state;
+
+  /// How many of its sub-sessions hold it out of Done: set only when they
+  /// are why it is not ready or done — "Waiting on 2 sub-sessions".
+  final int? waitingOn;
 
   /// The sub-sessions stacked on this card; null when it has none.
   final ChildSummary? children;
@@ -463,6 +471,37 @@ OverviewBoard buildOverviewBoard(
     return anchor;
   }
 
+  // **A parent is not done while its sub-sessions work** (round 56). Each
+  // session's own state is gathered on every ancestor in view; one that
+  // would be ready or done is drawn needing you while any of them needs you,
+  // else at work while any works — and says how many it waits on.
+  final own = Map.of(stateOf);
+  final descendants = <String, List<AgentState>>{};
+  for (final entry in byId.values) {
+    final seen = <String>{entry.id};
+    var parent = parentIn(entry);
+    while (parent != null && seen.add(parent)) {
+      (descendants[parent] ??= []).add(own[entry.id]!);
+      parent = parentIn(byId[parent]!);
+    }
+  }
+  final waitingOn = <String, int>{};
+  for (final MapEntry(key: id, value: states) in descendants.entries) {
+    final column = columnOf(own[id]!);
+    if (column == BoardColumn.needsYou || column == BoardColumn.working) {
+      continue;
+    }
+    final needs = states
+        .where((s) => columnOf(s) == BoardColumn.needsYou)
+        .length;
+    final works = states
+        .where((s) => columnOf(s) == BoardColumn.working)
+        .length;
+    if (needs + works == 0) continue;
+    stateOf[id] = needs > 0 ? AgentState.needsYou : AgentState.working;
+    waitingOn[id] = needs + works;
+  }
+
   final cards = <OverviewCard>[];
   final stacked = <String, List<AgentState>>{};
   final asCards = subSessions == OverviewSubSessionMode.cards;
@@ -479,6 +518,7 @@ OverviewBoard buildOverviewBoard(
           state: state,
           breadcrumb: byId[parent]?.title,
           parentId: parent,
+          waitingOn: waitingOn[entry.id],
         ),
       );
       continue;
@@ -507,6 +547,7 @@ OverviewBoard buildOverviewBoard(
       OverviewCard(
         entry: entry,
         state: stateOf[entry.id]!,
+        waitingOn: waitingOn[entry.id],
         children: below == null
             ? null
             : ChildSummary(
