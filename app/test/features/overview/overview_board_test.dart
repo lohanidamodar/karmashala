@@ -17,6 +17,7 @@ void main() {
     Duration age = Duration.zero,
     String env = 'windows',
     String repo = 'r1',
+    SessionStatus status = SessionStatus.running,
   }) => WorkspaceSessionEntry(
     id: id,
     title: 'T $id',
@@ -29,7 +30,7 @@ void main() {
       agentInstallationId: 'a1',
       title: 'T $id',
       useWorktree: false,
-      status: SessionStatus.running,
+      status: status,
       createdAt: now.subtract(age),
       parentSessionId: parent,
     ),
@@ -158,6 +159,52 @@ void main() {
       final working = board.lanes.single.cards(BoardColumn.working).single;
       expect(working.entry.id, 'c');
       expect(working.breadcrumb, 'T p');
+    });
+  });
+
+  group('a sub-session an agent just started', () {
+    // Its row says `created` and nothing has reported a status yet, which
+    // the lens reads as ready: it sat in "Done · ready to close", or folded
+    // into a ready parent's card that drew no sub-sessions.
+    List<AgentStateGroup> justStarted() => groups({
+      AgentState.working: [entry('p')],
+      AgentState.ready: [
+        entry('c', parent: 'p', status: SessionStatus.created),
+      ],
+    });
+
+    test('as cards: an "At work" card, starting', () {
+      final board = build(
+        justStarted(),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      final lane = board.lanes.single;
+      expect(ids(lane, BoardColumn.working), ['p', 'c']);
+      expect(ids(lane, BoardColumn.ready), isEmpty);
+      final child = lane.cards(BoardColumn.working).last;
+      expect(overviewIsStarting(child), isTrue);
+      expect(
+        overviewIsStarting(lane.cards(BoardColumn.working).first),
+        isFalse,
+      );
+    });
+
+    test('inside: on its parent\'s card, counted as working', () {
+      final board = build(justStarted());
+      final parent = board.lanes.single.cards(BoardColumn.working).single;
+      expect(parent.children!.working, 1);
+      expect(board.children['p']!.single.state, AgentState.working);
+    });
+
+    test('once it reports, its own state stands', () {
+      final board = build(
+        groups({
+          AgentState.working: [entry('p')],
+          AgentState.ready: [entry('c', parent: 'p')],
+        }),
+        subSessions: OverviewSubSessionMode.cards,
+      );
+      expect(ids(board.lanes.single, BoardColumn.ready), ['c']);
     });
   });
 

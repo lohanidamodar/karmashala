@@ -277,6 +277,67 @@ void main() {
       report: s.report,
     );
 
+    // The owner: "I asked an agent to start a sub-session from the dashboard
+    // chat. It started … but the dashboard isn't showing it." Its parent had
+    // finished its turn — a ready card, which drew no sub-sessions — and the
+    // child, with nothing reported yet, read as ready too.
+    MissionFixture agentStartedChild() => MissionFixture(
+      sessions: [
+        ...MissionFixture.realisticSessions(),
+        (
+          id: 'ks-r30-child',
+          title: 'Check the webhook retries',
+          project: 'p-ks',
+          machine: 'windows',
+          agent: AgentIds.claudeCode,
+          state: AgentState.ready,
+          age: Duration.zero,
+          parent: 'ks-r30',
+          report: null,
+        ),
+      ],
+      starting: const {'ks-r30-child'},
+    );
+
+    testWidgets('an agent-started child shows at once inside its parent, '
+        '"Starting…"', (tester) async {
+      await pump(tester, fixture: agentStartedChild());
+      final subs = find.byKey(const ValueKey('overview-subs:ks-r30'));
+      await tester.scrollUntilVisible(subs, 200, scrollable: hybridList);
+
+      final row = find.byKey(const ValueKey('overview-sub:ks-r30-child'));
+      expect(row, findsOneWidget);
+      expect(
+        find.descendant(of: row, matching: find.text('Starting…')),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('as cards, it is an "At work" card at once, "Starting…"', (
+      tester,
+    ) async {
+      final c = await pump(tester, fixture: agentStartedChild());
+      c
+          .read(overviewPrefsProvider.notifier)
+          .setSubSessions(OverviewSubSessionMode.cards);
+      await settleMission(tester);
+
+      final card = find.byKey(
+        const ValueKey('overview-work-card:ks-r30-child'),
+      );
+      await tester.scrollUntilVisible(card, 200, scrollable: hybridList);
+      expect(
+        find.descendant(of: card, matching: find.textContaining('Starting…')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('overview-ready-card:ks-r30-child')),
+        findsNothing,
+      );
+      await unmountMission(tester);
+    });
+
     testWidgets('inside: a sixth folds into "+1 more"', (tester) async {
       final sixth = asState(
         MissionFixture.realisticSessions().firstWhere(

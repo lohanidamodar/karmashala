@@ -283,7 +283,10 @@ class OverviewSubSessionRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: Insets.sm),
-                OverviewStateChip(state: card.state),
+                OverviewStateChip(
+                  state: card.state,
+                  label: overviewIsStarting(card) ? 'Starting…' : null,
+                ),
               ],
             ),
             Padding(

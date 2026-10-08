@@ -172,7 +172,9 @@ class OverviewStatePill extends ConsumerWidget {
         card.entry.activityAt;
     return OverviewStateChip(
       state: card.state,
-      label: '${card.state.label} · ${compactAge(now.difference(since))}',
+      label: overviewIsStarting(card)
+          ? 'Starting…'
+          : '${card.state.label} · ${compactAge(now.difference(since))}',
       color: color,
     );
   }

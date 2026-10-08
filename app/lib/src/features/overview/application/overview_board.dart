@@ -1,3 +1,4 @@
+import 'package:karmashala_session/session.dart' show SessionStatus;
 import 'package:flutter/foundation.dart' show immutable;
 
 import '../../explorer/application/agent_states.dart';
@@ -46,6 +47,21 @@ List<OverviewCard> byUrgency(Iterable<OverviewCard> cards) {
     });
   return [for (final (_, card) in indexed) card];
 }
+
+/// Whether [entry] is a sub-session started and not yet heard from: its row
+/// still `created`, which the lens reads as ready — and so it sat in "Done ·
+/// ready to close" until its first status. The Board counts it at work and
+/// says "Starting…".
+bool overviewEntryIsStarting(WorkspaceSessionEntry entry) {
+  final native = entry.native;
+  return native != null &&
+      native.parentSessionId != null &&
+      native.status == SessionStatus.created;
+}
+
+/// [overviewEntryIsStarting] for [card], while its state still says so.
+bool overviewIsStarting(OverviewCard card) =>
+    card.state == AgentState.working && overviewEntryIsStarting(card.entry);
 
 /// [cards] with each sub-session moved to just after its parent, when its
 /// parent is among them — after any sibling already placed there, and its
@@ -423,7 +439,11 @@ OverviewBoard buildOverviewBoard(
     for (final entry in group.entries) {
       if (byId.containsKey(entry.id) || !kept(entry)) continue;
       byId[entry.id] = entry;
-      stateOf[entry.id] = group.state;
+      // Just started, nothing reported: at work, not ready to close.
+      stateOf[entry.id] =
+          group.state == AgentState.ready && overviewEntryIsStarting(entry)
+          ? AgentState.working
+          : group.state;
     }
   }
 
