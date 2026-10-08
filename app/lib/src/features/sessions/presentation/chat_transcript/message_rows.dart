@@ -430,6 +430,7 @@ class _AgentMessageBlock extends StatelessWidget {
             selectable: false,
             foldLong: true,
           ),
+          TranscriptImageStrip(paths: inlineImagePaths(cleanText)),
           ?detail,
         ],
       ),

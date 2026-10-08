@@ -24,11 +24,10 @@ const double kFilePreviewMaxHeight = 360;
 
 /// A file the conversation named, previewed under the message that named it:
 /// read through the server, so a WSL or SSH session's file previews as this
-/// machine's does. Outside the session's checkout it asks first.
+/// machine's does.
 class TranscriptFilePreview extends ConsumerStatefulWidget {
   const TranscriptFilePreview({
     required this.path,
-    required this.inScope,
     required this.onClose,
     required this.onOpenInEditor,
     required this.onOpenInFiles,
@@ -40,9 +39,6 @@ class TranscriptFilePreview extends ConsumerStatefulWidget {
 
   /// The line the reference named, 1-based.
   final int? line;
-
-  /// Whether [path] is inside one of the session's checkouts.
-  final bool inScope;
   final VoidCallback onClose;
   final VoidCallback onOpenInEditor;
   final VoidCallback onOpenInFiles;
@@ -53,7 +49,6 @@ class TranscriptFilePreview extends ConsumerStatefulWidget {
 }
 
 class _TranscriptFilePreviewState extends ConsumerState<TranscriptFilePreview> {
-  late bool _allowed = widget.inScope;
   Future<FilePreviewData>? _load;
 
   Future<FilePreviewData> _loaded() =>
@@ -62,10 +57,7 @@ class _TranscriptFilePreviewState extends ConsumerState<TranscriptFilePreview> {
   @override
   void didUpdateWidget(TranscriptFilePreview old) {
     super.didUpdateWidget(old);
-    if (old.path != widget.path) {
-      _load = null;
-      _allowed = widget.inScope;
-    }
+    if (old.path != widget.path) _load = null;
   }
 
   @override
@@ -158,35 +150,22 @@ class _TranscriptFilePreviewState extends ConsumerState<TranscriptFilePreview> {
             children: [
               header,
               const SizedBox(height: Insets.xs),
-              if (!_allowed)
-                _Note(
-                  text:
-                      "This file is outside the session's checkout, so it is "
-                      'not read until you ask.',
-                  action: 'Preview anyway',
-                  onAction: () => setState(() => _allowed = true),
-                )
-              else
-                FutureBuilder<FilePreviewData>(
-                  future: _loaded(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return _Note(
-                        text: 'Could not read it: ${snapshot.error}',
-                      );
-                    }
-                    final data = snapshot.data;
-                    if (data == null) {
-                      return const Padding(
-                        padding: EdgeInsets.all(Insets.sm),
-                        child: InlineSpinner(
-                          semanticsLabel: 'Reading the file',
-                        ),
-                      );
-                    }
-                    return _body(context, data);
-                  },
-                ),
+              FutureBuilder<FilePreviewData>(
+                future: _loaded(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return _Note(text: 'Could not read it: ${snapshot.error}');
+                  }
+                  final data = snapshot.data;
+                  if (data == null) {
+                    return const Padding(
+                      padding: EdgeInsets.all(Insets.sm),
+                      child: InlineSpinner(semanticsLabel: 'Reading the file'),
+                    );
+                  }
+                  return _body(context, data);
+                },
+              ),
             ],
           ),
         ),

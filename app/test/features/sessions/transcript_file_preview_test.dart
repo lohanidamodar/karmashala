@@ -95,6 +95,23 @@ void main() {
           expect(data.size, 4);
           expect(data.bytes, isNull);
         });
+
+        test(
+          'a picture arrives whole, and one past the cap is not read',
+          () async {
+            onBox('/home/me/app/shot.png').writeAsBytesSync([137, 80, 78, 71]);
+            final shot = await load(environment, '/home/me/app/shot.png');
+            expect(shot.kind, FilePreviewKind.image);
+            expect(shot.bytes, [137, 80, 78, 71]);
+
+            onBox(
+              '/home/me/app/huge.png',
+            ).writeAsBytesSync(Uint8List(kPreviewMediaBytes + 1));
+            final huge = await load(environment, '/home/me/app/huge.png');
+            expect(huge.tooLarge, isTrue);
+            expect(huge.bytes, isNull);
+          },
+        );
       });
     }
   });
@@ -182,7 +199,6 @@ void main() {
       WidgetTester tester,
       String path,
       FilePreviewData data, {
-      bool inScope = true,
       int? line,
       double width = 1440,
       double textScale = 1,
@@ -210,7 +226,6 @@ void main() {
                   child: TranscriptFilePreview(
                     path: EnvironmentPath(environmentId: 'wsl', path: path),
                     line: line,
-                    inScope: inScope,
                     onClose: () {},
                     onOpenInEditor: () {},
                     onOpenInFiles: () {},
@@ -390,10 +405,10 @@ void main() {
       expect(find.textContaining('ZIP file · 2.0 KB'), findsOneWidget);
     });
 
-    testWidgets('outside the checkout, nothing is read until asked', (
+    testWidgets('outside the checkout, it previews with no prompt', (
       tester,
     ) async {
-      final loader = _Fixed(text(FilePreviewKind.code, 'secret'));
+      final loader = _Fixed(text(FilePreviewKind.code, 'root:x:0:0'));
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = const Size(1440, 900);
       addTearDown(tester.view.reset);
@@ -408,7 +423,6 @@ void main() {
                   environmentId: 'wsl',
                   path: '/etc/passwd',
                 ),
-                inScope: false,
                 onClose: () {},
                 onOpenInEditor: () {},
                 onOpenInFiles: () {},
@@ -417,12 +431,14 @@ void main() {
           ),
         ),
       );
-      expect(loader.loads, 0);
-      expect(find.text('Preview anyway'), findsOneWidget);
-      await tester.tap(find.text('Preview anyway'));
-      await tester.pump();
       await tester.pump();
       expect(loader.loads, 1);
+      expect(find.text('Preview anyway'), findsNothing);
+      expect(find.textContaining('outside'), findsNothing);
+      expect(
+        find.textContaining('root:x:0:0', findRichText: true),
+        findsOneWidget,
+      );
     });
 
     for (final width in const [360.0, 390.0, 1440.0]) {

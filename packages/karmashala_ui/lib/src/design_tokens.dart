@@ -882,6 +882,12 @@ class Chrome {
   /// page's name in the app bar's title style, its controls and actions.
   static const tabAppBar = 44.0;
 
+  /// The tallest a picture named in a conversation is drawn inline.
+  static const inlineImage = 220.0;
+
+  /// One square thumbnail in a strip of several pictures.
+  static const imageThumb = 96.0;
+
   /// [tabAppBar] grown with the text scale; under a thumb, never under
   /// [Touch.appBarOf], so its actions keep their 48dp targets.
   static double tabAppBarOf(BuildContext context) {

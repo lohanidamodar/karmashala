@@ -2,6 +2,7 @@
 /// code and clickable paths, and the accordion an agent's reasoning folds into.
 library;
 
+export 'src/transcript/markdown_image.dart';
 export 'src/transcript/markdown_message.dart';
 export 'src/transcript/ansi_text.dart';
 export 'src/transcript/code_block.dart';
