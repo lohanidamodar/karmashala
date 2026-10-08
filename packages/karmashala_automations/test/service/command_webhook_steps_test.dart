@@ -126,7 +126,6 @@ void main() {
     late List<String> notified;
     late _Commands commands;
     late _Webhooks webhooks;
-    var checksOn = true;
 
     AutomationFollowUps followUps() => AutomationFollowUps(
       automations: dao,
@@ -137,7 +136,6 @@ void main() {
       newId: () => 'id',
       commands: commands,
       webhooks: webhooks,
-      checksOn: (_) => checksOn,
     );
 
     AutomationRun arm(List<AutomationStep> steps) {
@@ -163,7 +161,6 @@ void main() {
       db = fixtureDatabase();
       dao = AutomationDao(db);
       notified = [];
-      checksOn = true;
       commands = _Commands(
         const StepCommandResult(exitCode: 0, output: 'pushed'),
       );
@@ -194,16 +191,16 @@ void main() {
       );
     });
 
-    test('a command runs only where checks are on', () async {
-      checksOn = false;
+    test('a command runs in a checkout with no project checks', () async {
       final run = arm(const [
         AutomationStep(kind: AutomationStepKind.command, text: 'push'),
       ]);
       await followUps().after(run);
-      expect(commands.calls, isEmpty);
-      final result = dao.runById('run1')!.stepResults.single;
-      expect(result.outcome, AutomationStepOutcome.failed);
-      expect(result.detail, contains('checks are off'));
+      expect(commands.calls.single.command, 'push');
+      expect(
+        dao.runById('run1')!.stepResults.single.outcome,
+        AutomationStepOutcome.done,
+      );
     });
 
     test(

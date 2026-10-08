@@ -66,10 +66,7 @@ final checkoutFactsProvider = Provider<CheckoutFacts>(AppCheckoutFacts.new);
 
 /// The one place a fire is checked against the unattended rules.
 final unattendedPreflightProvider = Provider<UnattendedPreflight>(
-  (ref) => UnattendedPreflight(
-    facts: ref.watch(checkoutFactsProvider),
-    checks: ref.watch(projectChecksDataProvider),
-  ),
+  (ref) => UnattendedPreflight(facts: ref.watch(checkoutFactsProvider)),
 );
 
 /// Why the automation with this id cannot be armed or fired right now, or null.

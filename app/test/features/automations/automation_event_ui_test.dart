@@ -115,7 +115,7 @@ void main() {
           .textSpan!
           .toPlainText(),
       'In plain words: When a session finishes a turn, in app → tell that '
-      'session → check the result',
+      'session',
     );
     expect(find.textContaining('never reacts to a run it started'), findsOne);
 

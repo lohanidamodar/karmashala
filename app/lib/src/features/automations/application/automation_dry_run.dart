@@ -16,7 +16,6 @@ List<DryRunStep> dryRunSteps(
   Automation automation, {
   required String checkout,
   required String agent,
-  required List<String> checks,
 }) {
   final webhook = automation.webhook != null;
   final prompt = webhook
@@ -50,9 +49,10 @@ List<DryRunStep> dryRunSteps(
         AutomationStepKind.check => DryRunStep(
           step.kind.storedName,
           step.kind.label,
-          checks.isEmpty
-              ? 'Would find no checks to run in $checkout.'
-              : 'Would run ${checks.join(', ')} on what the agent did.',
+          step.checkCommands.isEmpty
+              ? 'Would run $checkout\'s project checks on what the agent did.'
+              : 'Would run in $checkout, failing the run on a non-zero '
+                    'exit:\n\n${step.checkCommands.join('\n')}',
         ),
         AutomationStepKind.command => DryRunStep(
           step.kind.storedName,

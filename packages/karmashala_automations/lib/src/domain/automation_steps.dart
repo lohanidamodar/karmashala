@@ -25,7 +25,8 @@ enum AutomationStepWhen {
 /// The steps that may follow the agent, always in this order and at most one
 /// of each — a fixed pipeline, not a general engine.
 enum AutomationStepKind {
-  /// Runs the checkout's project checks on what the agent did.
+  /// Runs its own commands on what the agent did; a non-zero exit fails the
+  /// run.
   check('check'),
 
   /// Runs a shell command in the run's checkout or worktree. Variables reach
@@ -69,13 +70,14 @@ enum AutomationStepKind {
 
 /// One step after the agent. [text] is the message for tell and notify, with
 /// `{{…}}` variables ([fillStepText]); the command for a command step, never
-/// filled; the body template for a webhook ([fillJsonBody]). A check carries
-/// none.
+/// filled; the body template for a webhook ([fillJsonBody]); a check's
+/// commands, one a line ([checkCommands]).
 class AutomationStep {
   const AutomationStep({
     required this.kind,
     this.when = AutomationStepWhen.success,
     this.text = '',
+    this.name = '',
     this.url = '',
     this.allowPrivate = false,
     this.timeoutSeconds,
@@ -84,6 +86,9 @@ class AutomationStep {
   final AutomationStepKind kind;
   final AutomationStepWhen when;
   final String text;
+
+  /// What a check is called in its run's rows; empty names it by its command.
+  final String name;
 
   /// Where a webhook step posts.
   final String url;
@@ -98,9 +103,16 @@ class AutomationStep {
       ? kind.defaultTimeout
       : Duration(seconds: timeoutSeconds!);
 
+  /// A check's commands, one a line, blank lines dropped.
+  List<String> get checkCommands => [
+    for (final line in text.split('\n'))
+      if (line.trim().isNotEmpty) line.trim(),
+  ];
+
   AutomationStep copyWith({
     AutomationStepWhen? when,
     String? text,
+    String? name,
     String? url,
     bool? allowPrivate,
     int? timeoutSeconds,
@@ -108,6 +120,7 @@ class AutomationStep {
     kind: kind,
     when: when ?? this.when,
     text: text ?? this.text,
+    name: name ?? this.name,
     url: url ?? this.url,
     allowPrivate: allowPrivate ?? this.allowPrivate,
     timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
@@ -117,6 +130,7 @@ class AutomationStep {
     'kind': kind.storedName,
     'when': when.name,
     if (text.isNotEmpty) 'text': text,
+    if (name.isNotEmpty) 'name': name,
     if (url.isNotEmpty) 'url': url,
     if (allowPrivate) 'allowPrivate': true,
     'timeoutSeconds': ?timeoutSeconds,
@@ -135,6 +149,7 @@ class AutomationStep {
         AutomationStepWhen.success,
       ),
       text: json['text'] as String? ?? '',
+      name: json['name'] as String? ?? '',
       url: json['url'] as String? ?? '',
       allowPrivate: json['allowPrivate'] == true,
       timeoutSeconds: json['timeoutSeconds'] as int?,
@@ -143,6 +158,8 @@ class AutomationStep {
 
   /// Why this step cannot be saved, or null when it can.
   String? get refusal => switch (kind) {
+    AutomationStepKind.check when text.trim().isEmpty =>
+      'Say what command checks the result, like "flutter test".',
     AutomationStepKind.command when text.trim().isEmpty =>
       'Say what command to run.',
     AutomationStepKind.command when text.contains('{{') =>
@@ -159,13 +176,14 @@ class AutomationStep {
       other.kind == kind &&
       other.when == when &&
       other.text == text &&
+      other.name == name &&
       other.url == url &&
       other.allowPrivate == allowPrivate &&
       other.timeoutSeconds == timeoutSeconds;
 
   @override
   int get hashCode =>
-      Object.hash(kind, when, text, url, allowPrivate, timeoutSeconds);
+      Object.hash(kind, when, text, name, url, allowPrivate, timeoutSeconds);
 
   @override
   String toString() => '${kind.storedName}(${when.name})';
@@ -179,10 +197,16 @@ class AutomationSteps {
 
   const AutomationSteps._(this.after, {this.stated = true});
 
-  /// What every automation did before steps existed: its checks ran after it.
+  /// What every automation did before steps existed: its checkout's project
+  /// checks ran after it. A check step with no command still means that, until
+  /// [carryProjectChecks] gives it theirs.
   static const AutomationSteps standard = AutomationSteps._([
     AutomationStep(kind: AutomationStepKind.check),
   ]);
+
+  /// Nothing after the agent: where a new automation starts, a check being
+  /// optional.
+  static const AutomationSteps none = AutomationSteps._([]);
 
   /// [standard], read from a sender that predates steps — a save from it keeps
   /// what is stored instead of overwriting it.
@@ -275,7 +299,7 @@ const Map<String, String> kStepVariables = {
   'project': 'The checkout it runs in',
   'run.status': '"succeeded" or "failed"',
   'steps.agent.output': 'How the agent\'s run ended',
-  'steps.check.output': 'What the checks said',
+  'steps.check.output': 'What the check said',
   'steps.command.output': 'What the command printed',
   'steps.command.exit_code': 'The command\'s exit code',
   'steps.webhook.status': 'The webhook\'s HTTP status',

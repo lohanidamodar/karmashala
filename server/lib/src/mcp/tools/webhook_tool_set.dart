@@ -198,7 +198,7 @@ class WebhookToolSet extends ServerToolSet {
         );
     }
     final steps = arguments['steps'] == null
-        ? AutomationSteps.standard
+        ? AutomationSteps.none
         : AutomationSteps.fromJson(arguments['steps']);
     if (steps.refusal case final why?) throw ArgumentError(why);
     var proposal = Automation(
@@ -363,7 +363,9 @@ const List<Map<String, Object?>> webhookToolSchemas = [
           'type': 'array',
           'description':
               'Steps after the agent: {kind: check|command|webhook|tell|'
-              'notify, when: success|failure|always, text, url}.',
+              'notify, when: success|failure|always, text, url, name}. A check '
+              'is optional; its text is its command, one a line, like '
+              '"flutter test".',
           'items': {'type': 'object'},
         },
       },

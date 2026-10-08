@@ -19,12 +19,17 @@ class AutomationTemplate {
   final AutomationDraft Function(String? repositoryId) build;
 }
 
-const _check = AutomationStep(kind: AutomationStepKind.check);
+/// The command is a starting point the editor shows to change.
+const _check = AutomationStep(
+  kind: AutomationStepKind.check,
+  text: 'flutter test',
+  name: 'the tests',
+);
 
 const _tellOnFailure = AutomationStep(
   kind: AutomationStepKind.tell,
   when: AutomationStepWhen.failure,
-  text: 'The checks failed:\n\n{{steps.check.output}}\n\nFix them.',
+  text: 'The check failed:\n\n{{steps.check.output}}\n\nFix it.',
 );
 
 const _notifyAlways = AutomationStep(

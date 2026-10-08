@@ -4,27 +4,18 @@ import 'package:agent_cli/descriptors.dart';
 
 /// The rules that keep an agent from starting with nobody watching.
 ///
-/// One test per rule, and one for the order they are applied in — the order is
-/// what decides which sentence a person is shown when two things are wrong at
-/// once, and it is chosen so the first sentence is the one they can act on.
+/// One test per rule, and one for the order they are applied in. A check is
+/// an optional step, never one of these rules.
 void main() {
   UnattendedGateInput input({
-    bool verificationEnabled = true,
-    int projectCheckCount = 1,
     bool agentInstalled = true,
     PermissionRisk? permits = PermissionRisk.autoRun,
     String permissionLabel = 'Automatic',
     String permissionEvidence = '',
     UnattendedReach reach = UnattendedReach.reachable,
     String reachReason = '',
-    bool requiresChecks = true,
-    bool hasCheckStep = true,
   }) => UnattendedGateInput(
-    requiresChecks: requiresChecks,
-    hasCheckStep: hasCheckStep,
     repositoryName: 'app',
-    verificationEnabled: verificationEnabled,
-    projectCheckCount: projectCheckCount,
     agentName: 'Claude Code',
     agentInstalled: agentInstalled,
     permits: permits,
@@ -39,87 +30,18 @@ void main() {
     expect(canRunUnattended(input()), isTrue);
   });
 
-  group('verification is mandatory when nobody is watching', () {
-    test(
-      'verification off is refused, and the sentence names the checkout',
-      () {
-        final refusal = unattendedRefusal(input(verificationEnabled: false));
-        expect(refusal?.kind, UnattendedRefusalKind.verificationDisabled);
-        expect(refusal!.reason, contains('Checks are off for app'));
-        expect(refusal.reason, contains('at least one'));
-      },
+  test('an agent that never asks runs unattended with no check at all', () {
+    // Checks are an optional step: nothing about them is an input any more.
+    for (final risk in const [PermissionRisk.autoRun, PermissionRisk.bypass]) {
+      expect(unattendedRefusal(input(permits: risk)), isNull);
+    }
+  });
+
+  test('an agent that asks is refused, the one rule that stays', () {
+    expect(
+      unattendedRefusal(input(permits: PermissionRisk.ask))?.kind,
+      UnattendedRefusalKind.permissionModeCanPrompt,
     );
-
-    test('verification on with no check at all is refused', () {
-      final refusal = unattendedRefusal(input(projectCheckCount: 0));
-      expect(refusal?.kind, UnattendedRefusalKind.noProjectChecks);
-      expect(refusal!.reason, contains('no check yet'));
-    });
-
-    test('one check is enough', () {
-      expect(unattendedRefusal(input(projectCheckCount: 1)), isNull);
-    });
-  });
-
-  group('a check step judges what the agent did', () {
-    test('an agent that may change things needs one', () {
-      final refusal = unattendedRefusal(input(hasCheckStep: false));
-      expect(refusal?.kind, UnattendedRefusalKind.noCheckStep);
-      expect(refusal!.reason, contains('Check the result'));
-    });
-
-    test('a read-only agent changes nothing, so needs no check at all', () {
-      expect(
-        unattendedRefusal(
-          input(
-            permits: PermissionRisk.readOnly,
-            verificationEnabled: false,
-            projectCheckCount: 0,
-            hasCheckStep: false,
-          ),
-        ),
-        isNull,
-      );
-    });
-
-    test('the check step comes before the mode, as the other checks do', () {
-      final refusal = unattendedRefusal(
-        input(permits: PermissionRisk.ask, hasCheckStep: false),
-      );
-      expect(refusal?.kind, UnattendedRefusalKind.noCheckStep);
-    });
-  });
-
-  group('a scheduled resume is excused the checks, and nothing else', () {
-    test('verification off and no check are not refused', () {
-      expect(
-        unattendedRefusal(
-          input(
-            verificationEnabled: false,
-            projectCheckCount: 0,
-            requiresChecks: false,
-          ),
-        ),
-        isNull,
-      );
-    });
-
-    test('a mode that prompts still is, in the same sentence', () {
-      final resume = unattendedRefusal(
-        input(permits: PermissionRisk.ask, requiresChecks: false),
-      );
-      expect(resume?.kind, UnattendedRefusalKind.permissionModeCanPrompt);
-      expect(resume, unattendedRefusal(input(permits: PermissionRisk.ask)));
-    });
-
-    test('and so is a machine this app cannot reach', () {
-      expect(
-        unattendedRefusal(
-          input(reach: UnattendedReach.unreachable, requiresChecks: false),
-        )?.kind,
-        UnattendedRefusalKind.environmentUnreachable,
-      );
-    });
   });
 
   group('a mode that prompts is refused, never downgraded', () {
@@ -223,43 +145,18 @@ void main() {
     );
   });
 
-  test(
-    'the checkout is named before the mode, and the mode before the machine',
-    () {
-      // Everything wrong at once: the first sentence is the one the arm form can
-      // offer a fix for.
-      final all = input(
-        verificationEnabled: false,
-        projectCheckCount: 0,
-        permits: PermissionRisk.ask,
-        reach: UnattendedReach.unreachable,
-      );
-      expect(
-        unattendedRefusal(all)?.kind,
-        UnattendedRefusalKind.verificationDisabled,
-      );
-      expect(
-        unattendedRefusal(
-          input(projectCheckCount: 0, permits: PermissionRisk.ask),
-        )?.kind,
-        UnattendedRefusalKind.noProjectChecks,
-      );
-      expect(
-        unattendedRefusal(
-          input(
-            permits: PermissionRisk.ask,
-            reach: UnattendedReach.unreachable,
-          ),
-        )?.kind,
-        UnattendedRefusalKind.permissionModeCanPrompt,
-      );
-    },
-  );
+  test('the mode is named before the machine', () {
+    expect(
+      unattendedRefusal(
+        input(permits: PermissionRisk.ask, reach: UnattendedReach.unreachable),
+      )?.kind,
+      UnattendedRefusalKind.permissionModeCanPrompt,
+    );
+  });
 
   test('a refusal is never wordless', () {
     for (final refusal in [
-      unattendedRefusal(input(verificationEnabled: false)),
-      unattendedRefusal(input(projectCheckCount: 0)),
+      unattendedRefusal(input(agentInstalled: false)),
       unattendedRefusal(input(permits: null)),
       unattendedRefusal(input(permits: PermissionRisk.ask)),
       unattendedRefusal(input(reach: UnattendedReach.unnamed)),

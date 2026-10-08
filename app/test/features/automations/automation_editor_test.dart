@@ -142,7 +142,8 @@ void main() {
     final stored = server.automationRows.getAll().single;
     expect(stored.latePolicy, AutomationLatePolicy.skip);
     expect(stored.schedule.cron, '0 9 * * 1-5');
-    expect(stored.steps, AutomationSteps.standard);
+    // A check is optional, so a new automation starts with none.
+    expect(stored.steps, AutomationSteps.none);
   });
 
   testWidgets('it says what it does in plain words, and reads back when it '
@@ -171,8 +172,7 @@ void main() {
         .toPlainText();
     expect(
       summary,
-      'In plain words: Every day at 09:00, in app → start Claude Code → '
-      'check the result',
+      'In plain words: Every day at 09:00, in app → start Claude Code',
     );
     expect(find.textContaining('0 9 * *'), findsNothing, reason: 'no cron');
   });
@@ -192,7 +192,7 @@ void main() {
       find.textContaining('stops to ask, and nobody would be there'),
       findsOneWidget,
     );
-    expect(find.textContaining('app has no check yet'), findsOneWidget);
+    expect(find.textContaining('no check yet'), findsNothing);
     expect(save(tester).onPressed, isNull);
     expect(
       tester
@@ -206,38 +206,78 @@ void main() {
       kNotReadyTooltip,
     );
 
-    makeReady();
-    await tester.pumpAndSettle();
-    expect(find.textContaining('A check judges the result: tests'), findsOne);
-
+    // With no check anywhere, a mode that never asks is all it takes.
     await tester.tap(_field<AutomationPermissionModeField>());
     await tester.pumpAndSettle();
     await tester.tap(item('mode=auto').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('never stops to ask'), findsOneWidget);
-    expect(save(tester).onPressed, isNotNull);
-
-    // Taking the check step away is its own cross, with its fix beside it.
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('automation-remove-check')),
+    expect(
+      find.text('A checkpoint is taken first, so a run can be undone.'),
+      findsOneWidget,
     );
-    await tester.tap(find.byKey(const ValueKey('automation-remove-check')));
-    await tester.pumpAndSettle();
-    expect(find.text('Nothing checks what the agent did.'), findsOneWidget);
-    expect(save(tester).onPressed, isNull);
-    await tester.tap(find.text('Add "Check the result"'));
-    await tester.pumpAndSettle();
     expect(save(tester).onPressed, isNotNull);
   });
 
-  testWidgets('a read-only agent needs no check', (tester) async {
+  testWidgets('"Check the result" is optional and carries its own command', (
+    tester,
+  ) async {
     await pump(
       tester,
-      const AutomationDraft(repositoryId: 'r1', name: 'Look', prompt: 'look'),
+      const AutomationDraft(repositoryId: 'r1', name: 'N', prompt: 'p'),
     );
-    await pickAgent(tester, mode: 'mode=plan');
-    expect(find.text('Read-only, so there is nothing to check.'), findsOne);
+    await pickAgent(tester);
     expect(save(tester).onPressed, isNotNull);
+
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('automation-add-step')),
+    );
+    await tester.tap(find.byKey(const ValueKey('automation-add-step')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check the result').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Say what command checks'), findsOneWidget);
+    expect(save(tester).onPressed, isNull);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-text-check')),
+      'flutter test',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('automation-name-check')),
+      'the tests',
+    );
+    await tester.pumpAndSettle();
+    expect(save(tester).onPressed, isNotNull);
+    await tester.tap(find.byKey(const ValueKey('automation-save')));
+    await tester.pumpAndSettle();
+    final step = server.automationRows.getAll().single.steps.of(
+      AutomationStepKind.check,
+    )!;
+    expect(step.text, 'flutter test');
+    expect(step.name, 'the tests');
+  });
+
+  testWidgets('a stored automation opened to edit carries its checkout\'s '
+      'checks into its check step', (tester) async {
+    makeReady();
+    final old = Automation(
+      id: 'auto1',
+      repositoryId: 'r1',
+      name: 'Nightly',
+      schedule: const AutomationSchedule.cron('0 2 * * *'),
+      agentInstallationId: 'a1',
+      prompt: 'fix it',
+      permissionMode: const PermissionSelection({'mode': 'auto'}),
+      enabled: true,
+      armedAt: now,
+    );
+    expect(old.steps, AutomationSteps.standard);
+    container.read(automationEditorProvider.notifier).edit(old);
+    final draft = container.read(automationEditorProvider)!.draft;
+    final step = draft.steps.of(AutomationStepKind.check)!;
+    expect(step.text, 'flutter test');
+    expect(step.name, 'tests');
   });
 
   testWidgets('steps after the agent: failure ones sit on the amber rail', (
@@ -449,7 +489,6 @@ void main() {
 
   testWidgets('Dry run says what each step would do and starts nothing; '
       'Run now starts a real run of what is saved', (tester) async {
-    makeReady();
     final existing = Automation(
       id: 'auto1',
       repositoryId: 'r1',
@@ -460,6 +499,9 @@ void main() {
       permissionMode: const PermissionSelection({'mode': 'auto'}),
       enabled: true,
       armedAt: now,
+      steps: AutomationSteps(const [
+        AutomationStep(kind: AutomationStepKind.check, text: 'flutter test'),
+      ]),
     );
     server.automationRows.insert(existing);
     await pump(tester, AutomationDraft.from(existing));
@@ -474,7 +516,13 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Would run tests on what the agent did.'), findsOne);
+    expect(
+      find.text(
+        'Would run in app, failing the run on a non-zero exit:\n\n'
+        'flutter test',
+      ),
+      findsOne,
+    );
     expect(server.automationRows.ranNow, isEmpty);
 
     await tester.tap(find.byKey(const ValueKey('automation-run-now')));

@@ -12,6 +12,7 @@ import 'package:karmashala_automations/automations.dart'
 import 'package:karmashala_automations/webhooks.dart'
     show fillWebhookTemplate, webhookSampleBody, webhookTemplateFields;
 import 'package:karmashala_automations/check_runner.dart';
+import 'package:karmashala_automations/checks.dart' show carryProjectChecks;
 import 'package:karmashala_automations/github.dart'
     show GithubApi, kGithubVariables;
 import 'package:karmashala_automations/records.dart';
@@ -26,6 +27,7 @@ import 'package:karmashala_checkpoints/store.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
+        AutomationChanged,
         CheckpointRecorded,
         ChecksRun,
         DataChange,
@@ -165,7 +167,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       log: _log,
     );
     checks = checkRunner;
-    final preflight = UnattendedPreflight(facts: facts, checks: projectChecks);
+    final preflight = UnattendedPreflight(facts: facts);
     late final HostedAgentLauncher launcher;
     final runner = _runner = AutomationRunner(
       automations: automations,
@@ -306,9 +308,6 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
           stepCommands ??
           ServerStepCommands(facts: facts, sessionOf: sessions.getById),
       webhooks: stepWebhooks ?? ServerStepWebhooks(),
-      checksOn: (repositoryId) =>
-          projectChecks.isVerificationEnabled(repositoryId) &&
-          projectChecks.countFor(repositoryId) > 0,
     );
     github = DaemonGithub(
       dao: AutomationDao(database),
@@ -682,11 +681,32 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   }) async {
     _statusChanges = statusChanges.listen(_onStatus);
     _agentStatuses = agentStatus?.listen(_onAgentStatus);
+    carryChecksIntoSteps();
     settler.sweep(owns: _ownsSession);
     _resumes.failInterrupted();
     await scheduler.start();
     github.startPolling();
     AutomationDao(_db).proposed().forEach(fileProposal);
+  }
+
+  /// Gives each "Check the result" step that names no command its checkout's
+  /// project checks, which is what it ran before a check carried its own.
+  /// Once: a carried step has a command, so a second pass changes nothing.
+  void carryChecksIntoSteps() {
+    final dao = AutomationDao(_db);
+    final checks = ProjectCheckDao(_db);
+    for (final automation in dao.getAll()) {
+      final carried = carryProjectChecks(
+        automation.steps,
+        checks.forRepository(automation.repositoryId),
+      );
+      if (carried == null) continue;
+      dao.update(automation.copyWith(steps: carried));
+      _log('carried project checks into "${automation.name}"');
+      if (dao.getById(automation.id) case final row?) {
+        _told(AutomationChanged(row));
+      }
+    }
   }
 
   Future<void> close() async {

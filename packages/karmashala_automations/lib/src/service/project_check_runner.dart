@@ -6,8 +6,10 @@ import 'package:karmashala_verification/check_results.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/verification.dart';
 
+import '../domain/automation.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
+import '../domain/automation_steps.dart';
 import '../domain/project_check.dart';
 import 'automation_records.dart';
 
@@ -17,7 +19,27 @@ import 'checkout_facts.dart';
 /// One session's checks: each as it ran, and the one run that records them.
 typedef SessionChecks = ({List<CommandCheck> checks, VerificationRun run});
 
-/// Runs a checkout's project checks one after another and records what each
+/// The checks [automation]'s "Check the result" step runs: its own commands,
+/// or — for a step from before it carried any, until [carryProjectChecks]
+/// stores them on it — its checkout's [projectChecks]. Empty when it has no
+/// check step.
+List<ProjectCheck> automationChecks(
+  Automation automation,
+  List<ProjectCheck> projectChecks,
+) {
+  final step = automation.steps.of(AutomationStepKind.check);
+  if (step == null) return const [];
+  if (step.text.trim().isEmpty) return projectChecks;
+  return checksOfStep(
+    step,
+    automationId: automation.id,
+    repositoryId: automation.repositoryId,
+    at: automation.armedAt,
+  );
+}
+
+/// Runs an automation's check step, or a session's project checks, one after
+/// another and records what each
 /// said, as Karmashala's own reading ([kAppVerifierId]) — never the session's
 /// claim about itself. A check that could not run is inconclusive, never a pass.
 class ProjectCheckRunner {
@@ -79,7 +101,7 @@ class ProjectCheckRunner {
   }) async {
     final automation = _dao.getById(run.automationId);
     if (automation == null) return;
-    final checks = _checks.forRepository(automation.repositoryId);
+    final checks = _checksOf(automation);
     if (checks.isEmpty) {
       // Observed, with nothing to observe with: not the same as never looked.
       _dao.noteChecksObserved(run.id, _now());
@@ -109,7 +131,7 @@ class ProjectCheckRunner {
     final automation = _dao.getById(run.automationId);
     if (automation == null) return;
     var ordinal = 0;
-    for (final check in _checks.forRepository(automation.repositoryId)) {
+    for (final check in _checksOf(automation)) {
       ordinal++;
       _dao.insertRunCheck(
         AutomationCheckVerdict(
@@ -127,6 +149,11 @@ class ProjectCheckRunner {
     _dao.noteChecksObserved(run.id, _now());
     _onChanged();
   }
+
+  List<ProjectCheck> _checksOf(Automation automation) => automationChecks(
+    automation,
+    _checks.forRepository(automation.repositoryId),
+  );
 
   Future<AutomationCheckVerdict> _runOne({
     required AutomationRun run,

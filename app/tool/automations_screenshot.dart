@@ -15,7 +15,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala/src/features/automations/application/automation_draft.dart';
 import 'package:karmashala/src/features/automations/application/automation_editor_state.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/automation_templates.dart';
@@ -224,9 +223,6 @@ Future<ProviderContainer> _container() async {
       webhooksOfferedProvider.overrideWithValue(true),
     ],
   );
-  container
-      .read(projectChecksDataProvider)
-      .setVerification('r1', enabled: true);
   container.read(automationControllerProvider).addCheck(
     'r1',
     'Test suite',
@@ -246,6 +242,7 @@ void main() {
     String name, {
     required Size size,
     required Brightness brightness,
+    double textScale = 1,
     void Function(ProviderContainer container)? arrange,
     Future<void> Function(WidgetTester tester)? then,
   }) async {
@@ -268,6 +265,12 @@ void main() {
             themeMode: brightness == Brightness.dark
                 ? ThemeMode.dark
                 : ThemeMode.light,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(textScale)),
+              child: child!,
+            ),
             home: const Scaffold(body: AutomationsTabView()),
           ),
         ),
@@ -285,9 +288,22 @@ void main() {
     });
   }
 
-  void editNightly(ProviderContainer container) => container
-      .read(automationEditorProvider.notifier)
-      .open(AutomationDraft.from(_nightly()));
+  void editNightly(ProviderContainer container) =>
+      container.read(automationEditorProvider.notifier).edit(_nightly());
+
+  for (final width in const <double>[360, 390, 1100, 1440, 1920]) {
+    for (final scale in const [1.0, 1.6]) {
+      testWidgets('grid $width at $scale', (tester) async {
+        await shoot(
+          tester,
+          'grid-${width.toInt()}-x$scale',
+          size: Size(width, 1000),
+          brightness: Brightness.dark,
+          textScale: scale,
+        );
+      });
+    }
+  }
 
   void runs(ProviderContainer container) => container
       .read(automationsSectionProvider.notifier)

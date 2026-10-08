@@ -2481,7 +2481,7 @@
           },
           "steps": {
             "type": "array",
-            "description": "Steps after the agent: {kind: check|command|webhook|tell|notify, when: success|failure|always, text, url}.",
+            "description": "Steps after the agent: {kind: check|command|webhook|tell|notify, when: success|failure|always, text, url, name}. A check is optional; its text is its command, one a line, like \"flutter test\".",
             "items": {
               "type": "object"
             }

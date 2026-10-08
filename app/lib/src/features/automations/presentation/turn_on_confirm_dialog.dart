@@ -40,12 +40,6 @@ Future<bool> confirmTurnOn(
     checkout: repository?.name ?? 'its checkout',
     agent: descriptor?.displayName ?? 'the agent',
     permissions: descriptor?.launch.permission,
-    checks: [
-      for (final check in ref.read(
-        projectChecksProvider(automation.repositoryId),
-      ))
-        check.name,
-    ],
     proposedBy: proposedBy,
     now: ref.read(clockProvider).nowUtc(),
   );

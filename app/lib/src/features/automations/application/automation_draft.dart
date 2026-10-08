@@ -76,7 +76,7 @@ class AutomationDraft {
     this.prefersReadOnly = false,
     this.worktree = false,
     this.prompt = '',
-    this.steps = AutomationSteps.standard,
+    this.steps = AutomationSteps.none,
     this.stopAfterFailures = kDefaultStopAfterFailures,
     this.maxRuntimeMinutes,
   });
