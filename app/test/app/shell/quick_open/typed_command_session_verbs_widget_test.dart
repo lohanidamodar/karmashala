@@ -19,6 +19,8 @@ import 'package:karmashala/src/features/remote/application/remote_approval_bindi
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionSent;
 import 'package:karmashala_remote/remote.dart';
 
 import '../../../features/terminal/fake_instance.dart';
@@ -50,10 +52,22 @@ class _SpyMessage extends OverviewQuickMessage {
 
   final sent = <(String, String)>[];
 
+  /// The key each send carried.
+  final keys = <String>[];
+
+  /// What the server answers for each session; none is sent at once.
+  final replies = <String, SessionSent>{};
+
   @override
-  Future<QuickMessageOutcome> send(String sessionId, String text) async {
+  Future<QuickMessageSent> send(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) async {
     sent.add((sessionId, text));
-    return QuickMessageOutcome.sent;
+    final key = requestId ?? 'key-${keys.length}';
+    keys.add(key);
+    return QuickMessageSent(requestId: key, reply: replies[sessionId]);
   }
 }
 
@@ -321,6 +335,31 @@ void main() {
     await runner.run(const StopAllCommand(['s1', 's2']));
     // Neither has a live terminal here, and each says so rather than guess.
     expect(said, hasLength(2));
+  });
+
+  testWidgets('message says what the server did with it, never a guess: '
+      'queued, at its place', (tester) async {
+    final container = await open(tester);
+    final said = <String>[];
+    final runner = TypedCommandRunner(container, say: said.add);
+    messages.replies['s1'] = const SessionSent(
+      sent: true,
+      via: SessionSent.queuedVia,
+      queuedId: 'q2',
+      position: 2,
+      messageId: 'q2',
+    );
+
+    await runner.run(const MessageCommand(['s1'], 'and the docs'));
+    expect(
+      said.single,
+      'Queued for "Fix login redirect" (2nd) — it goes when the turn ends.',
+    );
+    expect(messages.keys.single, isNotEmpty);
+
+    said.clear();
+    await runner.run(const MessageCommand(['s1', 's2'], 'wrap up'));
+    expect(said.single, 'Sent to 2 (1 queued behind a turn).');
   });
 
   testWidgets('a group confirm names every session, and Cancel runs '

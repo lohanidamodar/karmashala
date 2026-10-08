@@ -11,6 +11,8 @@ import '../../../features/overview/application/overview_quick_message.dart';
 import '../../../features/overview/application/overview_resume.dart';
 import '../../../features/remote/application/remote_approval_bindings.dart';
 import '../../../features/sessions/application/session_actions.dart';
+import '../../../features/sessions/presentation/queued_messages_strip.dart'
+    show ordinalWord;
 import '../../../features/sessions/presentation/approval_request_card.dart'
     show BoardApproval, answerBoardApprovalBy;
 import 'package:karmashala_git/git.dart';
@@ -161,11 +163,15 @@ class TypedCommandRunner {
   Future<void> _message(MessageCommand command) async {
     final quick = _container.read(overviewQuickMessageProvider);
     var queued = 0;
+    int? place;
     final failed = <String>[];
     for (final id in command.sessionIds) {
       try {
-        if (await quick.send(id, command.text) == QuickMessageOutcome.queued) {
+        // Queued as the server answered for it, never guessed beforehand.
+        final sent = await quick.send(id, command.text);
+        if (sent.queued) {
           queued++;
+          place = sent.position;
         }
       } on Object catch (error) {
         failed.add(
@@ -180,8 +186,9 @@ class TypedCommandRunner {
         if (sent > 0)
           one
               ? queued > 0
-                    ? 'Queued for "${_title(command.sessionIds.single)}" — '
-                          'it goes when the turn ends.'
+                    ? 'Queued for "${_title(command.sessionIds.single)}"'
+                          '${place == null ? '' : ' (${ordinalWord(place)})'}'
+                          ' — it goes when the turn ends.'
                     : 'Sent to "${_title(command.sessionIds.single)}".'
               : 'Sent to $sent${queued > 0 ? ' ($queued queued behind a '
                           'turn)' : ''}.',

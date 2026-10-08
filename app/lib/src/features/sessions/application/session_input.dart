@@ -9,6 +9,32 @@ import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_providers.dart';
 import 'session_message_typist.dart';
 
+/// **What the server answered each send**, by the request id it carried
+/// ([SessionSent]: delivered at once, or queued at a place with its row's
+/// id). Read by a sender that shows what became of its message — the
+/// dashboard's quick box, batch replies and Ctrl+K's `message` — from the
+/// server's own words rather than a guess. The most recent few only.
+class SessionSendReplies extends Notifier<Map<String, SessionSent>> {
+  static const _kept = 64;
+
+  @override
+  Map<String, SessionSent> build() => const {};
+
+  void record(String requestId, SessionSent sent) {
+    final next = {...state}..remove(requestId);
+    next[requestId] = sent;
+    while (next.length > _kept) {
+      next.remove(next.keys.first);
+    }
+    state = next;
+  }
+}
+
+final sessionSendRepliesProvider =
+    NotifierProvider<SessionSendReplies, Map<String, SessionSent>>(
+      SessionSendReplies.new,
+    );
+
 /// **Where a person's message and Stop are typed.** A server that offers it
 /// types them as host keys (`sessions.send`, `sessions.interrupt`), so this
 /// client never takes the session's input or resizes its terminal; otherwise
@@ -29,6 +55,7 @@ class SessionInput {
   Future<bool> send(String sessionId, String text, {String? requestId}) async {
     final local = _ref.read(sessionMessageTypistProvider);
     if (!viaServer) return local.send(sessionId, text);
+    final key = requestId ?? newSessionInputId();
     try {
       final reply = await _ref
           .read(dataClientProvider)
@@ -36,10 +63,12 @@ class SessionInput {
             SessionSend(
               sessionId: sessionId,
               text: text.trim(),
-              requestId: requestId ?? newSessionInputId(),
+              requestId: key,
             ),
           );
       final sent = reply.value;
+      // Kept by its key, for a sender that shows what became of it.
+      _ref.read(sessionSendRepliesProvider.notifier).record(key, sent);
       _log.info(
         sent.queued
             ? 'Queued for $sessionId at the server, place ${sent.position}'
