@@ -126,6 +126,16 @@ void main() {
     await unmountMission(tester);
   });
 
+  testWidgets('with no card in view, nothing is "the same on every card"', (
+    tester,
+  ) async {
+    final c = await pumpMission(tester, fixture: filed(), prefsDir: dir);
+    c.read(overviewPrefsProvider.notifier).setProjects(const {});
+    await settleMission(tester);
+    expect(c.read(overviewCardDetailsProvider).same, isEmpty);
+    await unmountMission(tester);
+  });
+
   testWidgets('a part the person hid is not also counted as the same', (
     tester,
   ) async {

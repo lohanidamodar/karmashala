@@ -163,9 +163,11 @@ final overviewCardDetailsProvider = Provider.autoDispose<OverviewCardDetails>((
       values[OverviewCardDetail.machine]!.add(facts.machineOf(entry));
     }
   }
+  // With no card in view there is nothing to say "the same on every card" of.
   final same = {
-    for (final MapEntry(key: detail, value: seen) in values.entries)
-      if (seen.length <= 1) detail,
+    if (inView.isNotEmpty)
+      for (final MapEntry(key: detail, value: seen) in values.entries)
+        if (seen.length <= 1) detail,
   };
   return OverviewCardDetails(
     shown: {

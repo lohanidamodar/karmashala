@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_core/util.dart' show matchesSearch;
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -368,10 +369,10 @@ class _OverviewChecklistState extends State<OverviewChecklist> {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    final query = _query.text.trim().toLowerCase();
+    final query = _query.text.trim();
     final shown = [
       for (final option in options)
-        if (query.isEmpty || option.label.toLowerCase().contains(query)) option,
+        if (query.isEmpty || matchesSearch(query, option.label)) option,
     ];
 
     return Padding(
