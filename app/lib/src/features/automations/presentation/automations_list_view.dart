@@ -302,17 +302,22 @@ class _CheckoutGroup extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Flexible(
-                child: Text(
-                  name,
-                  style: theme.textTheme.titleSmall,
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    text: name,
+                    style: theme.textTheme.titleSmall,
+                    children: [
+                      TextSpan(
+                        text: ' · ${automations.length}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: Insets.xs),
-              Text('· ${automations.length}', style: theme.textTheme.bodySmall),
-              const Spacer(),
               if (repository case final repository?)
                 IconButton(
                   key: ValueKey('automation-new-in-${repository.id}'),

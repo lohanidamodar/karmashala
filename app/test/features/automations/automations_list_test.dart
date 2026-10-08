@@ -313,8 +313,7 @@ void main() {
         ),
       );
     await pump(tester);
-    expect(find.text('app'), findsWidgets);
-    expect(find.text('· 2'), findsOneWidget);
+    expect(find.text('app · 2'), findsOneWidget);
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('automation-summary-auto1')))
