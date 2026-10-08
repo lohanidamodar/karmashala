@@ -227,6 +227,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// [_drafts]' twin for files, held for the same reason.
   late final ComposerAttachments _queuedFiles;
 
+  /// Where half-typed text waits while no view of its session is open.
+  late final ParkedDrafts _parked;
+
+  /// A parked draft is looked for once, on the first frame of a session.
+  bool _restoreDue = true;
+
   /// Set before the draft is parked, because parking it notifies this widget's
   /// own listener on the same provider and `ref` is dead by then.
   bool _leaving = false;
@@ -241,6 +247,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     super.initState();
     _drafts = ref.read(composerDraftProvider.notifier);
     _queuedFiles = ref.read(composerAttachmentsProvider.notifier);
+    _parked = ref.read(parkedDraftsProvider);
   }
 
   @override
@@ -248,6 +255,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     super.didUpdateWidget(old);
     if (old.holdForPrompt != widget.holdForPrompt) _footer = null;
     if (old.sessionId != widget.sessionId) {
+      // Text typed for the last session is kept for it, never sent to this.
+      _parked.park(old.sessionId, _composer.text);
+      _composer.clear();
+      _restoreDue = true;
       _footer = null;
       _resolver = null;
       _sendKey = null;
@@ -262,8 +273,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // The workbench unmounts the conversation when it moves to another session,
     // so half-typed text is parked where the next mount already looks for it.
     _leaving = true;
-    final draft = _composer.text;
-    if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
+    _parked.park(widget.sessionId, _composer.text);
     _composer.dispose();
     unawaited(_dropped.close());
     _filesQueued.dispose();
@@ -297,6 +307,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     _composer.text = existing.isEmpty ? queued : '$existing\n\n$queued';
     _composer.selection = TextSelection.collapsed(
       offset: _composer.text.length,
+    );
+  }
+
+  /// Puts back what this session's last closed view left typed — only into
+  /// an empty box; otherwise it stays parked for the next one.
+  void _restoreParked() {
+    if (_leaving || !_restoreDue) return;
+    _restoreDue = false;
+    if (_composer.text.trim().isNotEmpty) return;
+    final parked = _parked.take(widget.sessionId);
+    if (parked == null) return;
+    _composer.value = TextEditingValue(
+      text: parked,
+      selection: TextSelection.collapsed(offset: parked.length),
     );
   }
 
@@ -646,6 +670,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _restoreParked();
       _takeQueuedNote();
     });
     final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
