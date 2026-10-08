@@ -14,6 +14,8 @@ import 'package:karmashala/src/features/overview/application/overview_reads.dart
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_done_card.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_title_block.dart'
+    show OverviewChipFit;
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:karmashala_session/delivery.dart'
     show DeliveryAction, OfferedAction;
@@ -840,7 +842,13 @@ void main() {
           );
           final row = find.byKey(const ValueKey('overview-phone-row:ks-r32'));
           await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
-          await tester.tap(row);
+          // The title: the row's own controls may sit at its middle.
+          final title = find.byKey(
+            const ValueKey('overview-card-title:ks-r32'),
+          );
+          await tester.ensureVisible(title);
+          await settleMission(tester);
+          await tester.tap(title);
           await settleMission(tester);
 
           // A page with a slim bar, not a sheet with a drag handle.
@@ -918,10 +926,24 @@ void main() {
         await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
         expect(row, findsOneWidget);
         expect(workCard('ks-r32'), findsNothing);
-        // Two lines: the title and what it is doing, nothing more.
+        // Two lines: the title and what it is doing, nothing more, beside
+        // the state chip (which holds its full and short forms).
+        final chip = find.descendant(
+          of: row,
+          matching: find.byType(OverviewChipFit),
+        );
+        expect(chip, findsOneWidget);
         expect(
-          find.descendant(of: row, matching: find.byType(Text)),
-          findsNWidgets(3),
+          find
+              .descendant(of: row, matching: find.byType(Text))
+              .evaluate()
+              .where(
+                (e) => find
+                    .descendant(of: chip, matching: find.byWidget(e.widget))
+                    .evaluate()
+                    .isEmpty,
+              ),
+          hasLength(2),
         );
         final ready = find.byKey(const ValueKey('overview-phone-row:ks-r30'));
         await tester.scrollUntilVisible(ready, 300, scrollable: hybridList);

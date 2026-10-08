@@ -17,6 +17,7 @@ import '../application/overview_card_line.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
+import 'overview_title_block.dart' show OverviewChipFit;
 
 /// The colour a state is drawn in on the Overview; null for no colour.
 Color? overviewStateColor(BuildContext context, AgentState state) {
@@ -200,6 +201,9 @@ class OverviewStatePill extends ConsumerWidget {
           : card.waitingOn != null
           ? 'Waiting'
           : '${card.state.label} · ${compactAge(now.difference(since))}',
+      shortLabel: overviewIsStarting(card) || card.waitingOn != null
+          ? null
+          : compactAge(now.difference(since)),
       color: color,
     );
   }
@@ -235,6 +239,7 @@ class OverviewStateChip extends StatelessWidget {
   const OverviewStateChip({
     required this.state,
     this.label,
+    this.shortLabel,
     this.color,
     super.key,
   });
@@ -243,6 +248,10 @@ class OverviewStateChip extends StatelessWidget {
 
   /// The words, when not the state's own label.
   final String? label;
+
+  /// Drawn with the colour's dot where [label] would not fit whole — "1m"
+  /// for "Working · 1m" — so the chip never ends mid-word.
+  final String? shortLabel;
   final Color? color;
 
   @override
@@ -252,7 +261,12 @@ class OverviewStateChip extends StatelessWidget {
         color ??
         overviewStateColor(context, state) ??
         theme.colorScheme.onSurfaceVariant;
-    return Container(
+    final style = theme.textTheme.labelSmall?.copyWith(
+      color: ink,
+      fontWeight: FontWeight.w600,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    Widget pill(Widget child) => Container(
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.sm - Insets.xxs,
         vertical: Insets.hair,
@@ -261,14 +275,43 @@ class OverviewStateChip extends StatelessWidget {
         color: ink.withValues(alpha: StateLayers.selectedAlpha),
         borderRadius: BorderRadius.circular(Radii.pill),
       ),
-      child: Text(
+      child: child,
+    );
+    final full = pill(
+      Text(
         label ?? state.label,
+        key: const ValueKey('overview-chip-full'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: ink,
-          fontWeight: FontWeight.w600,
-          fontFeatures: const [FontFeature.tabularFigures()],
+        style: style,
+      ),
+    );
+    final short = shortLabel;
+    if (short == null) return full;
+    return OverviewChipFit(
+      full: full,
+      short: Semantics(
+        label: label ?? state.label,
+        excludeSemantics: true,
+        child: pill(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: Chrome.dot,
+                height: Chrome.dot,
+                decoration: BoxDecoration(color: ink, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: Insets.xs),
+              Text(
+                short,
+                key: const ValueKey('overview-chip-short'),
+                maxLines: 1,
+                softWrap: false,
+                style: style,
+              ),
+            ],
+          ),
         ),
       ),
     );

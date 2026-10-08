@@ -151,6 +151,13 @@ void main() {
       await settleMission(tester);
       expect(byKey('overview-counter:working'), findsOneWidget);
       expect(byKey('overview-counter:failed'), findsNothing);
+      // One line: a chip's height, not two.
+      expect(
+        tester.getSize(byKey('overview-triage-line')).height,
+        lessThanOrEqualTo(
+          tester.getSize(byKey('overview-counter:working')).height,
+        ),
+      );
       // Done is said once, by the fold that opens it.
       expect(byKey('overview-counter:done'), findsNothing);
       await tester.scrollUntilVisible(
@@ -159,13 +166,6 @@ void main() {
         scrollable: hybridList,
       );
       expect(byKey('overview-done-fold'), findsOneWidget);
-      // One line: a chip's height, not two.
-      expect(
-        tester.getSize(byKey('overview-triage-line')).height,
-        lessThanOrEqualTo(
-          tester.getSize(byKey('overview-counter:working')).height,
-        ),
-      );
       await unmountMission(tester);
     });
 

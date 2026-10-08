@@ -19,6 +19,7 @@ import 'overview_cards.dart' show overviewCardEdge;
 import 'overview_end_button.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
+import 'overview_title_block.dart';
 
 /// [text] as one plain paragraph: markdown marks and line breaks dropped.
 String overviewPlain(String text) => text
@@ -374,6 +375,9 @@ class OverviewPhoneRow extends ConsumerWidget {
       overviewFocusProvider.select((f) => f.selected == card.id),
     );
     final line = watchOverviewLine(ref, card);
+    final titleStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
     final edge = switch (card.state) {
       AgentState.needsYou => SemanticColors.of(context).attention,
       AgentState.failed => SemanticColors.of(context).failure,
@@ -408,39 +412,37 @@ class OverviewPhoneRow extends ConsumerWidget {
                 OverviewAgentRing(card: card, size: Insets.xl + Insets.xs),
                 const SizedBox(width: Insets.sm),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              card.entry.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          OverviewNewBadge(card: card),
-                          const SizedBox(width: Insets.xs),
-                          // At large text it ends before the row does.
-                          Flexible(child: OverviewStatePill(card: card)),
-                          OverviewEndButton(card: card),
-                          OverviewCardMenu(card: card),
-                        ],
+                  child: OverviewTitleBlock(
+                    titleFloor: overviewTitleFloor(
+                      context,
+                      card.entry.title,
+                      titleStyle,
+                    ),
+                    title: Text(
+                      card.entry.title,
+                      key: ValueKey('overview-card-title:${card.id}'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    ),
+                    meta: Text(
+                      line,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
-                      Text(
-                        line,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OverviewNewBadge(card: card),
+                        const SizedBox(width: Insets.xs),
+                        Flexible(child: OverviewStatePill(card: card)),
+                        OverviewEndButton(card: card),
+                        OverviewCardMenu(card: card),
+                      ],
+                    ),
                   ),
                 ),
               ],
