@@ -20,6 +20,13 @@ class _DeviceRuntime {
   /// flight from one of them cannot re-open it.
   final Set<int> _retired = <int>{};
 
+  /// Retired generations whose switched link ended while suspended — its
+  /// retain window overflowed, most often. Their routes stay open for
+  /// [RemoteHostService.linkResumeGrace] so a client coming back to resume
+  /// is refused and redials at once, instead of hearing nothing until its
+  /// own grace runs out.
+  final Map<int, _Tombstone> _tombstones = {};
+
   /// Which relays [_listeners] are dialling; empty while parked.
   List<Uri> _listenerUrls = const [];
 
@@ -264,7 +271,7 @@ class _DeviceRuntime {
       );
     }
     for (final g in _rendezvousHexByGeneration.keys.toList()) {
-      if (g >= from) continue;
+      if (g >= from || _tombstones.containsKey(g)) continue;
       _closeGeneration(g);
     }
     await syncRelayListeners();
@@ -377,9 +384,21 @@ class _DeviceRuntime {
     Uint8List frame,
   ) async {
     if (_closed) return;
+    final tombstone = _tombstones[generation];
+    if (tombstone != null) {
+      await _onTombstoneFrame(generation, tombstone, transport, frame);
+      return;
+    }
     // A retired generation is over: anything still draining out of it must not
     // walk the window back down — `_activate` would happily re-open it.
-    if (_retired.contains(generation)) return;
+    if (_retired.contains(generation)) {
+      if (LinkHello.tryDecode(frame) != null) {
+        service.onLog?.call(
+          'a hello for retired generation $generation; ignored',
+        );
+      }
+      return;
+    }
     // Revocation is enforced at the door: a revoked row has no key.
     final current = service.devices.getById(device.id);
     if (current == null || current.revoked) return;
@@ -403,6 +422,10 @@ class _DeviceRuntime {
         // A plain hello — an older client, or one starting over — inside a
         // generation its byte stream already used: that stream cannot go on,
         // so the generation goes and the client probes forward to a fresh one.
+        service.onLog?.call(
+          'a desktop client said hello again on generation $generation; '
+          'ending its link',
+        );
         current.host!.close('the client connected again');
         return;
       }
@@ -642,12 +665,102 @@ class _DeviceRuntime {
   Future<void> _hostEnded(_ActiveLink active) async {
     active.resumeGrace?.cancel();
     if (_closed || !identical(_active, active)) return;
+    final host = active.host;
+    final reason = host?.closeReason ?? 'its byte stream ended';
+    final heldOpen = host != null && host.suspended;
+    service.onLog?.call(
+      'a desktop client\'s link on generation ${active.generation} ended'
+      '${heldOpen ? ' while suspended' : ''}: $reason',
+    );
+    if (heldOpen) _bury(active, reason);
     final transport = active.transport;
     await _retireGeneration(active.generation);
     try {
       await transport.close();
     } on Object {
       // Already gone.
+    }
+  }
+
+  /// Keeps [active]'s generation answering resumes with a refusal for the
+  /// grace: the client is away and cannot know its link is gone.
+  void _bury(_ActiveLink active, String reason) {
+    final generation = active.generation;
+    _tombstones.remove(generation)?.expiry.cancel();
+    _tombstones[generation] = _Tombstone(
+      channel: active.channel,
+      reason: reason,
+      expiry: Timer(service.linkResumeGrace, () {
+        _chain = _chain.then((_) {
+          if (_tombstones.remove(generation) == null || _closed) return;
+          if (generation < device.generation) _closeGeneration(generation);
+        });
+      }),
+    );
+  }
+
+  /// A frame for a generation whose suspended link already ended: a resume
+  /// hello marks its socket, and the `link.resume` that follows is answered
+  /// with a refusal the client takes as "redial now". Nothing else is taken.
+  Future<void> _onTombstoneFrame(
+    int generation,
+    _Tombstone tombstone,
+    RemoteTransport transport,
+    Uint8List frame,
+  ) async {
+    final hello = LinkHello.tryDecode(frame);
+    if (hello != null) {
+      if (hello.resume) {
+        tombstone.resumingOn = transport;
+        return;
+      }
+      // A fresh hello on a generation that is over: dropping the socket is
+      // how the client learns to probe forward. A relay listener is the
+      // rendezvous itself, and stays.
+      service.onLog?.call(
+        'a hello for ended generation $generation; the client probes forward',
+      );
+      if (!_isRelayListener(transport)) {
+        unawaited(transport.close().catchError((Object _) {}));
+      }
+      return;
+    }
+    if (!identical(tombstone.resumingOn, transport)) return;
+    tombstone.resumingOn = null;
+    final SealedFrame opened;
+    try {
+      opened = await tombstone.channel.unseal(frame);
+    } on Object {
+      return;
+    }
+    Envelope? envelope;
+    try {
+      envelope = Envelope.fromBytes(opened.plaintext, accept: VersionRange.any);
+    } on Object {
+      envelope = null;
+    }
+    if (envelope == null || envelope.type != FrameType.linkResume.wire) return;
+    service.onLog?.call(
+      'refused a link.resume on generation $generation: its link ended while '
+      'suspended (${tombstone.reason}); the client redials',
+    );
+    // An `error` answer is the refusal every client with `link.resume`
+    // already takes as "redial": no new frame or code an older one misreads.
+    // No await between reading the sequence and sealing: the two must agree.
+    final refusal = Envelope.of(
+      FrameType.error,
+      seq: tombstone.channel.nextSendSequence,
+      id: envelope.id,
+      payload: {
+        'code': ErrorCode.notFound.wire,
+        'message': kLinkEndedWhileSuspended,
+      },
+    );
+    final sealed = await tombstone.channel.seal(refusal.toBytes());
+    try {
+      transport.send(sealed);
+    } on TransportException {
+      // Gone already: the client's own deadline covers it.
     }
   }
 
@@ -1064,6 +1177,10 @@ class _DeviceRuntime {
     await _liveWatch?.cancel();
     _liveWatch = null;
     _watchedTransport = null;
+    for (final tombstone in _tombstones.values) {
+      tombstone.expiry.cancel();
+    }
+    _tombstones.clear();
     for (final generation in _rendezvousHexByGeneration.keys.toList()) {
       _closeGeneration(generation);
     }
@@ -1071,6 +1188,24 @@ class _DeviceRuntime {
     _active?.liveness?.stop();
     _active = null;
   }
+}
+
+/// A generation whose suspended link ended unresumed ([_DeviceRuntime._bury]).
+class _Tombstone {
+  _Tombstone({
+    required this.channel,
+    required this.reason,
+    required this.expiry,
+  });
+
+  /// The ended link's channel: a resume opens under it, and its refusal is
+  /// sealed with it.
+  final SealedChannel channel;
+  final String reason;
+  final Timer expiry;
+
+  /// The socket that said hello with `resume`, whose next frame is answered.
+  RemoteTransport? resumingOn;
 }
 
 class _ActiveLink {
