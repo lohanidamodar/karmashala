@@ -91,6 +91,7 @@ import 'switch_agent_control.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';
 import 'queued_messages_strip.dart';
+import 'slot_wait_notice.dart';
 import 'operator_chip.dart';
 import 'transcript_file_preview.dart';
 import 'transcript_image_preview.dart';

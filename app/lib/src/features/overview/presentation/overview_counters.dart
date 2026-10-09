@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show kLaunchSlotRule;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../explorer/application/agent_state_providers.dart';
+import '../../sessions/application/capacity_providers.dart';
 import '../../sessions/application/session_list_prefs.dart';
 import '../application/overview_board.dart';
 import '../application/overview_prefs.dart';
@@ -270,7 +273,17 @@ class OverviewFactsLine extends ConsumerWidget {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final muted = UiDensity.of(context).muted(theme);
+    final capacity = capacitySummary(ref.watch(capacityNowProvider));
     final facts = <Widget>[
+      if (capacity != null)
+        Tooltip(
+          message: kLaunchSlotRule,
+          child: Text(
+            capacity,
+            key: const ValueKey('overview-capacity'),
+            style: muted,
+          ),
+        ),
       if (strip.spendRecorded)
         Tooltip(
           message:

@@ -224,6 +224,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       return runtime == null || runtime.lifecycle.hasEnded ? null : runtime;
     }
 
+    agentLauncher = launcher;
     final resumeFiring = ServerResumeRunner(
       resumes: resumes,
       sessionOf: sessions.getById,
@@ -659,6 +660,9 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     }
     return _automations.runById(runId) ?? run;
   }
+
+  /// What starts every run's and scheduled resume's agent.
+  late final HostedAgentLauncher agentLauncher;
 
   /// Whether a run holds [automation]'s checkout now.
   bool checkoutBusy(Automation automation) => _automations.liveRuns().any(

@@ -243,6 +243,31 @@ class DaemonAttention {
     );
   }
 
+  /// Files that row [sessionId], which a person started, waits for a
+  /// concurrency slot, and why.
+  void waitingForSlot(String sessionId, String reason) {
+    final session = _watchedSessionOf(sessionId);
+    if (session == null) return;
+    attention.raise(
+      InboxItem(
+        session: session,
+        kind: InboxItemKind.waitingForSlot,
+        at: DateTime.now().toUtc(),
+        detail: reason,
+      ),
+    );
+  }
+
+  /// Takes row [sessionId]'s wait for a slot off the inbox: it started, or
+  /// the wait was cancelled.
+  void slotWaitOver(String sessionId) {
+    final session = _watchedSessionOf(sessionId);
+    if (session == null) return;
+    final id = InboxItem.idFor(InboxItemKind.waitingForSlot, session.key);
+    if (!attention.snapshot.inbox.items.any((item) => item.id == id)) return;
+    attention.handle(InboxDismiss(id), null);
+  }
+
   /// Whether [session] waits on something other than itself: a sub-session
   /// at work or asking, or a usage limit whose reset is known.
   bool _waitsOnOthers(WatchedSession session) {

@@ -103,8 +103,11 @@ class _NoPaneForSession extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final running = _running(ref);
-    final canResume = !running && _canResume(ref);
+    final wait = session.native
+        ? ref.watch(sessionSlotWaitProvider(session.id))
+        : null;
+    final running = wait == null && _running(ref);
+    final canResume = wait == null && !running && _canResume(ref);
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -128,7 +131,9 @@ class _NoPaneForSession extends ConsumerWidget {
               ),
               const SizedBox(height: Insets.xs),
               Text(
-                running
+                wait != null
+                    ? slotWaitText(wait)
+                    : running
                     ? 'This session is running. Its terminal opens here once '
                           'it is connected; the conversation can be read now.'
                     : canResume
@@ -144,30 +149,33 @@ class _NoPaneForSession extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: Insets.md),
-              Wrap(
-                spacing: Insets.sm,
-                alignment: WrapAlignment.center,
-                children: [
-                  if (canResume)
-                    FilledButton.tonalIcon(
-                      onPressed: () => _resume(ref),
-                      icon: const Icon(AppIcons.playCircle),
-                      label: const Text('Resume in a terminal'),
+              if (wait != null)
+                SlotWaitActions(waiter: wait)
+              else
+                Wrap(
+                  spacing: Insets.sm,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    if (canResume)
+                      FilledButton.tonalIcon(
+                        onPressed: () => _resume(ref),
+                        icon: const Icon(AppIcons.playCircle),
+                        label: const Text('Resume in a terminal'),
+                      ),
+                    TextButton(
+                      // This card is drawn inside one group, so the conversation
+                      // opens in that group.
+                      onPressed: () {
+                        if (groupId case final group?) {
+                          ref
+                              .read(terminalSessionsControllerProvider.notifier)
+                              .showFaceIn(group, terminal: false);
+                        }
+                      },
+                      child: const Text('Read the conversation'),
                     ),
-                  TextButton(
-                    // This card is drawn inside one group, so the conversation
-                    // opens in that group.
-                    onPressed: () {
-                      if (groupId case final group?) {
-                        ref
-                            .read(terminalSessionsControllerProvider.notifier)
-                            .showFaceIn(group, terminal: false);
-                      }
-                    },
-                    child: const Text('Read the conversation'),
-                  ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
         ),

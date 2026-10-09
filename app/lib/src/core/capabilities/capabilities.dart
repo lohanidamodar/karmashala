@@ -304,6 +304,10 @@ final class Capabilities {
   /// edit and cancel; without it, nothing is listed.
   bool get sessionQueue => sendViaServer && serverOffers('sessions.queue');
 
+  /// The server holds launches to a person's concurrency limits, says who
+  /// waits for a slot, and starts or cancels a wait.
+  bool get sessionCapacity => serverOffers('sessions.capacity');
+
   /// The queue says what holds it, pauses on Stop, and takes Send next.
   bool get sessionQueueControl =>
       sessionQueue && serverOffers('sessions.queue.control');

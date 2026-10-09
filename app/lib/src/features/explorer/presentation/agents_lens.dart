@@ -216,6 +216,22 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
     bool keepsLiveBelow(WorkspaceSessionEntry entry) =>
         (nesting.foldOf(entry)?.running ?? 0) > 0;
 
+    final waiting = ref.watch(slotWaitingSessionsProvider);
+    if (waiting.isNotEmpty) {
+      items.add(
+        SidebarGroupLabel(
+          key: const ValueKey('agents-group:waitingForSlot'),
+          label: 'Waiting for a slot',
+          color: SemanticColors.of(context).attention,
+          count: '${waiting.length}',
+          countTooltip: waiting.length == 1
+              ? '1 session'
+              : '${waiting.length} sessions',
+          spaceAbove: items.isNotEmpty,
+        ),
+      );
+      waiting.forEach(addRow);
+    }
     final hiddenWorking = ref.watch(agentsHiddenWorkingCountProvider);
     for (final group in groups) {
       // Where Quiet and Working end: every group is listed, empty or not.

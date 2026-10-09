@@ -208,6 +208,8 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Not started yet: it waits for a concurrency slot.
+            SlotWaitNotice(sessionId: widget.sessionId),
             // What was sent while the turn ran, waiting at the server below
             // the transcript it will join: bounded, it scrolls within what the
             // composer leaves, and may not push the box away.

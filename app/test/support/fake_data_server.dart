@@ -577,6 +577,8 @@ class FakeDataServer {
         case SessionQueueChanged():
           // Told, never kept: a client lists the queue again.
           break;
+        case CapacityChanged():
+          break;
         case SessionAgentChanged():
           // Told, never kept: the row itself carries the agent.
           break;
