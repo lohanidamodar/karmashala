@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_acp/karmashala_acp.dart' show McpServerStdio;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         ActiveModelSource,
@@ -48,6 +49,7 @@ class AcpSessionStart {
     this.variables = const {},
     this.removed = const {},
     this.mcpUrl,
+    this.mcpBridge,
     this.resumeSessionId,
     this.resumeAt,
     this.onCutTaken,
@@ -69,6 +71,9 @@ class AcpSessionStart {
   final Map<String, String> variables;
   final Set<String> removed;
   final String? mcpUrl;
+
+  /// Handed over instead of [mcpUrl]; see [AcpSessionRuntime.mcpBridge].
+  final McpServerStdio? mcpBridge;
   final String? resumeSessionId;
 
   /// A rewind's cut, for [resumeSessionId]'s load; see
@@ -199,6 +204,7 @@ class AcpRuntimes {
     terminals: terminals,
     host: host,
     mcpUrl: start.mcpUrl,
+    mcpBridge: start.mcpBridge,
     risk: start.risk,
     resumeSessionId: start.resumeSessionId,
     resumeAt: start.resumeAt,

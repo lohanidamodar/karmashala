@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart'
     show AcpLaunchSpec, AgentQuestionSet, AgentStatusReport, PermissionRisk;
+import 'package:karmashala_acp/karmashala_acp.dart' show McpServerStdio;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionConfigOptionsChanged, SessionModesChanged, SessionUsageChanged;
@@ -124,6 +125,7 @@ AcpSessionRuntime runtimeOver(
   String agentId = 'claude-acp',
   AcpLaunchSpec spec = const AcpLaunchSpec(),
   String? mcpUrl,
+  McpServerStdio? mcpBridge,
   PermissionRisk? risk,
   String? resumeSessionId,
   DateTime Function()? now,
@@ -145,6 +147,7 @@ AcpSessionRuntime runtimeOver(
     files: files,
     host: host ?? RecordingHost(),
     mcpUrl: mcpUrl,
+    mcpBridge: mcpBridge,
     risk: risk,
     resumeSessionId: resumeSessionId,
     newId: () => 'm${++ids}',

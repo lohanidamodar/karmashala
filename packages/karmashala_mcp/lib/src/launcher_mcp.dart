@@ -27,10 +27,14 @@ class LauncherMcp {
 
   /// A `mcpServers` entry that spawns the stdio bridge at [executablePath] —
   /// how an agent inside WSL2 reaches the app, and it carries no credential.
-  static Map<String, Object?> commandServerEntry(String executablePath) =>
-      <String, Object?>{
-        'type': 'stdio',
-        'command': executablePath,
-        'args': const <String>[],
-      };
+  /// [environment] is laid over the agent's own for the bridge.
+  static Map<String, Object?> commandServerEntry(
+    String executablePath, {
+    Map<String, String> environment = const {},
+  }) => <String, Object?>{
+    'type': 'stdio',
+    'command': executablePath,
+    'args': const <String>[],
+    if (environment.isNotEmpty) 'env': environment,
+  };
 }

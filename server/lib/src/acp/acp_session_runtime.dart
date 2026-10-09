@@ -88,6 +88,7 @@ class AcpSessionRuntime implements ScreenSession {
     AcpPathScope? files,
     this.host = AcpRuntimeHost.none,
     this.mcpUrl,
+    this.mcpBridge,
     this.risk,
     this.resumeSessionId,
     this.resumeAt,
@@ -135,6 +136,10 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// Karmashala's MCP endpoint for this session, or null for no tools.
   final String? mcpUrl;
+
+  /// The stdio bridge to hand over instead of [mcpUrl]: a WSL agent's way to
+  /// the tools that does not cross the virtual switch.
+  final McpServerStdio? mcpBridge;
 
   /// How much the session may do: picks the agent's mode, and answers
   /// `allow_once` itself from [PermissionRisk.autoRun] up.
@@ -331,10 +336,14 @@ class AcpSessionRuntime implements ScreenSession {
       );
       _capabilities = init.agentCapabilities;
       final url = mcpUrl;
-      final servers = [
-        if (url != null) McpServerEntry.http('karmashala', url: url),
+      final bridge = mcpBridge;
+      final servers = <McpServerEntry>[
+        if (bridge != null)
+          bridge
+        else if (url != null)
+          McpServerEntry.http('karmashala', url: url),
       ];
-      if (url == null) {
+      if (servers.isEmpty) {
         notices.add(
           "Karmashala's tools were not handed to $agentName: this server "
           'serves no MCP endpoint the agent can dial.',
