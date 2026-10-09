@@ -1450,11 +1450,14 @@ the relay — each works on the one per-user host there, the owner's included.
   attach the probe to the owner's host without a word. So a probe cannot test
   SSH host panes; the real app can. Local host-backed panes work in full,
   against the probe's own host.
-- **Not yet measured:** whether the bridge a *WSL* session in the probe spawns
-  over interop inherits `KARMASHALA_DATA_DIR`. If it does not, that session's
-  Karmashala tools reach the real app. Check `list_sessions` from such a
-  session before relying on it. The switch-address `/mcp` listener, when it
-  binds, is on the probe's own ephemeral port.
+- **A WSL session's bridge is told which handshake to read.** The server hands
+  it `KARMASHALA_BRIDGE_HANDSHAKE` (its own `mcp_bridge.json`) and
+  `KARMASHALA_SESSION_ID` in `WSLENV`, so a probe's WSL agents reach the probe.
+  Measured 2026-10-09 with Claude and Antigravity chat sessions in archlinux:
+  `list_sessions` answered with the probe's sessions, and `report_to_parent`
+  reached the parent. `flutter run` builds no bridge; set
+  `KARMASHALA_MCP_BRIDGE` to a compiled `karmashala_mcp.exe` before
+  `debug_run.bat`, or WSL sessions fall back to the switch URL.
 
 The tests are `test/core/probe/`. Each guarded seam has a non-probe twin that
 proves the fixture can observe the write, so a green run is not an empty one.

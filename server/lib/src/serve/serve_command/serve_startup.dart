@@ -84,6 +84,14 @@ AppDatabase? _openStore(String dataDirectory, IOSink errSink) {
   try {
     final directory = Directory(dataDirectory);
     if (!directory.existsSync()) directory.createSync(recursive: true);
+    // A restore staged from Settings → Data switches in before anything
+    // opens the files it replaces.
+    try {
+      final restored = applyPendingRestore(dataDirectory);
+      if (restored != null) errSink.writeln('karmashala_host: $restored');
+    } on Object catch (error) {
+      errSink.writeln('karmashala_host: restore not applied ($error)');
+    }
     // Refused when a newer build migrated it: this one would write tables
     // it does not know the shape of.
     return AppDatabase.open(directory, refuseNewerSchema: true);

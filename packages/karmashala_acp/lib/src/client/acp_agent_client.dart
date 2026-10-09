@@ -77,13 +77,18 @@ class AcpAgentClient {
 
   /// Throws [AcpAuthenticationRequired] when the agent wants
   /// [authenticate] first.
+  /// [additionalDirectories] widen the session past [cwd], for an agent that
+  /// advertises them ([AgentCapabilities.additionalDirectories]).
   Future<NewSessionResult> newSession({
     required String cwd,
     List<McpServerEntry> mcpServers = const [],
+    List<String> additionalDirectories = const [],
   }) async => NewSessionResult.fromJson(
     await _call(AcpMethods.sessionNew, {
       'cwd': cwd,
       'mcpServers': [for (final s in mcpServers) s.toJson()],
+      if (additionalDirectories.isNotEmpty)
+        'additionalDirectories': additionalDirectories,
     }),
   );
 
@@ -93,12 +98,15 @@ class AcpAgentClient {
     required String sessionId,
     required String cwd,
     List<McpServerEntry> mcpServers = const [],
+    List<String> additionalDirectories = const [],
     Map<String, Object?>? meta,
   }) async => LoadSessionResult.fromJson(
     await _call(AcpMethods.sessionLoad, {
       'sessionId': sessionId,
       'cwd': cwd,
       'mcpServers': [for (final s in mcpServers) s.toJson()],
+      if (additionalDirectories.isNotEmpty)
+        'additionalDirectories': additionalDirectories,
       '_meta': ?meta,
     }),
   );

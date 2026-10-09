@@ -42,6 +42,43 @@ class FakeStores {
   /// Refuses `stores.refresh.app` with this, when set.
   DataRefused? refuseAppRefresh;
 
+  /// The `stores.seen` asked, each its app keys.
+  final seen = <List<String>>[];
+
+  /// The background intervals set.
+  final schedules = <Duration>[];
+
+  /// A read found [found] changed: kept in the view and told once, as the
+  /// server tells it.
+  void notice(List<StoreAppChanges> found) {
+    final keys = {for (final held in found) held.app.key};
+    view = _copy(
+      changes: [
+        for (final held in view.changes)
+          if (!keys.contains(held.app.key)) held,
+        ...found,
+      ],
+    );
+    _server._tell(null, [StoreChangesNoticed(found), StoresChanged(view)]);
+  }
+
+  StoresView _copy({
+    List<StoreAppChanges>? changes,
+    StoreRefreshSchedule? schedule,
+  }) => StoresView(
+    apple: view.apple,
+    play: view.play,
+    stores: view.stores,
+    apps: view.apps,
+    icons: view.icons,
+    links: view.links,
+    refreshedAt: view.refreshedAt,
+    refreshing: view.refreshing,
+    reads: view.reads,
+    changes: changes ?? view.changes,
+    schedule: schedule ?? view.schedule,
+  );
+
   void _changed(StoresView next) {
     view = next;
     // Told to every link, the asker's too, as the server announces it.
@@ -171,6 +208,21 @@ class FakeStores {
             ],
           ),
         );
+        return view;
+      case StoresSeen(:final appKeys):
+        seen.add(appKeys);
+        _changed(
+          _copy(
+            changes: [
+              for (final held in view.changes)
+                appKeys.contains(held.app.key) ? held.asSeen() : held,
+            ],
+          ),
+        );
+        return view;
+      case StoresScheduleSet(:final every):
+        schedules.add(every);
+        _changed(_copy(schedule: StoreRefreshSchedule(every: every)));
         return view;
       default:
         // The protocol's private base class hides the list from the analyzer.

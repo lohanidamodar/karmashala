@@ -205,6 +205,18 @@ void main() {
     expect(server.automationRows.runs['r3']!.state, AutomationRunState.failed);
   });
 
+  testWidgets('a run whose checks are still running can be cancelled', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('7h ago'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('run-cancel')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('run-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Its checks are stopped now'), findsOneWidget);
+  });
+
   testWidgets('older runs page in past the copy, never capped', (tester) async {
     for (var i = 0; i < 60; i++) {
       server.automationRows.insertRun(

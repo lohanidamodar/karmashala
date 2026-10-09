@@ -230,7 +230,23 @@ class ConversationIndexStatus {
     this.backfilledAt,
     this.backfilling = false,
     this.queued = 0,
+    this.named,
+    this.unindexed,
+    this.unreadable,
   });
+
+  /// Conversations a session or imported record names: what a search could
+  /// cover. Null from a server that does not count them.
+  final int? named;
+
+  /// Of [named], the ones the index holds no reading of: their agent's store
+  /// did not have them, or has not been asked yet. Null: not counted.
+  final int? unindexed;
+
+  /// Conversations whose last read failed since the server started — their
+  /// store unreachable or their transcript unopenable — so what the index
+  /// holds of them may be old. Null: not counted.
+  final int? unreadable;
 
   /// Conversations the index has read at least once, and the turns it holds.
   final int conversations;
@@ -256,6 +272,9 @@ class ConversationIndexStatus {
     'backfilledAt': _iso(backfilledAt),
     'backfilling': backfilling,
     'queued': queued,
+    if (named != null) 'named': named,
+    if (unindexed != null) 'unindexed': unindexed,
+    if (unreadable != null) 'unreadable': unreadable,
   };
 
   static ConversationIndexStatus fromJson(Map<String, Object?> json) =>
@@ -266,6 +285,9 @@ class ConversationIndexStatus {
         backfilledAt: _date(json['backfilledAt']),
         backfilling: json['backfilling'] as bool? ?? false,
         queued: json['queued'] as int? ?? 0,
+        named: json['named'] as int?,
+        unindexed: json['unindexed'] as int?,
+        unreadable: json['unreadable'] as int?,
       );
 }
 

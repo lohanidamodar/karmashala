@@ -9,6 +9,7 @@ import 'package:agent_cli/launch.dart'
         decideInheritedCredentials,
         inheritedCredentialNotice;
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_acp/karmashala_acp.dart' show McpServerStdio;
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
@@ -798,6 +799,14 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
           variables: {...auth.variables, kSessionIdEnvironmentVariable: id},
           removed: removed,
           mcpUrl: access?.url,
+          mcpBridge: switch (access?.bridge) {
+            final bridge? => McpServerStdio(
+              'karmashala',
+              command: bridge.command,
+              env: bridge.environment,
+            ),
+            null => null,
+          },
           resumeSessionId: resumeId,
           resumeAt: resumeId == null ? null : rewindCuts?.cutOf(id),
           onCutTaken: () => rewindCuts?.taken(id),

@@ -32,6 +32,10 @@ class FakeConversations {
   /// past, say.
   DataRefused? refuseSearches;
 
+  /// What `conversations.status` reports of its coverage; null reports none,
+  /// as a server from before it was counted.
+  ({int named, int unindexed, int unreadable, bool backfilling})? coverage;
+
   var _generation = 0;
 
   /// Indexes [turns] of [conversationId], as a read of its transcript would.
@@ -84,6 +88,10 @@ class FakeConversations {
       conversations: {for (final row in _turns) row.conversationId}.length,
       turns: _turns.length,
       generation: _generation,
+      named: coverage?.named,
+      unindexed: coverage?.unindexed,
+      unreadable: coverage?.unreadable,
+      backfilling: coverage?.backfilling ?? false,
     ),
   };
 

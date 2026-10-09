@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_acp/karmashala_acp.dart' show McpServerStdio;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         ActiveModelSource,
@@ -14,8 +15,10 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionUsageChanged;
 import 'package:karmashala_launch/karmashala_launch.dart'
     show kSessionIdEnvironmentVariable;
+import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session_engine/store.dart'
-    show SessionMessageDao, SessionUsageDao;
+    show SessionMessageDao, SessionRepositoryDao, SessionUsageDao;
+import 'package:karmashala_store/database.dart' show AppDatabase;
 
 import '../checkpoints/daemon_checkpoints.dart';
 import '../data/data_service.dart';
@@ -46,6 +49,7 @@ class AcpSessionStart {
     this.variables = const {},
     this.removed = const {},
     this.mcpUrl,
+    this.mcpBridge,
     this.resumeSessionId,
     this.resumeAt,
     this.onCutTaken,
@@ -67,6 +71,9 @@ class AcpSessionStart {
   final Map<String, String> variables;
   final Set<String> removed;
   final String? mcpUrl;
+
+  /// Handed over instead of [mcpUrl]; see [AcpSessionRuntime.mcpBridge].
+  final McpServerStdio? mcpBridge;
   final String? resumeSessionId;
 
   /// A rewind's cut, for [resumeSessionId]'s load; see
@@ -75,6 +82,16 @@ class AcpSessionStart {
   final void Function()? onCutTaken;
   final PermissionRisk? risk;
 }
+
+/// The checkouts each session spans in [database], primary first: what
+/// [AcpRuntimes.checkoutsOf] reads, as the repositories bar writes it.
+List<EnvironmentPath> Function(String sessionId) sessionCheckoutsIn(
+  AppDatabase database,
+) =>
+    (sessionId) => [
+      for (final link in SessionRepositoryDao(database).linksFor(sessionId))
+        ?RepositoryDao(database).getById(link.repositoryId)?.path,
+    ];
 
 /// Builds the runtime for one start; the launcher calls `start()` on it.
 typedef AcpRuntimeFactory = AcpSessionRuntime Function(AcpSessionStart start);
@@ -88,6 +105,7 @@ class AcpRuntimes {
     required this.runnerFor,
     this.usage,
     this.openLink,
+    this.checkoutsOf,
     DateTime Function()? now,
   }) : _now = now;
 
@@ -101,12 +119,19 @@ class AcpRuntimes {
   /// Opens a login link on this machine for an agent that cannot
   /// ([serverOpensLoginLinks]); null opens none.
   final void Function(Uri link)? openLink;
+
+  /// The checkouts a session spans now, which its agent's paths may reach
+  /// besides its working directory; null: the working directory only.
+  final List<EnvironmentPath> Function(String sessionId)? checkoutsOf;
   final DateTime Function()? _now;
 
   AcpSessionRuntime start(AcpSessionStart start) {
+    final checkouts = checkoutsOf;
     final files = AcpPathScope.forEnvironment(
       start.environment,
       start.directory.path,
+      environmentId: start.directory.environmentId,
+      checkouts: checkouts == null ? null : () => checkouts(start.sessionId),
     );
     return _runtime(
       start,
@@ -179,6 +204,7 @@ class AcpRuntimes {
     terminals: terminals,
     host: host,
     mcpUrl: start.mcpUrl,
+    mcpBridge: start.mcpBridge,
     risk: start.risk,
     resumeSessionId: start.resumeSessionId,
     resumeAt: start.resumeAt,

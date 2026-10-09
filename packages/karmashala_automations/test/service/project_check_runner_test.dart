@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:karmashala_automations/store.dart';
 
@@ -16,13 +17,24 @@ import 'service_fixtures.dart';
 class _Commands implements CheckCommandRunner {
   final exits = <String, CheckExecution>{};
   final ran = <String>[];
+  final limits = <Duration>[];
+
+  /// Set to hold each check until it is cancelled.
+  void Function()? onStart;
   @override
   Future<CheckExecution> execute(
     ProjectCheck check, {
     required EnvironmentPath directory,
     required String title,
+    Future<void>? cancelled,
   }) async {
     ran.add('${check.name} in ${directory.path}');
+    limits.add(check.timeLimit);
+    if (onStart case final start?) {
+      start();
+      await cancelled;
+      return const CheckExecution.refused('cancelled');
+    }
     return exits[check.name] ?? const CheckExecution.ran(exitCode: 0);
   }
 }
@@ -275,5 +287,109 @@ void main() {
         );
       },
     );
+  });
+
+  test(
+    'a check past its time limit failed, said so, its output kept',
+    () async {
+      commands.exits['tests'] = const CheckExecution.timedOut(
+        Duration(minutes: 30),
+        tail: ['Watching for changes...'],
+      );
+      await runner.recordRun(run());
+      final tests = dao.checksFor('run1').firstWhere((v) => v.name == 'tests');
+      expect(tests.verdict, VerificationVerdict.fail);
+      final recorded = VerificationDao(db).getRun(tests.verificationRunId!)!;
+      expect(recorded.verdict, VerificationVerdict.fail);
+      expect(recorded.reason, contains('timed out after 30 min'));
+      expect(recorded.artifacts, isNotEmpty);
+    },
+  );
+
+  test('a session check past its limit fails its batch', () async {
+    insertSession(db, 's1');
+    commands.exits['tests'] = const CheckExecution.timedOut(
+      Duration(seconds: 90),
+    );
+    final result = await runner.runForSession(
+      Session(
+        id: 's1',
+        repositoryId: 'r1',
+        agentInstallationId: 'a1',
+        title: 'Work',
+        useWorktree: false,
+        status: SessionStatus.running,
+        createdAt: fixtureTime,
+      ),
+      const EnvironmentPath(environmentId: 'local', path: '/src/r1'),
+    );
+    expect(result!.run.verdict, VerificationVerdict.fail);
+    expect(
+      result.run.steps.map((s) => s.detail).join(),
+      contains('timed out after 90 s'),
+    );
+  });
+
+  test(
+    "a check step's time limit reaches its checks; 30 min unless set",
+    () async {
+      final automation = dao.getById('auto1')!;
+      dao.update(
+        automation.copyWith(
+          steps: AutomationSteps(const [
+            AutomationStep(
+              kind: AutomationStepKind.check,
+              text: 'flutter test',
+              timeoutSeconds: 600,
+            ),
+          ]),
+        ),
+      );
+      await runner.recordRun(run());
+      dao.update(
+        automation.copyWith(
+          steps: AutomationSteps(const [
+            AutomationStep(kind: AutomationStepKind.check),
+          ]),
+        ),
+      );
+      final second = AutomationRun(
+        id: 'run2',
+        automationId: 'auto1',
+        scheduledFor: fixtureTime,
+        firedAt: fixtureTime,
+        state: AutomationRunState.finished,
+        reason: '',
+      );
+      dao.insertRun(second);
+      await runner.recordRun(second);
+      expect(commands.limits, [
+        const Duration(minutes: 10),
+        kCheckTimeLimit,
+        kCheckTimeLimit,
+      ]);
+    },
+  );
+
+  test('cancelling a run stops its check and skips the rest', () async {
+    final started = Completer<void>();
+    commands.onStart = () {
+      if (!started.isCompleted) started.complete();
+    };
+    expect(runner.cancel('run1'), isFalse);
+    final recording = runner.recordRun(run());
+    await started.future;
+    expect(runner.checking('run1'), isTrue);
+    expect(runner.cancel('run1'), isTrue);
+    await recording;
+    expect(runner.checking('run1'), isFalse);
+    final verdicts = dao.checksFor('run1');
+    expect(verdicts, hasLength(2));
+    expect(
+      verdicts.map((v) => v.verdict),
+      everyElement(VerificationVerdict.inconclusive),
+    );
+    expect(commands.ran, hasLength(1));
+    expect(verdicts.last.reason, contains('cancelled'));
   });
 }

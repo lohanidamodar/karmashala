@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/read.dart';
@@ -85,6 +86,11 @@ class ConversationIndexer {
   /// Conversations queued, for diagnostics and tests.
   Iterable<String> get wantedIds => _wanted.keys;
 
+  /// Conversations whose last read failed — the store could not be asked or
+  /// the transcript not opened — until a read succeeds.
+  Set<String> get unreadable => Set.unmodifiable(_unreadable);
+  final Set<String> _unreadable = {};
+
   /// Queues [conversationId] for indexing — a map entry, nothing else until
   /// [drain], which resolves what the caller could not say.
   void want(String conversationId, {String? cli, String? filePath}) {
@@ -119,6 +125,7 @@ class ConversationIndexer {
         } on Object {
           // A store we cannot read answers as an empty one. The want is
           // dropped, not kept: the next trigger queues it again.
+          _unreadable.add(entry.key);
           path = null;
         }
       }
@@ -137,15 +144,58 @@ class ConversationIndexer {
     return changed;
   }
 
+  /// Reads in flight, by conversation.
+  final Map<String, Future<bool>> _indexing = {};
+
   /// Brings one conversation's rows up to date with its transcript, reading
   /// only what it appended when it can. A whole read that finds nothing keeps
-  /// the old rows: it cannot be told from format drift.
+  /// the old rows: it cannot be told from format drift. One read of a
+  /// conversation at a time: another's write must not land among the slices
+  /// of a first reading.
   Future<bool> indexConversation({
     required String conversationId,
     required String cli,
     required String filePath,
   }) async {
+    for (
+      var running = _indexing[conversationId];
+      running != null;
+      running = _indexing[conversationId]
+    ) {
+      try {
+        await running;
+      } on Object {
+        // Its own caller is told.
+      }
+    }
+    final run = _indexConversation(
+      conversationId: conversationId,
+      cli: cli,
+      filePath: filePath,
+    );
+    _indexing[conversationId] = run;
+    try {
+      return await run;
+    } finally {
+      _indexing.removeWhere(
+        (id, running) => id == conversationId && identical(running, run),
+      );
+    }
+  }
+
+  Future<bool> _indexConversation({
+    required String conversationId,
+    required String cli,
+    required String filePath,
+  }) async {
     final state = dao.stateFor(conversationId);
+    final row = recordedRowOf(filePath);
+    if (row != null) {
+      return await _indexRecorded(conversationId, cli, row, state);
+    }
+    // Once read from `session_messages`, always: they are what the chat
+    // showed, where a file the agent also keeps may say it differently.
+    if (state != null && recordedRowOf(state.filePath) != null) return false;
     final watermark = await _stat(filePath);
     if (state != null &&
         state.filePath == filePath &&
@@ -162,9 +212,11 @@ class ConversationIndexer {
     TranscriptTurnsRead read;
     try {
       read = await _read(filePath, cli, from: from);
+      _unreadable.remove(conversationId);
     } on Object {
       // The reader swallows malformed lines itself; this catches the layer
       // below — an unopenable path, e.g. a vanished `\\wsl.localhost`.
+      _unreadable.add(conversationId);
       read = TranscriptTurnsRead.nothing;
     }
     bytesRead += read.bytesRead;
@@ -212,16 +264,109 @@ class ConversationIndexer {
       );
       return false;
     }
-    dao.replaceTurns(
+    if ((state?.turns ?? 0) == 0 && turns.length > kConversationWriteSlice) {
+      await _writeFirstReading(
+        conversationId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: now,
+        watermark: watermark,
+        resumePoint: read.resumePoint,
+      );
+    } else {
+      dao.replaceTurns(
+        sessionId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: now,
+        modifiedAt: watermark.modifiedAt,
+        size: watermark.size,
+        resumePoint: read.resumePoint,
+      );
+    }
+    writes++;
+    return true;
+  }
+
+  /// A large conversation's first reading, a slice per transaction with the
+  /// event loop handed back between them: one transaction held the server's
+  /// isolate for seconds. Nothing indexed is lost meanwhile, there was none;
+  /// the state row goes last, so an interrupted write is read whole again.
+  Future<void> _writeFirstReading({
+    required String conversationId,
+    required String cli,
+    required String filePath,
+    required List<ConversationTurn> turns,
+    required DateTime indexedAt,
+    required TranscriptWatermark watermark,
+    TranscriptResumePoint? resumePoint,
+  }) async {
+    const slice = kConversationWriteSlice;
+    for (var start = 0; start < turns.length; start += slice) {
+      dao.addTurns(
+        sessionId: conversationId,
+        cli: cli,
+        turns: turns.sublist(start, min(start + slice, turns.length)),
+        clear: start == 0,
+      );
+      await Future<void>.delayed(Duration.zero);
+    }
+    dao.keepTurns(
       sessionId: conversationId,
       cli: cli,
       filePath: filePath,
-      turns: turns,
-      indexedAt: now,
+      turns: turns.length,
+      indexedAt: indexedAt,
       modifiedAt: watermark.modifiedAt,
       size: watermark.size,
-      resumePoint: read.resumePoint,
+      resumePoint: resumePoint,
     );
+  }
+}
+
+extension on ConversationIndexer {
+  /// [conversationId] read whole from session row [rowId]'s messages, unless
+  /// its newest revision is the one already read. A large first reading is
+  /// written in slices, as a transcript's is.
+  Future<bool> _indexRecorded(
+    String conversationId,
+    String cli,
+    String rowId,
+    ConversationIndexState? state,
+  ) async {
+    final filePath = recordedConversationPath(rowId);
+    final watermark = dao.recordedWatermark(rowId);
+    _unreadable.remove(conversationId);
+    if (state != null &&
+        state.filePath == filePath &&
+        state.matches(modifiedAt: watermark.modifiedAt, size: watermark.size)) {
+      skips++;
+      return false;
+    }
+    parses++;
+    final turns = dao.recordedTurns(rowId);
+    if ((state?.turns ?? 0) == 0 && turns.length > kConversationWriteSlice) {
+      await _writeFirstReading(
+        conversationId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: clock.nowUtc(),
+        watermark: watermark,
+      );
+    } else {
+      dao.replaceTurns(
+        sessionId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: clock.nowUtc(),
+        modifiedAt: watermark.modifiedAt,
+        size: watermark.size,
+      );
+    }
     writes++;
     return true;
   }

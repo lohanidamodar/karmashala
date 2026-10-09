@@ -36,6 +36,10 @@ class ConversationSearch {
   /// last reading; answers how many conversations changed.
   Future<int> catchUp() async =>
       (await _client.send(const ConversationsCatchUp())).value;
+
+  /// Where the index stands, coverage included — what a search could miss.
+  Future<ConversationIndexStatus> status() async =>
+      (await _client.send(const ConversationsStatus())).value;
 }
 
 final conversationSearchProvider = Provider<ConversationSearch>(

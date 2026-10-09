@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_mcp/access.dart'
@@ -13,9 +14,12 @@ import 'package:store_console_play/store_console_play.dart';
 
 import 'server_store_vault.dart';
 import 'store_desk.dart';
+import 'store_digest.dart';
+import 'store_refresh_timer.dart';
 
 /// The app stores as this server reads them, with the credentials in
-/// [ServerStoreVault]. It talks to a store only when asked; nothing polls.
+/// [ServerStoreVault]. It reads them when asked, and on its own every so
+/// often once [startSchedule] is called ([StoreRefreshTimer]).
 class ServerStoreDesk implements StoreDesk, StoreWork {
   ServerStoreDesk({
     required String dataDirectory,
@@ -25,6 +29,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     HandshakePermissions permissions = const SystemHandshakePermissions(),
     StoreClient Function(AppleApiKey key)? appleClient,
     StoreClient Function(PlayAccount account)? playClient,
+    Timer Function(Duration wait, void Function() fire)? timer,
+    math.Random? random,
   }) : _vault = ServerStoreVault(
          dataDirectory: dataDirectory,
          permissions: permissions,
@@ -38,6 +44,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
        _linksFile = File(
          p.join(dataDirectory, snapshotDirectoryName, linksFileName),
        ),
+       _watchFile = File(
+         p.join(dataDirectory, snapshotDirectoryName, watchFileName),
+       ),
        _tell = tell,
        _log = log ?? _silent,
        _now = clock ?? _utcNow,
@@ -45,6 +54,19 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
        _playClient = playClient {
     _loadSnapshot();
     _loadLinks();
+    _loadWatch();
+    _schedule = StoreRefreshTimer(
+      every: () => _every,
+      connected: () => _connected.isNotEmpty && !_closed,
+      running: () => _running != null,
+      lastRefreshedAt: () => _refreshedAt,
+      refresh: () =>
+          unawaited(refresh().then<void>((_) {}, onError: (Object _) {})),
+      now: _now,
+      timer: timer,
+      random: random,
+      log: _log,
+    );
   }
 
   static const String snapshotDirectoryName = 'stores';
@@ -56,6 +78,16 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   /// these are the owner's word, and outlive a credential being replaced.
   static const String linksFileName = 'links.json';
   static const int _linksVersion = 1;
+
+  /// What changed and what each app looked like when last compared, and the
+  /// background refresh's interval. Beside the snapshot, not in it: dropping
+  /// the cache must not make the next read's changes look like news.
+  static const String watchFileName = 'changes.json';
+  static const int _watchVersion = 1;
+
+  /// How many change sets are kept, and for how long, for `store_changes`.
+  static const int changeLogLimit = 200;
+  static const Duration changeLogAge = Duration(days: 30);
 
   /// How many apps are read at once.
   static const int concurrency = 4;
@@ -78,7 +110,28 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   final File _snapshotFile;
   final Directory _iconDirectory;
   final File _linksFile;
+  final File _watchFile;
   final void Function(List<DataChange> changes) _tell;
+
+  /// Change sets found by a read, for the inbox and a phone; set once the
+  /// server's attention is up.
+  void Function(List<StoreAppChanges> found)? onChanges;
+
+  /// Apps opened: their inbox items are seen too.
+  void Function(Set<String> appKeys)? onSeen;
+
+  late final StoreRefreshTimer _schedule;
+
+  /// By [StoreApp.key]: what each app looked like when last compared.
+  final _digests = <String, StoreDigest>{};
+
+  /// Oldest first.
+  final _changeLog = <StoreAppChanges>[];
+
+  /// Null until the person chooses, which is [StoreRefreshSchedule.standard].
+  Duration? _everyChosen;
+  Duration get _every => _everyChosen ?? StoreRefreshSchedule.standard;
+  Future<void> _watchWrites = Future<void>.value();
   final void Function(String message) _log;
   final DateTime Function() _now;
   final StoreClient Function(AppleApiKey key)? _appleClient;
@@ -173,8 +226,36 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         for (final MapEntry(:key, :value) in _reads.entries)
           if (connected.contains(_storeOfKey(key))) key: value,
       },
+      changes: [
+        for (final held in _latestChanges().values)
+          if (connected.contains(held.app.store)) held,
+      ],
+      schedule: StoreRefreshSchedule(every: _every, nextAt: _schedule.nextAt),
     );
   }
+
+  /// Each app's newest change set.
+  Map<String, StoreAppChanges> _latestChanges() => {
+    for (final held in _changeLog) held.app.key: held,
+  };
+
+  /// Change sets read since [since], newest first; only those not yet seen
+  /// with [unseenOnly]. For an agent's `store_changes`.
+  @override
+  List<StoreAppChanges> changesSince({
+    DateTime? since,
+    bool unseenOnly = false,
+  }) => [
+    for (final held in _changeLog.reversed)
+      if (_connected.contains(held.app.store) &&
+          (since == null || !held.at.isBefore(since)) &&
+          (!unseenOnly || !held.seen))
+        held,
+  ];
+
+  /// Starts the background refresh; a server that never calls this reads the
+  /// stores only when asked.
+  void startSchedule() => _schedule.start();
 
   /// What a client that has just subscribed is told.
   List<DataChange> greeting() => [StoresChanged(view)];
@@ -231,11 +312,14 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     StoreCredentialRemove(:final store) => await _remove(store),
     final StoreAppsLink r => await _link(r),
     final StoreAppsUnlink r => await _unlink(r),
+    StoresSeen(:final appKeys) => await _seen(appKeys.toSet()),
+    StoresScheduleSet(:final every) => await _setEvery(every),
     _ => throw DataRefused.invalid('${request.kind} is not a store request'),
   };
 
   void close() {
     _closed = true;
+    _schedule.stop();
     _console?.close();
     _console = null;
     for (final console in _retired) {
@@ -254,11 +338,12 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     bool current(StoreKind store) => _gen(store) == started[store];
     final console = _takeConsole();
     final mine = <String>{};
+    final found = <StoreAppChanges>[];
+    var answered = 0;
     try {
       final queue = Queue<StoreApp>();
       var listing = console.clients.length;
       var arrived = Completer<void>();
-      var answered = 0;
       var done = 0;
       var total = 0;
 
@@ -296,7 +381,12 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       Future<void> worker() async {
         while (true) {
           if (queue.isNotEmpty) {
-            await _readApp(console, queue.removeFirst(), current);
+            final changed = await _readApp(
+              console,
+              queue.removeFirst(),
+              current,
+            );
+            if (changed != null) found.add(changed);
             done++;
             _tell([StoresProgress(done: done, total: total)]);
           } else if (listing == 0) {
@@ -324,6 +414,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       _releaseConsole();
       _dropDisconnected();
       await _persist();
+      await _announce(found);
+      _schedule.refreshed(answered: answered > 0);
       _tell([StoresChanged(view)]);
     }
     return view;
@@ -349,14 +441,15 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
 
   /// Reads [app], and its icon beside it, telling each as it lands. Never
   /// throws. A read that gave nothing at all keeps the app's last numbers
-  /// and marks it failed.
-  Future<void> _readApp(
+  /// and marks it failed. Answers what changed since the app was last
+  /// compared, or null when nothing did.
+  Future<StoreAppChanges?> _readApp(
     StoreConsole console,
     StoreApp app,
     bool Function(StoreKind store) current,
   ) async {
     final key = app.key;
-    if (!current(app.store)) return;
+    if (!current(app.store)) return null;
     _reads[key] = const StoreAppRead.reading();
     _tell([StoreAppChanged(app: app, read: _reads[key])]);
     // In the same guarded zone and console as the snapshot, so it is closed
@@ -366,6 +459,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         : Future.value(false);
     StoreAppSnapshot? snapshot;
     String? failure;
+    StoreAppChanges? changed;
     try {
       snapshot = await console.snapshot(app);
       failure = _failureOf(snapshot);
@@ -374,6 +468,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
           'The read stopped before the store answered (${error.runtimeType}).';
     }
     if (current(app.store)) {
+      if (snapshot != null) changed = _compare(snapshot);
       final held = _apps[key];
       if (snapshot != null && (failure == null || held == null)) {
         _apps[key] = _withListingInstalls(snapshot.carriedFrom(held));
@@ -399,6 +494,140 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
         ),
       ]);
     }
+    return changed;
+  }
+
+  /// What [snapshot] says changed since its app was last compared; the
+  /// first read of an app keeps what it says and tells nothing.
+  StoreAppChanges? _compare(StoreAppSnapshot snapshot) {
+    final key = snapshot.app.key;
+    final fresh = StoreDigest.of(snapshot);
+    final before = _digests[key];
+    _digests[key] = before == null ? fresh : before.mergedWith(fresh);
+    if (before == null) return null;
+    final changes = storeChanges(snapshot.app.store, before, fresh);
+    if (changes.isEmpty) return null;
+    return StoreAppChanges(
+      app: snapshot.app,
+      platform: storePlatform(snapshot),
+      at: _now(),
+      changes: changes,
+    );
+  }
+
+  /// Keeps [found], files it, and tells every client once.
+  Future<void> _announce(List<StoreAppChanges> found) async {
+    final cutoff = _now().subtract(changeLogAge);
+    _changeLog
+      ..addAll(found)
+      ..removeWhere((held) => held.at.isBefore(cutoff));
+    if (_changeLog.length > changeLogLimit) {
+      _changeLog.removeRange(0, _changeLog.length - changeLogLimit);
+    }
+    await _persistWatch();
+    if (found.isEmpty) return;
+    _log('stores: ${found.length} app(s) changed since their last read');
+    _tell([StoreChangesNoticed(List.unmodifiable(found)), StoresChanged(view)]);
+    onChanges?.call(found);
+  }
+
+  Future<StoresView> _seen(Set<String> appKeys) async {
+    var moved = false;
+    for (var i = 0; i < _changeLog.length; i++) {
+      final held = _changeLog[i];
+      if (held.seen || !appKeys.contains(held.app.key)) continue;
+      _changeLog[i] = held.asSeen();
+      moved = true;
+    }
+    onSeen?.call(appKeys);
+    if (!moved) return view;
+    await _persistWatch();
+    final now = view;
+    _tell([StoresChanged(now)]);
+    return now;
+  }
+
+  Future<StoresView> _setEvery(Duration every) async {
+    if (!StoreRefreshSchedule.choices.contains(every)) {
+      throw DataRefused.invalid(
+        'the stores are read on their own every 1, 3, 6 or 12 hours, or '
+        'never; not every ${every.inMinutes} minutes',
+      );
+    }
+    _everyChosen = every;
+    await _persistWatch();
+    _schedule.reschedule();
+    final now = view;
+    _tell([StoresChanged(now)]);
+    return now;
+  }
+
+  /// What was compared and found for [store]'s apps goes with its
+  /// credential: another account's apps are not news.
+  void _forgetChanges(StoreKind store) {
+    _digests.removeWhere((key, _) => _storeOfKey(key) == store);
+    _changeLog.removeWhere((held) => held.app.store == store);
+  }
+
+  void _loadWatch() {
+    final file = _watchFile;
+    if (!file.existsSync()) return;
+    try {
+      final decoded = (jsonDecode(file.readAsStringSync()) as Map)
+          .cast<String, Object?>();
+      if (decoded['version'] != _watchVersion) {
+        _log('stores: the kept changes are of another version; not read');
+        return;
+      }
+      final every = decoded['everyMinutes'];
+      if (every is int) {
+        final chosen = Duration(minutes: every);
+        if (StoreRefreshSchedule.choices.contains(chosen)) {
+          _everyChosen = chosen;
+        }
+      }
+      for (final MapEntry(:key, :value)
+          in ((decoded['digests'] as Map?) ?? const {}).entries) {
+        _digests[key as String] = StoreDigest.fromJson(
+          (value as Map).cast<String, Object?>(),
+        );
+      }
+      for (final held in (decoded['log'] as List?) ?? const []) {
+        _changeLog.add(
+          StoreAppChanges.fromJson((held as Map).cast<String, Object?>()),
+        );
+      }
+    } on Object catch (error) {
+      _digests.clear();
+      _changeLog.clear();
+      _log('stores: the kept changes were not read (${error.runtimeType})');
+    }
+  }
+
+  Future<void> _persistWatch() {
+    final contents = {
+      'version': _watchVersion,
+      'everyMinutes': ?_everyChosen?.inMinutes,
+      'digests': {
+        for (final MapEntry(:key, :value) in _digests.entries)
+          key: value.toJson(),
+      },
+      'log': [for (final held in _changeLog) held.toJson()],
+    };
+    final done = _watchWrites.then((_) async {
+      try {
+        final directory = _watchFile.parent;
+        if (!directory.existsSync()) directory.createSync(recursive: true);
+        final temp = File('${_watchFile.path}.tmp');
+        await temp.writeAsString(jsonEncode(contents), flush: true);
+        await temp.rename(_watchFile.path);
+      } on Object catch (error) {
+        // Not kept: after a restart the next read compares with less.
+        _log('stores: the changes were not kept (${error.runtimeType})');
+      }
+    });
+    _watchWrites = done;
+    return done;
   }
 
   /// Why [snapshot] holds nothing at all, or null when anything was read or
@@ -443,11 +672,13 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     final generation = _gen(app.store);
     bool current(StoreKind store) => _gen(store) == generation;
     final console = _takeConsole();
+    StoreAppChanges? changed;
     try {
-      await _guarded(() => _readApp(console, app, current));
+      changed = await _guarded(() => _readApp(console, app, current));
     } finally {
       _releaseConsole();
       await _persist();
+      await _announce([?changed]);
     }
     return view;
   }
@@ -719,6 +950,8 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       _apps.removeWhere((_, kept) => kept.app.store == store);
       _reads.removeWhere((key, _) => _storeOfKey(key) == store);
       await _forgetIcons((kept) => kept == store);
+      _forgetChanges(store);
+      await _persistWatch();
       await _persist();
     }
     _tell([StoresChanged(view)]);
@@ -759,8 +992,11 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     _apps.removeWhere((_, kept) => kept.app.store == store);
     _reads.removeWhere((key, _) => _storeOfKey(key) == store);
     await _forgetIcons((kept) => kept == store);
+    _forgetChanges(store);
     _dropConsole();
     await _persist();
+    await _persistWatch();
+    _schedule.reschedule();
     final now = view;
     _tell([StoresChanged(now)]);
     return now;
@@ -824,7 +1060,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       ..remove('play')
       ..remove('links')
       ..remove('refreshing')
-      ..remove('reads');
+      ..remove('reads')
+      ..remove('changes')
+      ..remove('schedule');
     final done = _snapshotWrites.then(
       (_) => _writeSnapshot({
         'version': _snapshotVersion,

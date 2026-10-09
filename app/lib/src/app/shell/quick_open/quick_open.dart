@@ -628,7 +628,15 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         leading: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$count result${count == 1 ? '' : 's'}'),
+            // Ends rather than overflows at a phone's width and a large text
+            // scale, where the count alone is wider than its share.
+            Flexible(
+              child: Text(
+                '$count result${count == 1 ? '' : 's'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             if (step == null && _walking != null && !_indexed) ...[
               const SizedBox(width: Insets.sm),
               const Flexible(
@@ -639,6 +647,23 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
                 ),
               ),
             ],
+            if (step == null && _conversationQuery.isNotEmpty)
+              if (conversationCoverageNote(_hits.status) case final note?) ...[
+                const SizedBox(width: Insets.sm),
+                Flexible(
+                  child: Tooltip(
+                    message:
+                        'Conversation search finds only what has been '
+                        'indexed: $note.',
+                    child: Text(
+                      '· $note',
+                      key: const ValueKey('quickOpen.conversationCoverage'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
           ],
         ),
         // The sigils are a hint, not a control: at a narrow width they

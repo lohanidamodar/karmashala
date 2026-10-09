@@ -14,6 +14,7 @@ import '../application/store_groups.dart';
 import '../application/stores_controller.dart';
 import 'store_app_icon.dart';
 import 'store_badges.dart';
+import 'store_changes_view.dart';
 import 'store_installs.dart';
 import 'store_logo.dart';
 import 'stores_format.dart';
@@ -96,6 +97,10 @@ class StoreGroupCard extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _Heading(group: group),
+                    if (group.changedUnseen) ...[
+                      const SizedBox(height: Insets.sm),
+                      StoreChangedMarker(group: group),
+                    ],
                     const SizedBox(height: Insets.md),
                     for (final (i, entry) in group.entries.indexed) ...[
                       if (i > 0) const SizedBox(height: Insets.sm),

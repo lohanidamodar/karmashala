@@ -11,6 +11,8 @@ import '../../../core/data/data_providers.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../stores/application/store_changes.dart'
+    show storesOpenRequestProvider;
 import '../../terminal/application/terminal_sessions_controller.dart'
     show paneSessionsProvider;
 import 'notification_providers.dart';
@@ -40,6 +42,11 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
           // What this window looks at is the server's to mark seen too; a
           // batch that crossed the saying of it is marked the same here.
           state = snapshot.inbox.viewed(_lastSeen ?? const {});
+        case InboxOpenWanted(:final openId)
+            when storeAppKeyOfInboxId(openId) != null:
+          ref
+              .read(storesOpenRequestProvider.notifier)
+              .open(storeAppKeyOfInboxId(openId)!);
         case InboxOpenWanted(:final openId, :final imported):
           focusWatchedSession(
             ref.container,

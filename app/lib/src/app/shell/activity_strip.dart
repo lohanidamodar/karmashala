@@ -9,6 +9,7 @@ import '../../core/capabilities/capabilities.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/settings/application/settings_controller.dart';
+import '../../features/stores/application/store_changes.dart';
 import 'devices_dock.dart';
 import 'shell_area.dart';
 import 'shell_shortcuts.dart';
@@ -63,6 +64,8 @@ class ShellActivityStrip extends ConsumerWidget {
       onOverview: () => openOverviewTab(ref),
       overviewHint: shellChordLabel<OpenOverviewIntent>(),
       onStores: () => openStoresTab(ref),
+      storesBadge: ref.watch(storesUnseenAttentionProvider),
+      storesNews: ref.watch(storesUnseenNewsProvider),
       onRunning: () => openRunningTab(ref),
       onAutomations: () => openAutomationsTab(ref),
       // A diagnostic, not a daily tool: in the strip only while debug mode is
@@ -90,6 +93,8 @@ class ActivityStrip extends StatelessWidget {
     this.onUsage,
     this.usageHint,
     this.onStores,
+    this.storesBadge = 0,
+    this.storesNews = false,
     this.onRunning,
     this.onAutomations,
     this.onLogs,
@@ -121,6 +126,11 @@ class ActivityStrip extends StatelessWidget {
 
   /// Opens the Stores tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onStores;
+
+  /// Apps whose unseen store changes want a person; [storesNews] is the
+  /// neutral dot for unseen ones that do not.
+  final int storesBadge;
+  final bool storesNews;
 
   /// Opens the Running tab. Null leaves its glyph out, as [onUsage] does.
   final VoidCallback? onRunning;
@@ -216,6 +226,8 @@ class ActivityStrip extends StatelessWidget {
               icon: AppIcons.package,
               label: 'Stores',
               selected: false,
+              badge: storesBadge,
+              news: storesNews,
               onPressed: onStores,
             ),
           if (onUsage case final onUsage?)

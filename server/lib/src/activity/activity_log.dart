@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -93,15 +95,22 @@ class ActivityLog {
         if (_changes != before) ids.add(_db.lastInsertRowId);
       }
       if (ids.isEmpty) return const <ActivityEntry>[];
-      return _entries(
-        _db.query(
-          'SELECT * FROM activity_log WHERE id IN '
-          '(${List.filled(ids.length, '?').join(', ')}) ORDER BY id;',
-          ids,
-        ),
-      );
+      // In slices: one `IN` over a large backfill passed SQLite's variables.
+      return [
+        for (var start = 0; start < ids.length; start += _readBack)
+          ..._entries(
+            _db.query(
+              'SELECT * FROM activity_log WHERE id IN '
+              '(${List.filled(min(_readBack, ids.length - start), '?').join(', ')}) '
+              'ORDER BY id;',
+              ids.sublist(start, min(start + _readBack, ids.length)),
+            ),
+          ),
+      ];
     });
   }
+
+  static const _readBack = 500;
 
   int get _changes =>
       _db.query('SELECT total_changes() AS n;').first['n']! as int;
@@ -245,16 +254,18 @@ class ActivityLog {
 
   /// The newest id, or 0 for an empty log.
   int get lastId =>
-      _db.query('SELECT COALESCE(MAX(id), 0) AS n FROM activity_log;').first['n']!
+      _db
+              .query('SELECT COALESCE(MAX(id), 0) AS n FROM activity_log;')
+              .first['n']!
           as int;
 
   /// Deletes everything that happened before [before]; answers how many.
   int prune(DateTime before) {
-    final n = _db
-        .query('SELECT COUNT(*) AS n FROM activity_log WHERE at < ?;', [
-          _iso(before),
-        ])
-        .first['n']! as int;
+    final n =
+        _db.query('SELECT COUNT(*) AS n FROM activity_log WHERE at < ?;', [
+              _iso(before),
+            ]).first['n']!
+            as int;
     if (n > 0) {
       _db.execute('DELETE FROM activity_log WHERE at < ?;', [_iso(before)]);
     }

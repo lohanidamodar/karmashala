@@ -57,9 +57,27 @@ typedef RankedConversation = ({
   DateTime? indexedAt,
 });
 
+/// The `file_path` of a conversation read from `session_messages` rather than
+/// a transcript file: this prefix and the session row's id.
+const String kRecordedConversationPrefix = 'session_messages:';
+
+/// The `file_path` the index records for session row [rowId]'s messages.
+String recordedConversationPath(String rowId) =>
+    '$kRecordedConversationPrefix$rowId';
+
+/// The session row a recorded `file_path` names, or null for a file.
+String? recordedRowOf(String filePath) =>
+    filePath.startsWith(kRecordedConversationPrefix)
+    ? filePath.substring(kRecordedConversationPrefix.length)
+    : null;
+
 /// How many turns go into one `INSERT`. `AppDatabase.execute` prepares per
 /// call; six columns a row caps this at 5 461 variables per statement.
 const int kConversationInsertBatch = 128;
+
+/// Turns one transaction writes of a large conversation's first reading; the
+/// indexer hands the event loop back between slices.
+const int kConversationWriteSlice = 128;
 
 /// How many matching turns one [ConversationIndexDao.search] reads.
 const int kConversationSearchLimit = 50;
@@ -196,6 +214,26 @@ class ConversationIndexDao {
         resumePoint: resumePoint,
       );
       if (turns.isNotEmpty || removed > 0) _bumpGeneration();
+    });
+  }
+
+  /// One slice of a first reading, [clear]ing first what an interrupted one
+  /// left. Its state row is not touched: [keepTurns] writes it after the last.
+  void addTurns({
+    required String sessionId,
+    required String cli,
+    required List<ConversationTurn> turns,
+    bool clear = false,
+  }) {
+    _db.transaction(() {
+      if (clear) {
+        statements++;
+        _db.execute('DELETE FROM conversation_turns WHERE session_id = ?;', [
+          sessionId,
+        ]);
+      }
+      _insert(sessionId, cli, turns);
+      _bumpGeneration();
     });
   }
 
@@ -655,6 +693,26 @@ class ConversationIndexDao {
     ];
   }
 
+  /// The conversations a session row, a switched thread's span or an imported
+  /// record names, and how many of them the index holds no reading of.
+  ({int named, int unindexed}) coverage() {
+    statements++;
+    final row = _db
+        .query(
+          'WITH named(id) AS ('
+          'SELECT external_session_id FROM sessions '
+          "WHERE external_session_id IS NOT NULL AND external_session_id <> '' "
+          'UNION SELECT external_session_id FROM session_agent_spans '
+          "WHERE external_session_id IS NOT NULL AND external_session_id <> '' "
+          'UNION SELECT external_id FROM imported_sessions) '
+          'SELECT COUNT(*) AS n, COALESCE(SUM(NOT EXISTS ('
+          'SELECT 1 FROM conversation_index_state state '
+          'WHERE state.session_id = named.id)), 0) AS u FROM named;',
+        )
+        .first;
+    return (named: row['n'] as int, unindexed: row['u'] as int);
+  }
+
   /// Conversations read at least once, and the turns held.
   ({int conversations, int turns}) counts() {
     statements++;
@@ -665,6 +723,84 @@ class ConversationIndexDao {
         )
         .first;
     return (conversations: row['c'] as int, turns: row['t'] as int);
+  }
+
+  /// The conversation session row [rowId] runs and the agent running it, or
+  /// null when it names none yet.
+  ({String conversationId, String cli})? conversationOfRow(String rowId) {
+    statements++;
+    final rows = _db.query(
+      'SELECT s.external_session_id AS id, a.agent_kind AS cli '
+      'FROM sessions s '
+      'JOIN agent_installations a ON a.id = s.agent_installation_id '
+      'WHERE s.id = ? AND s.external_session_id IS NOT NULL '
+      "AND s.external_session_id <> '';",
+      [rowId],
+    );
+    if (rows.isEmpty) return null;
+    return (
+      conversationId: rows.first['id'] as String,
+      cli: rows.first['cli'] as String,
+    );
+  }
+
+  /// Every session row with `session_messages` rows, and its conversation.
+  List<({String rowId, String conversationId, String cli})> recordedRows() {
+    statements++;
+    return [
+      for (final row in _db.query(
+        'SELECT s.id AS row_id, s.external_session_id AS id, '
+        'a.agent_kind AS cli FROM sessions s '
+        'JOIN agent_installations a ON a.id = s.agent_installation_id '
+        'WHERE s.external_session_id IS NOT NULL '
+        "AND s.external_session_id <> '' "
+        'AND EXISTS (SELECT 1 FROM session_messages m '
+        'WHERE m.session_id = s.id);',
+      ))
+        (
+          rowId: row['row_id'] as String,
+          conversationId: row['id'] as String,
+          cli: row['cli'] as String,
+        ),
+    ];
+  }
+
+  /// Session row [rowId]'s `session_messages` as a watermark: the newest
+  /// revision as the size, the newest edit as the time. Nulls with no rows.
+  ({DateTime? modifiedAt, int? size}) recordedWatermark(String rowId) {
+    statements++;
+    final row = _db.query(
+      'SELECT MAX(revision) AS r, MAX(updated_at) AS at '
+      'FROM session_messages WHERE session_id = ?;',
+      [rowId],
+    ).first;
+    return (
+      modifiedAt: row['at'] == null ? null : dateFromIso(row['at']),
+      size: row['r'] as int?,
+    );
+  }
+
+  /// What was said in session row [rowId]'s `session_messages`: the user's
+  /// and the agent's text, at each row's own ordinal. Never thinking, tool
+  /// output, notices, or the markers the server writes (`_karmashala/…`).
+  List<ConversationTurn> recordedTurns(String rowId) {
+    statements++;
+    return [
+      for (final row in _db.query(
+        'SELECT ordinal, role, text, created_at FROM session_messages '
+        "WHERE session_id = ? AND role IN ('user', 'agent') "
+        "AND text <> '' "
+        r"AND (message_id IS NULL OR message_id NOT LIKE '\_karmashala/%' "
+        r"ESCAPE '\') ORDER BY ordinal;",
+        [rowId],
+      ))
+        ConversationTurn(
+          ordinal: row['ordinal'] as int,
+          role: row['role'] as String,
+          text: row['text'] as String,
+          at: dateFromIso(row['created_at']),
+        ),
+    ];
   }
 
   /// When the one-off backfill finished, or null before it has.

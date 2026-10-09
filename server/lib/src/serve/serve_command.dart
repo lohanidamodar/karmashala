@@ -114,6 +114,9 @@ import '../sessions/session_transcripts.dart';
 import '../status/child_turn_wait.dart';
 import '../status/hosted_session_wait.dart';
 import '../stores/server_store_desk.dart';
+import 'package:store_console/store_console.dart' show StoreKind;
+import '../stores/probe_store_fixture.dart';
+import '../stores/store_change_inbox.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
@@ -199,6 +202,8 @@ import 'package:karmashala_host_protocol/protocol.dart'
 import 'package:logging/logging.dart' show Logger;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
+import '../backup/backup_restore.dart' show applyPendingRestore;
+import '../backup/server_backups.dart';
 import '../server/server_administration.dart';
 import '../server/server_storage.dart';
 import '../data/conversations_handler.dart';
@@ -544,11 +549,24 @@ Future<int> _serve(
     ..envVault = envVault
     ..greeters.add(envVault.greeting);
   // The app stores, read with credentials only this server holds.
+  // A probe may read its stores from a fixture file, never the network.
+  final storeFixture = probeStoreFixture(environment ?? Platform.environment);
   final storeDesk = ServerStoreDesk(
     dataDirectory: dataDirectory,
     tell: data.announce,
     log: (message) => errSink.writeln('karmashala_host: $message'),
+    appleClient: storeFixture == null
+        ? null
+        : (_) => FixtureStoreClient(StoreKind.appStore, storeFixture),
+    playClient: storeFixture == null
+        ? null
+        : (_) => FixtureStoreClient(StoreKind.googlePlay, storeFixture),
   );
+  if (storeFixture != null) {
+    errSink.writeln(
+      'karmashala_host: probe: the stores are read from a fixture file',
+    );
+  }
   data
     ..storeWork = storeDesk
     ..greeters.add(storeDesk.greeting);
@@ -903,6 +921,19 @@ Future<int> _serve(
   );
   status.start();
   attention.start();
+  // What a read of the stores found changed is filed, one item per app;
+  // opening the app there sees its items here. Then the stores are read on
+  // their own, window or no window.
+  storeDesk
+    ..onChanges = (found) {
+      for (final changes in found) {
+        attention.attention.raise(storeChangesInboxItem(changes));
+      }
+    }
+    ..onSeen = (appKeys) {
+      attention.attention.viewedElsewhere(storeInboxOpenIds(appKeys));
+    }
+    ..startSchedule();
   final recording = SessionStatusRecording(
     server.lifecycle,
     database,
@@ -1097,6 +1128,7 @@ Future<int> _serve(
     runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
       environment ?? localHostEnvironment(DateTime.now().toUtc()),
     ),
+    checkoutsOf: sessionCheckoutsIn(database),
   );
   final automations = await _startAutomations(
     database: database,
@@ -1540,6 +1572,10 @@ Future<int> _serve(
     dataDirectory,
     limits: toolImageLimits,
   );
+  final backups = ServerBackups(
+    dataDirectory: dataDirectory,
+    database: database,
+  )..start();
   // A failed start nobody retries still leaves the inbox after a day.
   data.retireStaleFailedStarts();
   final failedStartSweep = Timer.periodic(
@@ -1616,7 +1652,10 @@ Future<int> _serve(
     ),
   );
   switchTranscripts = sessionTranscripts;
-  acpHost.transcriptsChanged = sessionTranscripts.messagesChanged;
+  acpHost.transcriptsChanged = (sessionId) {
+    unawaited(sessionTranscripts.messagesChanged(sessionId));
+    data.conversations.messagesChanged(sessionId);
+  };
   data.sessionTranscripts = sessionTranscripts;
   // A live session idle over background work it started still reads working,
   // by the runs the chat lists.
@@ -1691,8 +1730,10 @@ Future<int> _serve(
     turnRunning: (sessionId) => switchQueue?.busy(sessionId) ?? false,
     holdQueue: (sessionId) => switchQueue?.hold(sessionId),
     releaseQueue: (sessionId) => switchQueue?.release(sessionId),
-    messagesChanged: (sessionId) =>
-        unawaited(sessionTranscripts.messagesChanged(sessionId)),
+    messagesChanged: (sessionId) {
+      unawaited(sessionTranscripts.messagesChanged(sessionId));
+      data.conversations.messagesChanged(sessionId);
+    },
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   // A CLI in a terminal names its model in its record: read again on each
@@ -1996,6 +2037,7 @@ Future<int> _serve(
       toolImages: Directory(p.join(dataDirectory, kToolImageFolderName)),
       limits: toolImageLimits,
     ),
+    backups: backups,
   );
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
@@ -2052,8 +2094,9 @@ Future<int> _serve(
 
   // The conversation index: every conversation a written row names is read
   // from its agent's store, and once per store, what the workspace already
-  // had — not in the first moments either.
-  data.conversations.start(transcripts);
+  // had — not in the first moments either. An ACP session's is its
+  // `session_messages`, read again whenever they move.
+  data.conversations.start(transcripts, servesFromMessages: speaksAcp);
   unawaited(
     Future<void>.delayed(agentScanDelay).then((_) async {
       if (stopping.isCompleted) return;
@@ -2064,9 +2107,11 @@ Future<int> _serve(
     }),
   );
   // The activity log's backfill: what the store held before the log, once,
-  // in chunks, resumed after a restart, and never in the first moments.
+  // in chunks, resumed after a restart, and never in the first moments. After
+  // the conversation index's: run together, they doubled a client's p95.
   unawaited(
     Future<void>.delayed(agentScanDelay).then((_) async {
+      await data.conversations.backfill();
       if (stopping.isCompleted) return;
       final backfill = ActivityBackfill(
         database,
@@ -2171,6 +2216,7 @@ Future<int> _serve(
   await delegations.close();
   handoffSweep.cancel();
   toolImageSweep.cancel();
+  backups.cancel();
   failedStartSweep.cancel();
   await handoffDelivery.close();
   await sessionQueue.close();

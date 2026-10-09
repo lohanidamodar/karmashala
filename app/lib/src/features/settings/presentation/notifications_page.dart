@@ -63,6 +63,7 @@ class NotificationsSection extends ConsumerWidget {
             value: settings.chime,
             onChanged: controller.setChime,
           ),
+          const _StoreChangesChoice(),
           const _QuietAfterChoice(),
         ],
       ),
@@ -103,7 +104,51 @@ class _PhoneNotificationsSection extends ConsumerWidget {
                 'screen. Kept on this phone; the desktop’s are its own.',
           ),
           const _QuietItemsLink(),
+          const _StoreChangesChoice(),
         ],
+      ),
+    );
+  }
+}
+
+/// Which changes on the app stores interrupt. The inbox files every one.
+class _StoreChangesChoice extends ConsumerWidget {
+  const _StoreChangesChoice();
+
+  static String _label(StoreChangeNotify choice) => switch (choice) {
+    StoreChangeNotify.off => 'Off',
+    StoreChangeNotify.attention => 'Only what needs me',
+    StoreChangeNotify.everything => 'Everything',
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final choice = ref.watch(
+      notificationSettingsControllerProvider.select((s) => s.storeChanges),
+    );
+    return SettingsRow(
+      key: const ValueKey('settings-store-changes'),
+      label: 'Store changes',
+      help:
+          'When a read of the App Store or Google Play finds an app changed. '
+          'What needs you is a rejection, an action needed, a halted '
+          'rollout, a failed build or a 1–2★ review. The Inbox lists every '
+          'change either way.',
+      control: DropdownButtonFormField<StoreChangeNotify>(
+        initialValue: choice,
+        isExpanded: true,
+        items: [
+          for (final option in StoreChangeNotify.values)
+            DropdownMenuItem(
+              value: option,
+              child: Text(_label(option), overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: (value) => value == null
+            ? null
+            : ref
+                  .read(notificationSettingsControllerProvider.notifier)
+                  .setStoreChanges(value),
       ),
     );
   }

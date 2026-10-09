@@ -5,6 +5,7 @@ import 'package:re_highlight/languages/all.dart';
 
 import '../design_tokens.dart';
 import '../desktop_menu.dart';
+import 'code_change_gutter.dart';
 import 'code_editor_keys.dart';
 import 'code_editor_menu.dart';
 import 'code_find_bar.dart';
@@ -44,6 +45,10 @@ class AppCodeEditor extends StatefulWidget {
     this.onWrapChanged,
     this.menuItems,
     this.onMenuItem,
+    this.changeMarks,
+    this.onChangeMarkTap,
+    this.onNextChange,
+    this.onPreviousChange,
     super.key,
   });
 
@@ -76,6 +81,17 @@ class AppCodeEditor extends StatefulWidget {
 
   /// A caller entry was picked. The selection is the one the menu opened on.
   final void Function(String value, CodeEditorMenuContext context)? onMenuItem;
+
+  /// Lines changed since the version under review, by 0-based index, drawn in
+  /// a [CodeChangeGutter] beside the numbers. Null draws no gutter.
+  final Map<int, CodeLineChange>? changeMarks;
+
+  /// A marked line's bar was tapped.
+  final ValueChanged<int>? onChangeMarkTap;
+
+  /// `editor.nextChange` and `editor.previousChange`; null leaves them unbound.
+  final VoidCallback? onNextChange;
+  final VoidCallback? onPreviousChange;
 
   @override
   State<AppCodeEditor> createState() => AppCodeEditorState();
@@ -333,6 +349,10 @@ class AppCodeEditorState extends State<AppCodeEditor> {
         }),
       ...on('editor.contextMenu', openMenuAtCaret),
       if (onSave != null) ...on('editor.save', onSave),
+      if (widget.onNextChange case final next?)
+        ...on('editor.nextChange', next),
+      if (widget.onPreviousChange case final previous?)
+        ...on('editor.previousChange', previous),
     };
   }
 
@@ -393,22 +413,37 @@ class AppCodeEditorState extends State<AppCodeEditor> {
       indicatorBuilder:
           (context, editingController, chunkController, notifier) {
             _watchParagraphs(notifier);
+            final marks = widget.changeMarks;
+            final numbers = widget.showLineNumbers
+                ? DefaultCodeLineNumber(
+                    controller: editingController,
+                    notifier: notifier,
+                    textStyle: MonoStyles.body.copyWith(
+                      fontSize: widget.fontSize,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    focusedTextStyle: MonoStyles.body.copyWith(
+                      fontSize: widget.fontSize,
+                      color: scheme.onSurface,
+                    ),
+                  )
+                : const SizedBox.shrink();
             return KeyedSubtree(
               key: _indicatorKey,
-              child: widget.showLineNumbers
-                  ? DefaultCodeLineNumber(
-                      controller: editingController,
-                      notifier: notifier,
-                      textStyle: MonoStyles.body.copyWith(
-                        fontSize: widget.fontSize,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                      focusedTextStyle: MonoStyles.body.copyWith(
-                        fontSize: widget.fontSize,
-                        color: scheme.onSurface,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
+              child: marks == null
+                  ? numbers
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        numbers,
+                        CodeChangeGutter(
+                          notifier: notifier,
+                          marks: marks,
+                          onTapLine: widget.onChangeMarkTap,
+                        ),
+                      ],
+                    ),
             );
           },
     );

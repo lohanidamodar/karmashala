@@ -78,6 +78,18 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['density', 'compact', 'roomy'],
   ),
   SettingsEntry(
+    'Store changes',
+    anchor: SettingsAnchor.notifications,
+    description: 'Notify when an app changes on the App Store or Google Play.',
+    keywords: ['app store', 'play', 'release', 'review', 'rejected'],
+  ),
+  SettingsEntry(
+    'Read the stores in the background',
+    anchor: SettingsAnchor.storeCredentials,
+    description: 'How often the server checks the stores on its own.',
+    keywords: ['refresh', 'interval', 'poll', 'app store', 'play'],
+  ),
+  SettingsEntry(
     'Mark a session quiet after',
     anchor: SettingsAnchor.notifications,
     description: 'How long a working session may go with nothing new.',
@@ -282,6 +294,30 @@ const settingsEntries = <SettingsEntry>[
         'How many days of the activity log the timeline is drawn '
         'from to keep; forever by default.',
     keywords: ['timeline', 'activity', 'history', 'retention', 'overview'],
+  ),
+  SettingsEntry(
+    'Back up now',
+    anchor: SettingsAnchor.dataBackup,
+    description:
+        'One archive of the sessions, settings, artifacts and evidence, in '
+        'a folder you choose. Credentials are left out.',
+    keywords: ['backup', 'back up', 'export', 'archive', 'zip'],
+  ),
+  SettingsEntry(
+    'Scheduled backups',
+    anchor: SettingsAnchor.dataBackup,
+    description:
+        'Off, daily or weekly, made by the server, keeping the newest '
+        'few.',
+    keywords: ['schedule', 'automatic', 'daily', 'weekly', 'keep'],
+  ),
+  SettingsEntry(
+    'Restore from backup',
+    anchor: SettingsAnchor.dataRestore,
+    description:
+        'Check a backup, see what it holds, and switch to it; the data it '
+        'replaces is kept.',
+    keywords: ['restore', 'recover', 'migrate', 'new machine'],
   ),
   SettingsEntry(
     'Worktree setup',

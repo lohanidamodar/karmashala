@@ -170,6 +170,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
           // built once, and the library changing must not rebuild it.
           snippets: _snippets,
           commands: _commands,
+          mentions: ref.read(sessionMentionsProvider(widget.sessionId)),
           // Read when the chips draw, like the commands: never watched.
           imagesGoAsImages: () =>
               ref.read(sessionTakesImagesProvider(widget.sessionId)),

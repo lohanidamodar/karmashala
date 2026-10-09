@@ -185,6 +185,14 @@ enum SettingsSectionId {
         'Stores tab reads with.',
     ['app store', 'google play', 'app store connect', 'play console'],
   ),
+  data(
+    'Data',
+    AppIcons.floppyDisk,
+    SettingsGroup.advanced,
+    'Back up Karmashala\'s sessions, settings and evidence, on a schedule '
+        'or now, and restore a backup.',
+    ['backup', 'back up', 'restore', 'export', 'migrate'],
+  ),
   diagnostics(
     'Diagnostics',
     AppIcons.listMagnifyingGlass,

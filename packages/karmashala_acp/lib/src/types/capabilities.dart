@@ -120,6 +120,7 @@ final class AgentCapabilities {
     this.promptCapabilities = const PromptCapabilities(),
     this.mcpCapabilities = const McpCapabilities(),
     this.supportsLogout = false,
+    this.additionalDirectories = false,
     this.raw = const {},
   });
 
@@ -133,6 +134,9 @@ final class AgentCapabilities {
     ),
     // `auth.logout` is `{}` when supported, absent or null when not.
     supportsLogout: json.object('auth')?.object('logout') != null,
+    additionalDirectories:
+        json.object('sessionCapabilities')?.object('additionalDirectories') !=
+        null,
     raw: json,
   );
 
@@ -142,6 +146,10 @@ final class AgentCapabilities {
 
   /// Whether the agent answers `logout`.
   final bool supportsLogout;
+
+  /// Whether `session/new` and `session/load` take `additionalDirectories`
+  /// (`sessionCapabilities.additionalDirectories` is `{}`).
+  final bool additionalDirectories;
   final JsonMap raw;
 
   JsonMap toJson() => {

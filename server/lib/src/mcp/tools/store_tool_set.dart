@@ -58,8 +58,61 @@ class StoreToolSet extends ServerToolSet {
       );
       return _summary(_connected(view));
     }),
+    'store_changes' => runTool(() => _changes(arguments)),
     _ => null,
   };
+
+  /// What reads of the stores found changed: since [arguments]' `since`, or
+  /// what nobody has opened yet.
+  Map<String, Object?> _changes(Map<String, dynamic> arguments) {
+    final view = _connected(_desk.view);
+    final raw = arguments['since'];
+    DateTime? since;
+    if (raw != null) {
+      since = raw is String ? _utcTime(raw.trim()) : null;
+      if (since == null) {
+        throw ArgumentError(
+          'since must be an ISO-8601 time or date, such as 2026-10-09 or '
+          '2026-10-09T08:00:00Z.',
+        );
+      }
+    }
+    final unseenOnly = since == null || _flag(arguments, 'unseenOnly');
+    final found = _desk.changesSince(since: since, unseenOnly: unseenOnly);
+    final schedule = view.schedule;
+    return <String, Object?>{
+      ..._header(view),
+      'since': since?.toUtc().toIso8601String(),
+      'unseenOnly': unseenOnly,
+      'backgroundRead': schedule == null || schedule.off
+          ? null
+          : {
+              'everyHours': schedule.every.inMinutes / 60,
+              'nextAt': schedule.nextAt?.toUtc().toIso8601String(),
+            },
+      'changes': [
+        for (final held in found)
+          <String, Object?>{
+            'app': held.app.name,
+            'bundleId': held.app.bundleId,
+            'store': _storeName(held.app.store),
+            'platform': held.platform,
+            'at': held.at.toUtc().toIso8601String(),
+            'seen': held.seen,
+            'needsAttention': held.attention,
+            'summary': held.sentence,
+            'changes': [
+              for (final change in held.changes)
+                {
+                  'kind': change.kind.name,
+                  'text': change.text,
+                  'needsAttention': change.attention,
+                },
+            ],
+          },
+      ],
+    };
+  }
 
   StoresView _connected(StoresView view) {
     if (view.connected.isEmpty) {
@@ -723,6 +776,37 @@ const List<Map<String, Object?>> storeToolSchemas = [
     },
   },
   {
+    'name': 'store_changes',
+    'description':
+        'What changed in the stores, per app, as each read of them found it: '
+        'release states (Waiting for review → In review → Approved → Ready '
+        'for sale, rejections, Play rollouts), TestFlight and testing builds '
+        'processed or failed, new reviews with the lowest stars, the rating '
+        'moving by 0.1 or more, crash and ANR clusters new or no longer '
+        'reported, and crash or ANR rates that doubled. With since, every '
+        'change found since then; without it, what nobody has opened in the '
+        'Stores tab yet. The first read after a store is connected finds '
+        'nothing: there is nothing before it. The server reads the stores on '
+        'its own as backgroundRead says; store_refresh reads them now. '
+        'Read-only.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'since': {
+          'type': 'string',
+          'description':
+              'An ISO-8601 time or date (UTC unless it says otherwise): '
+              'changes found from then on, seen or not. Omit for unseen '
+              'changes.',
+        },
+        'unseenOnly': {
+          'type': 'boolean',
+          'description': 'With since, only what nobody has opened yet.',
+        },
+      },
+    },
+  },
+  {
     'name': 'store_refresh',
     'description':
         'Read every connected store again — calls out to Apple and Google '
@@ -744,3 +828,19 @@ const List<Map<String, Object?>> storeToolSchemas = [
     },
   },
 ];
+
+/// [text] as ISO-8601, read as UTC when it names no zone; null when it is
+/// not one.
+DateTime? _utcTime(String text) {
+  final parsed = DateTime.tryParse(text);
+  if (parsed == null || parsed.isUtc) return parsed;
+  return DateTime.utc(
+    parsed.year,
+    parsed.month,
+    parsed.day,
+    parsed.hour,
+    parsed.minute,
+    parsed.second,
+    parsed.millisecond,
+  );
+}

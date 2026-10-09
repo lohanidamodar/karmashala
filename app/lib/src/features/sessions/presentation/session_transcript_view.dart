@@ -56,6 +56,7 @@ import 'package:karmashala_terminal_core/geometry.dart' show isChatPane;
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/acp_session_providers.dart';
 import '../application/session_commands_providers.dart';
+import '../application/session_mention_reads.dart';
 import '../application/session_prompt_kinds_providers.dart';
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -164,7 +165,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
   /// Owned here rather than inside the composer, because something outside the
   /// composer writes to it: a note sent back lands in this box.
   @override
-  final _composer = TextEditingController();
+  final _composer = MentionTextController();
 
   /// Files dropped on the conversation, for the composer to attach.
   @override

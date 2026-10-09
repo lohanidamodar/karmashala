@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show AppleKeySummary, DataRefused, PlayAccountSummary;
+    show AppleKeySummary, DataRefused, PlayAccountSummary, StoreRefreshSchedule;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/picking.dart';
@@ -13,6 +13,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../git/application/remote_links.dart' show openExternalUrlProvider;
 import '../../settings/presentation/settings_catalog.dart';
 import '../../settings/presentation/settings_notice.dart';
+import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../settings/presentation/settings_theme.dart';
 import '../application/store_credentials.dart';
@@ -64,6 +65,11 @@ class StoresSettingsSection extends ConsumerWidget {
           else if (view == null)
             const SettingsNote('Asking the Karmashala server…')
           else ...[
+            if (view.schedule case final schedule?)
+              _BackgroundReadChoice(
+                schedule: schedule,
+                connected: view.connected.isNotEmpty,
+              ),
             // Keyed by what is held, so a form's typed text does not outlive
             // the credential it was typed for.
             _AppleCard(
@@ -86,6 +92,76 @@ class StoresSettingsSection extends ConsumerWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// How often the server reads the stores with no window open. The server
+/// runs it, so a phone and a desktop set the same one.
+class _BackgroundReadChoice extends ConsumerStatefulWidget {
+  const _BackgroundReadChoice({
+    required this.schedule,
+    required this.connected,
+  });
+
+  final StoreRefreshSchedule schedule;
+  final bool connected;
+
+  static String label(Duration every) => every == Duration.zero
+      ? 'Off'
+      : every.inHours == 1
+      ? 'Every hour'
+      : 'Every ${every.inHours} hours';
+
+  @override
+  ConsumerState<_BackgroundReadChoice> createState() =>
+      _BackgroundReadChoiceState();
+}
+
+class _BackgroundReadChoiceState extends ConsumerState<_BackgroundReadChoice> {
+  String? _problem;
+
+  @override
+  Widget build(BuildContext context) {
+    final schedule = widget.schedule;
+    final next = schedule.nextAt;
+    final now = ref.watch(clockProvider).nowUtc();
+    final help = !widget.connected
+        ? 'Starts once a store is connected.'
+        : schedule.off
+        ? 'The stores are read when you open the Stores tab or refresh.'
+        : next == null || !next.isAfter(now)
+        ? 'Changes reach the Inbox with no window open.'
+        : 'Next around ${formatClock(next.toLocal())}. Changes reach the '
+              'Inbox with no window open.';
+    return SettingsRow(
+      key: const ValueKey('settings-store-background'),
+      label: 'Read the stores in the background',
+      help: _problem ?? help,
+      control: DropdownButtonFormField<Duration>(
+        initialValue: schedule.every,
+        isExpanded: true,
+        items: [
+          for (final choice in {
+            ...StoreRefreshSchedule.choices,
+            schedule.every,
+          })
+            DropdownMenuItem(
+              value: choice,
+              child: Text(
+                _BackgroundReadChoice.label(choice),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: (value) async {
+          if (value == null) return;
+          final problem = await ref
+              .read(storesProvider.notifier)
+              .setBackgroundEvery(value);
+          if (mounted) setState(() => _problem = problem);
+        },
       ),
     );
   }

@@ -15,6 +15,7 @@ import '../application/store_groups.dart';
 import 'store_app_icon.dart';
 import 'store_logo.dart';
 import 'store_badges.dart';
+import 'store_changes_view.dart';
 import 'store_combine.dart';
 import 'store_detail_errors.dart';
 import 'store_detail_releases.dart';
@@ -79,39 +80,42 @@ class StoreGroupDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scaler = MediaQuery.textScalerOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final layout = _Layout.of(constraints.maxWidth, scaler);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Header(
-              group: group,
-              pushed: pushed,
-              onClose: onClose,
-              layout: layout,
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  layout.gutter,
-                  Insets.md,
-                  layout.gutter,
-                  Insets.xxl,
-                ),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: layout.maxWidth),
-                    child: _Body(group: group, layout: layout),
+    return StoreSeenOnOpen(
+      group: group,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final layout = _Layout.of(constraints.maxWidth, scaler);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Header(
+                group: group,
+                pushed: pushed,
+                onClose: onClose,
+                layout: layout,
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    layout.gutter,
+                    Insets.md,
+                    layout.gutter,
+                    Insets.xxl,
+                  ),
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: layout.maxWidth),
+                      child: _Body(group: group, layout: layout),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -192,6 +196,12 @@ class _Body extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Actions(group: group),
+        if (group.changes.isNotEmpty)
+          _Section(
+            'What changed',
+            key: const ValueKey('what-changed'),
+            child: _Card(child: StoreWhatChanged(group: group)),
+          ),
         status,
         ?crashes,
         // Keyed so its filters and paging survive a change of layout.

@@ -464,6 +464,31 @@ void main() {
   });
 
   group('a run the host started', () {
+    test('Cancel while its checks run stops the check, recorded as '
+        'cancelled', () async {
+      nightly();
+      await startDaemon();
+      final run = runs().single;
+      launcher.handles.single.finish(0);
+      await pump();
+      expect(launcher.started.last.argv, ['make', 'test']);
+      expect(automations.checks.checking(run.id), isTrue);
+
+      final cancelling = automations.cancelRun(run.id);
+      await pump();
+      final check = launcher.handles.last;
+      expect(check.signals, contains(9));
+      check.finish(137);
+      await cancelling;
+      await pump();
+
+      final verdict = automationDao().checksFor(run.id).single;
+      expect(verdict.verdict, VerificationVerdict.inconclusive);
+      expect(verdict.reason, contains('cancelled'));
+      expect(automations.checks.checking(run.id), isFalse);
+      expect(() => automations.cancelRun(run.id), throwsA(isA<DataRefused>()));
+    });
+
     test('its session ending settles it, then the checks run in a session the '
         'host owns and the verdict is Karmashala\'s', () async {
       nightly();

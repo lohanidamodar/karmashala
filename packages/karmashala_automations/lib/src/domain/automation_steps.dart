@@ -1,5 +1,10 @@
 import 'dart:convert';
 
+/// How long one check may run when nothing says otherwise: long enough for a
+/// slow suite, short enough that a watch mode or a prompt does not hold a run
+/// for good.
+const Duration kCheckTimeLimit = Duration(minutes: 30);
+
 /// When a step after the agent runs, judged by how the run went so far.
 enum AutomationStepWhen {
   success,
@@ -63,6 +68,7 @@ enum AutomationStepKind {
 
   /// How long the step may take when its owner names nothing.
   Duration get defaultTimeout => switch (this) {
+    AutomationStepKind.check => kCheckTimeLimit,
     AutomationStepKind.command => const Duration(minutes: 10),
     _ => const Duration(seconds: 30),
   };

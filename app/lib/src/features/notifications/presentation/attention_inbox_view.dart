@@ -252,6 +252,8 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
     left: left,
     said: said,
     onOpen: () {
+      // The server tells every window to show the app in the Stores tab.
+      if (isStoreInboxItem(item)) return controller.open(item);
       // An ask already gone is no longer the server's to open.
       if (!left) {
         controller.open(item);

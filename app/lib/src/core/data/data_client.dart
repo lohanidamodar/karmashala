@@ -503,6 +503,15 @@ class DataClient {
   /// The stores' view, whole, each time it changes.
   Stream<StoresView> get storesChanges => _storesChanges.stream;
 
+  final _storeChangeNotices = StreamController<List<StoreAppChanges>>.broadcast(
+    sync: true,
+  );
+
+  /// What each read of the stores found changed, once as it is found: for a
+  /// notification. The view keeps it after, in [StoresView.changes].
+  Stream<List<StoreAppChanges>> get storeChangeNotices =>
+      _storeChangeNotices.stream;
+
   final _storesProgress = StreamController<({int done, int total})>.broadcast(
     sync: true,
   );
@@ -1176,6 +1185,8 @@ class DataClient {
           final view = (storesView ?? const StoresView()).withApp(change);
           storesView = view;
           if (!_storesChanges.isClosed) _storesChanges.add(view);
+        case StoreChangesNoticed(:final changes):
+          if (!_storeChangeNotices.isClosed) _storeChangeNotices.add(changes);
         case StoresProgress(:final done, :final total):
           if (!_storesProgress.isClosed) {
             _storesProgress.add((done: done, total: total));
@@ -1381,6 +1392,7 @@ class DataClient {
     unawaited(_secretRequestChanges.close());
     unawaited(_quickAccessChanges.close());
     unawaited(_storesChanges.close());
+    unawaited(_storeChangeNotices.close());
     unawaited(_storesProgress.close());
     unawaited(_acpInstallProgress.close());
     unawaited(_activityAppended.close());

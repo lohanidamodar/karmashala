@@ -11,14 +11,27 @@ class CheckExecution {
     this.transcript,
     this.columns,
     this.transcriptTruncated = false,
-  }) : refusal = null;
+  }) : refusal = null,
+       timedOutAfter = null;
+
+  /// Stopped at its [ProjectCheck.timeLimit]: a failure, with what it printed
+  /// until then.
+  const CheckExecution.timedOut(
+    Duration this.timedOutAfter, {
+    this.tail = const [],
+    this.transcript,
+    this.columns,
+    this.transcriptTruncated = false,
+  }) : refusal = null,
+       exitCode = null;
 
   const CheckExecution.refused(String this.refusal)
     : exitCode = null,
       tail = const [],
       transcript = null,
       columns = null,
-      transcriptTruncated = false;
+      transcriptTruncated = false,
+      timedOutAfter = null;
 
   final String? refusal;
 
@@ -34,15 +47,21 @@ class CheckExecution {
 
   /// [transcript] lost its start to the output ring.
   final bool transcriptTruncated;
+
+  /// The limit it ran into, when it was stopped for taking too long.
+  final Duration? timedOutAfter;
 }
 
 /// Where a check's command runs: a visible pane in the app, a session the
 /// host owns in the daemon. [title] names that place.
 abstract interface class CheckCommandRunner {
-  /// Runs [check] in [directory] and waits for it to stop.
+  /// Runs [check] in [directory] and waits for it to stop — at most
+  /// [ProjectCheck.timeLimit], or until [cancelled] completes, either of
+  /// which ends its whole process tree.
   Future<CheckExecution> execute(
     ProjectCheck check, {
     required EnvironmentPath directory,
     required String title,
+    Future<void>? cancelled,
   });
 }

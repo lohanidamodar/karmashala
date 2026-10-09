@@ -3545,6 +3545,30 @@
       }
     },
     {
+      "name": "store_changes",
+      "description": "What changed in the stores, per app, as each read of them found it: release states (Waiting for review → In review → Approved → Ready for sale, rejections, Play rollouts), TestFlight and testing builds processed or failed, new reviews with the lowest stars, the rating moving by 0.1 or more, crash and ANR clusters new or no longer reported, and crash or ANR rates that doubled. With since, every change found since then; without it, what nobody has opened in the Stores tab yet. The first read after a store is connected finds nothing: there is nothing before it. The server reads the stores on its own as backgroundRead says; store_refresh reads them now. Read-only.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string",
+            "description": "An ISO-8601 time or date (UTC unless it says otherwise): changes found from then on, seen or not. Omit for unseen changes."
+          },
+          "unseenOnly": {
+            "type": "boolean",
+            "description": "With since, only what nobody has opened yet."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "store_refresh",
       "description": "Read every connected store again — calls out to Apple and Google and takes tens of seconds — then answer as store_apps does. A refresh already under way is joined. Read-only toward the stores. If no store is connected, import credentials in Karmashala Settings → Stores first.",
       "inputSchema": {
@@ -6327,6 +6351,10 @@
     "store_reviews": {
       "category": "stores",
       "summary": "An app's store reviews, newest first, by rating or unanswered only."
+    },
+    "store_changes": {
+      "category": "stores",
+      "summary": "What changed in the stores since a time, or since last looked at."
     },
     "store_refresh": {
       "category": "stores",

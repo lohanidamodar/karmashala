@@ -247,8 +247,22 @@ void main() {
       find.byKey(const ValueKey('automation-name-check')),
       'the tests',
     );
+    final limit = find.byKey(const ValueKey('automation-timeout-check'));
+    await tester.ensureVisible(limit);
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: limit, matching: find.byType(EditableText)),
+          )
+          .controller
+          .text,
+      '30',
+    );
+    await tester.enterText(limit, '45');
     await tester.pumpAndSettle();
     expect(save(tester).onPressed, isNotNull);
+    await tester.ensureVisible(find.byKey(const ValueKey('automation-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('automation-save')));
     await tester.pumpAndSettle();
     final step = server.automationRows.getAll().single.steps.of(
@@ -256,6 +270,7 @@ void main() {
     )!;
     expect(step.text, 'flutter test');
     expect(step.name, 'the tests');
+    expect(step.timeout, const Duration(minutes: 45));
   });
 
   testWidgets('a stored automation opened to edit carries its checkout\'s '

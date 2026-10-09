@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:karmashala_remote/remote.dart';
 
 import '../agents/server_agents.dart';
+import '../backup/backup_restore.dart';
+import '../backup/backup_writer.dart' show BackupRefused;
+import '../backup/server_backups.dart';
 import '../companion/daemon_companion.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'server_admin.dart';
@@ -20,7 +23,11 @@ class ServerAdministration implements ServerAdmin {
     required this.config,
     required this.dataDirectory,
     this.storage,
+    this.backups,
   });
+
+  /// Settings → Data's backups; null refuses those calls.
+  final ServerBackups? backups;
 
   /// What Settings → Server → Storage reads and clears; null refuses those
   /// calls.
@@ -111,8 +118,84 @@ class ServerAdministration implements ServerAdmin {
         return _storage().clearToolImages();
       case ServerMethod.toolImagesSweep:
         return _storage().sweepToolImages();
+      case ServerMethod.backupCreate:
+        final folder = _path(
+          arguments,
+          'folder',
+          'name the folder to back up into',
+        );
+        return _refusing(() async {
+          final written = await _backups().create(folder);
+          return {
+            'path': written.path,
+            'manifest': written.manifest.summaryJson(),
+          };
+        });
+      case ServerMethod.backupInspect:
+        final archive = _path(arguments, 'archive', 'name the backup to read');
+        return _refusing(() async {
+          final read = await inspectBackup(
+            archive,
+            knownSchema: _backups().database.schemaVersion,
+          );
+          return {
+            'manifest': read.manifest.summaryJson(),
+            'refusal': ?read.refusal,
+          };
+        });
+      case ServerMethod.backupRestore:
+        final archive = _path(
+          arguments,
+          'archive',
+          'name the backup to restore',
+        );
+        return _refusing(() async {
+          final staged = await stageRestore(
+            archive,
+            dataDirectory: _backups().dataDirectory,
+          );
+          return {
+            'staged': staged.staged,
+            'schemaFrom': staged.schemaFrom,
+            'schemaTo': staged.schemaTo,
+          };
+        });
+      case ServerMethod.backupScheduleGet:
+        return _backups().describe();
+      case ServerMethod.backupScheduleSet:
+        return _backups().setSchedule(arguments);
       default:
         throw ServerCallRefused('this server does not answer "$method"');
+    }
+  }
+
+  ServerBackups _backups() =>
+      backups ?? (throw const ServerCallRefused('this server cannot back up'));
+
+  static String _path(
+    Map<String, Object?> arguments,
+    String name,
+    String refusal,
+  ) {
+    final value = arguments[name];
+    if (value is! String || value.trim().isEmpty) {
+      throw ServerCallRefused(refusal);
+    }
+    return value.trim();
+  }
+
+  /// [work]'s answer, its refusals and file errors in words for the person.
+  static Future<Map<String, Object?>> _refusing(
+    Future<Map<String, Object?>> Function() work,
+  ) async {
+    try {
+      return await work();
+    } on BackupRefused catch (error) {
+      throw ServerCallRefused(error.message);
+    } on FileSystemException catch (error) {
+      throw ServerCallRefused(
+        '${error.message}${error.path == null ? '' : ' (${error.path})'}',
+      );
     }
   }
 
