@@ -1087,6 +1087,7 @@ Future<int> _serve(
     runnerFor: (environment) => const CommandRunnerFactory().forEnvironment(
       environment ?? localHostEnvironment(DateTime.now().toUtc()),
     ),
+    checkoutsOf: sessionCheckoutsIn(database),
   );
   final automations = await _startAutomations(
     database: database,

@@ -340,6 +340,11 @@ class AcpSessionRuntime implements ScreenSession {
           'serves no MCP endpoint the agent can dial.',
         );
       }
+      // Told at the start only: ACP has no request that changes them later,
+      // so an attach mid-session reaches the scope and not the agent.
+      final directories = _capabilities.additionalDirectories
+          ? _files.attachedRoots
+          : const <String>[];
       final resume = resumeSessionId;
       var resumed = false;
       SessionModeState? modes;
@@ -356,6 +361,7 @@ class AcpSessionRuntime implements ScreenSession {
                 sessionId: resume,
                 cwd: workingDirectory,
                 mcpServers: servers,
+                additionalDirectories: directories,
                 meta: resumeAt == null
                     ? null
                     : {AcpExtensions.resumeAt: resumeAt},
@@ -394,7 +400,11 @@ class AcpSessionRuntime implements ScreenSession {
           AcpMethods.sessionNew,
           _authenticating(
             init,
-            () => client.newSession(cwd: workingDirectory, mcpServers: servers),
+            () => client.newSession(
+              cwd: workingDirectory,
+              mcpServers: servers,
+              additionalDirectories: directories,
+            ),
           ),
         );
         _agentSessionId = created.sessionId;
