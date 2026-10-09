@@ -25,6 +25,7 @@ class QueuedMessagesStrip extends ConsumerWidget {
     required this.sessionId,
     this.onBackToComposer,
     this.folded = false,
+    this.inTranscript = const {},
   });
 
   final String sessionId;
@@ -37,13 +38,20 @@ class QueuedMessagesStrip extends ConsumerWidget {
   /// Dismiss.
   final ValueChanged<String>? onBackToComposer;
 
+  /// The person's latest messages as the transcript shows them, by
+  /// [sentMessageKey]: a delivered one already there is not shown twice.
+  final Set<String> inTranscript;
+
   /// Below this much room one bubble no longer fits whole.
   static const foldBelow = 104.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = ref.watch(sessionQueueProvider(sessionId));
-    final delivered = ref.watch(recentlyDeliveredProvider(sessionId));
+    final delivered = [
+      for (final message in ref.watch(recentlyDeliveredProvider(sessionId)))
+        if (!inTranscript.contains(sentMessageKey(message.text))) message,
+    ];
     if (messages.isEmpty && delivered.isEmpty) return const SizedBox.shrink();
     final quarter = MediaQuery.sizeOf(context).height / 4;
     return LayoutBuilder(
@@ -739,6 +747,11 @@ String queuedWhenWords(QueueHold? hold, DateTime now) {
     QueueHoldKind.scheduled => 'Held: until the scheduled resume',
   };
 }
+
+/// [text] as the transcript and the queue can both be matched by: its words
+/// without the images block, whitespace collapsed.
+String sentMessageKey(String text) =>
+    splitAttachedImages(text).text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 /// The heading the composer puts over the paths of a message's images.
 const kAttachedImagesHeading = 'Attached image(s):';

@@ -4,6 +4,7 @@ part of '../session_transcript_view.dart';
 
 mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
   TextEditingController get _composer;
+  ValueNotifier<Set<String>> get _sentInTranscript;
   ComposerFilesController get _composerFiles;
   StreamController<List<String>> get _dropped;
   ValueNotifier<int> get _filesQueued;
@@ -212,11 +213,15 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
             // composer leaves, and may not push the box away.
             Flexible(
               child: Consumer(
-                builder: (context, ref, _) => QueuedMessagesStrip(
-                  sessionId: widget.sessionId,
-                  onBackToComposer: _backToComposer,
-                  // One line while the agent asks: its card needs the room.
-                  folded: ref.watch(_promptOpenProvider(widget.sessionId)),
+                builder: (context, ref, _) => ValueListenableBuilder(
+                  valueListenable: _sentInTranscript,
+                  builder: (context, shown, _) => QueuedMessagesStrip(
+                    sessionId: widget.sessionId,
+                    onBackToComposer: _backToComposer,
+                    // One line while the agent asks: its card needs the room.
+                    folded: ref.watch(_promptOpenProvider(widget.sessionId)),
+                    inTranscript: shown,
+                  ),
                 ),
               ),
             ),
