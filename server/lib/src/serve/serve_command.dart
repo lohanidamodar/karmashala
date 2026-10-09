@@ -1605,7 +1605,10 @@ Future<int> _serve(
     ),
   );
   switchTranscripts = sessionTranscripts;
-  acpHost.transcriptsChanged = sessionTranscripts.messagesChanged;
+  acpHost.transcriptsChanged = (sessionId) {
+    unawaited(sessionTranscripts.messagesChanged(sessionId));
+    data.conversations.messagesChanged(sessionId);
+  };
   data.sessionTranscripts = sessionTranscripts;
   // A live session idle over background work it started still reads working,
   // by the runs the chat lists.
@@ -1680,8 +1683,10 @@ Future<int> _serve(
     turnRunning: (sessionId) => switchQueue?.busy(sessionId) ?? false,
     holdQueue: (sessionId) => switchQueue?.hold(sessionId),
     releaseQueue: (sessionId) => switchQueue?.release(sessionId),
-    messagesChanged: (sessionId) =>
-        unawaited(sessionTranscripts.messagesChanged(sessionId)),
+    messagesChanged: (sessionId) {
+      unawaited(sessionTranscripts.messagesChanged(sessionId));
+      data.conversations.messagesChanged(sessionId);
+    },
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   // A CLI in a terminal names its model in its record: read again on each
@@ -2041,8 +2046,9 @@ Future<int> _serve(
 
   // The conversation index: every conversation a written row names is read
   // from its agent's store, and once per store, what the workspace already
-  // had — not in the first moments either.
-  data.conversations.start(transcripts);
+  // had — not in the first moments either. An ACP session's is its
+  // `session_messages`, read again whenever they move.
+  data.conversations.start(transcripts, servesFromMessages: speaksAcp);
   unawaited(
     Future<void>.delayed(agentScanDelay).then((_) async {
       if (stopping.isCompleted) return;

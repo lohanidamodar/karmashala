@@ -146,6 +146,11 @@ class ConversationIndexer {
     required String filePath,
   }) async {
     final state = dao.stateFor(conversationId);
+    final row = recordedRowOf(filePath);
+    if (row != null) return _indexRecorded(conversationId, cli, row, state);
+    // Once read from `session_messages`, always: they are what the chat
+    // showed, where a file the agent also keeps may say it differently.
+    if (state != null && recordedRowOf(state.filePath) != null) return false;
     final watermark = await _stat(filePath);
     if (state != null &&
         state.filePath == filePath &&
@@ -221,6 +226,38 @@ class ConversationIndexer {
       modifiedAt: watermark.modifiedAt,
       size: watermark.size,
       resumePoint: read.resumePoint,
+    );
+    writes++;
+    return true;
+  }
+}
+
+extension on ConversationIndexer {
+  /// [conversationId] read whole from session row [rowId]'s messages, unless
+  /// its newest revision is the one already read.
+  bool _indexRecorded(
+    String conversationId,
+    String cli,
+    String rowId,
+    ConversationIndexState? state,
+  ) {
+    final filePath = recordedConversationPath(rowId);
+    final watermark = dao.recordedWatermark(rowId);
+    if (state != null &&
+        state.filePath == filePath &&
+        state.matches(modifiedAt: watermark.modifiedAt, size: watermark.size)) {
+      skips++;
+      return false;
+    }
+    parses++;
+    dao.replaceTurns(
+      sessionId: conversationId,
+      cli: cli,
+      filePath: filePath,
+      turns: dao.recordedTurns(rowId),
+      indexedAt: clock.nowUtc(),
+      modifiedAt: watermark.modifiedAt,
+      size: watermark.size,
     );
     writes++;
     return true;
