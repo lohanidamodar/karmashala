@@ -1,5 +1,7 @@
 import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show LaunchLimits, kLaunchLimitsSettingsKey;
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_ui/tokens.dart' show AppAccent, SurfaceSeparation;
 import 'app_theme_mode.dart';
@@ -128,6 +130,7 @@ class Settings {
     this.quitKeepsHostSessions = true,
     this.agentMcpEntries = true,
     this.letAgentsUpdateThemselves,
+    this.launchLimits = LaunchLimits.none,
     this.childReportMode,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
@@ -349,6 +352,10 @@ class Settings {
   /// own updates outside Karmashala are untouched.
   final bool? letAgentsUpdateThemselves;
 
+  /// How many agent sessions may run at once, and the pause on background
+  /// work: the server reads these on every launch.
+  final LaunchLimits launchLimits;
+
   /// What a session hears of a session it starts unless it says: `none`,
   /// `final` or `each_turn` (the server's `childReportMode`). Null is
   /// unset, which the server reads as `final`.
@@ -504,6 +511,7 @@ class Settings {
     bool? quitKeepsHostSessions,
     bool? agentMcpEntries,
     bool? letAgentsUpdateThemselves,
+    LaunchLimits? launchLimits,
     bool clearLetAgentsUpdateThemselves = false,
     String? childReportMode,
     Map<String, bool>? terminalChordOverrides,
@@ -596,6 +604,7 @@ class Settings {
     letAgentsUpdateThemselves: clearLetAgentsUpdateThemselves
         ? null
         : (letAgentsUpdateThemselves ?? this.letAgentsUpdateThemselves),
+    launchLimits: launchLimits ?? this.launchLimits,
     childReportMode: childReportMode ?? this.childReportMode,
     terminalChordOverrides:
         terminalChordOverrides ?? this.terminalChordOverrides,
@@ -710,6 +719,7 @@ class Settings {
     'quitKeepsHostSessions',
     'agentMcpEntries',
     'letAgentsUpdateThemselves',
+    kLaunchLimitsSettingsKey,
     'childReportMode',
     'terminalChordOverrides',
     'terminalThemeSource',
@@ -794,6 +804,8 @@ class Settings {
     'agentMcpEntries': agentMcpEntries,
     if (letAgentsUpdateThemselves != null)
       'letAgentsUpdateThemselves': letAgentsUpdateThemselves,
+    if (launchLimits != LaunchLimits.none)
+      kLaunchLimitsSettingsKey: launchLimits.toJson(),
     if (childReportMode != null) 'childReportMode': childReportMode,
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
@@ -994,6 +1006,7 @@ class Settings {
       letAgentsUpdateThemselves: json['letAgentsUpdateThemselves'] is bool
           ? json['letAgentsUpdateThemselves'] as bool
           : null,
+      launchLimits: LaunchLimits.fromJson(json[kLaunchLimitsSettingsKey]),
       childReportMode: switch (json['childReportMode']) {
         final String mode when kChildReportModes.contains(mode) => mode,
         _ => null,
@@ -1127,6 +1140,7 @@ class Settings {
       other.quitKeepsHostSessions == quitKeepsHostSessions &&
       other.agentMcpEntries == agentMcpEntries &&
       other.letAgentsUpdateThemselves == letAgentsUpdateThemselves &&
+      other.launchLimits == launchLimits &&
       other.childReportMode == childReportMode &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
@@ -1195,7 +1209,7 @@ class Settings {
       logBufferSize,
       // Folded in: the outer call is already at `Object.hash`'s 20-arg limit.
       Object.hash(
-        letAgentsUpdateThemselves,
+        Object.hash(letAgentsUpdateThemselves, launchLimits),
         useInAppFilePicker,
         showHiddenFiles,
         androidSlimming,

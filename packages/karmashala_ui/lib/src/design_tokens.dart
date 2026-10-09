@@ -825,6 +825,10 @@ class Chrome {
   /// `860` in three places, and three copies of a measure drift apart.
   static const readableWidth = 860.0;
 
+  /// A settings field that takes a small whole number — a limit — and its
+  /// "No limit" hint, at 1x text.
+  static const countField = 96.0;
+
   /// The chat view's column: **no cap** — the transcript and the composer
   /// take the pane's whole width (owner, 2026-09-28, over the spec's centred
   /// 780px column). A bubble still stops at [chatBubbleShare] of the row.

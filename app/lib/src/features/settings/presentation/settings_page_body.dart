@@ -40,6 +40,7 @@ import 'diagnostics_page.dart';
 import 'editor_files_sections.dart';
 import 'external_app_section.dart';
 import 'general_pages.dart';
+import 'session_limits_section.dart';
 import 'keyboard_section.dart';
 import 'permissions_page.dart';
 import 'settings_catalog.dart';
@@ -145,6 +146,7 @@ class _ShownSection extends ConsumerWidget {
 Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.startup => const StartupSection(),
   SettingsAnchor.sessionView => const SessionViewSection(),
+  SettingsAnchor.sessionLimits => const SessionLimitsSection(),
   SettingsAnchor.launcherHotkey => const LauncherHotkeySection(),
   SettingsAnchor.keyboard => const KeyboardSection(),
   SettingsAnchor.notifications => const NotificationsSection(),

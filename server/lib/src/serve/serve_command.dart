@@ -34,6 +34,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         SessionAgentChanged,
         SessionNoticed,
         SessionQueueChanged,
+        CapacityChanged,
+        LaunchPriority,
         SessionSend,
         SessionSent,
         TabReveal,
@@ -59,6 +61,7 @@ import 'package:karmashala_session_engine/store.dart'
         SessionRepositoryDao,
         SessionUsageDao;
 import 'package:karmashala_core/visuals.dart' show VisualKind;
+import 'package:karmashala_core/util.dart' show SystemClock;
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
@@ -84,6 +87,11 @@ import '../mcp/tools/session_archive_tool_set.dart';
 import '../mcp/tools/recording_tool_set.dart';
 import '../mcp/tools/terminal_tool_set.dart';
 import '../mcp/tools/window_tool_sets.dart';
+import '../mcp/tools/capacity_tool_set.dart';
+import '../sessions/launch/capacity/awaited_launches.dart';
+import '../sessions/launch/capacity/launch_slots.dart';
+import '../sessions/launch/capacity/slot_waits.dart';
+import '../sessions/launch/capacity/session_launch_gate.dart';
 import '../sessions/launch/conversation_presence.dart';
 import '../sessions/rewind/daemon_rewind_files.dart';
 import '../sessions/rewind/rewind_cuts.dart';
@@ -821,6 +829,7 @@ Future<int> _serve(
     worktrees: worktrees,
     liveness: liveness,
   );
+  final slotWaits = SlotWaits();
   final mcpTools = McpToolRelay(
     operatorGranted: (sessionId) =>
         grantRows.getById(sessionId)?.operatorGranted ?? false,
@@ -829,6 +838,7 @@ Future<int> _serve(
       InventoryToolSet(
         tools,
         quietSinceOf: (id) => attention.status.reportForOpenId(id)?.quietSince,
+        slotWaits: slotWaits,
       ),
       NotesTodosToolSet(tools),
       DecisionToolSet(tools),
@@ -1086,12 +1096,34 @@ Future<int> _serve(
 
   // A phone starts and resumes sessions here with no app, once a launched
   // agent can be handed its tools.
+  // Concurrency limits: every session launch passes one server-owned queue.
+  final launchGate = SessionLaunchGate(
+    limits: () => launchLimitsIn(database.readMetadata(kLaunchSettingsKey)),
+    occupants: () => liveSlotHolders(
+      sessions: SessionDao(database),
+      rows: checkoutRows,
+      holds: status.holds,
+      activityOf: (id) => status.statusOf(id)?.report.status,
+    ),
+    clock: const SystemClock(),
+    readQueue: () => database.readMetadata(kLaunchQueueKey),
+    writeQueue: (json) => database.writeMetadata(kLaunchQueueKey, json),
+    fiveHourPercent: (key) => fiveHourPercentOf(agentWork.usage.states(), key),
+    names: launchScopeNames(database, checkoutRows),
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  final awaitedLaunches = AwaitedLaunches(launchGate);
+  slotWaits.gate = launchGate;
   companion.serveSessions(
     mcp: SessionMcpAccessPoint(
       mcp: mcp,
       configDirectory: p.join(dataDirectory, 'mcp'),
     ),
     openAgent: openAgent,
+  );
+  // A phone's start is a person's; it waits in line, at the front of it.
+  companion.launcher?.admit = awaitedLaunches.admitAt(
+    LaunchPriority.interactive,
   );
   // An agent whose adapter speaks ACP runs in a runtime of the server's, not
   // a PTY: its conversation is `session_messages`, its status its own word.
@@ -1164,6 +1196,10 @@ Future<int> _serve(
     githubClient: github.client,
     worktrees: worktrees,
     identities: identities,
+  );
+  // Automations, webhooks and scheduled resumes are background work.
+  automations?.agentLauncher.admit = awaitedLaunches.admitAt(
+    LaunchPriority.background,
   );
   // Webhooks reach this server through the relay it pairs through.
   final webhooks = await _startWebhooks(
@@ -1287,6 +1323,7 @@ Future<int> _serve(
     },
   );
   final launches = ServerSessionLauncher(
+    gate: launchGate,
     launcher: hostedLauncher,
     agents: liveAgents,
     registry: registry,
@@ -1313,6 +1350,28 @@ Future<int> _serve(
       );
     },
     log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  launchGate.onGranted(
+    kSessionStartLaunchKind,
+    launches.startGranted,
+    onCancelled: launches.waitCancelled,
+  );
+  data.greeters.add(() => [CapacityChanged(launchGate.snapshot())]);
+  final slotWaitInbox = SlotWaitInbox(
+    raise: attention.waitingForSlot,
+    retire: attention.slotWaitOver,
+  );
+  final capacityAnnounce = launchGate.changes.listen((_) {
+    final capacity = launchGate.snapshot();
+    data.announce([CapacityChanged(capacity)]);
+    slotWaitInbox.update(capacity);
+  });
+  // A slot frees when a process ends or its agent goes idle, and the limits
+  // live in Settings; the timer catches a change nothing announces.
+  final capacityStatus = status.changes.listen((_) => launchGate.pump());
+  final capacityPump = Timer.periodic(
+    const Duration(seconds: 15),
+    (_) => launchGate.pump(),
   );
   final sessionWaits = HostedSessionWait(status: prompts.status);
   final typist = SessionToolSet.typistOver(prompts);
@@ -1397,8 +1456,13 @@ Future<int> _serve(
     resumesOnSend: speaksAcp,
     // A PTY session nothing runs is resumed for its queue, never left
     // holding it.
-    resumeStopped: (sessionId, prompt) =>
-        launches.resume(sessionId, prompt: prompt),
+    resumeStopped: (sessionId, prompt) => launches.resume(
+      sessionId,
+      prompt: prompt,
+      priority: queuedPriority(
+        SessionQueueDao(database).head(sessionId)?.origin,
+      ),
+    ),
     takesOpeningMessage: (sessionId) {
       final session = sessionRows.getById(sessionId);
       final agentId = session == null
@@ -1504,7 +1568,11 @@ Future<int> _serve(
           // A send meanwhile queues behind the start rather than racing it.
           sessionQueue.hold(sessionId);
           final started = await launches
-              .resume(sessionId, prompt: prompt)
+              .resume(
+                sessionId,
+                prompt: prompt,
+                priority: LaunchPriority.background,
+              )
               .whenComplete(() => sessionQueue.release(sessionId));
           data.tellIntent(
             OpenSessionTab(
@@ -1587,12 +1655,15 @@ Future<int> _serve(
   // A process starting or ending tells what waits for it: a start-up is a
   // turn whose end delivers; an end leaves nothing running it.
   final queueEnds = server.lifecycle.events.listen((event) {
+    launchGate.pump();
     if (event.kind == LifecycleEventKind.started) {
       sessionQueue.hostSessionStarted(event.sessionId);
     } else {
       sessionQueue.hostSessionEnded(event.sessionId);
     }
   });
+  // Every launch kind's dispatcher is registered by now: restore the queue.
+  launchGate.start();
   data.sessionInput = sessionInput;
   // A phone on the older companion API sends to such a session the same way;
   // to a PTY session it types its own keys, so only the queue's decision is
@@ -1979,6 +2050,7 @@ Future<int> _serve(
     ..add(
       SessionToolSet(
         tools,
+        slotWaits: slotWaits,
         prompts: prompts,
         registry: registry,
         waits: sessionWaits,
@@ -1988,7 +2060,11 @@ Future<int> _serve(
         sentBy: delegations.sent,
         endedBy: delegations.endedBy,
         resumeWith: (sessionId, prompt, reveal) async {
-          final started = await launches.resume(sessionId, prompt: prompt);
+          final started = await launches.resume(
+            sessionId,
+            prompt: prompt,
+            priority: LaunchPriority.background,
+          );
           data.tellIntent(
             OpenSessionTab(
               sessionId: started.sessionId,
@@ -2027,6 +2103,7 @@ Future<int> _serve(
     ..add(PipelineToolSet(tools, pipelines: () => pipelines))
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
+    ..add(CapacityToolSet(launchGate))
     ..add(StoreToolSet(storeDesk))
     // The inbox is the server's (slice 5c), app or no app.
     ..add(InboxToolSet(attention.attention))
@@ -2277,6 +2354,10 @@ Future<int> _serve(
   storeDesk.close();
   await attention.close();
   await queueEnds.cancel();
+  await capacityAnnounce.cancel();
+  await capacityStatus.cancel();
+  capacityPump.cancel();
+  await launchGate.dispose();
   await delegationStarts.cancel();
   await delegations.close();
   handoffSweep.cancel();

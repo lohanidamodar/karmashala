@@ -1,3 +1,4 @@
+import '../../sessions/launch/capacity/slot_waits.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -41,6 +42,7 @@ class SessionToolSet extends ServerToolSet {
     this.answerOf,
     this.sentBy,
     this.endedBy,
+    this.slotWaits,
   }) : _sessions = SessionDao(_context.database),
        waits = waits ?? HostedSessionWait(status: prompts.status) {
     this.typist = typist ?? typistOver(prompts);
@@ -64,6 +66,10 @@ class SessionToolSet extends ServerToolSet {
   )?
   resumeWith;
   final HostedSessionWait waits;
+
+  /// The sessions waiting for a concurrency slot: a wait on one answers at
+  /// once, saying so, rather than reading it as ended.
+  final SlotWaits? slotWaits;
 
   /// What a session said last, which a wait that settles ready answers with;
   /// null where this server reads no transcripts.
@@ -581,6 +587,17 @@ class SessionToolSet extends ServerToolSet {
   /// Blocks until [sessionId] settles, and says what it settled on.
   Future<Object?> _wait(String sessionId, {num? timeoutSeconds}) async {
     final session = _session(sessionId);
+    if (slotWaits?.of(sessionId) case final why?) {
+      return <String, Object?>{
+        'sessionId': sessionId,
+        'title': session.title,
+        'state': 'waitingForSlot',
+        'waitingForSlot': why,
+        'note':
+            'It has not started yet. It starts by itself when a slot frees; '
+            'wait again later, or read the capacity tool.',
+      };
+    }
     final outcome = await waits.wait(
       sessionId,
       bound: sessionWaitBoundFor(timeoutSeconds),

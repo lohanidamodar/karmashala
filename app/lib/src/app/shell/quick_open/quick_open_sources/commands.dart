@@ -55,6 +55,28 @@ extension _CommandSources on QuickOpenSources {
         onSelect: () => showPipelineRuns(context),
       ),
       ..._resumeCommands(),
+      if (ref.read(capabilitiesProvider).sessionCapacity)
+        ref.read(settingsControllerProvider).launchLimits.pauseBackground
+            ? _command(
+                'Resume background work',
+                subtitle: 'Automations and agents\' sessions start again',
+                icon: AppIcons.play,
+                keywords: const ['pause', 'background', 'limits', 'queue'],
+                onSelect: () => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setBackgroundPaused(false),
+              )
+            : _command(
+                'Pause new background work',
+                subtitle:
+                    'Automations, scheduled resumes and agents\' sessions '
+                    'wait; running sessions carry on',
+                icon: AppIcons.pause,
+                keywords: const ['pause', 'background', 'limits', 'queue'],
+                onSelect: () => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setBackgroundPaused(true),
+              ),
       // Listed as verbs, not places: "Notes · Context panel" only answers if
       // you already know the name. Each opens its surface on the way.
       if (ref.read(notesEnabledProvider))

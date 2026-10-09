@@ -66,7 +66,11 @@ enum InboxItemKind {
   storeAttention,
 
   /// An app on a store changed: a release moved, new reviews.
-  storeNews;
+  storeNews,
+
+  /// A session a person started waits for a concurrency slot; it goes when
+  /// the session starts or the wait is cancelled.
+  waitingForSlot;
 
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
@@ -87,7 +91,8 @@ enum InboxItemKind {
     // Neither: the watcher would sweep this away on its next poll, and glancing
     // at a crashed session does not deal with what it left.
     InboxItemKind.followUp ||
-    InboxItemKind.automationProposed => InboxRetirement.source,
+    InboxItemKind.automationProposed ||
+    InboxItemKind.waitingForSlot => InboxRetirement.source,
   };
 
   /// Whether this kind is a condition still true right now. Load-bearing: a
@@ -116,7 +121,8 @@ enum InboxItemKind {
     InboxItemKind.automationProposed ||
     InboxItemKind.wentQuiet ||
     InboxItemKind.storeAttention ||
-    InboxItemKind.storeNews => null,
+    InboxItemKind.storeNews ||
+    InboxItemKind.waitingForSlot => null,
   };
 
   String get label => switch (this) {
@@ -133,6 +139,7 @@ enum InboxItemKind {
     InboxItemKind.wentQuiet => 'Gone quiet',
     InboxItemKind.storeAttention => 'Store needs a look',
     InboxItemKind.storeNews => 'Store changes',
+    InboxItemKind.waitingForSlot => 'Waiting for a slot',
   };
 
   /// The kind written on the wire. A kind added after 1.31 travels as
@@ -143,7 +150,8 @@ enum InboxItemKind {
     InboxItemKind.automationProposed ||
     InboxItemKind.wentQuiet ||
     InboxItemKind.storeAttention ||
-    InboxItemKind.storeNews => InboxItemKind.followUp.name,
+    InboxItemKind.storeNews ||
+    InboxItemKind.waitingForSlot => InboxItemKind.followUp.name,
     _ => name,
   };
 

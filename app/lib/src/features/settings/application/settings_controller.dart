@@ -1,4 +1,6 @@
 import 'package:agent_cli/descriptors.dart' show AgentRunForm;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show LaunchLimits;
 import 'package:karmashala_ui/tokens.dart' show AppAccent, SurfaceSeparation;
 import 'package:riverpod/riverpod.dart';
 
@@ -570,6 +572,17 @@ class SettingsController extends Notifier<Settings> {
     state = state.copyWith(letAgentsUpdateThemselves: value);
     _save();
   }
+
+  /// The concurrency limits and the background pause. Lowering a limit
+  /// never stops a running session; new starts wait.
+  void setLaunchLimits(LaunchLimits limits) {
+    if (limits == state.launchLimits) return;
+    state = state.copyWith(launchLimits: limits);
+    _save();
+  }
+
+  void setBackgroundPaused(bool paused) =>
+      setLaunchLimits(state.launchLimits.copyWith(pauseBackground: paused));
 
   /// Whether Karmashala keeps its entry in agy's own MCP file. The file
   /// itself is written by `AgentMcpEntryService`, which the caller runs.

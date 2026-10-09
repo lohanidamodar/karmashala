@@ -22,7 +22,12 @@ import '../../automations/daemon_agents.dart';
 import '../../automations/daemon_checkout_facts.dart';
 import '../../automations/hosted_agent_launcher.dart';
 import '../../domain/session_registry.dart';
+import 'capacity/launch_slots.dart';
+import 'capacity/session_launch_gate.dart';
 import 'launch_settings.dart';
+
+/// The [SessionLaunchGate] kind a session launch waits under.
+const String kSessionStartLaunchKind = 'session.start';
 
 /// Asks an agent's own store whether it holds a conversation.
 typedef ConversationPresenceIn =
@@ -71,6 +76,7 @@ class ServerSessionLauncher {
     this.discardFailedScratch,
     this.writeScratchInstructions,
     this.log,
+    this.gate,
   });
 
   final HostedAgentLauncher launcher;
@@ -116,6 +122,9 @@ class ServerSessionLauncher {
   /// is there (`ProjectFolders.discardFailedScratch`); null keeps it.
   final Future<bool> Function(Repository checkout)? discardFailedScratch;
   final void Function(String message)? log;
+
+  /// The concurrency limits every launch passes; null is none.
+  final SessionLaunchGate? gate;
 
   LaunchSettings get _settings => settings?.call() ?? LaunchSettings.none;
 
@@ -205,9 +214,18 @@ class ServerSessionLauncher {
 
   /// Starts what [spec] asks for. Throws [LaunchTargetMissing], or
   /// [StateError] / [ArgumentError] in the words a person or agent reads.
+  ///
+  /// Under a concurrency limit the launch may wait: the answer then carries
+  /// [SessionStarted.wait], a new session's row is written `created`, and it
+  /// starts by itself when a slot frees. [priority] says whose launch it is;
+  /// [startAnyway] is a person's confirmed override of the limits.
   Future<SessionStarted> start(
     SessionStartSpec spec, {
     String? freshConversationId,
+    LaunchPriority priority = LaunchPriority.interactive,
+    bool startAnyway = false,
+    LaunchReservation? reservation,
+    String? waitingRowId,
   }) async {
     if (spec.restartSessionId != null &&
         (spec.resumeConversationId != null ||
@@ -332,6 +350,43 @@ class ServerSessionLauncher {
         : attributed;
     if (inScratch) await _trustScratch(installation, launchDirectory);
 
+    final rowId = reused?.id ?? waitingRowId ?? launcher.newId();
+    var reserved = reservation;
+    final gate = this.gate;
+    if (reserved == null &&
+        gate != null &&
+        spec.surface != SessionSurface.external) {
+      final label =
+          reused?.title ??
+          newSessionTitle(spec.title, typed: spec.titleTyped).title;
+      final admission = gate.acquire(
+        sessionLaunchClaim(
+          kind: kSessionStartLaunchKind,
+          priority: priority,
+          environmentId: launchDirectory.environmentId,
+          installation: installation,
+          projectId: repository.projectId,
+          label: label,
+          sessionId: rowId,
+          payload: {
+            'spec': spec.toJson(),
+            'freshConversationId': ?freshConversationId,
+          },
+        ),
+        startAnyway: startAnyway,
+      );
+      switch (admission) {
+        case LaunchGranted(:final reservation):
+          reserved = reservation;
+        case LaunchWaiting():
+          final row =
+              reused ??
+              _waitingRow(rowId, spec, repository, installation, label);
+          log?.call('Waiting ${row.id}: ${admission.reason}');
+          return SessionStarted(session: row, wait: admission.asSessionWait);
+      }
+    }
+
     final HostedStart started;
     try {
       started = await launcher.startDetailed(
@@ -365,6 +420,7 @@ class ServerSessionLauncher {
           columns: spec.columns,
           rows: spec.rows,
           followSettings: true,
+          id: reused == null ? rowId : null,
         ),
       );
     } on Object {
@@ -373,6 +429,8 @@ class ServerSessionLauncher {
         await discardFailedScratch?.call(repository);
       }
       rethrow;
+    } finally {
+      reserved?.release();
     }
     final words = [?notice, ?caveat, ?started.attachNotice].join(' ');
     log?.call(
@@ -404,9 +462,11 @@ class ServerSessionLauncher {
     String? freshConversationId,
     int columns = 120,
     int rows = 40,
+    LaunchPriority priority = LaunchPriority.interactive,
   }) {
     Future<SessionStarted> now() => _resume(
       sessionId,
+      priority: priority,
       restart: restart,
       prompt: prompt,
       systemPrompt: systemPrompt,
@@ -437,6 +497,7 @@ class ServerSessionLauncher {
     required String? prompt,
     required int columns,
     required int rows,
+    required LaunchPriority priority,
     String? systemPrompt,
     String? freshConversationId,
   }) async {
@@ -475,6 +536,7 @@ class ServerSessionLauncher {
         rows: rows,
       ),
       freshConversationId: freshConversationId,
+      priority: priority,
     );
   }
 
@@ -489,6 +551,11 @@ class ServerSessionLauncher {
     final hostId = hostSessionIdOf(sessionId);
     final session = registry.findProcess(hostId);
     if (session == null || session.lifecycle.hasEnded) {
+      final waiting = gate?.ticketForSession(sessionId);
+      if (waiting != null) {
+        gate!.cancel(waiting.id);
+        return;
+      }
       if (quietly) return;
       throw const LaunchTargetMissing(
         'Nothing is running that session, so there is nothing to end.',
@@ -502,6 +569,83 @@ class ServerSessionLauncher {
         'Nothing is running that session, so there is nothing to end.',
       );
     }
+  }
+
+  /// The row a new session waits in for a slot: `created`, so it shows and
+  /// can be cancelled, and the start that follows fills it in.
+  Session _waitingRow(
+    String id,
+    SessionStartSpec spec,
+    Repository repository,
+    AgentInstallation installation,
+    String title,
+  ) {
+    final existing = sessions.getById(id);
+    if (existing != null) return existing;
+    final named = newSessionTitle(spec.title, typed: spec.titleTyped);
+    final row = Session(
+      id: id,
+      repositoryId: repository.id,
+      agentInstallationId: installation.id,
+      title: named.title,
+      titleByUser: named.byUser,
+      useWorktree: false,
+      status: SessionStatus.created,
+      createdAt: DateTime.now().toUtc(),
+      surface: spec.surface,
+      view: spec.view ?? agents.defaultView(installation.agentId),
+      permissionMode: spec.permissionMode,
+      modelId: spec.modelId,
+      parentSessionId: spec.parentSessionId,
+      parentLink: spec.parentSessionId == null
+          ? null
+          : (spec.parentLink ?? SessionLink.spawn),
+    );
+    sessions.insertWithPrimaryRepository(row);
+    launcher.onRowWritten?.call(id);
+    return row;
+  }
+
+  /// Starts a launch the gate granted after it waited — after a restart too.
+  /// A waiting row that was cancelled or archived meanwhile is left alone.
+  Future<void> startGranted(
+    LaunchTicket ticket,
+    LaunchReservation reservation,
+  ) async {
+    final raw = ticket.claim.payload['spec'];
+    if (raw is! Map) return;
+    final spec = SessionStartSpec.fromJson(raw.cast<String, Object?>());
+    final rowId = ticket.claim.sessionId;
+    final row = rowId == null ? null : sessions.getById(rowId);
+    if (row == null || row.isArchived) return;
+    final waitingNew = row.status == SessionStatus.created;
+    if (!waitingNew && runsHere(row.id)) return;
+    try {
+      await start(
+        spec,
+        freshConversationId:
+            ticket.claim.payload['freshConversationId'] as String?,
+        priority: ticket.claim.priority,
+        reservation: reservation,
+        waitingRowId: waitingNew ? row.id : null,
+      );
+    } on Object catch (error) {
+      log?.call('Waited launch ${row.id} did not start: $error');
+      if (waitingNew) {
+        sessions.updateStatus(row.id, SessionStatus.failed);
+        launcher.onRowWritten?.call(row.id);
+      }
+      rethrow;
+    }
+  }
+
+  /// A wait taken out of line: a new session's waiting row is cancelled.
+  void waitCancelled(LaunchTicket ticket) {
+    final rowId = ticket.claim.sessionId;
+    final row = rowId == null ? null : sessions.getById(rowId);
+    if (row == null || row.status != SessionStatus.created) return;
+    sessions.updateStatus(row.id, SessionStatus.cancelled);
+    launcher.onRowWritten?.call(row.id);
   }
 
   SessionStarted _adopted(Session row) =>

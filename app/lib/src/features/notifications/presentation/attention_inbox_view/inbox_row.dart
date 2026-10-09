@@ -75,6 +75,10 @@ bool isStoreInboxItem(InboxItem item) =>
     color: semantic.attention,
   ),
   InboxItemKind.storeNews => (icon: AppIcons.package, color: semantic.idle),
+  InboxItemKind.waitingForSlot => (
+    icon: AppIcons.clock,
+    color: semantic.attention,
+  ),
 };
 
 /// One waiting thing, and the two verbs it is for. No `⋮`: every action this

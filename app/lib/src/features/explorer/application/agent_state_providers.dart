@@ -15,6 +15,7 @@ import '../../sessions/application/session_list_prefs.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../../sessions/application/capacity_providers.dart';
 import 'agent_states.dart';
 import 'hidden_working_sessions.dart';
 import 'workspace_session_entry.dart';
@@ -231,19 +232,46 @@ final agentStateGroupsProvider = Provider.autoDispose<List<AgentStateGroup>>((
   ref,
 ) {
   final hidden = ref.watch(hiddenWorkingSessionsProvider);
+  final waiting = ref.watch(_slotWaitingIdsProvider);
   final entries = ref.watch(workspaceSessionsProvider);
   return groupByAgentState(
-    hidden.isEmpty
+    hidden.isEmpty && waiting.isEmpty
         ? entries
         : [
             for (final entry in entries)
-              if (!hidden.contains(entry.id)) entry,
+              if (!hidden.contains(entry.id) && !waiting.contains(entry.id))
+                entry,
           ],
     needsYou: ref.watch(needsYouProvider),
     live: ref.watch(liveAgentStatusesProvider),
     quiet: ref.watch(quietSessionsProvider),
   );
 });
+
+final _slotWaitingIdsProvider = Provider.autoDispose<Set<String>>(
+  (ref) => {
+    for (final waiter in ref.watch(
+      capacityNowProvider.select((c) => c.waiters),
+    ))
+      ?waiter.sessionId,
+  },
+);
+
+/// The sessions waiting for a concurrency slot, in line order: drawn in a
+/// group of their own, never as Ready or Done, which they are not.
+final slotWaitingSessionsProvider =
+    Provider.autoDispose<List<WorkspaceSessionEntry>>((ref) {
+      final byId = {
+        for (final entry in ref.watch(workspaceSessionsProvider))
+          entry.id: entry,
+      };
+      return [
+        for (final waiter in ref.watch(
+          capacityNowProvider.select((c) => c.waiters),
+        ))
+          ?byId[waiter.sessionId],
+      ];
+    });
 
 /// How many sessions the Agents page's "N working" line stands for.
 final agentsHiddenWorkingCountProvider = Provider.autoDispose<int>((ref) {

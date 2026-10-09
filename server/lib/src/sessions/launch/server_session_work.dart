@@ -2,6 +2,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import '../../acp/acp_login_required.dart';
 import '../../data/session_work.dart';
+import 'capacity/session_launch_gate.dart';
 import 'server_session_launcher.dart';
 import 'session_continuations.dart';
 import '../rewind/session_rewinds.dart';
@@ -41,6 +42,16 @@ class ServerSessionWork implements SessionWork {
           rows: r.rows,
         ),
         SessionEndRequest(:final sessionId) => await _end(sessionId),
+        SessionCapacityRead() =>
+          launches.gate?.snapshot() ?? CapacitySnapshot.empty,
+        SessionWaitStartAnyway(:final ticketId) => _wait(
+          ticketId,
+          (gate) => gate.startAnyway(ticketId),
+        ),
+        SessionWaitCancel(:final ticketId) => _wait(
+          ticketId,
+          (gate) => gate.cancel(ticketId),
+        ),
         SessionDetachRequest(:final sessionId) => await _detach(sessionId),
         SessionAttachRequest(:final sessionId, :final parentId) =>
           await _attach(sessionId, parentId),
@@ -105,6 +116,14 @@ class ServerSessionWork implements SessionWork {
     } on ArgumentError catch (error) {
       throw DataRefused.invalid('${error.message}');
     }
+  }
+
+  DataAck _wait(String ticketId, bool Function(SessionLaunchGate gate) act) {
+    final gate = launches.gate;
+    if (gate == null || !act(gate)) {
+      throw const DataRefused.notFound('That launch is not waiting any more.');
+    }
+    return const DataAck();
   }
 
   Future<DataAck> _detach(String sessionId) async {

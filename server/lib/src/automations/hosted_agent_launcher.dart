@@ -30,6 +30,8 @@ import '../domain/session_registry.dart';
 import '../pty/environment_spawn.dart';
 import '../sessions/launch/handoff_routes.dart';
 import '../sessions/launch/session_handoffs.dart';
+import '../sessions/launch/capacity/session_launch_gate.dart'
+    show LaunchReservation;
 import '../sessions/launch/launch_settings.dart';
 import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
@@ -307,6 +309,11 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   final Map<String, String> _hostEnvironment;
   final bool _windows;
 
+  /// Waits for a concurrency slot before anything is written, for a caller
+  /// that does not pass `ServerSessionLauncher`'s own gate (an automation, a
+  /// scheduled resume, a phone); null starts at once.
+  Future<LaunchReservation?> Function(HostedLaunch launch)? admit;
+
   @override
   Future<String> launch(
     Automation automation,
@@ -340,6 +347,15 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
 
   /// [start], answering what was started and how a client shows it.
   Future<HostedStart> startDetailed(HostedLaunch launch) async {
+    final reservation = await admit?.call(launch);
+    try {
+      return await _startDetailed(launch);
+    } finally {
+      reservation?.release();
+    }
+  }
+
+  Future<HostedStart> _startDetailed(HostedLaunch launch) async {
     final installation = launch.installation;
     final agentId = installation.agentId;
     final descriptor = agents.descriptorOf(agentId);
@@ -476,7 +492,13 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             ? null
             : (launch.parentLink ?? SessionLink.spawn),
       );
-      sessions.insertWithPrimaryRepository(session);
+      // A row that waited for a slot is filled in, not inserted again.
+      if (launch.id != null &&
+          sessions.getById(id)?.status == SessionStatus.created) {
+        sessions.write(session);
+      } else {
+        sessions.insertWithPrimaryRepository(session);
+      }
     }
     for (final extra in launch.additionalRepositoryIds) {
       links?.link(id, extra);

@@ -119,4 +119,7 @@ const Set<String> kServerFeatures = <String>{
   'projects.createFolder',
   // `activity.range` and `activityAppended`: the log the Timeline draws.
   'activity',
+  // Concurrency limits: `sessions.capacity`, `sessions.waitStartAnyway`,
+  // `sessions.waitCancel`, `capacityChanged`, and a start's `wait`.
+  'sessions.capacity',
 };

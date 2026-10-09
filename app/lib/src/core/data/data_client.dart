@@ -395,6 +395,16 @@ class DataClient {
     sync: true,
   );
 
+  /// The concurrency limits and who waits for a slot, as last told.
+  CapacitySnapshot capacity = CapacitySnapshot.empty;
+
+  final _capacityChanges = StreamController<CapacitySnapshot>.broadcast(
+    sync: true,
+  );
+
+  /// The limits, their use or the waits moved.
+  Stream<CapacitySnapshot> get capacityChanges => _capacityChanges.stream;
+
   /// A session's agent was switched in place, with every agent it ran under.
   Stream<SessionAgentChanged> get sessionAgentChanges =>
       _sessionAgentChanges.stream;
@@ -1155,6 +1165,9 @@ class DataClient {
           if (!_sessionQueueChanges.isClosed) _sessionQueueChanges.add(change);
         case final SessionAgentChanged change:
           if (!_sessionAgentChanges.isClosed) _sessionAgentChanges.add(change);
+        case CapacityChanged(:final capacity):
+          this.capacity = capacity;
+          if (!_capacityChanges.isClosed) _capacityChanges.add(capacity);
         case final SessionCommandsChanged change:
           sessionCommands[change.sessionId] = change;
           if (!_sessionCommandChanges.isClosed) {
@@ -1421,6 +1434,7 @@ class DataClient {
     unawaited(_sessionPromptKindChanges.close());
     unawaited(_sessionQueueChanges.close());
     unawaited(_sessionAgentChanges.close());
+    unawaited(_capacityChanges.close());
     unawaited(_terminalChanges.close());
     unawaited(_attentionChanges.close());
     automations.dispose();
