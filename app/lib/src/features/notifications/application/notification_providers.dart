@@ -80,6 +80,9 @@ class NotificationSettingsController extends Notifier<NotificationSettings> {
   void setStoreChanges(StoreChangeNotify value) =>
       _update(state.copyWith(storeChanges: value));
 
+  void setUsageForecast(bool value) =>
+      _update(state.copyWith(usageForecast: value));
+
   /// Focus's half here: Only when I'm needed, remembering [before].
   void startFocus(FocusMemory before) =>
       _update(state.copyWith(level: NotifyLevel.whenNeeded, focus: before));

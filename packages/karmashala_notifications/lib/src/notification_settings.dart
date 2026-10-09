@@ -70,9 +70,14 @@ class NotificationSettings {
     this.focus,
     this.chime = false,
     this.storeChanges = StoreChangeNotify.attention,
+    this.usageForecast = false,
   });
 
   final NotifyLevel level;
+
+  /// Tell when an account's forecast runs out well before its window resets;
+  /// off unless turned on.
+  final bool usageForecast;
 
   /// A soft sound once for each new thing that needs the person; off unless
   /// they turn it on.
@@ -98,12 +103,14 @@ class NotificationSettings {
     bool endFocus = false,
     bool? chime,
     StoreChangeNotify? storeChanges,
+    bool? usageForecast,
   }) => NotificationSettings(
     level: level ?? this.level,
     onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
     focus: endFocus ? null : focus ?? this.focus,
     chime: chime ?? this.chime,
     storeChanges: storeChanges ?? this.storeChanges,
+    usageForecast: usageForecast ?? this.usageForecast,
   );
 
   /// The level, and the three switches it replaced, so an app from before
@@ -117,6 +124,7 @@ class NotificationSettings {
     'focus': focus?.toJson(),
     'chime': chime,
     'storeChanges': storeChanges.name,
+    'usageForecast': usageForecast,
   };
 
   /// Reads [json], falling back to the default for any absent or malformed
@@ -139,6 +147,7 @@ class NotificationSettings {
       // Off unless written on: a sound is never turned on by a missing key.
       chime: json['chime'] == true,
       storeChanges: StoreChangeNotify.parse(json['storeChanges']),
+      usageForecast: json['usageForecast'] == true,
     );
   }
 
@@ -161,9 +170,16 @@ class NotificationSettings {
       other.onlyWhenUnfocused == onlyWhenUnfocused &&
       other.focus == focus &&
       other.chime == chime &&
-      other.storeChanges == storeChanges;
+      other.storeChanges == storeChanges &&
+      other.usageForecast == usageForecast;
 
   @override
-  int get hashCode =>
-      Object.hash(level, onlyWhenUnfocused, focus, chime, storeChanges);
+  int get hashCode => Object.hash(
+    level,
+    onlyWhenUnfocused,
+    focus,
+    chime,
+    storeChanges,
+    usageForecast,
+  );
 }
