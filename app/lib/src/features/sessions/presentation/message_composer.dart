@@ -14,13 +14,20 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_session/mentions.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
+import '../domain/composer_mentions.dart';
+import 'mention_text_controller.dart';
+
+export '../domain/composer_mentions.dart';
+export 'mention_text_controller.dart' show MentionTextController;
 
 part 'message_composer/attachment.dart';
 part 'message_composer/attachment_chips.dart';
 part 'message_composer/attaching.dart';
 part 'message_composer/command_palette.dart';
+part 'message_composer/mention_palette.dart';
 part 'message_composer/toolbar.dart';
 
 /// How many lines of [style] fit [height], between 1 and 12. Unbounded means
@@ -85,6 +92,7 @@ class MessageComposer extends StatefulWidget {
     this.controller,
     this.snippets,
     this.commands,
+    this.mentions,
     this.imagesGoAsImages,
     this.server,
     this.attaches = true,
@@ -132,6 +140,10 @@ class MessageComposer extends StatefulWidget {
   /// lists them and picking one puts it in the box. Null offers none.
   final List<ComposerCommand> Function()? commands;
 
+  /// What "@" offers, and what a mention is sent as. Null offers nothing.
+  /// A [MentionTextController] as [controller] draws mentions as chips.
+  final ComposerMentions? mentions;
+
   /// Whether an attached image reaches the agent as an image rather than as
   /// its path, read when the chips are drawn. Null is "as its path".
   final bool Function()? imagesGoAsImages;
@@ -178,7 +190,7 @@ class MessageComposer extends StatefulWidget {
 final _log = AppLogger.named('composer');
 
 class _MessageComposerState extends State<MessageComposer>
-    with _ComposerCommands, _ComposerAttaching {
+    with _ComposerCommands, _ComposerMentioning, _ComposerAttaching {
   @override
   late TextEditingController _input;
   @override
@@ -202,9 +214,11 @@ class _MessageComposerState extends State<MessageComposer>
     super.initState();
     // No listener on [_input] or [_focusNode] here: [_SendButton] and the
     // card's border listen for themselves, so neither rebuilds the text field.
-    _input = widget.controller ?? TextEditingController();
+    _input = widget.controller ?? MentionTextController();
     // Rebuilds only when the palette's matches change, not per keystroke.
-    _input.addListener(_matchCommands);
+    _input
+      ..addListener(_matchCommands)
+      ..addListener(_matchMentions);
     _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     _drops = widget.droppedFiles?.listen(_attachDropped);
     widget.serverFilesWaiting?.addListener(_scheduleDrain);
@@ -262,12 +276,16 @@ class _MessageComposerState extends State<MessageComposer>
   void didUpdateWidget(MessageComposer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      _input.removeListener(_matchCommands);
+      _input
+        ..removeListener(_matchCommands)
+        ..removeListener(_matchMentions);
       if (oldWidget.controller == null) {
         _input.dispose();
       }
-      _input = widget.controller ?? TextEditingController();
-      _input.addListener(_matchCommands);
+      _input = widget.controller ?? MentionTextController();
+      _input
+        ..addListener(_matchCommands)
+        ..addListener(_matchMentions);
     }
     if (oldWidget.droppedFiles != widget.droppedFiles) {
       unawaited(_drops?.cancel());
@@ -299,7 +317,9 @@ class _MessageComposerState extends State<MessageComposer>
     }
     _lifecycle.dispose();
     _focusNode.dispose();
-    _input.removeListener(_matchCommands);
+    _input
+      ..removeListener(_matchCommands)
+      ..removeListener(_matchMentions);
     if (widget.controller == null) _input.dispose();
     super.dispose();
   }
@@ -309,6 +329,9 @@ class _MessageComposerState extends State<MessageComposer>
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
+    }
+    if (_mentionOpen && _handleMentionKey(event) == KeyEventResult.handled) {
+      return KeyEventResult.handled;
     }
     if (_paletteOpen && _handlePaletteKey(event) == KeyEventResult.handled) {
       return KeyEventResult.handled;
@@ -377,7 +400,8 @@ class _MessageComposerState extends State<MessageComposer>
       _sendError = null;
     });
     try {
-      await widget.onSend(buffer.toString());
+      final message = buffer.toString();
+      await widget.onSend(await widget.mentions?.expand(message) ?? message);
       if (mounted) {
         // Only what went: text a note or a draft added meanwhile stays.
         final left = textLeftAfterSend(_input.text, typed);
@@ -543,6 +567,13 @@ class _MessageComposerState extends State<MessageComposer>
                   ),
                 ),
               ),
+            if (_mentionOpen && canType)
+              _MentionPalette(
+                options: _mentionMatches,
+                highlighted: _mentionHighlight,
+                touch: touch,
+                onPicked: _pickMention,
+              ),
             if (_paletteOpen && canType)
               _CommandPalette(
                 commands: _commandMatches,
@@ -664,7 +695,10 @@ class _MessageComposerState extends State<MessageComposer>
 
   Widget _touchRow(Widget field, {required bool canType}) {
     final snippets = widget.snippets;
-    final tools = widget.attaches || snippets != null;
+    final tools =
+        widget.attaches ||
+        snippets != null ||
+        (widget.mentions != null && canType);
     return Padding(
       padding: const EdgeInsets.all(Insets.xs),
       child: Column(
@@ -686,6 +720,16 @@ class _MessageComposerState extends State<MessageComposer>
                   snippets: snippets,
                   touch: true,
                   onPicked: canType ? _insertSnippet : null,
+                ),
+              // Only while the box takes input: a held box's hint needs the
+              // row's width more than a button that could do nothing.
+              if (widget.mentions != null && canType)
+                _ToolbarIconButton(
+                  key: const ValueKey('composer-mention-button'),
+                  tooltip: 'Mention a file, diff, terminal or session',
+                  icon: AppIcons.at,
+                  touch: true,
+                  onPressed: () => unawaited(_openMentionSheet()),
                 ),
               Expanded(
                 // A thumb's height even for one line, the text centred in it,
@@ -738,9 +782,13 @@ class _MessageComposerState extends State<MessageComposer>
   /// Everything but the text lines, near enough to size the box by: guessing
   /// low costs a few pixels of scroll, never an overflow.
   double _chromeHeight(double width, TextScaler textScaler, bool touch) {
-    final palette = _paletteOpen
-        ? _CommandPalette.heightFor(_commandMatches.length, touch: touch)
-        : 0.0;
+    final palette =
+        (_paletteOpen
+            ? _CommandPalette.heightFor(_commandMatches.length, touch: touch)
+            : 0.0) +
+        (_mentionOpen
+            ? _MentionPalette.heightFor(_mentionMatches.length, touch: touch)
+            : 0.0);
     // Bottom padding, the ring, the text's own padding, the toolbar.
     // The phone's one row: its padding, the ring and the row's lines of
     // text beside the buttons — which the lines are counted into, so only
