@@ -114,6 +114,7 @@ import '../sessions/session_transcripts.dart';
 import '../status/child_turn_wait.dart';
 import '../status/hosted_session_wait.dart';
 import '../stores/server_store_desk.dart';
+import '../stores/store_change_inbox.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
@@ -893,6 +894,19 @@ Future<int> _serve(
   );
   status.start();
   attention.start();
+  // What a read of the stores found changed is filed, one item per app;
+  // opening the app there sees its items here. Then the stores are read on
+  // their own, window or no window.
+  storeDesk
+    ..onChanges = (found) {
+      for (final changes in found) {
+        attention.attention.raise(storeChangesInboxItem(changes));
+      }
+    }
+    ..onSeen = (appKeys) {
+      attention.attention.viewedElsewhere(storeInboxOpenIds(appKeys));
+    }
+    ..startSchedule();
   final recording = SessionStatusRecording(
     server.lifecycle,
     database,

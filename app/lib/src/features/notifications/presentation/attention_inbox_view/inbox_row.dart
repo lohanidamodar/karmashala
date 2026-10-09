@@ -65,6 +65,11 @@ class _ContinueAction extends StatelessWidget {
     icon: AppIcons.lightning,
     color: semantic.attention,
   ),
+  InboxItemKind.storeAttention => (
+    icon: AppIcons.package,
+    color: semantic.attention,
+  ),
+  InboxItemKind.storeNews => (icon: AppIcons.package, color: semantic.idle),
 };
 
 /// One waiting thing, and the two verbs it is for. No `⋮`: every action this

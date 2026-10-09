@@ -154,6 +154,7 @@ class ServerAttention implements AttentionWork {
     if (_closed) return;
     _update(_inbox.syncFollowUps(followUps()));
   }
+
   /// One pass over the whole watch set: every session judged, conditions that
   /// cleared retired, sessions that left forgotten.
   Future<void> poll() async {
@@ -441,6 +442,13 @@ class ServerAttention implements AttentionWork {
       stillListed: stillListed,
       windows: windows(),
     );
+  }
+
+  /// Marks the items about [openIds] seen, as a window looking at them
+  /// would: an app opened in the Stores tab.
+  void viewedElsewhere(Set<String> openIds) {
+    if (_closed) return;
+    _update(_inbox.viewed(openIds));
   }
 
   DataAck _seen(Object? link, List<String> openIds) {

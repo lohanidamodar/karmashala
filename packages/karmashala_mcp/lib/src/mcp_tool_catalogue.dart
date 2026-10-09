@@ -558,6 +558,7 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'store_apps': McpToolAnnotations.readOutside,
   'store_app': McpToolAnnotations.read,
   'store_reviews': McpToolAnnotations.read,
+  'store_changes': McpToolAnnotations.read,
   'store_refresh': McpToolAnnotations.readOutside,
 };
 
@@ -1243,6 +1244,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'store_reviews': McpToolListing(
     McpToolCategory.stores,
     'An app\'s store reviews, newest first, by rating or unanswered only.',
+  ),
+  'store_changes': McpToolListing(
+    McpToolCategory.stores,
+    'What changed in the stores since a time, or since last looked at.',
   ),
   'store_refresh': McpToolListing(
     McpToolCategory.stores,

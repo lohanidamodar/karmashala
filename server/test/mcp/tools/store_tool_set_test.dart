@@ -214,11 +214,62 @@ void main() {
   Map<String, Object?> onStore(Map<String, Object?> group, String store) =>
       list(group['stores']).singleWhere((s) => s['store'] == store);
 
-  test('serves the four store tools', () {
+  test('serves the five store tools', () {
     expect(
       [for (final s in tools.schemas) s['name']],
-      ['store_apps', 'store_app', 'store_reviews', 'store_refresh'],
+      [
+        'store_apps',
+        'store_app',
+        'store_reviews',
+        'store_changes',
+        'store_refresh',
+      ],
     );
+  });
+
+  group('store_changes', () {
+    final found = StoreAppChanges(
+      app: notesIos,
+      platform: 'iOS',
+      at: now.subtract(const Duration(hours: 1)),
+      changes: const [
+        StoreChange(
+          kind: StoreChangeKind.release,
+          text: '2.1.0 In review → Rejected',
+          attention: true,
+        ),
+        StoreChange(kind: StoreChangeKind.reviews, text: '1 new review (5★)'),
+      ],
+    );
+
+    test('without since, what nobody has opened yet', () async {
+      desk.changes = [found];
+      final answer = await call('store_changes');
+      expect(desk.changesAsked.single.since, isNull);
+      expect(desk.changesAsked.single.unseenOnly, isTrue);
+      final change = list(answer['changes']).single;
+      expect(change['app'], 'Calm Notes');
+      expect(change['store'], 'app_store');
+      expect(change['needsAttention'], isTrue);
+      expect(
+        change['summary'],
+        'Calm Notes (iOS): 2.1.0 In review → Rejected · 1 new review (5★)',
+      );
+      expect(list(change['changes']).first['kind'], 'release');
+    });
+
+    test('since a date, seen or not', () async {
+      await call('store_changes', {'since': '2026-10-01'});
+      expect(desk.changesAsked.single.since, DateTime.utc(2026, 10, 1));
+      expect(desk.changesAsked.single.unseenOnly, isFalse);
+    });
+
+    test('an unreadable since is refused', () async {
+      await expectLater(
+        call('store_changes', {'since': 'yesterday-ish'}),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 
   group('store_apps', () {
@@ -539,6 +590,7 @@ void main() {
       await call('store_app', {'app': 'com.popupbits.notes'}),
       await call('store_reviews', {'app': 'com.popupbits.notes'}),
       await call('store_refresh'),
+      await call('store_changes'),
     ];
     final text = jsonEncode(answers);
     for (final secret in [
@@ -573,5 +625,18 @@ class _FakeDesk implements StoreDesk {
     asked.add(maxAge);
     if (next case final replaced?) view = replaced;
     return view;
+  }
+
+  /// What [changesSince] answers, newest first.
+  List<StoreAppChanges> changes = [];
+  final changesAsked = <({DateTime? since, bool unseenOnly})>[];
+
+  @override
+  List<StoreAppChanges> changesSince({
+    DateTime? since,
+    bool unseenOnly = false,
+  }) {
+    changesAsked.add((since: since, unseenOnly: unseenOnly));
+    return changes;
   }
 }

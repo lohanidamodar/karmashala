@@ -5,6 +5,8 @@ library;
 
 import 'package:store_console/store_console.dart';
 
+import 'store_change_values.dart';
+
 /// The App Store Connect key the server holds, without its private key.
 final class AppleKeySummary {
   const AppleKeySummary({
@@ -163,6 +165,8 @@ final class StoresView {
     this.refreshedAt,
     this.refreshing = false,
     this.reads = const {},
+    this.changes = const [],
+    this.schedule,
   });
 
   final AppleKeySummary? apple;
@@ -193,6 +197,20 @@ final class StoresView {
   /// by [StoreApp.key]. Not kept across a server's restart.
   final Map<String, StoreAppRead> reads;
 
+  /// What the last read that changed anything found, one per app at most.
+  final List<StoreAppChanges> changes;
+
+  /// The background refresh; null from a server that runs none.
+  final StoreRefreshSchedule? schedule;
+
+  /// [appKey]'s latest changes, or null.
+  StoreAppChanges? changesOf(String appKey) {
+    for (final held in changes) {
+      if (held.app.key == appKey) return held;
+    }
+    return null;
+  }
+
   /// The stores the server holds a credential for.
   Set<StoreKind> get connected => {
     if (apple != null) StoreKind.appStore,
@@ -218,6 +236,8 @@ final class StoresView {
     'reads': {
       for (final MapEntry(:key, :value) in reads.entries) key: value.toJson(),
     },
+    'changes': [for (final held in changes) held.toJson()],
+    if (schedule case final schedule?) 'schedule': schedule.toJson(),
   };
 
   factory StoresView.fromJson(Map<String, Object?> json) {
@@ -262,6 +282,14 @@ final class StoresView {
             in ((json['reads'] as Map?) ?? const {}).entries)
           key as String: StoreAppRead.fromJson(map(value)),
       },
+      // Absent from an older server's view.
+      changes: [
+        for (final held in (json['changes'] as List?) ?? const [])
+          StoreAppChanges.fromJson(map(held)),
+      ],
+      schedule: json['schedule'] == null
+          ? null
+          : StoreRefreshSchedule.fromJson(map(json['schedule'])),
     );
   }
 }

@@ -13,6 +13,21 @@ enum NotifyLevel {
   nothing,
 }
 
+/// Which changes on the app stores interrupt: Settings → Notifications →
+/// Store changes. The inbox files every one whatever this says.
+enum StoreChangeNotify {
+  off,
+
+  /// A rejection, an action needed, a halted rollout, a 1–2★ review.
+  attention,
+  everything;
+
+  static StoreChangeNotify parse(Object? name) => values.firstWhere(
+    (value) => value.name == name,
+    orElse: () => StoreChangeNotify.attention,
+  );
+}
+
 /// What Focus replaced, to be put back when it ends: the level before it, and
 /// whether sessions were hidden while working.
 class FocusMemory {
@@ -54,6 +69,7 @@ class NotificationSettings {
     this.onlyWhenUnfocused = true,
     this.focus,
     this.chime = false,
+    this.storeChanges = StoreChangeNotify.attention,
   });
 
   final NotifyLevel level;
@@ -61,6 +77,9 @@ class NotificationSettings {
   /// A soft sound once for each new thing that needs the person; off unless
   /// they turn it on.
   final bool chime;
+
+  /// Which store changes interrupt; also held back by [level] nothing.
+  final StoreChangeNotify storeChanges;
 
   /// Only deliver while the app window does not have OS focus.
   final bool onlyWhenUnfocused;
@@ -78,11 +97,13 @@ class NotificationSettings {
     FocusMemory? focus,
     bool endFocus = false,
     bool? chime,
+    StoreChangeNotify? storeChanges,
   }) => NotificationSettings(
     level: level ?? this.level,
     onlyWhenUnfocused: onlyWhenUnfocused ?? this.onlyWhenUnfocused,
     focus: endFocus ? null : focus ?? this.focus,
     chime: chime ?? this.chime,
+    storeChanges: storeChanges ?? this.storeChanges,
   );
 
   /// The level, and the three switches it replaced, so an app from before
@@ -95,6 +116,7 @@ class NotificationSettings {
     'notifyWhenAttentionNeeded': enabled,
     'focus': focus?.toJson(),
     'chime': chime,
+    'storeChanges': storeChanges.name,
   };
 
   /// Reads [json], falling back to the default for any absent or malformed
@@ -116,6 +138,7 @@ class NotificationSettings {
       focus: FocusMemory.fromJson(json['focus']),
       // Off unless written on: a sound is never turned on by a missing key.
       chime: json['chime'] == true,
+      storeChanges: StoreChangeNotify.parse(json['storeChanges']),
     );
   }
 
@@ -137,8 +160,10 @@ class NotificationSettings {
       other.level == level &&
       other.onlyWhenUnfocused == onlyWhenUnfocused &&
       other.focus == focus &&
-      other.chime == chime;
+      other.chime == chime &&
+      other.storeChanges == storeChanges;
 
   @override
-  int get hashCode => Object.hash(level, onlyWhenUnfocused, focus, chime);
+  int get hashCode =>
+      Object.hash(level, onlyWhenUnfocused, focus, chime, storeChanges);
 }
