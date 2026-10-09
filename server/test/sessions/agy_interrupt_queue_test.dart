@@ -140,4 +140,93 @@ void main() {
       expect(delivered, ['carry on']);
     });
   }
+
+  group('the quiet-prompt fallback, for any agent', () {
+    setUp(() async {
+      await queue.close();
+      var n = 0;
+      queue = SessionQueue(
+        dao: SessionQueueDao(database),
+        status: status,
+        turnStartGrace: Duration.zero,
+        quietPeriod: const Duration(seconds: 30),
+        quietPoll: const Duration(milliseconds: 10),
+        promptMarkersOf: (_) => const ['>'],
+        promptPoll: const Duration(milliseconds: 10),
+        newId: () => 'm${++n}',
+        now: () => clock.now,
+      )..deliver = ((_, text) async => delivered.add(text));
+      queue.start();
+      registry.open(
+        'karmashala_s1',
+        const PtySpawnRequest(argv: ['agy'], columns: 120, rows: 30),
+      );
+    });
+
+    Future<void> wait() =>
+        Future<void>.delayed(const Duration(milliseconds: 60));
+
+    void screen(String fixture) => launcher.handles.last.emit(
+      utf8.encode(
+        File(
+          '../app/test/features/agents/fixtures/$fixture.raw',
+        ).readAsStringSync(),
+      ),
+    );
+
+    test('a status stuck on working over a still prompt delivers one '
+        'message after 20 s, and never a second on the same reading', () async {
+      hook('PreInvocation');
+      for (final text in ['first', 'second']) {
+        expect(
+          queue.admit('s1', text, origin: QueuedMessageOrigin.app),
+          isA<AdmitQueued>(),
+        );
+      }
+      screen('antigravity-interrupted');
+      await pumpEventQueue();
+      status.tick();
+      await wait();
+      expect(status.statusOf('s1')!.report.status, AgentActivityStatus.working);
+
+      clock.now = clock.now.add(const Duration(seconds: 10));
+      await wait();
+      expect(delivered, isEmpty, reason: 'still under 20 s');
+
+      clock.now = clock.now.add(const Duration(seconds: 15));
+      await wait();
+      expect(delivered, ['first']);
+
+      clock.now = clock.now.add(const Duration(minutes: 2));
+      await wait();
+      expect(delivered, ['first'], reason: 'once, never twice');
+
+      // A real reading moves it on.
+      hook('Stop');
+      await wait();
+      expect(delivered, ['first', 'second']);
+    });
+
+    test(
+      'a working screen that moves, or shows a menu, delivers nothing',
+      () async {
+        hook('PreInvocation');
+        queue.admit('s1', 'later', origin: QueuedMessageOrigin.app);
+        for (var i = 0; i < 4; i++) {
+          launcher.handles.last.emit(utf8.encode('\r\n⣷  Generating $i...'));
+          await pumpEventQueue();
+          clock.now = clock.now.add(const Duration(seconds: 15));
+          await wait();
+        }
+        expect(delivered, isEmpty);
+
+        screen('antigravity-permission-prompt');
+        await pumpEventQueue();
+        status.tick();
+        clock.now = clock.now.add(const Duration(minutes: 1));
+        await wait();
+        expect(delivered, isEmpty);
+      },
+    );
+  });
 }

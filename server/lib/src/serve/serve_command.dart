@@ -1343,6 +1343,8 @@ Future<int> _serve(
     dao: SessionQueueDao(database),
     status: prompts.status,
     turns: turnSettlement,
+    // A status stuck on working, over a still screen at the input prompt.
+    promptMarkersOf: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
     // A person's pause outlives a restart: it is theirs to lift.
     readPaused: () => database.readMetadata(kQueuePausedKey),
     writePaused: (value) => database.writeMetadata(kQueuePausedKey, value),
