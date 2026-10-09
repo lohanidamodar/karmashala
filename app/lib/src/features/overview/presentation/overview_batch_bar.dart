@@ -3,16 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_batch.dart';
+import '../application/overview_batch_actions.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_quick_message.dart';
 import '../application/overview_tiles.dart';
+import 'overview_batch_run.dart';
+import 'overview_end_button.dart' show OverviewHoverScope;
 import 'overview_hybrid.dart';
 
 /// The selected sessions still on the board, in the order it draws them.
@@ -63,9 +67,16 @@ bool overviewPickSelects(
   return false;
 }
 
-/// Whether a card's checkbox is drawn: on what waits on you once there is
+/// Whether a card's checkbox is drawn: always under a thumb; with a pointer,
+/// on the card hovered or holding focus, on what waits on you once there is
 /// more than one to answer, and on every card while some are picked.
-bool watchOverviewSelectable(WidgetRef ref, OverviewCard card) {
+bool watchOverviewSelectable(
+  WidgetRef ref,
+  OverviewCard card, {
+  bool touch = false,
+  bool hovered = false,
+}) {
+  if (touch || hovered) return true;
   if (!ref.watch(overviewSelectionProvider.select((s) => s.isEmpty))) {
     return true;
   }
@@ -90,7 +101,14 @@ class OverviewSelectBox extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!watchOverviewSelectable(ref, card)) return const SizedBox.shrink();
+    if (!watchOverviewSelectable(
+      ref,
+      card,
+      touch: UiDensity.of(context).isTouch,
+      hovered: OverviewHoverScope.of(context),
+    )) {
+      return const SizedBox.shrink();
+    }
     final picked = ref.watch(
       overviewSelectionProvider.select((s) => s.contains(card.id)),
     );
@@ -165,6 +183,14 @@ class OverviewBatchBar extends ConsumerWidget {
               icon: const Icon(AppIcons.chatCircle),
               label: Text('Send a message to $n'),
             ),
+            Builder(
+              builder: (button) => OutlinedButton.icon(
+                key: const ValueKey('overview-batch-actions'),
+                onPressed: () => _pickAction(button, ref, cards),
+                icon: const Icon(AppIcons.dotsThree),
+                label: const Text('Actions'),
+              ),
+            ),
             if (offersAll(BoardApproval.allow))
               FilledButton(
                 key: const ValueKey('overview-batch-allow'),
@@ -197,6 +223,49 @@ class OverviewBatchBar extends ConsumerWidget {
 
   static String _names(List<OverviewCard> cards) =>
       [for (final card in cards) '• ${card.entry.title}'].join('\n');
+
+  /// The batch verbs, each worded for how many it applies to, and the one
+  /// picked done.
+  Future<void> _pickAction(
+    BuildContext button,
+    WidgetRef ref,
+    List<OverviewCard> cards,
+  ) async {
+    final plans = {
+      for (final verb in OverviewBatchVerb.values)
+        verb: planOverviewBatch(
+          verb,
+          [for (final card in cards) card.id],
+          (id) => overviewBatchFactsOf(
+            ref,
+            cards.firstWhere((card) => card.id == id),
+          ),
+        ),
+    };
+    final picked = await showDesktopMenuUnder<OverviewBatchVerb>(button, [
+      for (final MapEntry(key: verb, value: plan) in plans.entries)
+        DesktopMenuItem(
+          key: ValueKey('overview-batch-verb:${verb.name}'),
+          value: verb,
+          label: plan.label,
+          icon: _iconOf(verb),
+          destructive: verb == OverviewBatchVerb.end,
+          enabled: !plan.isEmpty,
+        ),
+    ]);
+    if (picked == null || !button.mounted) return;
+    await runOverviewBatch(button, ref, plans[picked]!, cards);
+  }
+
+  static IconData _iconOf(OverviewBatchVerb verb) => switch (verb) {
+    OverviewBatchVerb.stop => AppIcons.stop,
+    OverviewBatchVerb.end => AppIcons.power,
+    OverviewBatchVerb.archive => AppIcons.tray,
+    OverviewBatchVerb.detach => AppIcons.linkBreak,
+    OverviewBatchVerb.merge => AppIcons.gitMerge,
+    OverviewBatchVerb.pin => AppIcons.pushPin,
+    OverviewBatchVerb.unpin => AppIcons.pushPinFill,
+  };
 
   Future<void> _allow(
     BuildContext context,

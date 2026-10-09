@@ -15,6 +15,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_today.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
@@ -213,8 +214,8 @@ void main() {
     await settle(tester);
   }
 
-  Finder counter(BoardColumn column) =>
-      find.byKey(ValueKey('overview-counter:${column.name}'));
+  Finder today(OverviewTodayPart part) =>
+      find.byKey(ValueKey('overview-today:${part.name}'));
 
   for (final (name, size) in [
     ('1440×900', const Size(1440, 900)),
@@ -227,13 +228,11 @@ void main() {
       await pump(tester, size);
 
       expect(find.byKey(const ValueKey('overview-hybrid')), findsOneWidget);
-      for (final column in BoardColumn.values) {
-        // A narrow line leaves Done to the fold that opens it.
+      // Today's parts with something in them; nothing is stuck.
+      for (final part in OverviewTodayPart.values) {
         expect(
-          counter(column),
-          column == BoardColumn.done && size.width < 600
-              ? findsNothing
-              : findsOneWidget,
+          today(part),
+          part == OverviewTodayPart.stuck ? findsNothing : findsOneWidget,
         );
       }
       expect(card('ask'), findsOneWidget);
@@ -261,39 +260,40 @@ void main() {
     });
   }
 
-  testBoard('the counters count what the tiles hold, spend left out', (
-    tester,
-  ) async {
+  testBoard('Today counts what the tiles hold, spend left out', (tester) async {
     await pump(tester, const Size(1440, 900));
 
-    expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp(r'^Working, 1, ')), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp(r'^Ready, 1, ')), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp(r'^Done today, 2, ')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^1 needs you, ')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^1 running, ')), findsOneWidget);
+    // Never looked at: what finished today is new — ready and done.
+    expect(
+      find.bySemanticsLabel(RegExp(r'^3 finished since you looked, ')),
+      findsOneWidget,
+    );
     // No agent here reports cost over a protocol: nothing is said about it.
     expect(find.textContaining('spend'), findsNothing);
     expect(find.byKey(const ValueKey('overview-facts')), findsNothing);
   });
 
-  testBoard('a counter shows only its state; tapped again, all of them', (
+  testBoard('a part of Today shows only its own; tapped again, all of them', (
     tester,
   ) async {
     final c = await pump(tester, const Size(1440, 900));
 
-    await tester.tap(counter(BoardColumn.working));
+    await tester.tap(today(OverviewTodayPart.running));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.columns, {BoardColumn.working});
     expect(card('busy'), findsOneWidget);
     expect(card('ask'), findsNothing);
     expect(find.byKey(const ValueKey('overview-done-fold')), findsNothing);
-    // The other counters keep their numbers.
-    expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
+    // The other parts keep their numbers.
+    expect(find.bySemanticsLabel(RegExp(r'^1 needs you, ')), findsOneWidget);
     expect(
-      find.bySemanticsLabel(RegExp(r'^Working, 1, showing only these')),
+      find.bySemanticsLabel(RegExp(r'^1 running, showing only these')),
       findsOneWidget,
     );
 
-    await tester.tap(counter(BoardColumn.working));
+    await tester.tap(today(OverviewTodayPart.running));
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.columns, isNull);
     expect(card('ask'), findsOneWidget);

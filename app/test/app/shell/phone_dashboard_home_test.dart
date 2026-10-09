@@ -6,6 +6,8 @@ import 'package:karmashala/src/app/shell/phone_shell.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/presentation/agents_lens.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_today.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 
 import '../../features/overview/mission_fixture.dart';
@@ -149,17 +151,22 @@ void main() {
       // karmashala alone: nothing failed there.
       c.read(overviewPrefsProvider.notifier).setProjects({'p-ks'});
       await settleMission(tester);
-      expect(byKey('overview-counter:working'), findsOneWidget);
-      expect(byKey('overview-counter:failed'), findsNothing);
+      // A part at zero is left out; one with something in it is drawn.
+      final today = c.read(overviewTodayProvider);
+      for (final part in OverviewTodayPart.values) {
+        expect(
+          byKey('overview-today:${part.name}'),
+          today.countOf(part) > 0 ? findsOneWidget : findsNothing,
+          reason: part.name,
+        );
+      }
       // One line: a chip's height, not two.
       expect(
         tester.getSize(byKey('overview-triage-line')).height,
         lessThanOrEqualTo(
-          tester.getSize(byKey('overview-counter:working')).height,
+          tester.getSize(byKey('overview-today:running')).height,
         ),
       );
-      // Done is said once, by the fold that opens it.
-      expect(byKey('overview-counter:done'), findsNothing);
       await tester.scrollUntilVisible(
         byKey('overview-done-fold'),
         300,
@@ -170,7 +177,7 @@ void main() {
     });
 
     testWidgets('all clear when nothing is in any bucket', (tester) async {
-      await pumpMission(
+      final c = await pumpMission(
         tester,
         fixture: MissionFixture(
           sessions: [
@@ -182,17 +189,24 @@ void main() {
         size: const Size(360, 800),
         phone: true,
       );
+      // What ended is finished since the last look until it is seen.
+      expect(byKey('overview-today:finished'), findsOneWidget);
+      await tester.ensureVisible(byKey('overview-today-seen'));
+      await settleMission(tester);
+      await tester.tap(byKey('overview-today-seen'));
+      await settleMission(tester);
+      expect(c.read(overviewLookedAtProvider), isNotNull);
       expect(byKey('overview-all-clear'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('overview-counter:working')),
-        findsNothing,
-      );
+      expect(byKey('overview-today:running'), findsNothing);
       await unmountMission(tester);
     });
 
-    testWidgets('a desktop keeps every counter', (tester) async {
+    testWidgets('a desktop shows each part with something in it', (
+      tester,
+    ) async {
       await pumpMission(tester, fixture: MissionFixture.full(), prefsDir: dir);
-      expect(byKey('overview-counter:done'), findsOneWidget);
+      expect(byKey('overview-today:needsYou'), findsOneWidget);
+      expect(byKey('overview-today:running'), findsOneWidget);
       expect(byKey('overview-all-clear'), findsNothing);
       await unmountMission(tester);
     });

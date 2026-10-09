@@ -7,16 +7,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
+import 'package:karmashala/src/features/overview/application/overview_batch_actions.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionsArchived;
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
+import 'package:karmashala/src/features/sessions/application/session_turn_interrupt.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 import 'mission_fixture.dart';
 
 class _SpyActions extends SessionActions {
-  _SpyActions(super.ref, this.sent);
+  _SpyActions(super.ref, this.sent, [this.archived]);
 
   final List<(String, String)> sent;
+  final List<List<String>>? archived;
+
+  @override
+  Future<SessionsArchived> archiveSessions(Iterable<String> ids) async {
+    archived?.add([...ids]);
+    return SessionsArchived(changed: [...ids]);
+  }
 
   @override
   Future<void> continueSession(
@@ -106,6 +119,80 @@ void main() {
       expect(container.read(overviewSelectionProvider).ids, {'b', 'd'});
       selection.clear();
       expect(container.read(overviewSelectionProvider).isEmpty, isTrue);
+      selection.selectAll(['x', 'y']);
+      expect(container.read(overviewSelectionProvider).ids, {'x', 'y'});
+    });
+  });
+
+  group('batch verbs', () {
+    const live = OverviewBatchFacts(live: true, runs: true, working: true);
+    const ended = OverviewBatchFacts();
+    final facts = {'a': ended, 'b': ended, 'c': live};
+
+    test('an action that does not apply to some says so', () {
+      final plan = planOverviewBatch(OverviewBatchVerb.archive, [
+        'a',
+        'b',
+        'c',
+      ], (id) => facts[id]!);
+      expect(plan.apply, ['a', 'b']);
+      expect(plan.label, 'Archive 2 of 3, 1 is still running');
+      expect(
+        planOverviewBatch(OverviewBatchVerb.end, [
+          'a',
+          'b',
+          'c',
+        ], (id) => facts[id]!).label,
+        'End 1 of 3, 2 are not running',
+      );
+      expect(
+        planOverviewBatch(OverviewBatchVerb.stop, ['c'], (id) => live).label,
+        'Stop 1',
+      );
+    });
+
+    test('each verb follows the session menu\'s rule', () {
+      String? skip(OverviewBatchVerb verb, OverviewBatchFacts f) =>
+          overviewBatchSkip(verb, f);
+      expect(skip(OverviewBatchVerb.archive, ended), isNull);
+      expect(
+        skip(
+          OverviewBatchVerb.archive,
+          const OverviewBatchFacts(archived: true),
+        ),
+        'already archived',
+      );
+      expect(skip(OverviewBatchVerb.detach, ended), 'not a sub-session');
+      expect(
+        skip(
+          OverviewBatchVerb.detach,
+          const OverviewBatchFacts(canDetach: true),
+        ),
+        isNull,
+      );
+      expect(skip(OverviewBatchVerb.merge, ended), 'nothing to merge');
+      expect(skip(OverviewBatchVerb.unpin, ended), 'not pinned');
+      expect(
+        skip(OverviewBatchVerb.pin, const OverviewBatchFacts(native: false)),
+        isNull,
+      );
+      expect(
+        skip(OverviewBatchVerb.end, const OverviewBatchFacts(native: false)),
+        'not a Karmashala session',
+      );
+    });
+
+    test('the result is one line, every failure named', () {
+      expect(
+        overviewBatchResult(
+          OverviewBatchVerb.archive,
+          done: 2,
+          skipped: {'Round 23': 'still running'},
+          failed: {'Round 24': 'refused'},
+        ),
+        'Archived 2. Left 1: "Round 23" is still running. '
+        'Failed 1: "Round 24": refused.',
+      );
     });
   });
 
@@ -113,9 +200,13 @@ void main() {
     late Directory dir;
     late _Recorder recorder;
     final sent = <(String, String)>[];
+    final archived = <List<String>>[];
+    final stopped = <String>[];
 
     setUp(() async {
       sent.clear();
+      archived.clear();
+      stopped.clear();
       recorder = _Recorder();
       dir = await Directory.systemTemp.createTemp('ks-batch');
     });
@@ -159,7 +250,14 @@ void main() {
       size: size,
       phone: phone,
       overrides: [
-        sessionActionsProvider.overrideWith((ref) => _SpyActions(ref, sent)),
+        sessionActionsProvider.overrideWith(
+          (ref) => _SpyActions(ref, sent, archived),
+        ),
+        // The chat's Stop: the very provider a batch Stop goes through.
+        sessionTurnInterruptProvider.overrideWithValue((id) async {
+          stopped.add(id);
+          return null;
+        }),
         sessionAnswerableProvider.overrideWithValue((_) => true),
         sessionPromptAnswersProvider.overrideWithValue(recorder),
       ],
@@ -282,6 +380,90 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await settleMission(tester);
       expect(bar, findsNothing);
+      await unmountMission(tester);
+    });
+
+    testWidgets('Ctrl+A picks every card in the lane of the selected one', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      final title = find.byKey(const ValueKey('overview-queue-title:r21'));
+      await tester.ensureVisible(title);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(title);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await settleMission(tester);
+      // The queue's three, not the session at work.
+      expect(c.read(overviewSelectionProvider).ids, {'r21', 'r22', 'r23'});
+      expect(find.text('3 selected'), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('an action runs through the shared path: what applies, one '
+        'confirm with the list, one result', (tester) async {
+      final c = await pump(tester);
+      await pick(tester, 'r21');
+      await pick(tester, 'r22');
+      // The session at work, alongside the two waiting on you.
+      c.read(overviewSelectionProvider.notifier).selectAll(['ks-release']);
+      await settleMission(tester);
+      await tester.tap(find.byKey(const ValueKey('overview-batch-actions')));
+      await settleMission(tester);
+      Finder verb(String name) =>
+          find.byKey(ValueKey('overview-batch-verb:$name'));
+      String label(String name) =>
+          tester.widget<DesktopMenuItem<OverviewBatchVerb>>(verb(name)).label;
+      // Nothing of these three is a sub-session; every one still runs.
+      expect(
+        tester.widget<PopupMenuItem<OverviewBatchVerb>>(verb('detach')).enabled,
+        isFalse,
+      );
+      expect(label('archive'), 'Archive 0 of 3, 3 are still running');
+      expect(label('stop'), 'Stop 1 of 3, 2 are not working');
+      await tester.tap(verb('stop'));
+      await settleMission(tester);
+      expect(find.text('Stop 1 session?'), findsOneWidget);
+      expect(find.textContaining('"Round 21" is not working'), findsOneWidget);
+      expect(stopped, isEmpty);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Stop 1'),
+        ),
+      );
+      await settleMission(tester);
+      expect(stopped, ['ks-release']);
+      expect(find.textContaining('Stopped 1. Left 2:'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('overview-batch-result')),
+        findsOneWidget,
+      );
+      expect(bar, findsNothing);
+      await unmountMission(tester);
+    });
+
+    testWidgets('Pin needs no confirm and pins every one', (tester) async {
+      final c = await pump(tester);
+      await pick(tester, 'r21');
+      await pick(tester, 'r22');
+      await tester.tap(find.byKey(const ValueKey('overview-batch-actions')));
+      await settleMission(tester);
+      await tester.tap(find.byKey(const ValueKey('overview-batch-verb:pin')));
+      await settleMission(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(c.read(overviewPrefsProvider).pinned, ['r21', 'r22']);
+      expect(find.text('Pinned 2.'), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('under a thumb every row has its box', (tester) async {
+      await pump(tester, size: const Size(412, 780), phone: true);
+      final row = box('ks-release');
+      await tester.scrollUntilVisible(row, 200, scrollable: hybridList);
+      expect(row, findsOneWidget);
+      expect(bar, findsNothing);
+      expect(tester.takeException(), isNull);
       await unmountMission(tester);
     });
 

@@ -7,7 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/overview_activity_strips.dart';
 import 'overview_counters.dart';
 
-/// **The fleet's heartbeat**, one slim row: the counters that filter the
+/// **The fleet's heartbeat**, one slim row: Today, whose parts filter the
 /// cards, the facts worth a word, and the last two hours as a sparkline —
 /// folded behind a toggle where the row is narrow.
 class OverviewHeartbeat extends ConsumerStatefulWidget {
@@ -43,7 +43,7 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
       spacing: Insets.md,
       runSpacing: Insets.xs,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: [OverviewCounters(), OverviewFactsLine()],
+      children: [OverviewTodayStrip(), OverviewFactsLine()],
     );
     return Container(
       key: const ValueKey('overview-heartbeat'),
@@ -68,7 +68,8 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
           if (chart == null) return counters;
           return Row(
             children: [
-              const Flexible(child: counters),
+              // Today's parts take the room; the chart keeps its least width.
+              const Flexible(flex: 3, child: counters),
               const SizedBox(width: Insets.md),
               Expanded(
                 child: ConstrainedBox(
@@ -99,7 +100,7 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  OverviewCounters(compact: true),
+                  OverviewTodayStrip(compact: true),
                   SizedBox(width: Insets.md),
                   OverviewFactsLine(),
                 ],

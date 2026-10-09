@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show immutable, mapEquals, setEquals;
 
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_automations/pipelines.dart'
+    show PipelineRun, PipelineRunState, PipelineStageState;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show ForgeReadingChanged;
 import 'package:karmashala_git/github.dart' show PullRequestSnapshot;
@@ -13,7 +15,10 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/data/agents_data.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
+import '../../explorer/application/agent_states.dart';
 import '../../notifications/application/attention_inbox.dart';
+import '../../pipelines/application/pipelines_controller.dart';
+import '../../sessions/application/capacity_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -23,6 +28,7 @@ import '../../workspaces/data/workspace_data.dart';
 import 'overview_board.dart';
 import 'overview_prefs.dart';
 import 'overview_tiles.dart';
+import 'overview_today.dart';
 
 /// What the Board files sessions by: each session's project, machine and
 /// agent, and the lanes in reading order — this machine, then WSL, then SSH.
@@ -115,8 +121,62 @@ final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewOrderProvider),
     subSessions: prefs.subSessions,
+    drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
   );
 });
+
+/// The sessions of the pipeline runs the dashboard draws: each is shown
+/// inside its run's card in the Pipelines lane, not loose in another.
+final overviewPipelineSessionIdsProvider = Provider.autoDispose<Set<String>>((
+  ref,
+) {
+  final now = ref.read(clockProvider).nowUtc();
+  return {
+    for (final run in dashboardPipelineRuns(
+      ref.watch(pipelinesProvider),
+      now: now,
+    ))
+      for (final record in run.records) ?record.sessionId,
+  };
+});
+
+/// Today over the Board: what waits, what finished since the last look,
+/// what is stuck and what runs, whatever state the Board is narrowed to.
+final overviewTodayProvider = Provider.autoDispose<OverviewToday>((ref) {
+  final board = ref.watch(overviewAllStatesBoardProvider);
+  final statusOf = ref.read(sessionStatusLookupProvider);
+  String? first;
+  DateTime? oldest;
+  for (final MapEntry(key: id, value: state) in board.states.entries) {
+    if (state != AgentState.needsYou) continue;
+    final since = statusOf(id)?.waitingSince ?? board.activeAt[id];
+    if (first == null ||
+        (since != null && (oldest == null || since.isBefore(oldest)))) {
+      first = id;
+      oldest = since;
+    }
+  }
+  return overviewTodayOf(
+    board,
+    strip: ref.watch(overviewCountersProvider).strip,
+    capacity: ref.watch(capacityNowProvider),
+    lookedAt: ref.watch(overviewLookedAtProvider),
+    startOfToday: _startOfToday(ref),
+    firstWaitingId: first,
+    gatesWaiting: [
+      for (final run in dashboardPipelineRuns(
+        ref.watch(pipelinesProvider),
+        now: ref.read(clockProvider).nowUtc(),
+      ))
+        if (pipelineRunAtGate(run)) run,
+    ].length,
+  );
+});
+
+/// Whether [run] waits on a person to approve its gate.
+bool pipelineRunAtGate(PipelineRun run) =>
+    run.state == PipelineRunState.waiting &&
+    run.current?.state == PipelineStageState.approval;
 
 /// Which parts of a card's "where" line are drawn, and why the rest are not.
 @immutable
@@ -234,6 +294,7 @@ final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewCountsOrderProvider),
     subSessions: prefs.subSessions,
+    drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
   );
 });
 

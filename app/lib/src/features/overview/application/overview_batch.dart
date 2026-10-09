@@ -48,6 +48,15 @@ class OverviewSelectionController extends Notifier<OverviewSelection> {
     );
   }
 
+  /// Picks every one of [ids] too: Ctrl+A in a lane.
+  void selectAll(Iterable<String> ids) {
+    if (ids.isEmpty) return;
+    state = OverviewSelection(
+      ids: {...state.ids, ...ids},
+      anchor: state.anchor ?? ids.first,
+    );
+  }
+
   void clear() => state = const OverviewSelection();
 }
 

@@ -81,7 +81,7 @@ void main() {
     tester,
   ) async {
     await pump(tester, const OverviewWaitingLane());
-    expect(find.text('Waiting for a slot'), findsOneWidget);
+    expect(find.text('WAITING FOR A SLOT · 2'), findsOneWidget);
     expect(find.text('Fix the cart'), findsOneWidget);
     expect(
       find.text(

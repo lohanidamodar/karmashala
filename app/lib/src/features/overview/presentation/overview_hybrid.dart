@@ -15,6 +15,8 @@ import 'overview_cards.dart';
 import 'overview_filters.dart';
 import 'overview_done_card.dart';
 import 'overview_heartbeat.dart';
+import 'overview_glances.dart';
+import 'overview_pipeline_lane.dart';
 import 'overview_waiting_lane.dart';
 import 'overview_pins.dart';
 import 'overview_queue_card.dart';
@@ -73,6 +75,25 @@ OverviewSections overviewSectionsOf(
       [for (final lane in board.lanes) ...lane.doneToday]..sort(newestFirst),
     ),
   );
+}
+
+/// The ids of the lane [id] is drawn in — waiting on you, one group at work,
+/// or ready to close — in drawn order; every drawn card when it is in none.
+List<String> overviewLaneOf(
+  OverviewSections sections,
+  OverviewBoard board,
+  String? id,
+) {
+  final lanes = [
+    [for (final card in sections.queue) card.id],
+    for (final (_, cards) in overviewWorkGroupsOf(board))
+      [for (final card in cards) card.id],
+    [for (final card in sections.ready) card.id],
+  ];
+  for (final lane in lanes) {
+    if (lane.contains(id)) return lane;
+  }
+  return [for (final lane in lanes) ...lane];
 }
 
 /// **The Overview, hybrid**: the fleet's heartbeat on top, what waits on you
@@ -280,7 +301,9 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           padding: EdgeInsets.fromLTRB(gutter, Insets.md, gutter, Insets.xxl),
           children: [
             const OverviewHeartbeat(),
+            const OverviewGlances(),
             const OverviewWaitingLane(),
+            const OverviewPipelineLane(),
             if (hasFilters)
               const Padding(
                 padding: EdgeInsets.only(top: Insets.md),

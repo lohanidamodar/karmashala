@@ -14,12 +14,16 @@ class _OnScreen extends ConsumerStatefulWidget {
 
 class _OnScreenState extends ConsumerState<_OnScreen> {
   late final OverviewOnScreen _shown;
+  late final OverviewLookedAtController _looked;
+  late final Clock _clock;
   var _counted = false;
 
   @override
   void initState() {
     super.initState();
     _shown = ref.read(overviewOnScreenProvider.notifier);
+    _looked = ref.read(overviewLookedAtProvider.notifier);
+    _clock = ref.read(clockProvider);
     // After the frame: a provider is not changed while the tree builds.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -32,7 +36,13 @@ class _OnScreenState extends ConsumerState<_OnScreen> {
   void dispose() {
     if (_counted) {
       final shown = _shown;
-      Future.microtask(shown.remove);
+      final looked = _looked;
+      // Left: what finishes from now on is new on the next look.
+      final at = _clock.nowUtc();
+      Future.microtask(() {
+        shown.remove();
+        looked.markLooked(at);
+      });
     }
     super.dispose();
   }

@@ -3,12 +3,14 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
+import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../sessions/application/session_chat_source.dart'
     show composersHoldingTextProvider;
@@ -20,6 +22,7 @@ import '../application/overview_on_screen.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
+import '../application/overview_today.dart';
 import 'overview_batch_bar.dart';
 import 'overview_filters.dart';
 import 'overview_hybrid.dart';
@@ -32,7 +35,6 @@ import '../../sessions/presentation/new_session_dialog.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
-import '../../pipelines/presentation/pipeline_run_card.dart';
 import '../../pipelines/presentation/pipeline_run_dialog.dart';
 import '../../todos/application/todos_providers.dart'
     show openTodoCountProvider;

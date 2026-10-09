@@ -1280,6 +1280,8 @@ void main() {
         await settleMission(tester);
         final fold = find.byKey(const ValueKey('overview-done-fold'));
         await tester.scrollUntilVisible(fold, 200, scrollable: hybridList);
+        await tester.ensureVisible(fold);
+        await settleMission(tester);
         await tester.tap(fold);
         await settleMission(tester);
 
@@ -1364,11 +1366,11 @@ void main() {
     await unmountMission(tester);
   });
 
-  testWidgets('a counter filters the cards; nothing at work says so', (
+  testWidgets('a part of Today filters the cards; nothing at work says so', (
     tester,
   ) async {
     final c = await pump(tester);
-    await tester.tap(find.byKey(const ValueKey('overview-counter:needsYou')));
+    await tester.tap(find.byKey(const ValueKey('overview-today:needsYou')));
     await settleMission(tester);
     expect(c.read(overviewPrefsProvider).filter.columns, {
       BoardColumn.needsYou,
@@ -1474,31 +1476,36 @@ void main() {
   });
 
   group('heartbeat', () {
-    testWidgets('failed has its own counter, and it shows failures alone', (
+    testWidgets('Stuck counts the failures, and shows them without the asks', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
       final c = await pump(tester);
-      expect(find.bySemanticsLabel(RegExp(r'^Needs you, 1, ')), findsOneWidget);
-      expect(find.bySemanticsLabel(RegExp(r'^Failed, 1, ')), findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('overview-counter:failed')));
-      await settleMission(tester);
-      expect(c.read(overviewPrefsProvider).filter.states, {AgentState.failed});
-      expect(queueCard('store-reviews'), findsOneWidget);
-      expect(queueCard('ks-r21'), findsNothing);
-      expect(workCard('ks-r32'), findsNothing);
+      expect(find.bySemanticsLabel(RegExp(r'^1 needs you, ')), findsOneWidget);
       expect(
-        find.bySemanticsLabel(RegExp(r'^Failed, 1, showing only these')),
+        find.bySemanticsLabel(RegExp(r'^\d+ stuck, .*1 failed')),
         findsOneWidget,
       );
 
-      await tester.tap(find.byKey(const ValueKey('overview-counter:needsYou')));
+      await tester.tap(find.byKey(const ValueKey('overview-today:stuck')));
+      await settleMission(tester);
+      expect(c.read(overviewPrefsProvider).filter.states, {
+        AgentState.failed,
+        AgentState.quiet,
+      });
+      expect(queueCard('store-reviews'), findsOneWidget);
+      expect(queueCard('ks-r21'), findsNothing);
+      expect(
+        find.bySemanticsLabel(RegExp(r'^\d+ stuck, .*showing only these')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('overview-today:needsYou')));
       await settleMission(tester);
       expect(queueCard('ks-r21'), findsOneWidget);
       expect(queueCard('store-reviews'), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('overview-counter:needsYou')));
+      await tester.tap(find.byKey(const ValueKey('overview-today:needsYou')));
       await settleMission(tester);
       expect(c.read(overviewPrefsProvider).filter.allStates, isTrue);
       expect(queueCard('store-reviews'), findsOneWidget);
@@ -1506,9 +1513,7 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('one slim row with the sparkline beside the counters', (
-      tester,
-    ) async {
+    testWidgets('one slim row with the sparkline beside Today', (tester) async {
       await pump(tester);
       final heart = find.byKey(const ValueKey('overview-heartbeat'));
       final chart = find.byKey(const ValueKey('overview-heartbeat-chart'));
@@ -1518,7 +1523,7 @@ void main() {
       expect(
         tester.getCenter(chart).dx,
         greaterThan(
-          tester.getCenter(find.byKey(const ValueKey('overview-counters'))).dx,
+          tester.getCenter(find.byKey(const ValueKey('overview-today'))).dx,
         ),
       );
       await unmountMission(tester);
