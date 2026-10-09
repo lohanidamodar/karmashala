@@ -479,6 +479,102 @@ void main() {
     });
   });
 
+  group('session_answer option: a parent picks a menu row in its child', () {
+    late FakePtyHandle agent;
+
+    setUp(() async {
+      database.execute(
+        "UPDATE agent_installations SET agent_kind = ? WHERE id = 'a1';",
+        [AgentIds.codex],
+      );
+      agent = await runAgent('codex-trust-prompt-0.160');
+    });
+
+    void parentOf(String child, String parent) => database.execute(
+      'UPDATE sessions SET parent_session_id = ? WHERE id = ?;',
+      [parent, child],
+    );
+
+    test('the transcript lists the rows the option indexes', () async {
+      final answer = await call('session_transcript', {'sessionId': 's1'});
+      expect(answer['menu'], {
+        'prompt': contains(startsWith('Trust this folder?')),
+        'options': ['Trust and continue', 'Quit'],
+        'highlighted': 0,
+      });
+    });
+
+    test('in its own child: the row is chosen, by the caller', () async {
+      parentOf('s1', 'caller');
+      final answer = await call('session_answer', {
+        'sessionId': 's1',
+        'option': 0,
+      }, caller: 'caller');
+      expect(answer['answered'], 'Trust and continue');
+      expect(typedInto(agent), '\r');
+    });
+
+    test('in a grandchild too', () async {
+      insertSession('mid', title: 'Middle');
+      parentOf('mid', 'caller');
+      parentOf('s1', 'mid');
+      final answer = await call('session_answer', {
+        'sessionId': 's1',
+        'option': 0,
+      }, caller: 'caller');
+      expect(answer['answered'], 'Trust and continue');
+    });
+
+    test('refused, nothing pressed, in a session the caller did not start, '
+        'or with no calling session', () async {
+      for (final caller in ['caller', null]) {
+        await expectLater(
+          tools.call('session_answer', {
+            'sessionId': 's1',
+            'option': 1,
+          }, caller),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('is not a session you started'),
+            ),
+          ),
+        );
+      }
+      expect(agent.writes, isEmpty);
+    });
+
+    test(
+      'a row past the end, or option beside a decision, is refused',
+      () async {
+        parentOf('s1', 'caller');
+        await expectLater(
+          tools.call('session_answer', {
+            'sessionId': 's1',
+            'option': 2,
+          }, 'caller'),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.message,
+              'message',
+              contains('0 "Trust and continue", 1 "Quit"'),
+            ),
+          ),
+        );
+        await expectLater(
+          tools.call('session_answer', {
+            'sessionId': 's1',
+            'option': 0,
+            'decision': 'approve',
+          }, 'caller'),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(agent.writes, isEmpty);
+      },
+    );
+  });
+
   group('session_end', () {
     test('closes the session the host runs; the row survives', () async {
       await runAgent('claude-code-tui');

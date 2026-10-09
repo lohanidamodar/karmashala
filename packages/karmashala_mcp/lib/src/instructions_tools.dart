@@ -181,7 +181,10 @@ approve/deny prompt using that agent's declared bindings — nothing here invent
 a keystroke, and an agent that declares no way to decline from outside its own
 terminal is reported as such rather than guessed at with Escape. Approving is
 granting permission for something that then happens, which is why it is
-annotated destructive: nothing un-happens it.
+annotated destructive: nothing un-happens it. In a session you started, its
+`option` picks any row of the menu on screen by index (`session_transcript`
+lists them under `menu`): Enter at a highlighted row, or one the agent names
+no yes or no for.
 
 **`session_end` ends the process.** The transcript survives. The turn in flight
 does not, and nothing brings it back.
