@@ -454,6 +454,10 @@ class _RunTileState extends ConsumerState<RunTile> {
         !run.state.isLive &&
         (run.sessionId != null || run.eventSessionId == null) &&
         run.baseCheckpointId != null;
+    // Its checks are still running: Cancel stops them.
+    final checking =
+        runOutcome(run, widget.checks) == RunOutcome.checking &&
+        (automation?.steps.checks ?? false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Insets.xl + Insets.lg,
@@ -496,7 +500,7 @@ class _RunTileState extends ConsumerState<RunTile> {
                   onPressed: () => runAutomationNow(context, ref, automation),
                   child: const Text('Run again'),
                 ),
-              if (run.state.isLive)
+              if (run.state.isLive || checking)
                 OutlinedButton(
                   key: const ValueKey('run-cancel'),
                   style: OutlinedButton.styleFrom(

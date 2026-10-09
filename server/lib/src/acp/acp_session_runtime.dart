@@ -89,6 +89,7 @@ class AcpSessionRuntime implements ScreenSession {
     AcpPathScope? files,
     this.host = AcpRuntimeHost.none,
     this.mcpUrl,
+    this.mcpBridge,
     this.risk,
     this.resumeSessionId,
     this.resumeAt,
@@ -136,6 +137,10 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// Karmashala's MCP endpoint for this session, or null for no tools.
   final String? mcpUrl;
+
+  /// The stdio bridge to hand over instead of [mcpUrl]: a WSL agent's way to
+  /// the tools that does not cross the virtual switch.
+  final McpServerStdio? mcpBridge;
 
   /// How much the session may do: picks the agent's mode, and answers
   /// `allow_once` itself from [PermissionRisk.autoRun] up.
@@ -233,6 +238,12 @@ class AcpSessionRuntime implements ScreenSession {
   final _ended = Completer<SessionLifecycle>();
   var _started = false;
   var _loading = false;
+
+  /// What `session/new` or `session/load` was last handed, so a change in
+  /// the attached checkouts can be told with a load of the same session.
+  List<McpServerEntry> _servers = const [];
+  List<String> _toldRoots = const [];
+  Future<void>? _retelling;
   var _closeRequested = false;
   var _stoppingWithHost = false;
   var _stopping = false;
@@ -332,15 +343,26 @@ class AcpSessionRuntime implements ScreenSession {
       );
       _capabilities = init.agentCapabilities;
       final url = mcpUrl;
-      final servers = [
-        if (url != null) McpServerEntry.http('karmashala', url: url),
+      final bridge = mcpBridge;
+      final servers = <McpServerEntry>[
+        if (bridge != null)
+          bridge
+        else if (url != null)
+          McpServerEntry.http('karmashala', url: url),
       ];
-      if (url == null) {
+      if (servers.isEmpty) {
         notices.add(
           "Karmashala's tools were not handed to $agentName: this server "
           'serves no MCP endpoint the agent can dial.',
         );
       }
+      // Told at the start only: ACP has no request that changes them later,
+      // so an attach mid-session reaches the scope and not the agent.
+      final directories = _capabilities.additionalDirectories
+          ? _files.attachedRoots
+          : const <String>[];
+      _servers = servers;
+      _toldRoots = directories;
       final resume = resumeSessionId;
       var resumed = false;
       SessionModeState? modes;
@@ -357,6 +379,7 @@ class AcpSessionRuntime implements ScreenSession {
                 sessionId: resume,
                 cwd: workingDirectory,
                 mcpServers: servers,
+                additionalDirectories: directories,
                 meta: resumeAt == null
                     ? null
                     : {AcpExtensions.resumeAt: resumeAt},
@@ -395,7 +418,11 @@ class AcpSessionRuntime implements ScreenSession {
           AcpMethods.sessionNew,
           _authenticating(
             init,
-            () => client.newSession(cwd: workingDirectory, mcpServers: servers),
+            () => client.newSession(
+              cwd: workingDirectory,
+              mcpServers: servers,
+              additionalDirectories: directories,
+            ),
           ),
         );
         _agentSessionId = created.sessionId;
@@ -441,13 +468,17 @@ class AcpSessionRuntime implements ScreenSession {
         '$agentName has not finished starting; send once it has',
       );
     }
-    if (_turn != null) {
+    if (_turn != null || _retelling != null) {
       throw StateError(
         '$agentName is still working on the last message; wait for the turn '
         'to end or interrupt it before sending another',
       );
     }
     if (text.trim().isEmpty) throw StateError('there is no message to send');
+    await (_retelling = _retellRoots(
+      client,
+      agent,
+    )).whenComplete(() => _retelling = null);
     final (prompt, notice) = _promptOf(text);
     _writer.user(text);
     host.checkpointPrompt(sessionId, text);
@@ -466,6 +497,44 @@ class AcpSessionRuntime implements ScreenSession {
     }
     return notice;
   }
+
+  /// ACP has no request that changes a session's roots but a load, whose
+  /// `additionalDirectories` are its complete new list: so the checkouts
+  /// attached or detached since the agent was last told are told before
+  /// the next prompt, while it is idle. A load that fails leaves the old
+  /// roots, said in the chat.
+  Future<void> _retellRoots(AcpAgentClient client, String agent) async {
+    if (!_capabilities.loadSession || !_capabilities.additionalDirectories) {
+      return;
+    }
+    final roots = _files.attachedRoots;
+    if (_sameRoots(roots, _toldRoots)) return;
+    _loading = true;
+    try {
+      await _within(
+        AcpMethods.sessionLoad,
+        client.loadSession(
+          sessionId: agent,
+          cwd: workingDirectory,
+          mcpServers: _servers,
+          additionalDirectories: roots,
+        ),
+      );
+      _toldRoots = roots;
+    } on Object catch (error) {
+      host.notice(
+        sessionId,
+        '$agentName was not told of the checkouts attached since it started '
+        '($error), so it may refuse paths in them.',
+      );
+    } finally {
+      _loading = false;
+    }
+  }
+
+  static bool _sameRoots(List<String> a, List<String> b) =>
+      a.length == b.length &&
+      [for (var i = 0; i < a.length; i++) a[i] == b[i]].every((same) => same);
 
   /// [text] as prompt blocks: its `@` mentions as links and resources
   /// ([mentionPromptBlocks]), then its images as [_withImages] has them.

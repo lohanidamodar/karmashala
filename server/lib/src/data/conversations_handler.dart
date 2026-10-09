@@ -38,11 +38,35 @@ class ConversationsHandler {
   Future<int>? _backfill;
   var _backfilling = false;
 
+  /// Which session rows' conversations are their `session_messages` (an ACP
+  /// agent's), read from there: no agent store holds them.
+  bool Function(String rowId) _servesFromMessages = _none;
+  static bool _none(String _) => false;
+
   /// Starts keeping the index: every conversation a written row names is
   /// read [drainAfter] later (the writes of one turn come in bursts).
-  void start(TranscriptStores stores, {Duration? drainAfter}) {
+  void start(
+    TranscriptStores stores, {
+    Duration? drainAfter,
+    bool Function(String rowId)? servesFromMessages,
+  }) {
     _stores = stores;
     if (drainAfter != null) _drainAfter = drainAfter;
+    if (servesFromMessages != null) _servesFromMessages = servesFromMessages;
+  }
+
+  /// Session row [rowId]'s `session_messages` changed: its conversation is
+  /// read again on the next drain.
+  void messagesChanged(String rowId) {
+    if (_stores == null || !_servesFromMessages(rowId)) return;
+    final conversation = dao.conversationOfRow(rowId);
+    if (conversation == null) return;
+    indexer.want(
+      conversation.conversationId,
+      cli: conversation.cli,
+      filePath: recordedConversationPath(rowId),
+    );
+    _schedule();
   }
 
   /// Queues the conversations [changes] name — a session row that has one, an
@@ -54,7 +78,12 @@ class ConversationsHandler {
         case SessionRowChanged(:final session):
           final conversation = session.externalSessionId;
           if (conversation != null && conversation.isNotEmpty) {
-            indexer.want(conversation);
+            indexer.want(
+              conversation,
+              filePath: _servesFromMessages(session.id)
+                  ? recordedConversationPath(session.id)
+                  : null,
+            );
           }
         case ImportedChanged(:final session):
           indexer.want(
@@ -66,6 +95,10 @@ class ConversationsHandler {
           break;
       }
     }
+    _schedule();
+  }
+
+  void _schedule() {
     if (indexer.hasWork) {
       _drainTimer ??= Timer(_drainAfter, () {
         _drainTimer = null;
@@ -102,12 +135,13 @@ class ConversationsHandler {
     return _backfill ??= () async {
       _backfilling = true;
       try {
-        return await ConversationIndexBackfill(
+        final read = await ConversationIndexBackfill(
           dao: dao,
           indexer: indexer,
           clock: _clock,
           locateTranscripts: stores.all,
         ).runOnce();
+        return read + await _catchUpRecorded();
       } on Object {
         // A store closed under it (the server stopping) or a transcript that
         // broke a read: search answers from what is indexed, and the next
@@ -117,6 +151,24 @@ class ConversationsHandler {
         _backfilling = false;
       }
     }();
+  }
+
+  /// Every start, unlike the stamped backfill: the ACP conversations whose
+  /// messages moved while nothing was indexing them. One query each when not.
+  Future<int> _catchUpRecorded() async {
+    var read = 0;
+    for (final row in dao.recordedRows()) {
+      if (!_servesFromMessages(row.rowId)) continue;
+      if (await indexer.indexConversation(
+        conversationId: row.conversationId,
+        cli: row.cli,
+        filePath: recordedConversationPath(row.rowId),
+      )) {
+        read++;
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+    return read;
   }
 
   /// `conversations.catchUp`: what the running sessions appended since they
@@ -146,7 +198,11 @@ class ConversationsHandler {
 
   ConversationIndexStatus status() {
     final counts = dao.counts();
+    final coverage = dao.coverage();
     return ConversationIndexStatus(
+      named: coverage.named,
+      unindexed: coverage.unindexed,
+      unreadable: indexer.unreadable.length,
       conversations: counts.conversations,
       turns: counts.turns,
       generation: dao.generation,

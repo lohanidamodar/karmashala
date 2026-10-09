@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:agent_cli/descriptors.dart'
     show
         AcpLaunchSpec,
@@ -15,6 +16,7 @@ import 'package:karmashala_acp/karmashala_acp.dart';
 import 'package:karmashala_host/src/acp/acp_extensions.dart';
 import 'package:karmashala_host/src/acp/acp_login_required.dart';
 import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
+import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host/src/acp/claude/claude_stream_json_bridge.dart'
@@ -89,6 +91,7 @@ void main() {
     void Function()? onCutTaken,
     String? mcpUrl,
     Duration? interruptPatience,
+    AcpPathScope? files,
   }) {
     var ids = 0;
     return AcpSessionRuntime(
@@ -115,6 +118,7 @@ void main() {
       messages: SessionMessageDao(database),
       usage: SessionUsageDao(database),
       host: host,
+      files: files,
       mcpUrl: mcpUrl,
       risk: risk,
       resumeSessionId: resumeSessionId,
@@ -241,6 +245,58 @@ void main() {
     test('a person not logged in is asked to log in, in words', () async {
       final rt = runtime(FakeClaudeMachine(loggedIn: false));
       await expectLater(rt.start(), throwsA(isA<AcpLoginRequired>()));
+    });
+
+    test('attached checkouts are Claude\'s --add-dir, and one attached later '
+        'is told with a resume before the next prompt', () async {
+      final far = Directory('${temp.path}-far')..createSync();
+      final later = Directory('${temp.path}-later')..createSync();
+      addTearDown(() {
+        far.deleteSync();
+        later.deleteSync();
+      });
+      var attached = [EnvironmentPath(environmentId: 'local', path: far.path)];
+      final machine = FakeClaudeMachine(
+        turns: [(c, user) async => c.result(), (c, user) async => c.result()],
+      );
+      final rt = runtime(
+        machine,
+        files: AcpPathScope(
+          root: temp.path,
+          environmentId: 'local',
+          checkouts: () => attached,
+        ),
+      );
+      final outcome = await rt.start();
+      expect(machine.current.args, contains('--add-dir=${far.path}'));
+
+      await rt.send('First');
+      await rt.awaitTurn();
+      // Nothing changed since the start: no load before the first prompt.
+      expect(
+        machine.launched.where((c) => c.args.contains('--resume')),
+        isEmpty,
+      );
+
+      attached = [
+        ...attached,
+        EnvironmentPath(environmentId: 'local', path: later.path),
+      ];
+      await rt.send('Second');
+      await rt.awaitTurn();
+      expect(machine.current.args, [
+        '--resume',
+        outcome.agentSessionId,
+        '--add-dir=${far.path}',
+        '--add-dir=${later.path}',
+      ]);
+      expect(
+        rows()
+            .where((r) => r.role == SessionMessageRole.user)
+            .map((r) => r.text),
+        ['First', 'Second'],
+      );
+      await rt.stop();
     });
 
     test('session/load resumes the conversation by id in a process of its '

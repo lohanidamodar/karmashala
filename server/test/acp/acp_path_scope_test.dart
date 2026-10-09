@@ -1,5 +1,5 @@
 import 'package:agent_cli/process.dart'
-    show EnvironmentKind, ExecutionEnvironment;
+    show EnvironmentKind, EnvironmentPath, ExecutionEnvironment;
 import 'package:karmashala_acp/karmashala_acp.dart'
     show AcpRpcError, JsonRpcErrorCodes;
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
@@ -93,5 +93,84 @@ void main() {
       expect(resolved.agent, p.join(root, 'a.txt'));
       expect(resolved.host, resolved.agent);
     }
+  });
+
+  group('checkouts attached to the session', () {
+    var attached = <EnvironmentPath>[];
+    setUp(() => attached = []);
+
+    AcpPathScope wslScope() => AcpPathScope.forEnvironment(
+      wsl,
+      '/home/u/scratch',
+      environmentId: wsl.id,
+      checkouts: () => attached,
+    );
+
+    test('one in the same distribution is inside the scope, and lands on '
+        'its share', () {
+      final scope = wslScope();
+      attached = [EnvironmentPath(environmentId: wsl.id, path: '/home/u/far')];
+      expect(scope.resolve('/home/u/far/lib/a.dart', verb: 'read'), (
+        agent: '/home/u/far/lib/a.dart',
+        host: r'\\wsl.localhost\archlinux\home\u\far\lib\a.dart',
+      ));
+      expect(scope.attachedRoots, ['/home/u/far']);
+      // Relative paths stay the working directory's.
+      expect(
+        scope.resolve('note.txt', verb: 'read').agent,
+        '/home/u/scratch/note.txt',
+      );
+    });
+
+    test('a Windows checkout is spelled as its mount for a WSL agent', () {
+      final scope = wslScope();
+      attached = [
+        const EnvironmentPath(environmentId: 'windows', path: r'C:\src\other'),
+      ];
+      expect(scope.attachedRoots, ['/mnt/c/src/other']);
+      expect(
+        scope.resolve('/mnt/c/src/other/x.txt', verb: 'written').host,
+        r'C:\src\other\x.txt',
+      );
+    });
+
+    test('follows a detach at once: the same path is refused in words', () {
+      final scope = wslScope();
+      attached = [EnvironmentPath(environmentId: wsl.id, path: '/home/u/far')];
+      scope.resolve('/home/u/far/a', verb: 'read');
+      attached = [];
+      expect(
+        () => scope.resolve('/home/u/far/a', verb: 'read'),
+        throwsA(
+          isA<AcpRpcError>()
+              .having((e) => e.code, 'code', JsonRpcErrorCodes.invalidParams)
+              .having((e) => e.message, 'message', contains('attached')),
+        ),
+      );
+    });
+
+    test('one this agent has no name for is not a root', () {
+      final scope = wslScope();
+      attached = [
+        const EnvironmentPath(environmentId: 'ssh:box', path: '/srv/app'),
+        EnvironmentPath(environmentId: wsl.id, path: '/home/u/scratch/sub'),
+      ];
+      expect(scope.attachedRoots, isEmpty);
+      expect(
+        () => scope.resolve('/srv/app/x', verb: 'read'),
+        throwsA(isA<AcpRpcError>()),
+      );
+    });
+
+    test('a checkout the store cannot list leaves the working directory', () {
+      final scope = AcpPathScope.forEnvironment(
+        wsl,
+        '/home/u/scratch',
+        environmentId: wsl.id,
+        checkouts: () => throw StateError('store closed'),
+      );
+      expect(scope.attachedRoots, isEmpty);
+      expect(scope.resolve('a', verb: 'read').agent, '/home/u/scratch/a');
+    });
   });
 }

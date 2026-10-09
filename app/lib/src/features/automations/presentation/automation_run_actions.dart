@@ -64,10 +64,15 @@ Future<void> cancelAutomationRun(
   final confirmed = await showConfirmDialog(
     context,
     title: 'Cancel this run?',
-    message: run.state == AutomationRunState.queued
-        ? 'It has not started yet, and will not.'
-        : 'Its session is ended now. What it already changed stays until you '
-              'undo the run.',
+    message: switch (run.state) {
+      AutomationRunState.queued => 'It has not started yet, and will not.',
+      AutomationRunState.running =>
+        'Its session is ended now. What it already changed stays until you '
+            'undo the run.',
+      _ =>
+        'Its checks are stopped now, with everything they started, and '
+            'recorded as cancelled.',
+    },
     confirmLabel: 'Cancel run',
     destructive: true,
   );

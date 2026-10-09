@@ -29,7 +29,11 @@ List<ProjectCheck> automationChecks(
 ) {
   final step = automation.steps.of(AutomationStepKind.check);
   if (step == null) return const [];
-  if (step.text.trim().isEmpty) return projectChecks;
+  if (step.text.trim().isEmpty) {
+    return [
+      for (final check in projectChecks) check.withTimeLimit(step.timeout),
+    ];
+  }
   return checksOfStep(
     step,
     automationId: automation.id,
@@ -109,21 +113,59 @@ class ProjectCheckRunner {
       return;
     }
     directory ??= _facts.repository(automation.repositoryId)?.path;
-    var ordinal = 0;
-    for (final check in checks) {
-      ordinal++;
-      final verdict = await _runOne(
-        run: run,
-        check: check,
-        ordinal: ordinal,
-        directory: directory,
-      );
-      _dao.insertRunCheck(verdict);
-      _onChanged();
+    final cancel = _cancels[run.id] = Completer<void>();
+    try {
+      var ordinal = 0;
+      for (final check in checks) {
+        ordinal++;
+        final verdict = cancel.isCompleted
+            ? _cancelled(run, check, ordinal)
+            : await _runOne(
+                run: run,
+                check: check,
+                ordinal: ordinal,
+                directory: directory,
+                cancelled: cancel.future,
+              );
+        _dao.insertRunCheck(verdict);
+        _onChanged();
+      }
+    } finally {
+      _cancels.remove(run.id);
     }
     _dao.noteChecksObserved(run.id, _now());
     _onChanged();
   }
+
+  /// Runs whose checks are under way, each with what stops them.
+  final _cancels = <String, Completer<void>>{};
+
+  /// Whether [runId]'s checks are running now.
+  bool checking(String runId) => _cancels.containsKey(runId);
+
+  /// Stops [runId]'s running check and every one after it, each recorded as
+  /// cancelled. False when none of its checks is running.
+  bool cancel(String runId) {
+    final cancel = _cancels[runId];
+    if (cancel == null) return false;
+    if (!cancel.isCompleted) cancel.complete();
+    return true;
+  }
+
+  AutomationCheckVerdict _cancelled(
+    AutomationRun run,
+    ProjectCheck check,
+    int ordinal,
+  ) => AutomationCheckVerdict(
+    runId: run.id,
+    ordinal: ordinal,
+    checkId: check.id,
+    name: check.name,
+    command: check.command,
+    verdict: VerificationVerdict.inconclusive,
+    reason: '"${check.name}" did not run: the run was cancelled.',
+    checkedAt: _now(),
+  );
 
   /// Records every check of [run]'s checkout as not run, for [reason] — a
   /// check nobody could run is inconclusive, never skipped in silence.
@@ -160,12 +202,14 @@ class ProjectCheckRunner {
     required ProjectCheck check,
     required int ordinal,
     required EnvironmentPath? directory,
+    Future<void>? cancelled,
   }) async {
     final startedAt = _now();
     final result = await _execute(
       check,
       directory,
       title: '${check.name} · ${run.id}',
+      cancelled: cancelled,
     );
     VerificationVerdict verdict;
     String reason;
@@ -194,6 +238,7 @@ class ProjectCheckRunner {
         environmentId: directory.environmentId,
         startedAt: startedAt,
         exitCode: result.exitCode,
+        timedOutAfter: result.timedOutAfter,
         output: result.tail.join('\n'),
         sessionId: run.sessionId,
         producedBySessionId: kAppVerifierId,
@@ -250,6 +295,7 @@ class ProjectCheckRunner {
           name: check.name,
           command: check.command,
           exitCode: result.exitCode,
+          timedOutAfter: result.timedOutAfter,
           output: result.tail.join('\n'),
           refusal: result.refusal,
           results: results,
@@ -316,7 +362,8 @@ class ProjectCheckRunner {
   }
 
   CheckResults? _parse(CheckExecution result, EnvironmentPath? directory) =>
-      result.refusal != null
+      // A cut-off run's partial output is no reading, and no baseline either.
+      result.refusal != null || result.timedOutAfter != null
       ? null
       : parseCheckOutput(
           result.transcript ?? result.tail.join('\n'),
@@ -379,6 +426,7 @@ class ProjectCheckRunner {
     ProjectCheck check,
     EnvironmentPath? directory, {
     required String title,
+    Future<void>? cancelled,
   }) async {
     final commandRefusal = projectCheckCommandRefusal(check.command);
     if (commandRefusal != null) {
@@ -393,7 +441,12 @@ class ProjectCheckRunner {
       );
     }
     try {
-      return await _commands.execute(check, directory: directory, title: title);
+      return await _commands.execute(
+        check,
+        directory: directory,
+        title: title,
+        cancelled: cancelled,
+      );
     } on Object catch (error) {
       return CheckExecution.refused(
         '"${check.name}" could not be started: $error',

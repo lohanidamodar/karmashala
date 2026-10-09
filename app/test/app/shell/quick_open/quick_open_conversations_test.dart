@@ -336,4 +336,96 @@ void main() {
     expect(find.text('CONVERSATIONS'), findsOneWidget);
     expect(find.text('The worktree loop'), findsOneWidget);
   });
+
+  group('coverage', () {
+    const note = ValueKey('quickOpen.conversationCoverage');
+
+    testWidgets('what the index has not read is said beside the results', (
+      tester,
+    ) async {
+      nativeSession();
+      said('conv-1', 'the heap doubled');
+      server.conversations.coverage = (
+        named: 12,
+        unindexed: 3,
+        unreadable: 1,
+        backfilling: false,
+      );
+      await open(tester);
+
+      await type(tester, 'heap');
+
+      expect(
+        tester.widget<Text>(find.byKey(note)).data,
+        '· 3 of 12 conversations not indexed · '
+        '1 could not be read, may be out of date',
+      );
+    });
+
+    testWidgets('an empty search with gaps says so too', (tester) async {
+      server.conversations.coverage = (
+        named: 4,
+        unindexed: 4,
+        unreadable: 0,
+        backfilling: true,
+      );
+      await open(tester);
+
+      await type(tester, 'nothing said this');
+
+      expect(
+        tester.widget<Text>(find.byKey(note)).data,
+        '· reading history · 4 of 4 conversations not indexed',
+      );
+    });
+
+    testWidgets('a server that does not count coverage says nothing', (
+      tester,
+    ) async {
+      nativeSession();
+      said('conv-1', 'the heap doubled');
+      await open(tester);
+      await type(tester, 'heap');
+      expect(find.text('The worktree loop'), findsOneWidget);
+      expect(find.byKey(note), findsNothing);
+    });
+
+    testWidgets('no gap says nothing', (tester) async {
+      nativeSession();
+      said('conv-1', 'the heap doubled');
+      server.conversations.coverage = (
+        named: 1,
+        unindexed: 0,
+        unreadable: 0,
+        backfilling: false,
+      );
+      await open(tester);
+      await type(tester, 'heap');
+      expect(find.text('The worktree loop'), findsOneWidget);
+      expect(find.byKey(note), findsNothing);
+    });
+
+    testWidgets('fits a phone at text scale 1.6', (tester) async {
+      tester.view
+        ..physicalSize = const Size(360, 740)
+        ..devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      nativeSession();
+      said('conv-1', 'the heap doubled');
+      server.conversations.coverage = (
+        named: 1200,
+        unindexed: 300,
+        unreadable: 12,
+        backfilling: true,
+      );
+      await open(tester);
+
+      await type(tester, 'heap');
+
+      expect(find.byKey(note), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

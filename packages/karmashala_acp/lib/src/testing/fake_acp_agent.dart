@@ -31,6 +31,7 @@ class FakeAcpAgent {
     this.holdsNoConversations = false,
     this.supportsLogout = false,
     this.supportsImages = false,
+    this.supportsAdditionalDirectories = false,
     this.authenticateRefusal,
     this.loadReplay = const [],
     this.agentInfo = const AgentInfo(name: 'fake-acp-agent', version: '0.0.1'),
@@ -65,6 +66,9 @@ class FakeAcpAgent {
 
   /// Whether `initialize` advertises `promptCapabilities.image`.
   final bool supportsImages;
+
+  /// Whether `initialize` advertises `sessionCapabilities.additionalDirectories`.
+  final bool supportsAdditionalDirectories;
 
   /// When set, `authenticate` fails -32603 with these words.
   final String? authenticateRefusal;
@@ -137,6 +141,7 @@ class FakeAcpAgent {
               agentInfo: agentInfo,
               supportsLogout: supportsLogout,
               supportsImages: supportsImages,
+              supportsAdditionalDirectories: supportsAdditionalDirectories,
             ),
           );
         case AcpMethods.authenticate:
@@ -501,6 +506,7 @@ abstract final class InitializeResultJson {
     required AgentInfo agentInfo,
     bool supportsLogout = false,
     bool supportsImages = false,
+    bool supportsAdditionalDirectories = false,
   }) => {
     'protocolVersion': protocolVersion,
     'agentCapabilities': {
@@ -512,6 +518,8 @@ abstract final class InitializeResultJson {
       },
       'mcpCapabilities': {'http': true, 'sse': false},
       if (supportsLogout) 'auth': {'logout': <String, Object?>{}},
+      if (supportsAdditionalDirectories)
+        'sessionCapabilities': {'additionalDirectories': <String, Object?>{}},
     },
     'authMethods': [for (final m in authMethods) m.toJson()],
     'agentInfo': agentInfo.toJson(),

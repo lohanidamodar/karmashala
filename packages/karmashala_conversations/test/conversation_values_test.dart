@@ -168,5 +168,27 @@ void main() {
     );
     expect(fresh.backfilledAt, isNull);
     expect(fresh.backfilling, isFalse);
+    // A server that does not count coverage says nothing, not zero.
+    expect(fresh.named, isNull);
+    expect(fresh.unindexed, isNull);
+    expect(fresh.unreadable, isNull);
+  });
+
+  test('the index status carries its coverage', () {
+    final back = ConversationIndexStatus.fromJson(
+      _wire(
+        const ConversationIndexStatus(
+          conversations: 9,
+          turns: 40,
+          generation: 3,
+          named: 12,
+          unindexed: 3,
+          unreadable: 1,
+        ).toJson(),
+      ),
+    );
+    expect(back.named, 12);
+    expect(back.unindexed, 3);
+    expect(back.unreadable, 1);
   });
 }

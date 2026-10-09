@@ -153,6 +153,34 @@ void main() {
     expect(indexer.skips, 1);
   });
 
+  test('an ACP session\'s large first reading from session_messages is '
+      'written in slices too', () async {
+    db.execute('PRAGMA foreign_keys = OFF;');
+    const at = '2026-10-09T12:00:00Z';
+    for (var i = 0; i < turns; i++) {
+      db.execute(
+        'INSERT INTO session_messages (id, session_id, ordinal, role, text, '
+        'revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+        ['m$i', 's1', i, i.isEven ? 'user' : 'agent', 'said $i', i, at, at],
+      );
+    }
+    db.transactions = 0;
+
+    expect(
+      await indexer.indexConversation(
+        conversationId: 'c1',
+        cli: 'claude-acp',
+        filePath: recordedConversationPath('s1'),
+      ),
+      isTrue,
+    );
+
+    expect(db.transactions, 3);
+    expect(dao.turnCountFor('c1'), turns);
+    expect(dao.stateFor('c1')!.filePath, recordedConversationPath('s1'));
+    expect(dao.search('${turns - 1}').single.ordinal, turns - 1);
+  });
+
   test('a conversation already indexed is still replaced in one', () async {
     final path = transcript(10);
     await index(path);

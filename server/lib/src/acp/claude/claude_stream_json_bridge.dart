@@ -152,7 +152,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     final old = _claude;
     _claude = null;
     if (old != null) unawaited(_retire(old));
-    final claude = _adopt(await relaunch(arguments));
+    final claude = _adopt(
+      await relaunch([...arguments, ..._addDirArguments(params)]),
+    );
     _opening = claude;
     try {
       _absorb(await claude.control('initialize'));
@@ -187,6 +189,15 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     if (claude.hasEnded) _ended(claude, await claude.ended);
     return claude;
   }
+
+  /// `additionalDirectories` as Claude's `--add-dir`, one token each: the
+  /// option is variadic, and a separate value would swallow what follows.
+  static List<String> _addDirArguments(JsonMap params) => [
+    for (final directory in [
+      ...?(params['additionalDirectories'] as List?)?.whereType<String>(),
+    ])
+      if (directory.isNotEmpty) '--add-dir=$directory',
+  ];
 
   Future<void> _retire(ClaudeProcess claude) async {
     await claude.close();
@@ -290,6 +301,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           'embeddedContext': true,
         },
         'mcpCapabilities': {'http': true, 'sse': true},
+        'sessionCapabilities': {'additionalDirectories': <String, Object?>{}},
       },
       'authMethods': [
         {

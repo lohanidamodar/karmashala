@@ -242,8 +242,10 @@ extension _AutomationStepFields on _AutomationEditorState {
       else
         const EditorNote(
           'One command a line. A non-zero exit fails the run, and the '
-          '"if it fails" steps run.',
+          '"if it fails" steps run. A check still running at its time limit '
+          'is stopped, with everything it started, and fails.',
         ),
+      _timeoutField(step, minutes: true),
     ],
   );
 

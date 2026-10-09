@@ -618,7 +618,8 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   }
 
   /// A waiting run is let go; a running one's session is ended, which
-  /// settles it as stopped by you.
+  /// settles it as stopped by you; one whose checks are running has them
+  /// stopped, each recorded as cancelled.
   @override
   Future<AutomationRun> cancelRun(String runId) async {
     final run =
@@ -644,6 +645,8 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
           );
         }
         await _registry.close(hosted);
+      case _ when checks.cancel(runId):
+        await checks.drain();
       case _:
         throw const DataRefused.invalid('That run has already ended.');
     }
