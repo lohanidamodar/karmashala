@@ -47,7 +47,45 @@ abstract final class ServerMethod {
   /// `{}` → `{removed}`: the tool-image cache swept by its limits as they are
   /// set now.
   static const String toolImagesSweep = 'server.toolImages.sweep';
+
+  /// `{folder}` → `{path, manifest}`: a backup archive written into
+  /// `folder`, a path on the server's machine.
+  static const String backupCreate = 'server.backup.create';
+
+  /// `{archive}` → `{manifest, refusal?}`: what a backup holds, and why this
+  /// server would refuse to restore it.
+  static const String backupInspect = 'server.backup.inspect';
+
+  /// `{archive}` → `{staged, schemaFrom, schemaTo}`: the backup unpacked,
+  /// checked and migrated into a fresh folder, switched to at the next start.
+  static const String backupRestore = 'server.backup.restore';
+
+  /// `{}` → `{frequency, keep, folder?, last?, lastRestore?,
+  /// pendingRestore}`.
+  static const String backupScheduleGet = 'server.backup.schedule.get';
+
+  /// `{frequency, keep, folder?}` → as [backupScheduleGet].
+  static const String backupScheduleSet = 'server.backup.schedule.set';
 }
+
+/// What a backup never holds, as Settings → Data and the manifest name it.
+const List<String> kBackupExclusions = [
+  'The vaults in secrets/: environment variables, store credentials, the '
+      'GitHub token, agent secrets and webhook secrets',
+  'server.json, which holds the relay token',
+  'The MCP bridge handshake and per-session MCP configs',
+  'Phone pairing keys and push tokens',
+  'SSH keys: only the paths to them are recorded',
+  'Any file named .env*, key.properties, or a keystore or private key',
+  'Logs and the tool-image cache',
+];
+
+/// What a backup refers to but cannot carry, as Settings → Data names it.
+const List<String> kBackupNotCarried = [
+  'Checkpoint contents: they are git objects in each repository, so the '
+      'backup records their refs and the repositories must still hold them',
+  "Agent transcripts: each agent CLI keeps its own, outside Karmashala's data",
+];
 
 /// client → host: one administrative question, answered with a
 /// [ServerResultMessage] under [requestId].

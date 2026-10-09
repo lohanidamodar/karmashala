@@ -197,6 +197,8 @@ import 'package:karmashala_host_protocol/protocol.dart'
 import 'package:logging/logging.dart' show Logger;
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
+import '../backup/backup_restore.dart' show applyPendingRestore;
+import '../backup/server_backups.dart';
 import '../server/server_administration.dart';
 import '../server/server_storage.dart';
 import '../data/conversations_handler.dart';
@@ -1529,6 +1531,10 @@ Future<int> _serve(
     dataDirectory,
     limits: toolImageLimits,
   );
+  final backups = ServerBackups(
+    dataDirectory: dataDirectory,
+    database: database,
+  )..start();
   // A failed start nobody retries still leaves the inbox after a day.
   data.retireStaleFailedStarts();
   final failedStartSweep = Timer.periodic(
@@ -1985,6 +1991,7 @@ Future<int> _serve(
       toolImages: Directory(p.join(dataDirectory, kToolImageFolderName)),
       limits: toolImageLimits,
     ),
+    backups: backups,
   );
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
@@ -2160,6 +2167,7 @@ Future<int> _serve(
   await delegations.close();
   handoffSweep.cancel();
   toolImageSweep.cancel();
+  backups.cancel();
   failedStartSweep.cancel();
   await handoffDelivery.close();
   await sessionQueue.close();

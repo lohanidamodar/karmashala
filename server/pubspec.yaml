@@ -20,6 +20,12 @@ dependencies:
   # (lib/src/automations/daemon_agents.dart) and never by agent id.
   agent_cli:
     path: ../packages/agent_cli
+  # Backups are zip archives (Settings → Data). MIT, and already in the
+  # workspace lock as a transitive dependency.
+  archive: ^4.3.0
+  # A backed-up file's SHA-256, checked again on restore. BSD-3-Clause, and
+  # already transitive.
+  crypto: ^3.0.7
   # The browser the server drives over CDP (slice 3d): its service, the
   # `browser_*` tools and their consent. Pure Dart.
   karmashala_browser:
