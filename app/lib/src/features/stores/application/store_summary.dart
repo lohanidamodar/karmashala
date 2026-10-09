@@ -110,3 +110,17 @@ List<StoreSummaryRow> storeSummaryRows(List<StoreAppGroup> groups) {
     return byStore != 0 ? byStore : a.app.key.compareTo(b.app.key);
   });
 }
+
+/// A rating trend's scale: its own range with a little room, at least half a
+/// star tall, so a month's movement shows instead of a flat line on 1..5.
+({double min, double max}) ratingTrendScale(List<double> values) {
+  if (values.isEmpty) return (min: 1, max: 5);
+  var low = values.reduce((a, b) => a < b ? a : b);
+  var high = values.reduce((a, b) => a > b ? a : b);
+  final middle = (low + high) / 2;
+  if (high - low < 0.5) {
+    low = middle - 0.25;
+    high = middle + 0.25;
+  }
+  return (min: (low - 0.05).clamp(0, 5), max: (high + 0.05).clamp(0, 5));
+}

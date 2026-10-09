@@ -9,6 +9,7 @@ import '../../../app/shell/workbench_tabs.dart' show openStoresTab;
 import '../../../app/widgets/dashboard_glance.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/store_glance.dart';
+import '../application/store_summary.dart' show ratingTrendScale;
 
 /// How wide the glance's rating sparkline is drawn, and how tall.
 const double kGlanceSparklineWidth = 72;
@@ -118,8 +119,8 @@ class StoresGlanceBody extends ConsumerWidget {
                   key: const ValueKey('stores-glance-sparkline'),
                   values: data.ratingTrend,
                   color: scheme.primary,
-                  minValue: 1,
-                  maxValue: 5,
+                  minValue: ratingTrendScale(data.ratingTrend).min,
+                  maxValue: ratingTrendScale(data.ratingTrend).max,
                   width: kGlanceSparklineWidth,
                   height: kGlanceSparklineHeight,
                   area: false,

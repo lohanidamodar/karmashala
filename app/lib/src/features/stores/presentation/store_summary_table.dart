@@ -315,8 +315,8 @@ class _Rating extends StatelessWidget {
           Sparkline(
             values: trend,
             color: theme.colorScheme.primary,
-            minValue: 1,
-            maxValue: 5,
+            minValue: ratingTrendScale(trend).min,
+            maxValue: ratingTrendScale(trend).max,
             width: kSummarySparklineWidth,
             height: kSummarySparklineHeight,
             area: false,

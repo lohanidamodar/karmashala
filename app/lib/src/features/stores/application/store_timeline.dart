@@ -119,7 +119,7 @@ String _releaseOf(StoreKind store, StoreReleaseStep step) =>
     ? '${step.track}|${step.version}'
     : '${step.track}|${step.version}|${step.build ?? ''}';
 
-/// Each release's path, newest first, from the [steps] the server kept for
+/// Each release's path, the newest started first, from the [steps] the server kept for
 /// one app on [store]. With [publicOnly], the public track alone.
 List<ReleaseTimeline> releaseTimelines(
   StoreKind store,
@@ -157,7 +157,8 @@ List<ReleaseTimeline> releaseTimelines(
         ],
       ),
   ];
-  return timelines..sort((a, b) => b.latest.at.compareTo(a.latest.at));
+  return timelines
+    ..sort((a, b) => b.steps.first.at.compareTo(a.steps.first.at));
 }
 
 bool _isPublic(StoreKind store, String track) => switch (store) {

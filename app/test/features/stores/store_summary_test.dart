@@ -160,6 +160,16 @@ void main() {
     expect(rows['Calm']!.unanswered, 0);
   });
 
+  test('a rating trend is drawn on its own range, half a star at least', () {
+    final narrow = ratingTrendScale(const [4.4, 4.5]);
+    expect(narrow.min, closeTo(4.15, 1e-9));
+    expect(narrow.max, closeTo(4.75, 1e-9));
+    final wide = ratingTrendScale(const [3.0, 4.6]);
+    expect(wide.min, closeTo(2.95, 1e-9));
+    expect(wide.max, closeTo(4.65, 1e-9));
+    expect(ratingTrendScale(const []), (min: 1.0, max: 5.0));
+  });
+
   test('the rating trend covers 30 days, days unread left out', () {
     final app = storeApp(StoreKind.appStore, 'com.example.r');
     final group = groupStoreApps(

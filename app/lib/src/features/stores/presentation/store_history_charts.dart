@@ -177,6 +177,7 @@ class _AppCharts extends StatelessWidget {
       required Color color,
       String? note,
       String? absent,
+      bool area = true,
     }) => _Chart(
       key: ValueKey('store-history-$key'),
       title: title,
@@ -192,6 +193,7 @@ class _AppCharts extends StatelessWidget {
               color: color,
               markers: markers,
               breakAfter: kHistoryChartBreak,
+              area: area,
               height: height,
               valueLabel: valueLabel,
               timeLabel: day,
@@ -217,6 +219,7 @@ class _AppCharts extends StatelessWidget {
           shown: rating,
           valueLabel: (value) => '${value.toStringAsFixed(2)} ★',
           minY: 1,
+          area: false,
           maxY: 5,
           color: primary,
         ),

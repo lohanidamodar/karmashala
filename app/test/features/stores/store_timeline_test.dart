@@ -102,6 +102,30 @@ void main() {
       expect(waiting.reviewTime, isNull);
     });
 
+    test('an older release replaced later still sorts below a newer one', () {
+      final timelines = releaseTimelines(StoreKind.googlePlay, [
+        storeStep(
+          '1.9.4',
+          ReleaseState.live,
+          'Live',
+          DateTime.utc(2026, 9, 1),
+          track: 'production',
+          build: '19',
+          firstRead: true,
+        ),
+        ...playSteps(),
+        storeStep(
+          '1.9.4',
+          ReleaseState.superseded,
+          'Replaced',
+          DateTime.utc(2026, 10, 6, 11),
+          track: 'production',
+          build: '19',
+        ),
+      ], now: now);
+      expect(timelines.map((t) => t.version), ['2.0.0', '1.9.4']);
+    });
+
     test('testing tracks are left off the public timeline', () {
       final timelines = releaseTimelines(StoreKind.googlePlay, [
         ...playSteps(),
