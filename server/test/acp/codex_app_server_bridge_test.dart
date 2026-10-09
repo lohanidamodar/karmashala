@@ -424,6 +424,46 @@ void main() {
     await runtime.stop();
   });
 
+  test('a request for more access is an open ask; allowing it for the turn '
+      'grants exactly what was asked', () async {
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.ask('item/permissions/requestApproval', {
+          'itemId': 'perm-3',
+          'reason': 'needs the network',
+          'permissions': {
+            'network': {'enabled': true},
+          },
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Fetch it');
+    await pump(40);
+    final waiting = host.statuses.last;
+    expect(waiting.status, AgentActivityStatus.awaitingApproval);
+    expect(waiting.hasOpenPrompt, isTrue);
+    expect(waiting.toolAsk?.options.map((o) => o.name), [
+      'Allow for this turn',
+      'Allow for this session',
+      'Reject',
+    ]);
+    final answer = await runtime.answerPermission(approve: true);
+    expect(answer.granted, isTrue);
+    expect(await answered, {
+      'permissions': {
+        'network': {'enabled': true},
+      },
+      'scope': 'turn',
+    });
+    await runtime.awaitTurn();
+    await runtime.stop();
+  });
+
   test('a command approval asks the runtime, and an allow reaches Codex as '
       'accept', () async {
     late Future<Object?> answered;
