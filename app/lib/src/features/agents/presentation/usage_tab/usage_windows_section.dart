@@ -50,7 +50,13 @@ DateTime usageChartEnd(
   final line = forecast == null
       ? const <TimeSeriesPoint>[]
       : usageForecastLine(forecast);
-  final forecastEnd = line.isEmpty ? now : line.last.at;
+  var forecastEnd = line.isEmpty ? now : line.last.at;
+  // A run-out before the reset: run on to the reset, so its marker shows
+  // how far ahead of it the limit comes.
+  final reset = forecast?.resetsAt;
+  if (line.isNotEmpty && reset != null && reset.isAfter(forecastEnd)) {
+    forecastEnd = reset;
+  }
   if (forecastEnd.isAfter(horizon)) return horizon;
   return forecastEnd.isAfter(now) ? forecastEnd : now;
 }
