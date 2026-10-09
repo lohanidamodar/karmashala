@@ -113,6 +113,49 @@ void main() {
     }
   });
 
+  test(
+    'a checkout attached mid-session is told with a session/load before '
+    'the next prompt, once; an agent without loads is not reloaded',
+    () async {
+      for (final loads in [true, false]) {
+        SessionRepositoryDao(database).unlink('s1', 'r-far');
+        database.execute('DELETE FROM session_messages;');
+        final process = FakeAcpProcess(
+          FakeAcpAgent(
+            turns: const [FakeTurn([]), FakeTurn([]), FakeTurn([])],
+            supportsAdditionalDirectories: true,
+            supportsLoadSession: loads,
+          ),
+        );
+        final runtime = runtimeOver(
+          process,
+          database: database,
+          workingDirectory: scratch,
+          files: scope(),
+        );
+        await runtime.start();
+        await runtime.send('Before');
+        await runtime.awaitTurn();
+        expect(process.agent.loadSessionParams, isEmpty);
+
+        SessionRepositoryDao(database).link('s1', 'r-far');
+        await runtime.send('After the attach');
+        await runtime.awaitTurn();
+        await runtime.send('Again');
+        await runtime.awaitTurn();
+        if (loads) {
+          final loaded = process.agent.loadSessionParams.single;
+          expect(loaded['sessionId'], 'fake-session');
+          expect(loaded['additionalDirectories'], [far]);
+        } else {
+          expect(process.agent.loadSessionParams, isEmpty);
+        }
+        expect(process.agent.prompts, hasLength(3));
+        await runtime.stop();
+      }
+    },
+  );
+
   test('terminal/create runs in an attached checkout', () async {
     SessionRepositoryDao(database).link('s1', 'r-far');
     final runner = FakeCommandRunner(

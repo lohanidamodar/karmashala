@@ -237,6 +237,12 @@ class AcpSessionRuntime implements ScreenSession {
   final _ended = Completer<SessionLifecycle>();
   var _started = false;
   var _loading = false;
+
+  /// What `session/new` or `session/load` was last handed, so a change in
+  /// the attached checkouts can be told with a load of the same session.
+  List<McpServerEntry> _servers = const [];
+  List<String> _toldRoots = const [];
+  Future<void>? _retelling;
   var _closeRequested = false;
   var _stoppingWithHost = false;
   var _stopping = false;
@@ -354,6 +360,8 @@ class AcpSessionRuntime implements ScreenSession {
       final directories = _capabilities.additionalDirectories
           ? _files.attachedRoots
           : const <String>[];
+      _servers = servers;
+      _toldRoots = directories;
       final resume = resumeSessionId;
       var resumed = false;
       SessionModeState? modes;
@@ -459,13 +467,17 @@ class AcpSessionRuntime implements ScreenSession {
         '$agentName has not finished starting; send once it has',
       );
     }
-    if (_turn != null) {
+    if (_turn != null || _retelling != null) {
       throw StateError(
         '$agentName is still working on the last message; wait for the turn '
         'to end or interrupt it before sending another',
       );
     }
     if (text.trim().isEmpty) throw StateError('there is no message to send');
+    await (_retelling = _retellRoots(
+      client,
+      agent,
+    )).whenComplete(() => _retelling = null);
     final (prompt, notice) = _promptOf(text);
     _writer.user(text);
     host.checkpointPrompt(sessionId, text);
@@ -484,6 +496,44 @@ class AcpSessionRuntime implements ScreenSession {
     }
     return notice;
   }
+
+  /// ACP has no request that changes a session's roots but a load, whose
+  /// `additionalDirectories` are its complete new list: so the checkouts
+  /// attached or detached since the agent was last told are told before
+  /// the next prompt, while it is idle. A load that fails leaves the old
+  /// roots, said in the chat.
+  Future<void> _retellRoots(AcpAgentClient client, String agent) async {
+    if (!_capabilities.loadSession || !_capabilities.additionalDirectories) {
+      return;
+    }
+    final roots = _files.attachedRoots;
+    if (_sameRoots(roots, _toldRoots)) return;
+    _loading = true;
+    try {
+      await _within(
+        AcpMethods.sessionLoad,
+        client.loadSession(
+          sessionId: agent,
+          cwd: workingDirectory,
+          mcpServers: _servers,
+          additionalDirectories: roots,
+        ),
+      );
+      _toldRoots = roots;
+    } on Object catch (error) {
+      host.notice(
+        sessionId,
+        '$agentName was not told of the checkouts attached since it started '
+        '($error), so it may refuse paths in them.',
+      );
+    } finally {
+      _loading = false;
+    }
+  }
+
+  static bool _sameRoots(List<String> a, List<String> b) =>
+      a.length == b.length &&
+      [for (var i = 0; i < a.length; i++) a[i] == b[i]].every((same) => same);
 
   /// [text] as prompt blocks: its attached images as image blocks when the
   /// agent takes them, each one that cannot be left as its path; and what
