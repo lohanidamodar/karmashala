@@ -185,6 +185,7 @@ class FakeVerificationRows {
         reason: reason,
         steps: run.steps,
         artifacts: run.artifacts,
+        identity: run.identity,
       ),
     );
   }
@@ -222,6 +223,7 @@ class FakeVerificationRows {
         :final verdict,
         :final reason,
         :final producedBySessionId,
+        :final identity,
       ):
         final run = _run(id);
         return _changed(
@@ -238,6 +240,7 @@ class FakeVerificationRows {
             reason: reason,
             steps: run.steps,
             artifacts: run.artifacts,
+            identity: identity ?? run.identity,
           ),
           changes,
         );

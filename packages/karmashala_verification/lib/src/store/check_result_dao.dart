@@ -4,6 +4,7 @@ import 'package:karmashala_store/database.dart';
 
 import '../domain/check_results.dart';
 import '../service/check_result_records.dart';
+import 'verification_dao.dart' show identityColumn, identityFromColumn;
 
 /// The `check_results` table: one row per check per run whose output parsed.
 ///
@@ -23,8 +24,9 @@ class CheckResultDao implements CheckResultRecords {
     _db.transaction(() {
       _db.execute(
         'INSERT INTO check_results (verification_run_id, session_id, '
-        'repository_id, directory, check_name, recorded_at, results) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?);',
+        'repository_id, directory, check_name, recorded_at, results, '
+        'code_identity) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
         [
           results.verificationRunId,
           results.sessionId,
@@ -33,6 +35,7 @@ class CheckResultDao implements CheckResultRecords {
           results.checkName,
           isoFromDate(results.recordedAt),
           jsonEncode(_stored(results.results).toJson()),
+          identityColumn(results.identity),
         ],
       );
       _trim(results.repositoryId, directory, results.checkName);
@@ -137,6 +140,7 @@ class CheckResultDao implements CheckResultRecords {
       checkName: row['check_name']! as String,
       recordedAt: dateFromIso(row['recorded_at']),
       results: results,
+      identity: identityFromColumn(row['code_identity']),
     );
   }
 }

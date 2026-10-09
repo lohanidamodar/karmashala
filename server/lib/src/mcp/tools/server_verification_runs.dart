@@ -7,7 +7,10 @@ import 'package:karmashala_browser/browser.dart'
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_devices/devices.dart'
     show AdbService, DeviceAction, LogLevel;
+import 'package:karmashala_automations/check_runner.dart'
+    show CodeIdentityReader;
 import 'package:karmashala_environments/store.dart' show AgentInstallationDao;
+import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:karmashala_verification/artifacts.dart';
@@ -36,6 +39,7 @@ class ServerVerificationRuns implements VerificationToolBackend {
     String Function()? newId,
     this.browser,
     this.devices,
+    this.identities,
   }) : _newId = newId,
        _runs = VerificationDao(_context.database),
        _store = VerificationArtifactStore(
@@ -53,6 +57,10 @@ class ServerVerificationRuns implements VerificationToolBackend {
   /// The devices on the server's machine a device run drives (slice 4a);
   /// null refuses device runs in words.
   final ServerDevices? devices;
+
+  /// Which code the subject session's checkout holds, read when a run
+  /// starts and again when it finishes; null records none.
+  final CodeIdentityReader? identities;
 
   /// The adb a device run put its recorder on, until it finishes.
   AdbService? _deviceAdb;
@@ -95,6 +103,7 @@ class ServerVerificationRuns implements VerificationToolBackend {
     }
     final id = _newId?.call() ?? verificationRunId(_context.now());
     final directory = await _store.createDirectory(id);
+    final identity = await _identityOf(sessionId);
     final run = _context.write(
       VerificationStart(
         VerificationRun(
@@ -107,6 +116,7 @@ class ServerVerificationRuns implements VerificationToolBackend {
           producedBySessionId: producedBySessionId,
           startedAt: _context.now(),
           artifactDirectory: directory.path,
+          identity: identity,
         ),
       ),
     );
@@ -273,12 +283,16 @@ class ServerVerificationRuns implements VerificationToolBackend {
       );
       await recorder.drain();
     }
+    // A run over code that moved is kept as evidence, marked as such.
+    final started = run.identity;
+    final settled = started?.settledAgainst(await _identityOf(run.sessionId));
     final finished = _context.write(
       VerificationFinish(
         run.id,
         verdict: verdict,
         reason: reason?.trim(),
         producedBySessionId: producedBySessionId,
+        identity: settled != null && settled.changedDuringRun ? settled : null,
       ),
     );
     _active = null;
@@ -287,6 +301,20 @@ class ServerVerificationRuns implements VerificationToolBackend {
     await _writeReport(whole);
     _recordVerdict(whole);
     return whole;
+  }
+
+  /// The code [sessionId]'s checkout holds now: where its agent works, else
+  /// its repository. Null without a session, a reader, or a git checkout.
+  Future<CodeIdentity?> _identityOf(String? sessionId) async {
+    final reader = identities;
+    if (reader == null || sessionId == null) return null;
+    final session = SessionDao(_context.database).getById(sessionId);
+    if (session == null) return null;
+    final directory =
+        session.worktree ??
+        session.workingDirectory ??
+        RepositoryDao(_context.database).getById(session.repositoryId)?.path;
+    return directory == null ? null : reader.read(directory);
   }
 
   /// Collected without being asked, at the end: the page's console and failed

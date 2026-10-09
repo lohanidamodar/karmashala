@@ -580,6 +580,14 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// Other sessions writing in the same checkout.
+  static const IconData usersThree = IconData(
+    0xe68e,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData clipboardText = IconData(
     0xe198,
     fontFamily: 'PhosphorRegular',

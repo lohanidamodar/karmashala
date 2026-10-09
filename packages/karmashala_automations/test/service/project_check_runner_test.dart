@@ -198,6 +198,97 @@ void main() {
     expect(commands.ran, isEmpty);
   });
 
+  group('the code a check ran on', () {
+    CodeIdentity code(String head) => CodeIdentity(
+      environmentId: 'local',
+      path: '/src/r1',
+      head: head.padRight(40, '0'),
+      tree: '',
+      dirty: const {},
+    );
+
+    ProjectCheckRunner withCode(List<String> heads) {
+      var read = 0;
+      return ProjectCheckRunner(
+        automations: dao,
+        checks: ProjectCheckDao(db),
+        facts: FakeCheckoutFacts(),
+        commands: commands,
+        recorder: CommandCheckRecorder(
+          StoreVerificationRecords(VerificationDao(db)),
+          VerificationArtifactStore(artifacts),
+          newId: () => 'vr-${++ids}',
+          now: () => fixtureTime,
+        ),
+        now: () => fixtureTime,
+        results: CheckResultDao(db),
+        // Each read answers the next head; the last one repeats.
+        identityOf: (directory) async =>
+            code(heads[read < heads.length ? read++ : heads.length - 1]),
+      );
+    }
+
+    test('every check records the code the batch was asked about', () async {
+      await withCode(['a']).recordRun(run());
+      final verdicts = dao.checksFor('run1');
+      expect(
+        verdicts.map((v) => v.verdict),
+        everyElement(VerificationVerdict.pass),
+      );
+      for (final verdict in verdicts) {
+        final recorded = VerificationDao(
+          db,
+        ).getRun(verdict.verificationRunId!)!;
+        expect(recorded.identity!.head, startsWith('a'));
+        expect(recorded.identity!.changedDuringRun, isFalse);
+      }
+    });
+
+    test(
+      'the gate refuses a pass over code that changed during the batch',
+      () async {
+        // The batch starts on a; the code is b by the time the first check ends.
+        await withCode(['a', 'b']).recordRun(run());
+        final verdicts = dao.checksFor('run1');
+        expect(
+          verdicts.map((v) => v.verdict),
+          everyElement(VerificationVerdict.inconclusive),
+        );
+        expect(verdicts.first.reason, contains('changed while it ran'));
+        final recorded = VerificationDao(
+          db,
+        ).getRun(verdicts.first.verificationRunId!)!;
+        expect(recorded.identity!.changedDuringRun, isTrue);
+      },
+    );
+
+    test(
+      "a session's batch records its code, and moved code is not a pass",
+      () async {
+        insertSession(db, 's1');
+        final session = Session(
+          id: 's1',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Work',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: fixtureTime,
+        );
+        const here = EnvironmentPath(environmentId: 'local', path: '/src/r1');
+        final still = await withCode(['a']).runForSession(session, here);
+        expect(still!.run.verdict, VerificationVerdict.pass);
+        expect(still.run.identity!.head, startsWith('a'));
+        final moved = await withCode(['a', 'b']).runForSession(session, here);
+        expect(moved!.run.verdict, VerificationVerdict.inconclusive);
+        expect(
+          sessionChecksReport(moved),
+          contains('changed while the checks ran'),
+        );
+      },
+    );
+  });
+
   test(
     'a check past its time limit failed, said so, its output kept',
     () async {

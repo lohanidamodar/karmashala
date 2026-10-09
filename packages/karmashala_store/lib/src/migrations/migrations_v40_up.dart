@@ -1264,3 +1264,17 @@ void _migrateToV90(Database db) {
     'ON session_visuals (session_id, created_at);',
   );
 }
+
+/// Which code a verification run or a check reading was taken on — the
+/// commit and a fingerprint of the uncommitted files, as JSON — so a pass can
+/// be held against the checkout as it is now. Null on every older row, which
+/// reads as "version unknown".
+void _migrateToV91(Database db) {
+  for (final table in const ['verification_runs', 'check_results']) {
+    final columns = db
+        .select('PRAGMA table_info($table);')
+        .map((row) => row['name'] as String);
+    if (columns.contains('code_identity')) continue;
+    db.execute('ALTER TABLE $table ADD COLUMN code_identity TEXT;');
+  }
+}

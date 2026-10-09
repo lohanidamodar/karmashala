@@ -11,6 +11,7 @@ import 'checkout_reach.dart';
 import 'project_folders.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
+import 'server_checkout_occupancy.dart';
 import 'session_liveness.dart';
 
 /// Where the work is: the checkouts under a project, a rescan for the ones it
@@ -115,8 +116,24 @@ class WorkspaceToolSet extends ServerToolSet {
                     'status': session.status.name,
                   },
               ],
+              // The live sessions that may write there: one working tree,
+              // index and branch between them. Advisory — nothing is locked.
+              'writersHere': <Object?>[
+                for (final occupant in serverCheckoutOccupants(
+                  _context,
+                  repository.path,
+                  liveness: _liveness,
+                ))
+                  occupant.toJson(),
+              ],
             },
         ],
+        'writersRule':
+            'writersHere: live sessions that may write in that checkout — '
+            'their own directory or one attached to them — leaving out '
+            'read-only modes. A session following the per-agent default '
+            'counts. Two writers share one working tree, index and branch; '
+            'start in a new worktree to work apart. Nothing is locked.',
       };
     });
   }
@@ -263,7 +280,10 @@ const List<Map<String, Object?>> workspaceToolSchemas = [
         'that touches it — same working tree, same index, same branch. Read '
         'sessionsWorkingHere before editing or running a build in a checkout '
         'that is not your own; an empty list means none was recorded, not that '
-        'the checkout is free.',
+        'the checkout is free. writersHere narrows it to the live '
+        'sessions that may write there (not read-only), with their agent and '
+        'whether they are working or idle: if it names anyone, prefer a new '
+        'worktree (worktree_create) over sharing.',
     'inputSchema': {
       'type': 'object',
       'properties': {

@@ -59,13 +59,21 @@ abstract interface class VerificationToolBackend {
 /// One text block, not a JSON map the bridge would pretty-print, and pruned by
 /// default: step detail, file contents and screenshots are opt-in.
 class VerificationTools {
-  const VerificationTools(this._service, {this.callerSessionId});
+  const VerificationTools(
+    this._service, {
+    this.callerSessionId,
+    this.freshnessOf,
+  });
 
   final VerificationToolBackend _service;
 
   /// The calling agent's session; null outside one, and the run stays
   /// unattributed.
   final String? callerSessionId;
+
+  /// Holds a run's recorded code against its checkout now; null says only
+  /// what was recorded.
+  final Future<CodeFreshness> Function(CodeIdentity? identity)? freshnessOf;
 
   /// Whether [tool] belongs to this set.
   static bool handles(String tool) => tool.startsWith('verification_');
@@ -252,6 +260,7 @@ class VerificationTools {
           '${run.producedBySessionId == null ? '' : ' (${run.producedBySessionId})'}',
       'Started ${run.startedAt.toIso8601String()}'
           '${run.duration == null ? ' (still recording)' : ', took ${_seconds(run.duration!)}'}',
+      ...await _codeLines(run),
       '',
       'Steps (${run.steps.length}):',
       for (final step in run.steps) _stepLine(step, run, full: full),
@@ -315,6 +324,22 @@ class VerificationTools {
       ...blocks,
       {'type': 'text', 'text': lines.join('\n')},
     ]);
+  }
+
+  /// Which code [run] was taken on, and whether the checkout still holds it.
+  Future<List<String>> _codeLines(VerificationRun run) async {
+    final code = run.identity;
+    final freshness = freshnessOf == null
+        ? (code == null ? CodeFreshness.notRecorded : null)
+        : await freshnessOf!(code);
+    return [
+      code == null
+          ? 'Code: not recorded'
+          : 'Code: ${code.label} in ${code.path}'
+                '${code.changedDuringRun ? ' (it changed while this ran)' : ''}',
+      if (freshness != null)
+        'Freshness: ${freshness.label.toUpperCase()} — ${freshness.reason}',
+    ];
   }
 
   static String _runLine(VerificationRun run) =>

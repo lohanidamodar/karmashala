@@ -4,6 +4,10 @@ import 'dart:typed_data';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
+import 'package:karmashala_automations/check_runner.dart'
+    show CodeIdentityReader;
+import 'package:karmashala_git/git.dart' show GitService;
+import 'package:karmashala_verification/store.dart' show VerificationDao;
 import 'package:karmashala_devices/devices.dart' show AndroidSdk;
 import 'package:karmashala_host/src/browser/server_browser.dart';
 import 'package:karmashala_host/src/devices/server_device_claims.dart';
@@ -194,6 +198,71 @@ void main() {
         textOf(await call('verification_get')),
         contains('STILL RECORDING'),
       );
+    });
+  });
+
+  group('the code a run was taken on', () {
+    late _ScriptedIdentities identities;
+
+    setUp(() {
+      identities = _ScriptedIdentities();
+      runs = ServerVerificationRuns(
+        context,
+        newId: () => 'run-${(++ids).toString().padLeft(3, '0')}',
+        identities: identities,
+      );
+      tools = VerificationToolSet(runs);
+    });
+
+    test('is read from the subject session\'s checkout at the start', () async {
+      identities.head = 'a';
+      await call('verification_start', {
+        'change': true,
+        'sessionId': 'work-1',
+      }, 'review-1');
+      expect(identities.reads, [r'C:\src']);
+      expect(runs.activeRun!.identity!.head, startsWith('a'));
+      expect(runs.activeRun!.identity!.changedDuringRun, isFalse);
+    });
+
+    test('code that moved before the finish is recorded as such, and the '
+        'get says it is stale', () async {
+      identities.head = 'a';
+      await call('verification_start', {
+        'change': true,
+        'sessionId': 'work-1',
+      }, 'review-1');
+      identities.head = 'b';
+      await call('verification_finish', {'verdict': 'pass'}, 'review-1');
+      final stored = VerificationDao(db).getRun('run-001')!;
+      expect(stored.identity!.changedDuringRun, isTrue);
+      final text = textOf(await call('verification_get', {'id': 'run-001'}));
+      expect(text, contains('Code: aaaaaaa'));
+      expect(text, contains('it changed while this ran'));
+      expect(text, contains('Freshness: STALE'));
+    });
+
+    test('code that held still reads fresh', () async {
+      identities.head = 'a';
+      await call('verification_start', {
+        'change': true,
+        'sessionId': 'work-1',
+      }, 'review-1');
+      await call('verification_finish', {'verdict': 'pass'}, 'review-1');
+      expect(
+        VerificationDao(db).getRun('run-001')!.identity!.changedDuringRun,
+        isFalse,
+      );
+      final text = textOf(await call('verification_get', {'id': 'run-001'}));
+      expect(text, contains('Freshness: FRESH'));
+    });
+
+    test('a run with nothing recorded says so', () async {
+      await call('verification_start', {'change': true}, null);
+      await call('verification_finish', {'verdict': 'pass'}, null);
+      final text = textOf(await call('verification_get', {'id': 'run-001'}));
+      expect(text, contains('Code: not recorded'));
+      expect(text, contains('Freshness: VERSION UNKNOWN'));
     });
   });
 
@@ -875,4 +944,45 @@ class _FakeAdb {
     if (argv.contains('pidof')) return ok(packageRunning ? '4242' : '');
     return ok('');
   }
+}
+
+/// Answers whatever [head] is now, and remembers which directories it read.
+class _ScriptedIdentities extends CodeIdentityReader {
+  _ScriptedIdentities() : super(_noGit);
+
+  static Future<T> _noGit<T>(
+    EnvironmentPath at,
+    Future<T> Function(GitService git, EnvironmentPath at) question,
+  ) => throw UnimplementedError();
+
+  String head = 'a';
+  final reads = <String>[];
+
+  CodeIdentity _now(EnvironmentPath directory) => CodeIdentity(
+    environmentId: directory.environmentId,
+    path: directory.path,
+    head: head.padRight(40, head),
+    tree: '',
+    dirty: const {},
+  );
+
+  @override
+  Future<CodeIdentity?> read(EnvironmentPath directory) async {
+    reads.add(directory.path);
+    return _now(directory);
+  }
+
+  @override
+  Future<CodeFreshness> freshnessOf(CodeIdentity? recorded) async =>
+      compareCodeIdentity(
+        recorded,
+        recorded == null
+            ? null
+            : _now(
+                EnvironmentPath(
+                  environmentId: recorded.environmentId,
+                  path: recorded.path,
+                ),
+              ),
+      );
 }

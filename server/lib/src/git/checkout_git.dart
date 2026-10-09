@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_automations/check_runner.dart'
+    show CodeIdentityReader;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/github.dart';
@@ -139,6 +141,11 @@ class CheckoutGit {
         at,
         (git, p) => git.hashObjects(p, paths),
       ),
+      // Its own reads, where the recorded checkout is; one with nothing
+      // recorded is answered without git.
+      GitCodeFreshness(:final identity) => CodeIdentityReader(
+        reach.ask,
+      ).freshnessOf(identity),
       GitDelivery(:final repository) => () async {
         final path = pathOf(at);
         final reading = repository == null

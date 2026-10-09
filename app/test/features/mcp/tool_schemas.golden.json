@@ -1098,7 +1098,7 @@
     },
     {
       "name": "list_checkouts",
-      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free.",
+      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free. writersHere narrows it to the live sessions that may write there (not read-only), with their agent and whether they are working or idle: if it names anyone, prefer a new worktree (worktree_create) over sharing.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1996,7 +1996,7 @@
     },
     {
       "name": "verification_get",
-      "description": "Read one run: its verdict, its steps and what it captured. Compact by default — step summaries and a list of artifacts, no images and no file contents. Pass full:true for step detail and the text of the evidence files, or images:true to attach the screenshots. Ask for images only when you need to look at one; they are the expensive part.",
+      "description": "Read one run: its verdict, its steps and what it captured. Compact by default — step summaries and a list of artifacts, no images and no file contents. Pass full:true for step detail and the text of the evidence files, or images:true to attach the screenshots. Ask for images only when you need to look at one; they are the expensive part. It also says which code the run was taken on (commit and uncommitted files) and whether the checkout still holds it: FRESH, STALE (the code changed since, or while it ran) or VERSION UNKNOWN. A stale pass is not a pass for the code as it is now.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2415,7 +2415,7 @@
     },
     {
       "name": "checks_results",
-      "description": "The structured results of a session's project checks, as recorded by its newest checks_run: per check, the analyzer diagnostics (file, line, code, message) or the failing tests, and what the session changed — issues added and resolved, tests broken and fixed — against the baseline: the last reading of that check in the repository before the session started, or else the session's own first reading. Runs nothing; run checks_run first for fresh results. A check whose output was neither format has none.",
+      "description": "The structured results of a session's project checks, as recorded by its newest checks_run: per check, the analyzer diagnostics (file, line, code, message) or the failing tests, and what the session changed — issues added and resolved, tests broken and fixed — against the baseline: the last reading of that check in the repository before the session started, or else the session's own first reading. Runs nothing; run checks_run first for fresh results. A check whose output was neither format has none. Each reading carries the code it was taken on (identity) and its freshness against the checkout now: fresh, stale (the code changed since — run checks_run again) or unknown.",
       "inputSchema": {
         "type": "object",
         "properties": {

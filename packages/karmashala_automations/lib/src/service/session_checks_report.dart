@@ -24,6 +24,12 @@ String sessionChecksReport(SessionChecks? result) {
       if (check.resultsLine case final line?) '    $line',
       ..._changeLines(check),
     ],
+    if (run.identity case final code?)
+      'Code checked: ${code.label} in ${code.path}'
+          '${code.changedDuringRun ? ' — it changed while the checks ran' : ''}.'
+    else
+      'Which code was checked was not recorded: this checkout could not be '
+          'read as a git repository.',
     if (result.checks.any((c) => c.results != null))
       'Structured results: checks_results.',
   ].join('\n');
@@ -36,9 +42,10 @@ Iterable<String> _changeLines(CommandCheck check, {int limit = 10}) sync* {
     // No baseline yet: what is wrong now is the most useful thing to name.
     final results = check.results;
     if (results == null) return;
-    for (final issue in results.diagnostics
-        .where((d) => d.severity == DiagnosticSeverity.error)
-        .take(limit)) {
+    for (final issue
+        in results.diagnostics
+            .where((d) => d.severity == DiagnosticSeverity.error)
+            .take(limit)) {
       yield '    ${issue.listing}';
     }
     for (final test in results.failures.take(limit)) {
@@ -79,6 +86,7 @@ String _word(VerificationVerdict verdict) => switch (verdict) {
 Object sessionCheckResultsReport(
   List<({RecordedCheckResults latest, CheckResultsChange? change})> readings, {
   int limit = 50,
+  List<CodeFreshness>? freshness,
 }) {
   if (readings.isEmpty) {
     return 'NOTHING RECORDED: no check in this session printed output '
@@ -91,10 +99,21 @@ Object sessionCheckResultsReport(
         'Each check is compared with the last reading of it in this '
         'repository before the session started; failing that, with the '
         "session's own first reading.",
+    'freshnessRule':
+        'fresh: the checkout is still the code the reading was taken on. '
+        'stale: it changed since (or while it ran) — run checks_run again '
+        'before relying on it. unknown: an older reading, or a checkout that '
+        'cannot be read now.',
     'checks': [
-      for (final reading in readings)
+      for (final (i, reading) in readings.indexed)
         {
           ...reading.latest.toJson(limit: limit),
+          'identity': reading.latest.identity?.toSummaryJson(),
+          'freshness':
+              (freshness == null || i >= freshness.length
+                      ? CodeFreshness.notRecorded
+                      : freshness[i])
+                  .toJson(),
           'change': reading.change?.toJson(limit: limit),
         },
     ],

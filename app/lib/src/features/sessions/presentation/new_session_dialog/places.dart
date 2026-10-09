@@ -87,6 +87,23 @@ extension _NewSessionPlaces on _NewSessionDialogState {
         );
   }
 
+  /// The directory the session would share with whoever works there: the
+  /// checkout, or an existing worktree it joins. Null for a new worktree,
+  /// which nobody else is in.
+  EnvironmentPath? _sharedDirectory(Repository? checkout, _WorkPlace place) {
+    if (checkout == null) return null;
+    final pick = _existingPick;
+    return switch (place) {
+      _WorkPlace.checkout => checkout.path,
+      _WorkPlace.existing when pick != null && pick.startsWith(_pickWorktree) =>
+        _joinable(checkout)
+            .where((w) => w.path.path == pick.substring(_pickWorktree.length))
+            .firstOrNull
+            ?.path,
+      _ => null,
+    };
+  }
+
   /// The worktrees other than the checkout itself: what "existing" can join.
   List<GitWorktree> _joinable(Repository? checkout) => [
     for (final w in _worktrees ?? const <GitWorktree>[])

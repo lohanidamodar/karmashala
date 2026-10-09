@@ -42,6 +42,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_verification/command_checks.dart';
 import 'package:karmashala_verification/artifacts.dart';
 import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart' show CodeFreshness;
 import 'package:karmashala_git/github.dart' show GithubClient;
 import 'package:karmashala_git/worktrees.dart' show WorktreeService;
 import 'package:path/path.dart' as p;
@@ -115,11 +116,13 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     GithubClient? githubClient,
     Future<String?> Function(EnvironmentPath directory)? branchOf,
     Duration? githubSweepEvery,
+    CodeIdentityReader? identities,
   }) : _db = database,
        _tell = tell,
        _registry = registry,
        _log = log ?? _ignore,
-       _raise = raise {
+       _raise = raise,
+       _identities = identities {
     final now = _now = clock ?? _utcNow;
     final ids = _newId = newId ?? newUuid;
     final automations = ToldAutomations(AutomationDao(database), _told);
@@ -165,6 +168,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       ),
       now: now,
       results: CheckResultDao(database),
+      identityOf: identities?.read,
       onChanged: _changed,
       log: _log,
     );
@@ -397,6 +401,9 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   }
 
   final AppDatabase _db;
+
+  /// Which code a checkout holds, so a check reading is held against it.
+  final CodeIdentityReader? _identities;
   final void Function(List<DataChange> changes) _tell;
   final SessionRegistry _registry;
   late final DateTime Function() _now;
@@ -823,11 +830,18 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       return Future.error(StateError('No session $sessionId.'));
     }
     if (tool == 'checks_results') {
-      // A read of what is recorded: it runs nothing, so reach does not matter.
-      return Future.value(
-        sessionCheckResultsReport(
-          checks.latestResults(session),
+      // A read of what is recorded: it runs nothing, so reach does not matter
+      // — but each reading is held against its checkout as it is now.
+      final readings = checks.latestResults(session);
+      return Future.wait([
+        for (final reading in readings)
+          _identities?.freshnessOf(reading.latest.identity) ??
+              Future.value(CodeFreshness.notRecorded),
+      ]).then(
+        (freshness) => sessionCheckResultsReport(
+          readings,
           limit: (arguments['limit'] as num?)?.round() ?? 50,
+          freshness: freshness,
         ),
       );
     }

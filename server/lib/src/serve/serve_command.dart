@@ -170,6 +170,8 @@ import '../companion/daemon_worktrees.dart';
 import '../automations/daemon_checkout_facts.dart';
 import 'package:karmashala_automations/store.dart'
     show AutomationDao, CheckoutRows;
+import 'package:karmashala_automations/check_runner.dart'
+    show CodeIdentityReader;
 import '../domain/uuid.dart';
 import '../mcp/tools/checkout_reach.dart';
 import '../mcp/tools/project_folders.dart';
@@ -731,6 +733,9 @@ Future<int> _serve(
     runners: ssh.runners,
     github: github.client,
   );
+  // Which code a checkout holds — read where its files are — so a check or
+  // a verification is tied to the code it ran on.
+  final identities = CodeIdentityReader(reach.ask);
   // A project an agent adds imports the CLI history of its new checkouts.
   final folders = ProjectFolders(
     tools,
@@ -852,7 +857,12 @@ Future<int> _serve(
       // when the session has no project of its own.
       SessionCheckoutToolSet(tools, worktrees: worktreeTools),
       VerificationToolSet(
-        ServerVerificationRuns(tools, browser: browser, devices: devices),
+        ServerVerificationRuns(
+          tools,
+          browser: browser,
+          devices: devices,
+          identities: identities,
+        ),
       ),
     ]),
   );
@@ -1157,6 +1167,7 @@ Future<int> _serve(
         : null,
     githubClient: github.client,
     worktrees: worktrees,
+    identities: identities,
   );
   // Webhooks reach this server through the relay it pairs through.
   final webhooks = await _startWebhooks(

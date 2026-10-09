@@ -205,7 +205,8 @@ void main() {
   // A test each: the three verdicts must all be offered a re-check, and none of
   // them may be offered it in the words a never-checked session gets.
   for (final (verdict, label) in const [
-    (VerificationVerdict.pass, 'Checked: pass'),
+    // Nothing recorded which code it ran on: a pass says so (round 74).
+    (VerificationVerdict.pass, 'Checked: pass · version unknown'),
     (VerificationVerdict.fail, 'Checked: fail'),
     (VerificationVerdict.inconclusive, 'Checked: inconclusive'),
   ]) {
@@ -306,7 +307,7 @@ void main() {
     await pump(tester);
     // Both present, so the matrix below is measuring the crowded strip rather
     // than one that quietly dropped its newest control.
-    expect(find.text('Checked: pass'), findsOneWidget);
+    expect(find.text('Checked: pass · version unknown'), findsOneWidget);
     expect(find.text('Check again'), findsOneWidget);
 
     await expectSurvivesWindowMatrix(

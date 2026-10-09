@@ -60,6 +60,7 @@ DataRequest<Object?>? _checkpointsRequestFromJson(
         (throw DataRefused.invalid('$kind: "verdict" is not a verdict')),
     reason: args.optionalString('reason'),
     producedBySessionId: args.optionalString('producedBySessionId'),
+    identity: CodeIdentity.fromJson(args.values['identity']),
   ),
   VerificationRecord.name => VerificationRecord(
     args.value('run', verificationRunFromJson),
@@ -600,6 +601,7 @@ final class VerificationFinish extends _VerificationRunAnswer {
     required this.verdict,
     this.reason,
     this.producedBySessionId,
+    this.identity,
   });
 
   static const String name = 'verification.finish';
@@ -608,6 +610,9 @@ final class VerificationFinish extends _VerificationRunAnswer {
   final VerificationVerdict verdict;
   final String? reason;
   final String? producedBySessionId;
+
+  /// The code the run ended on, when it is not the code it started on.
+  final CodeIdentity? identity;
 
   @override
   String get kind => name;
@@ -618,6 +623,7 @@ final class VerificationFinish extends _VerificationRunAnswer {
     'verdict': verdict.name,
     'reason': ?reason,
     'producedBySessionId': ?producedBySessionId,
+    'identity': ?identity?.toJson(),
   };
 }
 

@@ -42,6 +42,7 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/lineage.dart' show SessionDepth, SessionLink;
 import 'package:karmashala_session/session.dart' show Session;
+import 'checkout_occupancy_views.dart' show CheckoutOccupancyWarning;
 import 'session_destination_picker.dart';
 import 'slow_start_note.dart';
 import 'filter_menu_field.dart';
@@ -513,6 +514,21 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   checkout,
                   externalOffered: externalOffered,
                 ),
+              ),
+            // Who else is writing there, before a second writer starts.
+            if (_sharedDirectory(
+                  checkout,
+                  worktreeOffered ? _place : _WorkPlace.checkout,
+                )
+                case final shared?)
+              CheckoutOccupancyWarning(
+                directory: shared,
+                padding: const EdgeInsets.only(top: Insets.sm),
+                onUseWorktree: worktreeOffered && !_busy
+                    ? () => setState(() => _place = _WorkPlace.newWorktree)
+                    : null,
+                onStartAnyway: canStart ? start : null,
+                onWait: _busy ? null : () => Navigator.of(context).pop(),
               ),
             NewDialogSection(
               label: 'First prompt',

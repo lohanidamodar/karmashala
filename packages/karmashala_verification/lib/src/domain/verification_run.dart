@@ -1,5 +1,6 @@
 import 'package:karmashala_core/verdicts.dart';
 
+import 'code_identity.dart';
 import 'verdict_attribution.dart';
 import 'verification_artifact.dart';
 import 'verification_step.dart';
@@ -25,6 +26,7 @@ class VerificationRun {
     this.reason,
     this.steps = const [],
     this.artifacts = const [],
+    this.identity,
   });
 
   final String id;
@@ -51,6 +53,10 @@ class VerificationRun {
   final List<VerificationStep> steps;
   final List<VerificationArtifact> artifacts;
 
+  /// The code this ran on, or null for a run recorded before that was kept
+  /// or with no checkout to read.
+  final CodeIdentity? identity;
+
   VerdictAttribution get attribution => VerdictAttribution.of(
     producerSessionId: producedBySessionId,
     subjectSessionId: sessionId,
@@ -70,6 +76,7 @@ class VerificationRun {
     String? reason,
     List<VerificationStep>? steps,
     List<VerificationArtifact>? artifacts,
+    CodeIdentity? identity,
   }) => VerificationRun(
     id: id,
     title: title ?? this.title,
@@ -83,5 +90,6 @@ class VerificationRun {
     reason: reason ?? this.reason,
     steps: steps ?? this.steps,
     artifacts: artifacts ?? this.artifacts,
+    identity: identity ?? this.identity,
   );
 }

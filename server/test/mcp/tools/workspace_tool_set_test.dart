@@ -139,6 +139,74 @@ void main() {
       expect(byId[featureId]!['sessionsWorkingHere'], isEmpty);
     });
 
+    test('writersHere names the live sessions that may write, with their '
+        'agent and activity — not ended or read-only ones', () async {
+      fixture.database.execute(
+        'INSERT INTO agent_installations '
+        '(id, agent_kind, environment_id, executable_path, created_at) '
+        "VALUES ('claude', 'claudeCode', ?, 'claude', ?);",
+        [localHostEnvironmentId, RepoToolFixture.now.toIso8601String()],
+      );
+      fixture
+        ..session(
+          'writer',
+          appId,
+          title: 'Fix login',
+          status: SessionStatus.running,
+          workingDirectory: app,
+          agentInstallationId: 'claude',
+        )
+        ..session(
+          'waiting',
+          appId,
+          title: 'Docs',
+          status: SessionStatus.idle,
+          workingDirectory: app,
+        )
+        ..session(
+          'planner',
+          appId,
+          title: 'Plan only',
+          status: SessionStatus.running,
+          workingDirectory: app,
+          agentInstallationId: 'claude',
+          permissionMode: 'mode=plan',
+        )
+        ..session(
+          'done',
+          appId,
+          status: SessionStatus.completed,
+          workingDirectory: app,
+        )
+        // A row still `created`, with a process the server runs: live.
+        ..session('starting', appId, workingDirectory: app);
+      running.add('starting');
+
+      final answer = await call('list_checkouts', {'projectId': projectId});
+      final result = answer.value! as Map;
+      final checkouts = (result['checkouts']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+      final here = checkouts.firstWhere((c) => c['repositoryId'] == appId);
+      final writers = (here['writersHere']! as List)
+          .cast<Map<String, Object?>>();
+      // In the store's order: by when they started, then by id.
+      expect(writers.map((w) => w['sessionId']), [
+        'starting',
+        'waiting',
+        'writer',
+      ]);
+      final writer = writers.last;
+      expect(writer['title'], 'Fix login');
+      expect(writer['agent'], 'Claude Code');
+      expect(writer['activity'], 'working');
+      expect(writers[1]['activity'], 'idle');
+      expect(result['writersRule'], contains('Nothing is locked'));
+      final elsewhere = checkouts.firstWhere(
+        (c) => c['repositoryId'] == featureId,
+      );
+      expect(elsewhere['writersHere'], isEmpty);
+    });
+
     test('an unknown project is an error', () async {
       final answer = await call('list_checkouts', {'projectId': 'ghost'});
       expect(answer.error, contains('ghost'));

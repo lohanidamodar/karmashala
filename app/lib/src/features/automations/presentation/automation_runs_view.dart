@@ -8,11 +8,16 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_verification/verification.dart' show CodeFreshness;
 
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../terminal/presentation/session_status.dart' show describeAge;
+import '../../verification/application/verification_providers.dart'
+    show runFreshnessProvider;
+import '../../verification/presentation/session_verdict_mark.dart'
+    show SessionVerdictMark;
 import '../application/automation_providers.dart';
 import 'automation_run_actions.dart';
 import '../application/automation_runs_page.dart';
@@ -433,7 +438,8 @@ class _RunTileState extends ConsumerState<RunTile> {
               ? 'No checks were configured.'
               : [
                   for (final c in widget.checks)
-                    '${c.verdict.label} · ${c.name} · '
+                    '${SessionVerdictMark.freshnessLabel(c.verdict.label, _freshnessOf(c), pass: c.passed)}'
+                        ' · ${c.name} · '
                         '${describeAge(c.checkedAt, now: now)}'
                         '${c.reason.isEmpty ? '' : '\n${c.reason}'}',
                 ].join('\n'),
@@ -515,6 +521,14 @@ class _RunTileState extends ConsumerState<RunTile> {
       ),
     );
   }
+
+  /// Whether [check]'s code is still the checkout's; null while asking, or
+  /// for a check that never ran.
+  CodeFreshness? _freshnessOf(AutomationCheckVerdict check) =>
+      switch (check.verificationRunId) {
+        final id? => ref.watch(runFreshnessProvider(id)).value,
+        null => null,
+      };
 
   Future<void> _openSession(String id) async {
     final messenger = ScaffoldMessenger.maybeOf(context);

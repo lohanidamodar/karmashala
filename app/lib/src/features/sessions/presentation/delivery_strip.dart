@@ -37,6 +37,9 @@ import '../application/session_signals.dart';
 import '../application/session_status_providers.dart';
 import '../application/session_ui_providers.dart' show sessionsStartingProvider;
 import 'package:karmashala_session/delivery.dart';
+import '../application/checkout_occupancy_providers.dart'
+    show sessionCheckoutSharersProvider;
+import 'checkout_occupancy_views.dart' show SharedCheckoutBadge;
 import 'continue_with_dialog.dart';
 import 'model_chip.dart';
 

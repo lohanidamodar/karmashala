@@ -1066,6 +1066,105 @@ class GitService {
     }
   }
 
+  /// Every path whose working-tree file differs from `HEAD` — tracked edits,
+  /// deletions and untracked files git does not ignore, each file listed —
+  /// and whether it is gone from the working tree. The index is not asked
+  /// about: what a check runs on is the files. Throws [GitException].
+  Future<List<({String path, bool deleted})>> worktreeChanges(
+    EnvironmentPath repo,
+  ) async {
+    final result = await _git(repo, [
+      'status',
+      '--porcelain=v1',
+      '-z',
+      '--untracked-files=all',
+      '--no-renames',
+    ]);
+    if (!result.ok) {
+      throw GitException('git status failed: ${result.stderr.trim()}');
+    }
+    return [
+      for (final entry in result.stdout.split('\x00'))
+        if (entry.length > 3)
+          (
+            path: entry.substring(3),
+            deleted: entry[1] == 'D' || (entry[0] == 'D' && entry[1] == ' '),
+          ),
+    ];
+  }
+
+  /// The blob id each of [paths] — relative to [repo] — would have, read
+  /// through stdin so thousands of paths fit no command line. Nothing is
+  /// written to the repository. Null when git could not say for every one.
+  Future<List<String>?> hashFiles(
+    EnvironmentPath repo,
+    List<String> paths,
+  ) async {
+    if (paths.isEmpty) return const [];
+    final result = await runner.run(
+      CommandRequest(
+        executable: 'git',
+        arguments: ['-C', repo.path, 'hash-object', '--stdin-paths'],
+        stdinText: '${paths.join('\n')}\n',
+        environment: gitEnvironmentFor(const ['hash-object']),
+        removedEnvironment: kGitRemovedEnvironment,
+      ),
+    );
+    if (!result.ok) return null;
+    final ids = [
+      for (final line in result.stdout.split(RegExp(r'[\r\n]+')))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    return ids.length == paths.length ? ids : null;
+  }
+
+  /// The blob each of [paths] has in [rev]; a path missing from the answer is
+  /// not in it. Null when git could not say.
+  Future<Map<String, String>?> blobsAt(
+    EnvironmentPath repo,
+    String rev,
+    List<String> paths,
+  ) async {
+    if (paths.isEmpty) return const {};
+    final result = await _git(repo, [
+      'ls-tree',
+      '-r',
+      '-z',
+      '--full-tree',
+      rev,
+      '--',
+      ...paths,
+    ]);
+    if (!result.ok) return null;
+    return {
+      for (final entry in result.stdout.split('\x00'))
+        if (entry.indexOf('\t') case final tab when tab > 0)
+          entry.substring(tab + 1): entry.substring(0, tab).split(' ').last,
+    };
+  }
+
+  /// The paths [from] and [to] differ in, or null when git could not say — a
+  /// commit gone from the repository, say.
+  Future<Set<String>?> pathsBetween(
+    EnvironmentPath repo, {
+    required String from,
+    required String to,
+  }) async {
+    final result = await _git(repo, [
+      'diff',
+      '--name-only',
+      '-z',
+      '--no-renames',
+      from,
+      to,
+    ]);
+    if (!result.ok) return null;
+    return {
+      for (final path in result.stdout.split('\x00'))
+        if (path.isNotEmpty) path,
+    };
+  }
+
   /// The diff between two objects — two checkpoint trees, or a tree and the
   /// working tree when [to] is omitted.
   Future<String> diffObjects(

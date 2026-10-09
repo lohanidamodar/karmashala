@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:karmashala_store/database.dart';
+import '../domain/code_identity.dart';
 import '../domain/verification_artifact.dart';
 import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
@@ -16,8 +19,8 @@ class VerificationDao {
       'INSERT INTO verification_runs '
       '(id, title, target_kind, target_url, target_serial, target_package, '
       'session_id, produced_by_session_id, started_at, finished_at, verdict, '
-      'reason, artifact_directory) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'reason, artifact_directory, code_identity) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         run.id,
         run.title,
@@ -32,6 +35,7 @@ class VerificationDao {
         run.verdict?.name,
         run.reason,
         run.artifactDirectory,
+        identityColumn(run.identity),
       ],
     );
   }
@@ -60,12 +64,21 @@ class VerificationDao {
     required VerificationVerdict verdict,
     String? reason,
     String? producedBySessionId,
+    CodeIdentity? identity,
   }) {
     _db.execute(
       'UPDATE verification_runs SET finished_at = ?, verdict = ?, reason = ?, '
-      'produced_by_session_id = COALESCE(?, produced_by_session_id) '
+      'produced_by_session_id = COALESCE(?, produced_by_session_id), '
+      'code_identity = COALESCE(?, code_identity) '
       'WHERE id = ?;',
-      [isoFromDate(finishedAt), verdict.name, reason, producedBySessionId, id],
+      [
+        isoFromDate(finishedAt),
+        verdict.name,
+        reason,
+        producedBySessionId,
+        identityColumn(identity),
+        id,
+      ],
     );
   }
 
@@ -242,6 +255,22 @@ class VerificationDao {
       verdict: VerificationVerdict.parse(row['verdict'] as String?),
       reason: row['reason'] as String?,
       artifactDirectory: row['artifact_directory']! as String,
+      identity: identityFromColumn(row['code_identity']),
     );
+  }
+}
+
+/// [identity] as a `code_identity` column holds it.
+String? identityColumn(CodeIdentity? identity) =>
+    identity == null ? null : jsonEncode(identity.toJson());
+
+/// A `code_identity` column read back; null for an old row or one out of
+/// shape, which reads as unknown, never as a match.
+CodeIdentity? identityFromColumn(Object? value) {
+  if (value is! String) return null;
+  try {
+    return CodeIdentity.fromJson(jsonDecode(value));
+  } on FormatException {
+    return null;
   }
 }

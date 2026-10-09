@@ -83,7 +83,10 @@ const List<Map<String, Object?>> checksToolSchemas = [
         'against the baseline: the last reading of that check in the '
         'repository before the session started, or else the session\'s own '
         'first reading. Runs nothing; run checks_run first for fresh results. '
-        'A check whose output was neither format has none.',
+        'A check whose output was neither format has none. Each reading '
+        'carries the code it was taken on (identity) and its freshness '
+        'against the checkout now: fresh, stale (the code changed since — run '
+        'checks_run again) or unknown.',
     'inputSchema': {
       'type': 'object',
       'properties': {

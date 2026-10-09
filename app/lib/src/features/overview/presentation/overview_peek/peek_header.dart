@@ -308,6 +308,12 @@ class _PeekHeaderState extends ConsumerState<_PeekHeader> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               row,
+              // Other live sessions writing in its checkout; nothing if none.
+              if (native != null)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: SharedCheckoutBadge(sessionId: id),
+                ),
               if (plan != null && plan.total > 0)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(

@@ -143,11 +143,14 @@ class RepoToolFixture {
     SessionStatus status = SessionStatus.created,
     String? worktree,
     String? workingDirectory,
+    String agentInstallationId = 'a1',
+    String? permissionMode,
   }) {
     final session = Session(
       id: id,
       repositoryId: repositoryId,
-      agentInstallationId: 'a1',
+      agentInstallationId: agentInstallationId,
+      permissionMode: permissionMode,
       title: title,
       useWorktree: worktree != null,
       worktree: worktree == null ? null : here(worktree),

@@ -204,6 +204,7 @@ class EvidenceHandler {
       verdict: r.verdict,
       reason: r.reason,
       producedBySessionId: r.producedBySessionId,
+      identity: r.identity,
     );
     final stored = _existingRun(r.id);
     changes.add(VerificationRunChanged(stored));

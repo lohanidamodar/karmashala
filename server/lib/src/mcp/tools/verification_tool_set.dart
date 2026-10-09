@@ -24,6 +24,7 @@ class VerificationToolSet extends ServerToolSet {
     () => VerificationTools(
       runs,
       callerSessionId: callerSessionId,
+      freshnessOf: runs.identities?.freshnessOf,
     ).call(tool, arguments),
   );
 }
