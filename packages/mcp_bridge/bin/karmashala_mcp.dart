@@ -19,7 +19,7 @@ import 'dart:io';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 
 Future<void> main(List<String> args) async {
-  final bridge = _Bridge();
+  final bridge = _Bridge(sessionOnly: args.contains('--session-only'));
   final lines = stdin.transform(utf8.decoder).transform(const LineSplitter());
   await for (final line in lines) {
     if (line.trim().isEmpty) continue;
@@ -36,6 +36,17 @@ Future<void> main(List<String> args) async {
 }
 
 class _Bridge {
+  _Bridge({this.sessionOnly = false});
+
+  /// Serves only an agent Karmashala started, named by
+  /// `KARMASHALA_SESSION_ID`: an entry in an agent's own config file is read
+  /// by every run of it, and one the person started by hand gets no tools.
+  final bool sessionOnly;
+
+  bool get _outsideSession =>
+      sessionOnly &&
+      (Platform.environment['KARMASHALA_SESSION_ID'] ?? '').isEmpty;
+
   _BridgeConfig? _config;
 
   Future<void> handle(Map<String, dynamic> message) async {
@@ -72,6 +83,10 @@ class _Bridge {
   }
 
   Future<void> _toolsList(Object? id) async {
+    if (_outsideSession) {
+      _reply(id, {'tools': const <Object?>[]});
+      return;
+    }
     try {
       final result = await _call('__list_tools__', const {});
       _reply(id, {'tools': result});
@@ -88,6 +103,20 @@ class _Bridge {
     final name = params['name'];
     if (name is! String || name.isEmpty) {
       _error(id, -32602, 'Missing tool name');
+      return;
+    }
+    if (_outsideSession) {
+      _reply(id, {
+        'content': [
+          {
+            'type': 'text',
+            'text':
+                "Error: Karmashala's tools are only for an agent Karmashala "
+                'started; this one is not running inside a Karmashala session.',
+          },
+        ],
+        'isError': true,
+      });
       return;
     }
     final rawArguments = params['arguments'];

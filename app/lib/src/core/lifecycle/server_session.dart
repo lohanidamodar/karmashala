@@ -415,6 +415,7 @@ class ServerSession {
     // no address, and its bytes are constant.
     if (capabilities.setsUpThisMachine) {
       lifecycle.installAgentSkills(afterFirstFrame: afterFirstFrame);
+      lifecycle.installAgentMcpEntries(afterFirstFrame: afterFirstFrame);
     }
 
     // The CLI stores, **once**, behind the same gate. The project row's

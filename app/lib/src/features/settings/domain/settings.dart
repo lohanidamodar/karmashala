@@ -126,6 +126,7 @@ class Settings {
     this.quitAsks = true,
     this.quitReopens = true,
     this.quitKeepsHostSessions = true,
+    this.agentMcpEntries = true,
     this.letAgentsUpdateThemselves,
     this.childReportMode,
     this.terminalChordOverrides = const {},
@@ -332,6 +333,12 @@ class Settings {
   /// do unless ended, since closing a pane only disconnects from them.
   final bool quitKeepsHostSessions;
 
+  /// Whether Karmashala keeps its own entry in the MCP file of an agent that
+  /// takes no server for one launch — agy's `~/.gemini/config/mcp_config.json`.
+  /// Off once the person removes it in Settings, so a launch does not put it
+  /// back.
+  final bool agentMcpEntries;
+
   /// Whether an agent CLI Karmashala launches may update itself in that
   /// session. **`null` means unset**, resolved by platform where it is read
   /// (`agentsMayUpdateThemselvesProvider`): default off on Windows, on
@@ -495,6 +502,7 @@ class Settings {
     bool? quitAsks,
     bool? quitReopens,
     bool? quitKeepsHostSessions,
+    bool? agentMcpEntries,
     bool? letAgentsUpdateThemselves,
     bool clearLetAgentsUpdateThemselves = false,
     String? childReportMode,
@@ -584,6 +592,7 @@ class Settings {
     quitAsks: quitAsks ?? this.quitAsks,
     quitReopens: quitReopens ?? this.quitReopens,
     quitKeepsHostSessions: quitKeepsHostSessions ?? this.quitKeepsHostSessions,
+    agentMcpEntries: agentMcpEntries ?? this.agentMcpEntries,
     letAgentsUpdateThemselves: clearLetAgentsUpdateThemselves
         ? null
         : (letAgentsUpdateThemselves ?? this.letAgentsUpdateThemselves),
@@ -699,6 +708,7 @@ class Settings {
     'quitAsks',
     'quitReopens',
     'quitKeepsHostSessions',
+    'agentMcpEntries',
     'letAgentsUpdateThemselves',
     'childReportMode',
     'terminalChordOverrides',
@@ -781,6 +791,7 @@ class Settings {
     'quitAsks': quitAsks,
     'quitReopens': quitReopens,
     'quitKeepsHostSessions': quitKeepsHostSessions,
+    'agentMcpEntries': agentMcpEntries,
     if (letAgentsUpdateThemselves != null)
       'letAgentsUpdateThemselves': letAgentsUpdateThemselves,
     if (childReportMode != null) 'childReportMode': childReportMode,
@@ -979,6 +990,7 @@ class Settings {
       quitAsks: json['quitAsks'] != false,
       quitReopens: json['quitReopens'] != false,
       quitKeepsHostSessions: json['quitKeepsHostSessions'] != false,
+      agentMcpEntries: json['agentMcpEntries'] != false,
       letAgentsUpdateThemselves: json['letAgentsUpdateThemselves'] is bool
           ? json['letAgentsUpdateThemselves'] as bool
           : null,
@@ -1113,6 +1125,7 @@ class Settings {
       other.quitAsks == quitAsks &&
       other.quitReopens == quitReopens &&
       other.quitKeepsHostSessions == quitKeepsHostSessions &&
+      other.agentMcpEntries == agentMcpEntries &&
       other.letAgentsUpdateThemselves == letAgentsUpdateThemselves &&
       other.childReportMode == childReportMode &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
@@ -1197,6 +1210,7 @@ class Settings {
           childReportMode,
           quitReopens,
           quitKeepsHostSessions,
+          agentMcpEntries,
           toolImageMaxAgeDays,
           toolImageMaxMegabytes,
           Object.hash(

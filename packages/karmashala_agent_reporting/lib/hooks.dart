@@ -6,4 +6,5 @@ library;
 export 'src/agent_hook_installer.dart';
 export 'src/agent_hook_receiver.dart';
 export 'src/agent_hook_spool.dart';
+export 'src/agent_mcp_entry_installer.dart';
 export 'src/real_home_guard.dart';

@@ -721,9 +721,20 @@ const antigravityDescriptor = AgentDescriptor(
         'agy-customizations skill names ~/.gemini/config/ as the global '
         'discovery root. Read 2026-09-09.',
   ),
-  mcpConfig: AgentMcpConfigSpec.undeclared(
-    refusal:
-        'Nobody has established where agy reads its own MCP servers, so what '
-        'it would be given has not been read.',
+  // Store-home-relative and it walks out: the store is
+  // `~/.gemini/antigravity-cli`, the customization root `~/.gemini/config`.
+  mcpConfig: AgentMcpConfigSpec.json(
+    projectFileName: '',
+    projectServersPath: [],
+    userFileName: '../config/mcp_config.json',
+    userServersPath: ['mcpServers'],
+    installsKarmashalaEntry: true,
+    evidence:
+        'agy 1.3.2: the bundled agy-customizations skill, '
+        'docs/mcp_servers.md, names ~/.gemini/config/mcp_config.json as the '
+        'global file, `mcpServers` of `command`/`args`/`env` stdio entries. '
+        'Seen 2026-10-09 under a throwaway HOME: agy spawns them before '
+        'sign-in and they inherit its environment, KARMASHALA_SESSION_ID '
+        'included.',
   ),
 );
