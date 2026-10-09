@@ -3907,8 +3907,9 @@ WorkbenchView
                                                                                                     Column
                                                                                                       Flexible
                                                                                                         Consumer
-                                                                                                          QueuedMessagesStrip
-                                                                                                            SizedBox
+                                                                                                          ValueListenableBuilder<Set<String>>
+                                                                                                            QueuedMessagesStrip
+                                                                                                              SizedBox
                                                                                                       PinnedPlanStrip
                                                                                                         SizedBox
                                                                                                       Flexible
