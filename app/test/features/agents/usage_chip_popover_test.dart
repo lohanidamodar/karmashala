@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala_ui/charts.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -58,7 +59,7 @@ void main() {
     ),
   );
 
-  testWidgets('clicking the chip opens a card of meters, with pace', (
+  testWidgets('clicking the chip opens a card of meters, with the forecast', (
     tester,
   ) async {
     final container = ProviderContainer(overrides: overrides());
@@ -82,7 +83,9 @@ void main() {
     expect(find.byType(UsageChipPopover), findsOneWidget);
     expect(find.byType(LinearMeter), findsNWidgets(2));
     expect(find.textContaining('62% · resets in 2h11m'), findsOneWidget);
-    expect(find.text('Slightly ahead of pace'), findsOneWidget);
+    // No history yet: the forecast says so rather than guessing.
+    expect(find.text('Forecast: not enough data yet'), findsNWidgets(2));
+    expect(find.text('Slightly ahead of pace'), findsNothing);
     expect(find.text('owner@example.com'), findsOneWidget);
     expect(find.text('Checked just now'), findsOneWidget);
     expect(find.text('Refresh'), findsOneWidget);
@@ -152,7 +155,10 @@ void main() {
       [for (final point in charts.single.points) point.value],
       [0, 10, 20, 30, 40, 50],
     );
-    expect(find.textContaining(RegExp('last 7 days', caseSensitive: false)), findsOneWidget);
+    expect(
+      find.textContaining(RegExp('last 7 days', caseSensitive: false)),
+      findsOneWidget,
+    );
   });
 
   testWidgets('nothing read yet: the card is the sentence', (tester) async {
@@ -197,5 +203,39 @@ void main() {
       build: () => popover(view),
       because: 'the hover card opens at the smallest window too',
     );
+  });
+
+  testWidgets('a recent pace that runs out before the reset warns on the chip '
+      'and in the card', (tester) async {
+    // 2 points every 5 minutes for the last hour, ending at the reading's
+    // 62%: 24 an hour, so 38 left lasts ~1h35m — 36 minutes before the reset.
+    final dao = db.server.usageRows;
+    for (var i = 12; i >= 1; i--) {
+      dao.insert(
+        UsageSample(
+          accountKey: 'claudeCode@windows',
+          windowLabel: '5-hour',
+          span: kUsageFiveHourWindow,
+          percent: 62.0 - 2 * i,
+          recordedAt: testTime.subtract(Duration(minutes: 5 * i)),
+        ),
+      );
+    }
+    final container = ProviderContainer(overrides: overrides());
+    addTearDown(container.dispose);
+    await tester.pumpWidget(strip(container));
+    await tester.pumpAndSettle();
+
+    final attention = SemanticColors.forBrightness(Brightness.light).attention;
+    expect(tester.widget<Text>(find.text('62%')).style?.color, attention);
+
+    await tester.tap(find.text('62%'));
+    await tester.pumpAndSettle();
+    final sentence = find.textContaining('At this pace: runs out ~');
+    expect(sentence, findsOneWidget);
+    expect(tester.widget<Text>(sentence).data, contains('before the reset'));
+    expect(tester.widget<Text>(sentence).style?.color, attention);
+    container.read(windowFocusedProvider.notifier).set(false);
+    await tester.pump(const Duration(seconds: 1));
   });
 }

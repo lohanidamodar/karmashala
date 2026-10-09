@@ -12,6 +12,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/agent_account_switch.dart';
+import '../application/usage_forecast.dart';
 import '../application/usage_history.dart';
 import 'agent_logo.dart';
 import 'usage_chip.dart' show UsageChipView, formatResetClock;
@@ -19,7 +20,7 @@ import 'usage_history_charts.dart'
     show kUsageHistoryWindow, samplesOf, usageHistoryQuery, usageSeriesSummary;
 import 'usage_machine_switcher.dart';
 import 'usage_tab/usage_windows_section.dart'
-    show clipForecast, usageForecastOf;
+    show clipBand, clipForecast, usageChartEnd;
 import 'usage_window_meter.dart';
 
 /// The width the card is laid out at, window permitting. Fixed rather than
@@ -179,9 +180,16 @@ class UsageChipPopover extends ConsumerWidget {
         ..add(Text(view.tooltip, style: meta));
     } else {
       body.add(const _GroupLabel('Windows'));
+      // The Usage tab's own forecast, so the card and the tab never disagree.
+      final forecasts = ref.watch(usageForecastsProvider(accountKey));
       for (final window in reading.windows) {
         body.add(
-          UsageWindowMeter(window: window, readAt: reading.fetchedAt, now: now),
+          UsageWindowMeter(
+            window: window,
+            readAt: reading.fetchedAt,
+            now: now,
+            forecast: window.percent == null ? null : forecasts[window.label],
+          ),
         );
       }
       // Asked of the server; the last answer stays while a newer one comes.
@@ -194,6 +202,7 @@ class UsageChipPopover extends ConsumerWidget {
         _WeekChart(
           usage: reading,
           history: history,
+          forecasts: forecasts,
           now: now,
           width: inner,
           meta: meta,
@@ -336,6 +345,7 @@ class _WeekChart extends StatelessWidget {
   const _WeekChart({
     required this.usage,
     required this.history,
+    required this.forecasts,
     required this.now,
     required this.width,
     required this.meta,
@@ -343,6 +353,7 @@ class _WeekChart extends StatelessWidget {
 
   final AgentUsage usage;
   final List<UsageSample> history;
+  final Map<String, UsageForecast> forecasts;
   final DateTime now;
   final double width;
   final TextStyle? meta;
@@ -361,12 +372,11 @@ class _WeekChart extends StatelessWidget {
 
     final start = now.subtract(kUsageHistoryWindow);
     final series = samplesOf(history, window.label, from: start);
-    final forecast = usageForecastOf(window, usage.fetchedAt);
-    final horizon = now.add(_forecastHorizon);
-    final forecastEnd = forecast.isEmpty ? now : forecast.last.at;
-    final end = forecastEnd.isAfter(horizon)
-        ? horizon
-        : (forecastEnd.isAfter(now) ? forecastEnd : now);
+    final forecast =
+        forecasts[window.label] ??
+        usageForecastFor(window, readAt: usage.fetchedAt, samples: history);
+    final end = usageChartEnd(forecast, now, now.add(_forecastHorizon));
+    final reset = window.resetsAt;
     final percent = window.percent!;
     final label = _GroupLabel('Last 7 days · ${window.label}');
 
@@ -397,7 +407,12 @@ class _WeekChart extends StatelessWidget {
             points: [
               for (final s in series) TimeSeriesPoint(s.recordedAt, s.percent),
             ],
-            forecast: clipForecast(forecast, end),
+            forecast: clipForecast(usageForecastLine(forecast), end),
+            forecastBand: clipBand(usageForecastBand(forecast), end),
+            markers: [
+              if (reset != null && reset.isAfter(now) && !reset.isAfter(end))
+                ChartMarker(reset, label: 'resets'),
+            ],
             start: start,
             end: end,
             maxY: math.max(100, series.map((s) => s.percent).reduce(math.max)),

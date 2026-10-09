@@ -20,6 +20,27 @@ class TimeSeriesPoint {
   int get hashCode => Object.hash(at, value);
 }
 
+/// One moment of a [TimeSeriesChart.forecastBand]: the range a projection
+/// may fall in at [at], from [low] to [high].
+@immutable
+class TimeSeriesBandPoint {
+  const TimeSeriesBandPoint(this.at, this.low, this.high);
+
+  final DateTime at;
+  final double low;
+  final double high;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TimeSeriesBandPoint &&
+      other.at == at &&
+      other.low == low &&
+      other.high == high;
+
+  @override
+  int get hashCode => Object.hash(at, low, high);
+}
+
 /// A moment worth a vertical rule — a quota reset, say — with an optional
 /// word drawn beside it when there is room.
 @immutable
@@ -60,8 +81,14 @@ class TimeSeriesChart extends StatefulWidget {
     this.area = true,
     this.height = 160,
     this.forecast = const [],
+    this.forecastBand = const [],
     super.key,
   });
+
+  /// The range around [forecast] — the slower and faster paces the readings
+  /// allow — shaded faintly in the series colour, with no hover. Empty for
+  /// none; at least two points to draw.
+  final List<TimeSeriesBandPoint> forecastBand;
 
   /// Where the line goes if nothing changes — drawn dashed, with no area and
   /// no hover, so a projection never reads as a measurement. Empty for none.
@@ -192,6 +219,7 @@ class _TimeSeriesChartState extends State<TimeSeriesChart> {
                             area: widget.area,
                             selected: chosen,
                             forecast: widget.forecast,
+                            forecastBand: widget.forecastBand,
                           ),
                         ),
                       ),
@@ -318,7 +346,11 @@ class TimeSeriesPainter extends CustomPainter {
     this.area = true,
     this.selected,
     this.forecast = const [],
+    this.forecastBand = const [],
   });
+
+  /// See [TimeSeriesChart.forecastBand].
+  final List<TimeSeriesBandPoint> forecastBand;
 
   /// See [TimeSeriesChart.forecast].
   final List<TimeSeriesPoint> forecast;
@@ -354,6 +386,7 @@ class TimeSeriesPainter extends CustomPainter {
       );
     }
     _paintSeries(canvas);
+    _paintForecastBand(canvas);
     _paintForecast(canvas);
     canvas.restore();
 
@@ -479,6 +512,26 @@ class TimeSeriesPainter extends CustomPainter {
       canvas.drawPath(line, stroke);
     }
     canvas.drawCircle(runs.last.last, 2.5, Paint()..color = color);
+  }
+
+  /// The band: a faint fill between its high and low edges, wide where the
+  /// readings disagree, and never mistaken for the measured area.
+  void _paintForecastBand(Canvas canvas) {
+    if (forecastBand.length < 2) return;
+    final first = forecastBand.first;
+    final band = Path()
+      ..moveTo(geometry.xFor(first.at), geometry.yFor(first.high));
+    for (final p in forecastBand.skip(1)) {
+      band.lineTo(geometry.xFor(p.at), geometry.yFor(p.high));
+    }
+    for (final p in forecastBand.reversed) {
+      band.lineTo(geometry.xFor(p.at), geometry.yFor(p.low));
+    }
+    band.close();
+    canvas.drawPath(
+      band,
+      Paint()..color = color.withValues(alpha: ChartAlphas.band),
+    );
   }
 
   /// The projection, dashed in the series colour: the same ink says it is the

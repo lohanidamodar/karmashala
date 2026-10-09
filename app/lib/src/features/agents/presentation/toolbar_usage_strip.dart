@@ -14,6 +14,7 @@ import '../../settings/presentation/settings_nav.dart';
 import '../application/agent_account_switch.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_accounts.dart';
+import '../application/usage_forecast.dart';
 import 'agent_logo.dart';
 import 'usage_chip.dart';
 import 'usage_chip_popover.dart';
@@ -71,7 +72,7 @@ class ToolbarUsageStrip extends ConsumerWidget {
 
 /// The chip's words for [account]'s latest reading, as the session chip said
 /// them: the short and long window, the worst one's colour.
-UsageChipView _viewOf(UsageAccount account, DateTime now) {
+UsageChipView _viewOf(WidgetRef ref, UsageAccount account, DateTime now) {
   final state = account.latest;
   final failure = state.failure;
   final AsyncValue<AgentUsage> value = failure != null
@@ -79,7 +80,12 @@ UsageChipView _viewOf(UsageAccount account, DateTime now) {
       : state.usage == null
       ? const AsyncLoading()
       : AsyncData(state.usage!);
-  return usageChipViewFor(value, now, remembered: state.usage);
+  return usageChipViewFor(
+    value,
+    now,
+    remembered: state.usage,
+    forecasts: ref.watch(usageForecastsProvider(state.accountKey)),
+  );
 }
 
 Color _toneColor(BuildContext context, UsageTone tone) {
@@ -238,7 +244,7 @@ class _AccountChipState extends ConsumerState<_AccountChip>
   Widget build(BuildContext context) {
     final account = widget.account;
     final now = ref.watch(clockProvider).nowUtc();
-    final view = _viewOf(account, now);
+    final view = _viewOf(ref, account, now);
     followSwitches([account]);
     final colour = _toneColor(context, view.tone);
     final theme = Theme.of(context);
@@ -449,7 +455,7 @@ class _MoreChipState extends ConsumerState<_MoreChip> with _FollowsSwitches {
     final now = ref.watch(clockProvider).nowUtc();
     followSwitches(accounts);
     final worst = accounts
-        .map((a) => _viewOf(a, now).tone)
+        .map((a) => _viewOf(ref, a, now).tone)
         .reduce((a, b) => _loudness(a) >= _loudness(b) ? a : b);
     final maxHeight = MediaQuery.sizeOf(context).height - Insets.xl * 4;
     return MenuAnchor(
@@ -474,7 +480,7 @@ class _MoreChipState extends ConsumerState<_MoreChip> with _FollowsSwitches {
                       context,
                       ref,
                       account,
-                      _viewOf(account, now),
+                      _viewOf(ref, account, now),
                       onLeave: controller.close,
                     ),
                   ),

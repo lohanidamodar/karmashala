@@ -3,36 +3,13 @@ import 'dart:math' as math;
 import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:karmashala_ui/charts.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../usage_chip.dart'
-    show formatResetClock, formatUsageDuration, onCourseToRunOut;
+import '../../application/usage_forecast.dart';
+import '../usage_chip.dart' show formatResetClock;
 import '../usage_history_charts.dart' show samplesOf, usageSeriesSummary;
 import '../usage_window_meter.dart';
 import 'usage_tab_state.dart';
-
-/// Where a window's line would go if spending carried on at its pace so far:
-/// from the reading to the limit, when that comes first, or to the reset.
-/// Empty when there is no pace to carry — no period, no reset, too early.
-///
-/// The same pace [usagePace] gives the meters, so the dashed line and the
-/// sentence under the meter cannot disagree.
-List<TimeSeriesPoint> usageForecastOf(UsageWindow window, DateTime readAt) {
-  final percent = window.percent;
-  final resetsAt = window.resetsAt;
-  if (percent == null || resetsAt == null) return const [];
-  final pace = usagePace(window, readAt);
-  final projected = pace.projected;
-  if (projected == null) return const [];
-  final from = TimeSeriesPoint(readAt, percent);
-  if (projected < 100) return [from, TimeSeriesPoint(resetsAt, projected)];
-  final limitAt = pace.limitAt;
-  if (limitAt == null || !limitAt.isBefore(resetsAt)) {
-    return [from, TimeSeriesPoint(resetsAt, 100)];
-  }
-  return [from, TimeSeriesPoint(limitAt, 100)];
-}
 
 /// [forecast] cut at [end], so a projection days long does not squeeze the
 /// recorded part of the chart into a sliver.
@@ -49,6 +26,33 @@ List<TimeSeriesPoint> clipForecast(
       end.difference(a.at).inMicroseconds /
       b.at.difference(a.at).inMicroseconds;
   return [a, TimeSeriesPoint(end, a.value + (b.value - a.value) * share)];
+}
+
+/// [band] without its points past [end].
+List<TimeSeriesBandPoint> clipBand(
+  List<TimeSeriesBandPoint> band,
+  DateTime end,
+) {
+  final kept = [
+    for (final p in band)
+      if (!p.at.isAfter(end)) p,
+  ];
+  return kept.length < 2 ? const [] : kept;
+}
+
+/// Where a window's chart ends: the forecast's end when it comes before
+/// [horizon], else [horizon], and never before [now].
+DateTime usageChartEnd(
+  UsageForecast? forecast,
+  DateTime now,
+  DateTime horizon,
+) {
+  final line = forecast == null
+      ? const <TimeSeriesPoint>[]
+      : usageForecastLine(forecast);
+  final forecastEnd = line.isEmpty ? now : line.last.at;
+  if (forecastEnd.isAfter(horizon)) return horizon;
+  return forecastEnd.isAfter(now) ? forecastEnd : now;
 }
 
 /// How many times [samples] reached a window's limit: each rise to 100% or
@@ -75,13 +79,14 @@ int usageLimitsHit(List<UsageSample> samples) {
 
 /// **Each window of the account over the range**: its meter as the chip card
 /// draws it, then the recorded line with its resets, the limit as a guide, and
-/// the run-out forecast dashed ahead of it.
+/// the forecast at the recent pace dashed ahead of it, inside its band.
 class UsageWindowsOverTime extends StatelessWidget {
   const UsageWindowsOverTime({
     required this.usage,
     required this.history,
     required this.range,
     required this.now,
+    this.forecasts = const {},
     super.key,
   });
 
@@ -89,6 +94,10 @@ class UsageWindowsOverTime extends StatelessWidget {
   final List<UsageSample> history;
   final UsageRange range;
   final DateTime now;
+
+  /// [usageForecastsProvider]'s answer for the account, by window label; a
+  /// window missing from it is forecast from [history] by the same function.
+  final Map<String, UsageForecast> forecasts;
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +110,8 @@ class UsageWindowsOverTime extends StatelessWidget {
     );
     if (measured.isEmpty) {
       return Text(
-        'This account reports no quota windows, so there is nothing to chart.',
+        'This account reports no quota windows, so there is nothing to '
+        'chart or forecast — not measured.',
         style: muted,
       );
     }
@@ -116,6 +126,13 @@ class UsageWindowsOverTime extends StatelessWidget {
             history: history,
             range: range,
             now: now,
+            forecast:
+                forecasts[window.label] ??
+                usageForecastFor(
+                  window,
+                  readAt: usage.fetchedAt,
+                  samples: history,
+                ),
           ),
         ],
       ],
@@ -130,6 +147,7 @@ class _WindowOverTime extends StatelessWidget {
     required this.history,
     required this.range,
     required this.now,
+    required this.forecast,
   });
 
   final UsageWindow window;
@@ -137,11 +155,11 @@ class _WindowOverTime extends StatelessWidget {
   final List<UsageSample> history;
   final UsageRange range;
   final DateTime now;
+  final UsageForecast forecast;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final semantic = SemanticColors.of(context);
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
@@ -149,22 +167,11 @@ class _WindowOverTime extends StatelessWidget {
     final series = samplesOf(history, window.label, from: start);
     // Ahead of now by at most half the range: enough to see where the line is
     // heading, not so much that the recorded part shrinks to nothing.
-    final horizon = now.add(range.span ~/ 2);
-    final forecast = usageForecastOf(window, readAt);
-    final forecastEnd = forecast.isEmpty ? now : forecast.last.at;
-    final end = forecastEnd.isAfter(horizon)
-        ? horizon
-        : (forecastEnd.isAfter(now) ? forecastEnd : now);
-    final shown = clipForecast(forecast, end);
+    final end = usageChartEnd(forecast, now, now.add(range.span ~/ 2));
     final reset = window.resetsAt;
     final percent = window.percent!;
-    final onCourse = onCourseToRunOut(
-      percent: percent,
-      span: window.span,
-      resetsAt: reset,
-      now: now,
-    );
     final colour = usageSeverityColor(context, usageSeverityFor(percent));
+    final sentenceColour = usageForecastColor(context, forecast);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -192,7 +199,8 @@ class _WindowOverTime extends StatelessWidget {
             points: [
               for (final s in series) TimeSeriesPoint(s.recordedAt, s.percent),
             ],
-            forecast: shown,
+            forecast: clipForecast(usageForecastLine(forecast), end),
+            forecastBand: clipBand(usageForecastBand(forecast), end),
             start: start,
             end: end,
             maxY: math.max(100, series.map((s) => s.percent).reduce(math.max)),
@@ -214,48 +222,27 @@ class _WindowOverTime extends StatelessWidget {
               range.span,
             ),
           ),
-        if (_forecastSentence() case final sentence?) ...[
-          const SizedBox(height: Insets.xs),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                onCourse ? AppIcons.warning : AppIcons.clock,
-                size: Chrome.iconSmall,
-                color: onCourse
-                    ? semantic.attention
-                    : theme.colorScheme.onSurfaceVariant,
+        const SizedBox(height: Insets.xs),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              usageForecastIcon(forecast),
+              size: Chrome.iconSmall,
+              color: sentenceColour,
+            ),
+            const SizedBox(width: Insets.xs),
+            Expanded(
+              child: Text(
+                usageForecastSentence(forecast, now),
+                key: ValueKey('usage-forecast-${window.label}'),
+                style: muted?.copyWith(color: sentenceColour),
               ),
-              const SizedBox(width: Insets.xs),
-              Expanded(
-                child: Text(
-                  sentence,
-                  style: muted?.copyWith(
-                    color: onCourse ? semantic.attention : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ],
     );
-  }
-
-  /// The forecast in words, beside the dashes: when the limit arrives at this
-  /// pace, or where the window ends. Null when there is no pace to speak of.
-  String? _forecastSentence() {
-    final reset = window.resetsAt;
-    final forecast = usageForecastOf(window, readAt);
-    if (reset == null || forecast.length < 2) return null;
-    final last = forecast.last;
-    if (last.value >= 100 && last.at.isBefore(reset)) {
-      return 'At this pace it runs out at ${formatResetClock(last.at, now)}, '
-          '${formatUsageDuration(reset.difference(last.at))} before it resets '
-          '(${formatResetClock(reset, now)}).';
-    }
-    return 'At this pace it ends the window near ${last.value.round()}% '
-        'when it resets (${formatResetClock(reset, now)}).';
   }
 }
 
