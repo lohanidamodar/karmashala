@@ -3448,6 +3448,118 @@
       }
     },
     {
+      "name": "pipeline_templates",
+      "description": "The pipelines you can run: the built-in templates (Plan → Implement → Review, Implement → Test → Fix loop, Research → Write) and any the person saved. Each lists its stages with their workspace, gate and loop-back, plus the template fields an instruction can use.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "pipeline_run",
+      "description": "Start a pipeline: ordered stages, each a real agent session started as your sub-session, each handed the previous stage's answer, artifacts and worktree. Gates between stages go on by themselves, wait for pipeline_approve, or run checks. Answers at once with the run id; follow it with pipeline_status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "What the run is to do: {{input}} in every stage."
+          },
+          "template": {
+            "type": "string",
+            "description": "A pipeline id or name from pipeline_templates. Default: Plan → Implement → Review."
+          },
+          "definition": {
+            "type": "object",
+            "description": "A whole definition in place of template: {name, stages: [{role, instruction, workspace: source|new_worktree|previous_worktree, gate: auto|approval|check, checkCommand, loopBackTo, loopCap, agentInstallationId, modelId, permissionMode}]}."
+          },
+          "repositoryId": {
+            "type": "string",
+            "description": "The checkout to run in. Default: your own."
+          },
+          "projectId": {
+            "type": "string",
+            "description": "A project whose first checkout to run in."
+          }
+        },
+        "required": [
+          "input"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "pipeline_status",
+      "description": "A pipeline run in full — each stage attempt with its session, answer, artifacts, worktree, branch, checks (with the code they ran on, and whether that reading is stale) and duration — or, with no runId, the recent runs one line each.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "From pipeline_run."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Without runId: the most recent N (default 10)."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "pipeline_approve",
+      "description": "Approve the hand-off a pipeline run is waiting on at an approval gate, optionally edited, or stop the run. Only in runs you started: another session's run, or a person's, is refused.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "stop"
+            ],
+            "description": "Default approve."
+          },
+          "handoff": {
+            "type": "string",
+            "description": "The hand-off to pass on in place of the stage's answer."
+          }
+        },
+        "required": [
+          "runId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
       "name": "get_usage",
       "description": "An agent account's usage against its limits, read live. cli is \"claude\", \"codex\" or \"antigravity\"; environmentId is optional (defaults to the first matching installation). Each window carries a label and, when the agent reported one, a \"percent\" used and a \"resetsAt\". A window with no \"percent\" was not measured — Antigravity names the account's tiers and reports no quota against them — and that absence means unknown, never zero. \"fetchedAt\" is when the reading was taken.",
       "inputSchema": {
@@ -6376,6 +6488,22 @@
     "report_to_parent": {
       "category": "sessions",
       "summary": "Tell the session that started yours you are done, blocked or need it."
+    },
+    "pipeline_templates": {
+      "category": "pipelines",
+      "summary": "The built-in and saved pipelines, with their stages and fields."
+    },
+    "pipeline_run": {
+      "category": "pipelines",
+      "summary": "Start a pipeline: each stage a sub-session, handed the last one's work."
+    },
+    "pipeline_status": {
+      "category": "pipelines",
+      "summary": "A run in full: every stage's session, answer, artifacts and checks."
+    },
+    "pipeline_approve": {
+      "category": "pipelines",
+      "summary": "Approve or stop a gate in a pipeline run you started."
     },
     "get_usage": {
       "category": "sessions",

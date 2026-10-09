@@ -24,6 +24,8 @@ import 'package:agent_cli/read.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_artifacts/karmashala_artifacts.dart';
 import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/pipelines.dart'
+    show PipelineDefinition, PipelineRun;
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/records.dart';
 import 'package:karmashala_automations/resumes.dart';
@@ -88,6 +90,7 @@ part 'changes/acp_agent_changes.dart';
 part 'changes/sessions_changes.dart';
 part 'changes/activity_changes.dart';
 part 'changes/artifacts_changes.dart';
+part 'changes/pipelines_changes.dart';
 
 /// One row a server wrote or removed, as it now stands.
 sealed class DataChange {
@@ -636,7 +639,8 @@ DataChange? _domainChangeFromJson(String name, Map<String, Object?> json) =>
     _acpAgentsChangeFromJson(name, json) ??
     _activityChangeFromJson(name, json) ??
     _sessionsChangeFromJson(name, json) ??
-    _artifactsChangeFromJson(name, json);
+    _artifactsChangeFromJson(name, json) ??
+    _pipelinesChangeFromJson(name, json);
 
 Map<String, Object?> _row(Map<String, Object?> json) =>
     (json['row']! as Map).cast<String, Object?>();

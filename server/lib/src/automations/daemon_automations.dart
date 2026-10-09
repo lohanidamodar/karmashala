@@ -12,7 +12,8 @@ import 'package:karmashala_automations/automations.dart'
 import 'package:karmashala_automations/webhooks.dart'
     show fillWebhookTemplate, webhookSampleBody, webhookTemplateFields;
 import 'package:karmashala_automations/check_runner.dart';
-import 'package:karmashala_automations/checks.dart' show carryProjectChecks;
+import 'package:karmashala_automations/checks.dart'
+    show ProjectCheck, carryProjectChecks;
 import 'package:karmashala_automations/github.dart'
     show GithubApi, kGithubVariables;
 import 'package:karmashala_automations/records.dart';
@@ -805,6 +806,23 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
             SessionChecksOutcome.ran,
             verificationRunId: result.run.id,
           );
+  }
+
+  /// A pipeline stage's check gate: [only] (or the checkout's checks) run
+  /// where [sessionId]'s agent worked, as one verification run. Throws
+  /// [StateError] when they cannot run here; null when there are none.
+  Future<SessionChecks?> runStageChecks(
+    String sessionId, {
+    List<ProjectCheck>? only,
+  }) async {
+    final session =
+        _sessions.getById(sessionId) ??
+        (throw StateError('No session $sessionId.'));
+    final directory = _directoryOf(session);
+    if (!facts.runsChecksIn(directory)) {
+      throw StateError(_notRunHere(directory));
+    }
+    return checks.runForSession(session, directory, only: only);
   }
 
   String _notRunHere(EnvironmentPath? directory) => directory == null

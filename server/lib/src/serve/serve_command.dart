@@ -128,6 +128,8 @@ import '../stores/store_change_inbox.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
+import '../pipelines/pipeline_tool_set.dart';
+import '../pipelines/server_pipelines.dart';
 import '../automations/webhooks/daemon_webhooks.dart';
 import '../automations/webhooks/server_hook_vault.dart';
 import '../automations/server_resume_runner.dart';
@@ -177,7 +179,8 @@ import '../mcp/tools/server_tools.dart';
 import '../companion/daemon_worktrees.dart';
 import '../automations/daemon_checkout_facts.dart';
 import 'package:karmashala_automations/store.dart'
-    show AutomationDao, CheckoutRows;
+    show AutomationDao, CheckoutRows, PipelineDao;
+import 'package:karmashala_automations/pipelines.dart' show PipelineArtifactRef;
 import 'package:karmashala_automations/check_runner.dart'
     show CodeIdentityReader;
 import '../domain/uuid.dart';
@@ -1951,6 +1954,64 @@ Future<int> _serve(
     recordingsDirectory: p.join(dataDirectory, 'recordings'),
     devices: devices,
   );
+  // Pipelines: each stage a real session through the one launch path, its
+  // turn followed as subagent_run follows one, its gate the automations'
+  // verified checks. Runs left running carry on from their current stage.
+  final pipelines = ServerPipelines(
+    records: PipelineDao(database),
+    launcher: ServerStageLauncher(
+      // Behind the launch limits: a stage may wait for a slot.
+      start: (spec, priority) => launches.start(spec, priority: priority),
+      defaultInstallation: (repositoryId) {
+        final repository =
+            checkoutRows.repository(repositoryId) ??
+            (throw StateError('That checkout is not in the workspace.'));
+        final environmentId = repository.path.environmentId;
+        final installation =
+            launches.defaultInstallationIn(environmentId) ??
+            launches.installationsIn(environmentId).firstOrNull ??
+            (throw StateError('No agent is installed in $environmentId.'));
+        return installation.id;
+      },
+      opened: (started, launch) => data.tellIntent(
+        OpenSessionTab(
+          sessionId: started.session.id,
+          title: started.session.title,
+          launch: started.launch,
+          reveal: TabReveal.background,
+        ),
+      ),
+    ),
+    watcher: ServerStageWatcher(turns: childTurns, end: endChild),
+    evidence: ServerStageEvidence(
+      listArtifacts: (sessionId) => [
+        for (final artifact in artifacts.library.forSession(sessionId))
+          PipelineArtifactRef(
+            id: artifact.id,
+            title: artifact.title,
+            path: artifact.source?.path ?? artifact.fileName,
+            revision: artifact.revision,
+          ),
+      ],
+      contentOf: (id) => artifacts.library.content(id),
+      runChecks: (sessionId, {only}) =>
+          automations?.runStageChecks(sessionId, only: only) ??
+          (throw StateError('this server runs no checks')),
+      now: () => DateTime.now().toUtc(),
+      worktreeOf: (sessionId) {
+        final session = SessionDao(database).getById(sessionId);
+        return session == null || session.worktreeRemoved
+            ? null
+            : session.worktree;
+      },
+    ),
+    tell: data.announce,
+    hasRepository: (id) => checkoutRows.repository(id) != null,
+    now: () => DateTime.now().toUtc(),
+    newId: newUuid,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  )..start();
+  data.pipelinesWork = pipelines;
   // `checks_run` for a checkout on this machine or an SSH box is the
   // automations'.
   mcpTools.tools
@@ -2045,6 +2106,7 @@ Future<int> _serve(
         defaultReportMode: () => launchSettings().childReportMode,
       ),
     )
+    ..add(PipelineToolSet(tools, pipelines: () => pipelines))
     // `get_usage` is read here from the server's own usage (slice 2a).
     ..add(UsageToolSet(agentWork.usage))
     ..add(CapacityToolSet(launchGate))

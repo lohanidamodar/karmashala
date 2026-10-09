@@ -11,6 +11,7 @@ import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
+import '../../features/pipelines/presentation/pipeline_run_dialog.dart';
 import 'native_menus.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_menus.dart';
@@ -201,6 +202,11 @@ class _NewButton extends ConsumerWidget {
             icon: AppIcons.terminal,
             shortcut: shellChordLabel<NewTerminalTabIntent>(),
           ),
+          DesktopMenuItem(
+            value: #pipeline,
+            label: 'Run pipeline…',
+            icon: AppIcons.treeStructure,
+          ),
           if (profiles.length > 1) ...[
             const DesktopMenuDivider(),
             for (final profile in profiles)
@@ -226,6 +232,8 @@ class _NewButton extends ConsumerWidget {
             actions.open(actions.defaultProfile());
           case #project:
             await NewProjectDialog.show(anchor);
+          case #pipeline:
+            await showRunPipeline(anchor);
           case final TerminalProfile profile:
             actions.open(profile);
         }

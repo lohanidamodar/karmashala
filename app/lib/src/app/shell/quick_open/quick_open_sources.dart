@@ -103,6 +103,9 @@ import '../side_panel.dart';
 import '../side_panel_state.dart';
 import '../tab_picker.dart';
 import '../workbench.dart';
+import '../../../features/pipelines/presentation/pipeline_run_detail.dart'
+    show showPipelineRuns;
+import '../../../features/pipelines/presentation/pipeline_run_dialog.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
 import 'quick_open_step.dart';

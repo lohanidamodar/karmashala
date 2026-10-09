@@ -288,12 +288,14 @@ class ProjectCheckRunner {
 
   /// Runs [session]'s checkout's checks in [directory] — where its agent
   /// works — and records them as **one** verification run against it, the
-  /// worst verdict of the batch. Null when the checkout has none.
+  /// worst verdict of the batch. Null when the checkout has none. [only] runs
+  /// those in place of the checkout's, as a pipeline's check gate does.
   Future<SessionChecks?> runForSession(
     Session session,
-    EnvironmentPath? directory,
-  ) async {
-    final checks = _checks.forRepository(session.repositoryId);
+    EnvironmentPath? directory, {
+    List<ProjectCheck>? only,
+  }) async {
+    final checks = only ?? _checks.forRepository(session.repositoryId);
     if (checks.isEmpty) return null;
     final startedAt = _now();
     final before = await _identity(directory);

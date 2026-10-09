@@ -22,6 +22,7 @@ import 'review_thread_tool_set.dart';
 import 'snippet_tool_set.dart';
 import 'session_archive_tool_set.dart' show sessionArchiveToolSchemas;
 import 'session_tool_schemas.dart';
+import '../../pipelines/pipeline_tool_set.dart' show pipelineToolSchemas;
 import 'usage_tool_set.dart';
 import 'capacity_tool_set.dart' show capacityToolSchemas;
 import 'webhook_tool_set.dart' show webhookToolSchemas;
@@ -71,6 +72,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...sessionControlToolSchemas,
   ...sessionArchiveToolSchemas,
   ...launchToolSchemas,
+  ...pipelineToolSchemas,
   ...usageToolSchemas,
   ...capacityToolSchemas,
   ...storeToolSchemas,

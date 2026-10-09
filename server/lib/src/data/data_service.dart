@@ -17,6 +17,7 @@ import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../activity/activity_log.dart';
 import '../artifacts/server_artifacts.dart';
+import '../pipelines/server_pipelines.dart' show PipelinesWork;
 import '../domain/uuid.dart';
 import '../sessions/session_input.dart';
 import '../sessions/session_media.dart';
@@ -188,6 +189,10 @@ class DataService {
   /// What agents showed in their threads (`artifacts.*`), set by `serve`;
   /// without it that work is refused `unavailable`.
   ArtifactsWork? artifactsWork;
+
+  /// Pipelines and their runs (`pipelines.*`), set by `serve`; without it
+  /// that work is refused `unavailable`.
+  PipelinesWork? pipelinesWork;
 
   /// Sessions' transcripts read here for any client (`sessions.transcript`),
   /// set by `serve`; without them that work is refused `unavailable`.
@@ -602,6 +607,7 @@ class DataService {
         SessionWorkRequest() ||
         SessionTranscriptRequest() ||
         ArtifactsRequest() ||
+        PipelinesRequest() ||
         SessionInputRequest() ||
         SessionSetMode() ||
         SessionSetConfigOption() ||
@@ -828,6 +834,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is SessionWorkRequest ||
       request is SessionTranscriptRequest ||
       request is ArtifactsRequest ||
+      request is PipelinesRequest ||
       request is SessionInputRequest ||
       request is SessionSetMode ||
       request is SessionSetConfigOption ||
@@ -929,6 +936,15 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     )) {
       await _service.sessionModes.setConfigOption(sessionId, configId, value);
       return DataReply(const DataAck() as R, _service._revision);
+    }
+    if (request case final PipelinesRequest<Object?> asked) {
+      final work =
+          _service.pipelinesWork ??
+          (throw const DataRefused.unavailable(
+            'this server runs no pipelines',
+          ));
+      final result = await work.handle(asked);
+      return DataReply(result as R, _service._revision);
     }
     if (request case final ArtifactsRequest<Object?> asked) {
       if (!transcripts) {
@@ -1221,7 +1237,12 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionSwitchAgent() ||
     // Who reports to whom is a session's shape, as its start is.
     SessionDetachRequest() ||
-    SessionAttachRequest() => Capability.startSession,
+    SessionAttachRequest() ||
+    // A pipeline's stages are sessions it starts.
+    PipelineRunStart() ||
+    PipelineRunApprove() ||
+    PipelineRunRetry() ||
+    PipelineRunSkip() => Capability.startSession,
     FilesUploadBegin() => Capability.sendAttachment,
     ProjectCreate() ||
     ProjectFoldersCreate() ||

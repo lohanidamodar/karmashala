@@ -32,6 +32,8 @@ import '../../sessions/presentation/new_session_dialog.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
+import '../../pipelines/presentation/pipeline_run_card.dart';
+import '../../pipelines/presentation/pipeline_run_dialog.dart';
 
 part 'overview_tab_view/tab_chrome.dart';
 part 'overview_tab_view/board_body.dart';
@@ -50,6 +52,7 @@ class OverviewTabView extends ConsumerWidget {
     final actions = [
       const _ResumeButton(),
       const _NewSessionButton(),
+      const _RunPipelineButton(),
       if (view == OverviewView.board) ...[
         const OverviewFilterButton(),
         // The keys need a keyboard; a thumb has none to press.
