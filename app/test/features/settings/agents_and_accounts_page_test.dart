@@ -2,6 +2,9 @@ import 'dart:io' show SocketException;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/usage.dart' show ClaudeAccount, ClaudeAuthSnapshot;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AnthropicSignIn;
 import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +12,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_account_switch.dart';
 import 'package:karmashala/src/features/agents/application/agent_latest_versions_controller.dart';
 import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
@@ -56,8 +60,7 @@ void main() {
     chatFormId = registry.formsOf(terminalId).chatId!;
     npxAcpId = registry.adapters
         .firstWhere(
-          (a) =>
-              a.acp?.npxPackage != null && registry.foldedIdOf(a.id) == a.id,
+          (a) => a.acp?.npxPackage != null && registry.foldedIdOf(a.id) == a.id,
         )
         .id;
   });
@@ -68,9 +71,7 @@ void main() {
   void seedInstalls() {
     db.server.installationRows
       ..insert(agentInstallation(id: 'a1', agentId: terminalId))
-      ..insert(
-        agentInstallation(id: 'a4', agentId: chatFormId, version: null),
-      )
+      ..insert(agentInstallation(id: 'a4', agentId: chatFormId, version: null))
       ..insert(
         agentInstallation(
           id: 'a2',
@@ -340,6 +341,46 @@ void main() {
     expect(expandButton('Mine'), findsNothing);
   });
 
+  testWidgets('a machine row\'s account switch asks the switch the usage '
+      'card asks', (tester) async {
+    seedInstalls();
+    const one = 'one@example.com';
+    const two = 'two@example.com';
+    for (final email in [one, two]) {
+      db.server.claudeAccountRows.insert(
+        ClaudeAccount(
+          id: email,
+          email: email,
+          claudeAiOauth: const {},
+          capturedAt: testTime,
+        ),
+      );
+    }
+    db.server.agentWork.signIns['a1'] = const AnthropicSignIn(
+      ClaudeAuthSnapshot(environmentId: 'windows', email: one),
+    );
+    final asked = <(String, String)>[];
+    await tester.pumpWidget(
+      page([
+        ...await overrides(),
+        accountSwitchControllerProvider.overrideWith(
+          () => _RecordingSwitch(asked),
+        ),
+      ]),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(expandButton(nameOf(terminalId)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Switch Windows to another saved account'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(two).last);
+    await tester.pumpAndSettle();
+
+    expect(asked, [('a1', two)]);
+    expect(find.text('Switched Windows to $two.'), findsOneWidget);
+  });
+
   testWidgets('a deep link to an anchor inside a card opens the card', (
     tester,
   ) async {
@@ -379,10 +420,9 @@ void main() {
       tester.element(find.byType(AgentsAndAccountsBody)),
     );
     final choice = find.byKey(ValueKey('run-form:$chatFormed'));
-    expect(
-      tester.widget<SegmentedButton<AgentRunForm>>(choice).selected,
-      {AgentRunForm.terminal},
-    );
+    expect(tester.widget<SegmentedButton<AgentRunForm>>(choice).selected, {
+      AgentRunForm.terminal,
+    });
     await tester.ensureVisible(choice);
     await tester.tap(find.descendant(of: choice, matching: find.text('Chat')));
     await tester.pumpAndSettle();
@@ -400,10 +440,7 @@ void main() {
     );
     final choice = find.byKey(const ValueKey('child-report-mode'));
     await tester.ensureVisible(choice);
-    expect(
-      tester.widget<SegmentedButton<String>>(choice).selected,
-      {'final'},
-    );
+    expect(tester.widget<SegmentedButton<String>>(choice).selected, {'final'});
     await tester.tap(
       find.descendant(of: choice, matching: find.text('Every turn')),
     );
@@ -438,4 +475,25 @@ void main() {
       },
     );
   });
+}
+
+class _RecordingSwitch extends AccountSwitchController {
+  _RecordingSwitch(this.asked);
+
+  final List<(String, String)> asked;
+
+  @override
+  Future<AccountSwitchOutcome> switchTo(
+    AgentInstallation installation,
+    String accountId,
+  ) async {
+    asked.add((installation.id, accountId));
+    return AccountSwitchOutcome(
+      installationId: installation.id,
+      agentId: installation.agentId,
+      environmentId: installation.environmentId,
+      account: accountId,
+      at: testTime,
+    );
+  }
 }

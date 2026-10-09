@@ -11,6 +11,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/workbench_tabs.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_nav.dart';
+import '../application/agent_account_switch.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_accounts.dart';
 import 'agent_logo.dart';
@@ -226,9 +227,11 @@ class _AccountChip extends ConsumerStatefulWidget {
   ConsumerState<_AccountChip> createState() => _AccountChipState();
 }
 
-class _AccountChipState extends ConsumerState<_AccountChip> {
+class _AccountChipState extends ConsumerState<_AccountChip>
+    with _FollowsSwitches {
   // Kept across rebuilds: a reading landing while the card is open must not
   // close it.
+  @override
   final controller = MenuController();
 
   @override
@@ -236,6 +239,7 @@ class _AccountChipState extends ConsumerState<_AccountChip> {
     final account = widget.account;
     final now = ref.watch(clockProvider).nowUtc();
     final view = _viewOf(account, now);
+    followSwitches([account]);
     final colour = _toneColor(context, view.tone);
     final theme = Theme.of(context);
     final name = _shortName(account.agentId);
@@ -262,8 +266,7 @@ class _AccountChipState extends ConsumerState<_AccountChip> {
             child: InkWell(
               key: ValueKey('toolbar-usage-${account.latest.accountKey}'),
               borderRadius: BorderRadius.circular(Radii.sm),
-              onTap: () =>
-                  controller.isOpen ? controller.close() : controller.open(),
+              onTap: () => toggle(),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: Insets.sm,
@@ -429,7 +432,8 @@ class _MoreChip extends ConsumerStatefulWidget {
   ConsumerState<_MoreChip> createState() => _MoreChipState();
 }
 
-class _MoreChipState extends ConsumerState<_MoreChip> {
+class _MoreChipState extends ConsumerState<_MoreChip> with _FollowsSwitches {
+  @override
   final controller = MenuController();
 
   static int _loudness(UsageTone tone) => switch (tone) {
@@ -443,6 +447,7 @@ class _MoreChipState extends ConsumerState<_MoreChip> {
   Widget build(BuildContext context) {
     final accounts = widget.accounts;
     final now = ref.watch(clockProvider).nowUtc();
+    followSwitches(accounts);
     final worst = accounts
         .map((a) => _viewOf(a, now).tone)
         .reduce((a, b) => _loudness(a) >= _loudness(b) ? a : b);
@@ -483,8 +488,7 @@ class _MoreChipState extends ConsumerState<_MoreChip> {
         child: InkWell(
           key: const ValueKey('toolbar-usage-more'),
           borderRadius: BorderRadius.circular(Radii.sm),
-          onTap: () =>
-              controller.isOpen ? controller.close() : controller.open(),
+          onTap: () => toggle(),
           child: Center(
             child: Text(
               '+${accounts.length}',
@@ -497,5 +501,60 @@ class _MoreChipState extends ConsumerState<_MoreChip> {
         ),
       ),
     );
+  }
+}
+
+/// How long after a switch the card holding the machine opens on its own: a
+/// chip built later than this does not open for an old switch.
+const Duration _followSwitchFor = Duration(seconds: 10);
+
+/// A chip's card follows an account switch: the switched machine's row moves
+/// to the new account's card, so that one opens and the card it left closes,
+/// and the outcome is read where the machine is now.
+mixin _FollowsSwitches<T extends ConsumerStatefulWidget> on ConsumerState<T> {
+  MenuController get controller;
+
+  AccountSwitchOutcome? _followed;
+
+  /// Opening by hand starts afresh: the last switch's words are not repeated.
+  void toggle() {
+    if (controller.isOpen) {
+      controller.close();
+      return;
+    }
+    ref.read(accountSwitchControllerProvider.notifier).dismiss();
+    controller.open();
+  }
+
+  /// Called from build with the accounts this chip's card shows.
+  void followSwitches(List<UsageAccount> mine) {
+    final last = ref.watch(accountSwitchControllerProvider).last;
+    if (last == null || !last.succeeded || identical(last, _followed)) return;
+    final now = ref.read(clockProvider).nowUtc();
+    if (now.difference(last.at) > _followSwitchFor) return;
+    bool holds(UsageAccount a) =>
+        a.agentId == last.agentId &&
+        a.environmentIds.contains(last.environmentId);
+    final void Function() act;
+    if (mine.any(holds)) {
+      // Not settled while open: this may be the card the machine is leaving,
+      // whose readings have not caught up yet.
+      if (controller.isOpen) return;
+      act = () {
+        if (!controller.isOpen) controller.open();
+      };
+    } else if (ref.watch(usageAccountsProvider).any(holds)) {
+      act = () {
+        if (controller.isOpen) controller.close();
+      };
+    } else {
+      // The new account's reading has not arrived yet; look again when it
+      // does.
+      return;
+    }
+    _followed = last;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) act();
+    });
   }
 }

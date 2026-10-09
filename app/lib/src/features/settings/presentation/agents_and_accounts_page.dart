@@ -14,6 +14,7 @@ import '../../../app/shell/workbench_tabs.dart' show openUsageTab;
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/acp_agent_providers.dart'
     show userAcpAgentIdsProvider;
+import '../../agents/application/agent_account_switch.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_latest_versions_controller.dart';
 import '../../agents/application/agent_model_catalog_providers.dart';

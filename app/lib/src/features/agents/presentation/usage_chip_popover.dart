@@ -11,6 +11,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environments_controller.dart';
+import '../application/agent_account_switch.dart';
 import '../application/usage_history.dart';
 import 'agent_logo.dart';
 import 'usage_chip.dart' show UsageChipView, formatResetClock;
@@ -83,7 +84,9 @@ class UsageChipPopover extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
-    final body13 = theme.textTheme.bodyMedium?.copyWith(fontSize: TypeSizes.body);
+    final body13 = theme.textTheme.bodyMedium?.copyWith(
+      fontSize: TypeSizes.body,
+    );
     final meta = theme.textTheme.bodySmall?.copyWith(
       fontSize: TypeSizes.label,
       color: scheme.onSurfaceVariant,
@@ -143,6 +146,33 @@ class UsageChipPopover extends ConsumerWidget {
           style: body13,
         ),
     ];
+    // Said in the card that holds the machine now: after a switch, the new
+    // account's.
+    final switched = ref.watch(accountSwitchControllerProvider).last;
+    if (switched != null &&
+        switched.agentId == agentId &&
+        (environmentIds ?? [environmentId]).contains(switched.environmentId)) {
+      final machine = ref.watch(
+        environmentLabelForIdProvider(switched.environmentId),
+      );
+      final failure = switched.failure;
+      body.add(
+        Padding(
+          padding: const EdgeInsets.only(top: Insets.xs),
+          child: Text(
+            failure == null
+                ? 'Switched $machine to ${switched.account}.'
+                : 'Could not switch $machine: $failure',
+            key: const ValueKey('usage-switch-outcome'),
+            style: meta?.copyWith(
+              color: failure == null
+                  ? null
+                  : SemanticColors.of(context).failure,
+            ),
+          ),
+        ),
+      );
+    }
     if (reading == null || reading.windows.every((w) => w.percent == null)) {
       body
         ..add(const SizedBox(height: Insets.sm))
@@ -189,7 +219,9 @@ class UsageChipPopover extends ConsumerWidget {
     return SizedBox(
       width: width,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight < 160 ? 160 : maxHeight),
+        constraints: BoxConstraints(
+          maxHeight: maxHeight < 160 ? 160 : maxHeight,
+        ),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: tones.raised,

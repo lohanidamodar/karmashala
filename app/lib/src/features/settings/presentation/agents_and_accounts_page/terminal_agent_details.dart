@@ -30,6 +30,8 @@ class _TerminalAgentDetailsState extends ConsumerState<TerminalAgentDetails> {
       (message, failed) = (e.message, true);
     } on CodexAuthException catch (e) {
       (message, failed) = (e.message, true);
+    } on AccountSwitchFailed catch (e) {
+      (message, failed) = (e.message, true);
     } on UsageException catch (e) {
       (message, failed) = (e.message, true);
     } catch (e) {
