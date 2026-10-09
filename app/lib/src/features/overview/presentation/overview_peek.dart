@@ -60,6 +60,8 @@ import 'overview_session_menu.dart';
 import 'overview_session_parts.dart';
 import 'overview_title_block.dart';
 import 'session_fact_list.dart';
+import '../../todos/application/todos_providers.dart' show todoScopeOfSession;
+import '../../todos/presentation/todos_page.dart';
 
 part 'overview_peek/peek_header.dart';
 part 'overview_peek/peek_line.dart';

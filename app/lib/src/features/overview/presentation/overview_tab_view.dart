@@ -34,6 +34,9 @@ import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
 import '../../pipelines/presentation/pipeline_run_card.dart';
 import '../../pipelines/presentation/pipeline_run_dialog.dart';
+import '../../todos/application/todos_providers.dart'
+    show openTodoCountProvider;
+import '../../todos/presentation/todos_page.dart';
 
 part 'overview_tab_view/tab_chrome.dart';
 part 'overview_tab_view/board_body.dart';
@@ -45,14 +48,25 @@ class OverviewTabView extends ConsumerWidget {
   const OverviewTabView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context, WidgetRef ref) => LayoutBuilder(
+    // The tab's own width, not the window's: the pinned dashboard can sit in a
+    // narrow group of a wide window.
+    builder: (context, box) => _build(context, ref, box.maxWidth),
+  );
+
+  Widget _build(BuildContext context, WidgetRef ref, double width) {
     final view = ref.watch(overviewPrefsProvider.select((p) => p.view));
     // The phone's Dashboard tab: no name over it, its header the one row.
     final rootTab = PaneTitleOverride.maybeOf(context) != null;
+    // Words beside Resume and New session only where the header has room
+    // for them and the view switch together.
+    final narrow = width < WidthClass.expandedMin;
     final actions = [
-      const _ResumeButton(),
-      const _NewSessionButton(),
-      const _RunPipelineButton(),
+      // The phone's way to its todos, one tap from home.
+      if (rootTab) const OverviewTodosButton(),
+      _ResumeButton(narrow: narrow),
+      _NewSessionButton(narrow: narrow),
+      if (width >= WidthClass.expandedMin) const _RunPipelineButton(),
       if (view == OverviewView.board) ...[
         const OverviewFilterButton(),
         // The keys need a keyboard; a thumb has none to press.
