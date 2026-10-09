@@ -91,12 +91,17 @@ class _Upload {
     required this.server,
     required this.image,
     this.preview,
+    this.spilled = false,
   });
 
   final DevicePick pick;
   final PickServer server;
   final bool image;
   final ImageProvider? preview;
+
+  /// [pick] is a copy in the composer's attachments folder of bytes that had
+  /// no file — a pasted image — deleted once it has landed or is dropped.
+  final bool spilled;
 
   int sent = 0;
   int? size;

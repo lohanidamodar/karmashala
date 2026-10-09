@@ -4,6 +4,7 @@ part of '../session_transcript_view.dart';
 
 mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
   TextEditingController get _composer;
+  ComposerFilesController get _composerFiles;
   StreamController<List<String>> get _dropped;
   ValueNotifier<int> get _filesQueued;
   ValueNotifier<int> get _composerFocus;
@@ -156,6 +157,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
             : null;
         return MessageComposer(
           controller: _composer,
+          files: _composerFiles,
           // Watched here, not by the view: a turn starting or ending
           // rebuilds the box's buttons and nothing else.
           working: ref.watch(sessionTurnWorkingProvider(widget.sessionId)),

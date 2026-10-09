@@ -17,9 +17,11 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_session/mentions.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
+import '../domain/composer_draft_file.dart';
 import '../domain/composer_mentions.dart';
 import 'mention_text_controller.dart';
 
+export '../domain/composer_draft_file.dart';
 export '../domain/composer_mentions.dart';
 export 'mention_text_controller.dart' show MentionTextController;
 
@@ -101,6 +103,7 @@ class MessageComposer extends StatefulWidget {
     this.takeServerFiles,
     this.serverFilesWaiting,
     this.focusRequests,
+    this.files,
     this.working = false,
     this.uncertain = false,
     this.onStop,
@@ -188,8 +191,42 @@ class MessageComposer extends StatefulWidget {
   /// a message put back in it to edit.
   final Listenable? focusRequests;
 
+  /// The box's files, for a host that keeps them with its draft. Supplied
+  /// means owned, like [controller].
+  final ComposerFilesController? files;
+
   @override
   State<MessageComposer> createState() => _MessageComposerState();
+}
+
+/// **The files in a composer's box**, for its host to keep with the draft's
+/// text while no view of the session is open, and to put back: what a
+/// [TextEditingController] is to the words. Files put before a box mounts, or
+/// left by one that unmounted, wait here for the next.
+class ComposerFilesController {
+  _ComposerAttaching? _box;
+  var _waiting = <ComposerDraftFile>[];
+
+  bool get isEmpty => _waiting.isEmpty && !(_box?._holdsFiles ?? false);
+
+  /// Every file in the box, taken out of it.
+  List<ComposerDraftFile> take() {
+    final box = _box;
+    final taken = [..._waiting, if (box != null) ...box._handOverFiles()];
+    _waiting = [];
+    return taken;
+  }
+
+  /// Puts [files] in the box, after any it holds.
+  void put(List<ComposerDraftFile> files) {
+    if (files.isEmpty) return;
+    final box = _box;
+    if (box == null) {
+      _waiting = [..._waiting, ...files];
+    } else {
+      box._receiveFiles(files);
+    }
+  }
 }
 
 final _log = AppLogger.named('composer');
@@ -228,6 +265,7 @@ class _MessageComposerState extends State<MessageComposer>
     _drops = widget.droppedFiles?.listen(_attachDropped);
     widget.serverFilesWaiting?.addListener(_scheduleDrain);
     widget.focusRequests?.addListener(_takeFocus);
+    _bindFiles(widget.files);
     // Files queued before this box existed — while the transcript loaded.
     _scheduleDrain();
   }
@@ -300,6 +338,10 @@ class _MessageComposerState extends State<MessageComposer>
       oldWidget.serverFilesWaiting?.removeListener(_scheduleDrain);
       widget.serverFilesWaiting?.addListener(_scheduleDrain);
     }
+    if (oldWidget.files != widget.files) {
+      _unbindFiles(oldWidget.files);
+      _bindFiles(widget.files);
+    }
     if (oldWidget.focusRequests != widget.focusRequests) {
       oldWidget.focusRequests?.removeListener(_takeFocus);
       widget.focusRequests?.addListener(_takeFocus);
@@ -317,6 +359,8 @@ class _MessageComposerState extends State<MessageComposer>
     unawaited(_drops?.cancel());
     widget.serverFilesWaiting?.removeListener(_scheduleDrain);
     widget.focusRequests?.removeListener(_takeFocus);
+    // Before the uploads stop: the draft keeps them, to go at the next Send.
+    _unbindFiles(widget.files);
     for (final upload in _uploads) {
       upload.cancelled = true;
     }
@@ -535,9 +579,7 @@ class _MessageComposerState extends State<MessageComposer>
               _TouchAttachmentList(
                 attachments: _attachments,
                 uploads: _uploads,
-                onRemove: canType
-                    ? (i) => setState(() => _attachments.removeAt(i))
-                    : null,
+                onRemove: canType ? _removeAttachment : null,
                 onCancel: _cancelUpload,
                 // Queued again, not uploaded: Send uploads it.
                 onRetry: (upload) => setState(
@@ -551,7 +593,7 @@ class _MessageComposerState extends State<MessageComposer>
                 attachments: _attachments,
                 uploading: _uploading,
                 asImages: widget.imagesGoAsImages?.call() ?? false,
-                onRemove: (i) => setState(() => _attachments.removeAt(i)),
+                onRemove: _removeAttachment,
               ),
             if (_sendError case final error?)
               Padding(
