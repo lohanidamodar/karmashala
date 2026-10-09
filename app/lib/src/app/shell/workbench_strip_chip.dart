@@ -153,17 +153,20 @@ class _TabChip extends ConsumerWidget {
     // Read now rather than trusting the index the chip was built with: a tab
     // can have gone between the menu opening and a row being picked.
     final group = groupId;
-    final tabs = group == null
-        ? ref.read(terminalTabsProvider)
-        : ref
-              .read(terminalSessionsControllerProvider.notifier)
-              .tabsInGroup(group);
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    // The pinned tab is not in the rail, so not in any "to the left" either.
+    final tabs = [
+      for (final tab
+          in group == null
+              ? ref.read(terminalTabsProvider)
+              : sessions.tabsInGroup(group))
+        if (!sessions.isPinnedTab(tab.id)) tab,
+    ];
     final at = tabs.indexWhere((candidate) => candidate.id == tab.id);
     if (at < 0) return;
     final ids = scope.apply([for (final tab in tabs) tab.id], at);
     if (ids.isEmpty) return;
 
-    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final state = ref.read(terminalSessionsControllerProvider);
     final closing = {for (final tab in tabs) tab.id: tab};
     final live = ids

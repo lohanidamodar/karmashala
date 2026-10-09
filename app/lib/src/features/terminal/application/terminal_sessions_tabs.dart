@@ -259,15 +259,19 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return paneId;
   }
 
-  void activateTab(String id) {
+  /// Brings tab [id] forward. False, moving nothing, for a tab that is not
+  /// open: an id left over from a closed tab must not empty the workbench.
+  bool activateTab(String id) {
+    if (_tabById(id) == null) return false;
     if (_activeTabId == id) {
       _besideOnActiveTab();
-      return;
+      return true;
     }
     _activeTabId = id;
     _restoreLivePanesIn(id);
     _publish();
     _focusActivePane();
+    return true;
   }
 
   /// Starts the panes in [tabId] that were running when the app last closed.
@@ -316,7 +320,7 @@ extension TerminalTabVerbs on TerminalSessionsController {
   /// count. [activate] names the tab to leave in front if the active one goes.
   void closeTabs(Iterable<String> ids, {bool detach = true, String? activate}) {
     final closing = {
-      for (final id in ids)
+      for (final id in _closable(ids))
         if (_tabById(id) != null) id,
     };
     if (closing.isEmpty) return;

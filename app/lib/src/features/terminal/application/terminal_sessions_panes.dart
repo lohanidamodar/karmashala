@@ -34,6 +34,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
   void closePane(String paneId, {bool detach = true}) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
+    if (paneId == kOverviewPaneId && isPinnedTab(tab.id)) return;
     _userClosedSinceRestore = true;
 
     final layout = tab.layout.close(paneId);
@@ -61,7 +62,8 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
   void closePanes(Iterable<String> paneIds) {
     final byTab = <String, List<String>>{};
     for (final paneId in paneIds) {
-      if (_tabContaining(paneId) case final tab?) {
+      if (_tabContaining(paneId) case final tab?
+          when paneId != kOverviewPaneId || !isPinnedTab(tab.id)) {
         (byTab[tab.id] ??= []).add(paneId);
       }
     }

@@ -25,7 +25,8 @@ class _TabStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final tabs = _tabs(ref);
+    final pinned = _pinnedTab(ref);
+    final tabs = _tabs(ref, pinned: pinned?.id);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final group = groupId;
 
@@ -60,6 +61,18 @@ class _TabStrip extends ConsumerWidget {
         child: LayoutBuilder(
           builder: (context, strip) => Row(
             children: [
+              // Outside the rail, so it never scrolls away or pages behind a
+              // chevron.
+              if (pinned != null)
+                _PinnedTabChip(
+                  tab: pinned,
+                  selected:
+                      _showingPanes(ref, groupId: group) &&
+                      group != null &&
+                      ref.watch(workspaceGroupActiveTabProvider(group)) ==
+                          pinned.id,
+                  accented: groupFocused,
+                ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) => _TabRail(
@@ -108,11 +121,14 @@ class _TabStrip extends ConsumerWidget {
 
   /// Every tab in the strip, left to right. Watched narrowly: the whole
   /// [TerminalSessionsState] republishes whenever any pane's process dies.
-  List<_StripTab> _tabs(WidgetRef ref) {
+  List<_StripTab> _tabs(WidgetRef ref, {String? pinned}) {
     final group = groupId;
     final tabs = group == null
         ? const <TerminalTab>[]
-        : ref.watch(workspaceGroupTabsProvider(group));
+        : [
+            for (final tab in ref.watch(workspaceGroupTabsProvider(group)))
+              if (tab.id != pinned) tab,
+          ];
     final active = group == null
         ? null
         : ref.watch(workspaceGroupActiveTabProvider(group));
@@ -133,6 +149,79 @@ class _TabStrip extends ConsumerWidget {
           ),
         ),
     ];
+  }
+
+  /// The pinned tab, when it hangs in this strip.
+  TerminalTab? _pinnedTab(WidgetRef ref) {
+    final group = groupId;
+    final pinned = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.pinnedTabId),
+    );
+    if (group == null || pinned == null) return null;
+    return ref
+        .watch(workspaceGroupTabsProvider(group))
+        .where((tab) => tab.id == pinned)
+        .firstOrNull;
+  }
+}
+
+/// The pinned tab — the Agent dashboard — drawn as its glyph alone, first in
+/// the strip, with no close: nothing closes it.
+class _PinnedTabChip extends ConsumerWidget {
+  const _PinnedTabChip({
+    required this.tab,
+    required this.selected,
+    required this.accented,
+  });
+
+  final TerminalTab tab;
+  final bool selected;
+  final bool accented;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final tones = SurfaceTones.of(context);
+    final title = ref.watch(terminalTabTitleProvider(tab.id));
+    return Semantics(
+      key: ValueKey('pinned-tab:${tab.id}'),
+      button: true,
+      selected: selected,
+      label: '$title, pinned tab',
+      excludeSemantics: true,
+      child: Tooltip(
+        message: '$title (pinned)',
+        child: Material(
+          color: selected ? tones.term : Colors.transparent,
+          child: InkWell(
+            onTap: () => activateTerminalTab(ref, tab.id),
+            child: Container(
+              width: Chrome.pinnedTab,
+              height: Chrome.tabStrip,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    width: 2,
+                    color: selected && accented
+                        ? scheme.primary
+                        : Colors.transparent,
+                  ),
+                  right: BorderSide(color: tones.line),
+                ),
+              ),
+              child: Icon(
+                documentIconFor(tab) ?? AppIcons.squaresFour,
+                size: Chrome.iconSmall,
+                color: selected && accented
+                    ? scheme.onSurface
+                    : scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

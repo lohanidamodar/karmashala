@@ -63,6 +63,7 @@ part 'terminal_sessions_titles.dart';
 part 'terminal_sessions_lifetime.dart';
 part 'terminal_sessions_persistence.dart';
 part 'terminal_sessions_restore.dart';
+part 'terminal_sessions_pinned.dart';
 
 /// Manages open terminal tabs, the split tree in each, focus, and persisting
 /// the layout. Tabs are **fields**, not [state] — `build`/`onDispose` need them.
@@ -172,6 +173,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// licence to write an empty layout. A pane exiting on its own does not set it.
   bool _userClosedSinceRestore = false;
 
+  /// Whether the Agent dashboard is this window's pinned tab — see
+  /// [TerminalPinnedDashboard.pinDashboard].
+  bool _dashboardPinned = false;
+
   late final ScrollbackAutosave _autosave =
       ref.read(scrollbackAutosaveFactoryProvider)(
         onTick: () {
@@ -279,6 +284,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
             paneId: ?chatPaneSessionId(paneId),
       }),
       unseenTabIds: _unseenView ??= Set.unmodifiable(_unseen),
+      pinnedTabId: _pinnedTabId,
       titleRevision: _titleRevision,
     );
   }

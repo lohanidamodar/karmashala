@@ -5,6 +5,8 @@ import 'package:karmashala/src/features/notifications/application/attention_inbo
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show kOverviewPaneId;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_verification/verification.dart';
 import 'package:flutter/gestures.dart';
@@ -13,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/fake_data_server.dart';
@@ -38,6 +41,8 @@ void main() {
     container = ProviderContainer(
       overrides: [
         await server.override(),
+        // Opening a session reveals it, on the dashboard's tab.
+        ...fakeTerminalOverrides(machine: db),
         clockProvider.overrideWithValue(
           FixedClock(testTime.add(const Duration(hours: 2))),
         ),
@@ -143,8 +148,15 @@ void main() {
     await tester.tap(find.text('Fix login'));
     await tester.pump();
 
-    // Opened, and nothing else: the offer is a way in, never a relaunch.
-    expect(container.read(selectedSessionIdProvider), 's1');
+    // Opened, and nothing else: the offer is a way in, never a relaunch. With
+    // no tab here, on the dashboard rather than selected (round 81).
+    expect(container.read(selectedSessionIdProvider), isNull);
+    expect(
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .tabIdOfPane(kOverviewPaneId),
+      isNotNull,
+    );
     expect(container.read(attentionInboxProvider).items.single.seen, isTrue);
     expect(db.server.sessionRows.getById('s1')!.status, SessionStatus.failed);
   });

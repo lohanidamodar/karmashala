@@ -6,8 +6,8 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_context.dart';
-import '../../features/notifications/application/notification_providers.dart';
 import '../../features/sessions/application/session_status_providers.dart';
+import 'reveal_session.dart';
 
 /// **Another session needs you** (Stage 2 step 5): one line under the phone's
 /// session page app bar, from the same feed as the needs-you badges — the
@@ -103,7 +103,7 @@ class _PhoneAskBannerState extends ConsumerState<PhoneAskBanner> {
                 style: TextButton.styleFrom(
                   minimumSize: const Size(Touch.target, Touch.target),
                 ),
-                onPressed: () => focusWatchedSession(
+                onPressed: () => revealSession(
                   ref.container,
                   openId: first,
                   imported: source.imported,
@@ -115,8 +115,7 @@ class _PhoneAskBannerState extends ConsumerState<PhoneAskBanner> {
                 iconSize: Touch.icon,
                 color: scheme.onSurfaceVariant,
                 icon: const Icon(AppIcons.x),
-                onPressed: () =>
-                    setState(() => _dismissed.add(_keyOf(first))),
+                onPressed: () => setState(() => _dismissed.add(_keyOf(first))),
               ),
             ],
           ),

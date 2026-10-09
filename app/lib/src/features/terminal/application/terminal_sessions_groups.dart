@@ -199,6 +199,16 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     if (tree == null || group == null || tree.groups.length < 2) return false;
 
     if (!_isEmptyGroup(group)) {
+      // The pinned tab outlives its group: it moves first into a group that
+      // stays, which may be all it takes to empty this one.
+      final pinned = _pinnedTabId;
+      if (pinned != null && group.panes.contains(pinned)) {
+        final heir = tree.groups.firstWhere((other) => other.id != groupId);
+        moveTabToGroup(pinned, heir.id, index: 0);
+        final left = _workspace?.groupById(groupId);
+        if (left != null) closeTabs(List.of(left.panes), detach: detach);
+        return true;
+      }
       // The tabs are what the group is: taking them out empties it, and
       // reconciliation collapses what is left.
       closeTabs(List.of(group.panes), detach: detach);

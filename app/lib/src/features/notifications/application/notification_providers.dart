@@ -13,6 +13,7 @@ import 'package:karmashala_notifications/toasts.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/phone_routes.dart';
+import '../../../app/shell/reveal_session.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/data/data_providers.dart';
 import '../../../core/probe/probe_mode.dart';
@@ -194,7 +195,7 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
         ref.read(windowRaiseRequestProvider.notifier).bump();
         return;
       }
-      focusWatchedSession(
+      revealSession(
         ref.container,
         openId: payload.openId,
         imported: payload.imported,
@@ -339,10 +340,13 @@ bool phoneSessionPageDown(ProviderContainer container) {
 /// Selects a session so the app shows it, walking up to its repository and
 /// project — selecting a session alone leaves the explorer pointing elsewhere.
 /// False, selecting nothing, when the session or its repository is gone.
+/// Without [selectSession], only the explorer walks there: the session is
+/// shown somewhere else (the dashboard's peek).
 bool focusWatchedSession(
   ProviderContainer container, {
   required String openId,
   required bool imported,
+  bool selectSession = true,
 }) {
   final read = container.read;
   final repositoryId = imported
@@ -354,6 +358,7 @@ bool focusWatchedSession(
 
   read(selectedProjectIdProvider.notifier).select(repository.projectId);
   read(selectedRepositoryIdProvider.notifier).select(repository.id);
+  if (!selectSession) return true;
   if (imported) {
     read(selectedSessionIdProvider.notifier).select(null);
     read(selectedImportedSessionIdProvider.notifier).select(openId);
@@ -365,8 +370,9 @@ bool focusWatchedSession(
 }
 
 /// Opens the session a tapped phone notification names, once the server has
-/// said what the sessions are: a stale list must not act (decision 9). Its
-/// page comes up; a session that is gone opens the Inbox instead.
+/// said what the sessions are: a stale list must not act (decision 9). It
+/// is revealed as every alert reveals one ([revealSession]): the Dashboard
+/// tab with its peek page, or the dashboard and a word when it is gone.
 void openNotifiedSession(
   ProviderContainer container,
   NotificationPayload payload,
@@ -375,22 +381,14 @@ void openNotifiedSession(
     container.read(storesOpenRequestProvider.notifier).open(appKey);
     return;
   }
-  void open() {
-    final found = focusWatchedSession(
+  void open() => _whenShellUp(
+    container,
+    () => revealSession(
       container,
       openId: payload.openId,
       imported: payload.imported,
-    );
-    if (found) {
-      // Opened here, not left to the shell's selection listener: re-selecting
-      // the session already selected moves nothing, and a shell not built yet
-      // hears nothing.
-      container.read(phoneWorkbenchProvider.notifier).open();
-      return;
-    }
-    _log.info('A notified session (${payload.openId}) is gone; the Inbox.');
-    _showInbox(container);
-  }
+    ),
+  );
 
   if (container.read(sessionsPrimedProvider)) return open();
   late final ProviderSubscription<bool> waiting;
@@ -401,19 +399,23 @@ void openNotifiedSession(
   });
 }
 
-/// The Inbox tab, once the phone's shell is up: a cold start may be answered
-/// before its first frame.
-void _showInbox(ProviderContainer container, {int framesLeft = 30}) {
+/// Runs [reveal] once the phone's shell is up — a cold start may be answered
+/// before its first frame — or, after [framesLeft] frames with none, anyway:
+/// a wide window has the desktop's shell instead.
+void _whenShellUp(
+  ProviderContainer container,
+  void Function() reveal, {
+  int framesLeft = 30,
+}) {
   final PhoneShellRoutes? routes;
   try {
     routes = container.read(phoneShellRouterProvider).current;
   } on Object {
     return; // The session closed first: a switch of server.
   }
-  if (routes != null) return routes.showInbox();
-  if (framesLeft == 0) return;
+  if (routes != null || framesLeft == 0) return reveal();
   SchedulerBinding.instance.addPostFrameCallback((_) {
-    _showInbox(container, framesLeft: framesLeft - 1);
+    _whenShellUp(container, reveal, framesLeft: framesLeft - 1);
   });
   SchedulerBinding.instance.ensureVisualUpdate();
 }

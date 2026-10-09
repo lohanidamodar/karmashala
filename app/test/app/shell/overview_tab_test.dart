@@ -9,7 +9,10 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/activity_strip.dart';
 import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart'
+    show TerminalTabChip;
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/logging/server_log_tail.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -139,11 +142,43 @@ void main() {
 
   testWidgets('the activity strip opens it', (tester) async {
     final container = await launch(tester);
+    openSettingsTab(refOf(tester));
+    await settle(tester);
 
-    await tester.tap(find.bySemanticsLabel('Agent dashboard'));
+    // The strip's button: the dashboard's own page names itself too.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(ShellActivityStrip),
+        matching: find.bySemanticsLabel('Agent dashboard'),
+      ),
+    );
     await settle(tester);
 
     expect(overviewTabsIn(container), hasLength(1));
+    expect(
+      container.read(terminalSessionsControllerProvider).activeTabId,
+      overviewTabsIn(container).single,
+    );
+  });
+
+  testWidgets('on the desktop it is pinned: there at start, with no close', (
+    tester,
+  ) async {
+    final container = await launch(tester);
+
+    final tabId = overviewTabsIn(container).single;
+    expect(
+      container.read(terminalSessionsControllerProvider).pinnedTabId,
+      tabId,
+    );
+    final chip = find.byKey(ValueKey('pinned-tab:$tabId'));
+    expect(chip, findsOneWidget);
+    expect(
+      find.descendant(of: chip, matching: find.byTooltip('Close tab')),
+      findsNothing,
+    );
+    // Nothing else in the strip draws it again.
+    expect(find.byType(TerminalTabChip), findsNothing);
   });
 
   testWidgets('Timeline is the second view, drawn from the activity log', (

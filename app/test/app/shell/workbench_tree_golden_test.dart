@@ -272,6 +272,15 @@ void main() {
     capture(tester, '11 a settings tab in the strip');
   });
 
+  testWidgets('12 the pinned dashboard in the strip', (tester) async {
+    terminals().openTab(TerminalProfile.powerShell);
+    // Pinned behind the terminal: the chip is what this state is about, and
+    // the dashboard's page is a whole feature's tree, as Settings' is.
+    terminals().pinDashboard();
+    await pump(tester);
+    capture(tester, '12 the pinned dashboard in the strip');
+  });
+
   // Declared last so every state above has been captured by the time it runs.
   test('the workbench renders the committed tree', () {
     final encoded = StringBuffer(

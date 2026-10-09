@@ -12,6 +12,7 @@ import '../../features/explorer/application/session_context.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/sessions/application/session_prompt_answers.dart';
 import '../../features/sessions/presentation/approval_refusal_text.dart';
+import 'reveal_session.dart';
 
 /// One ask a toast is raised for: a session that is not on screen and is
 /// waiting on an approval.
@@ -135,7 +136,7 @@ class _ShellAskToastsState extends ConsumerState<ShellAskToasts> {
               onAnswer: ask.canAnswer
                   ? (approve) => _answer(ask, approve: approve)
                   : null,
-              onOpen: () => focusWatchedSession(
+              onOpen: () => revealSession(
                 ref.container,
                 openId: ask.openId,
                 imported: ask.imported,

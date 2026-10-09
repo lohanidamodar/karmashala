@@ -24,7 +24,9 @@ import 'phone_routes.dart';
 /// is showing: picking a tab from a strip or a list is a request to *see* it.
 void activateTerminalTab(WidgetRef ref, String tabId) {
   final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-  terminals.activateTab(tabId);
+  // A tab gone by the time it is asked for lands on the dashboard, never on
+  // an empty workbench.
+  if (!terminals.activateTab(tabId)) return openOverviewTab(ref);
   // The group that holds it, which activating the tab has just focused.
   terminals.revealTab(tabId);
   releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
