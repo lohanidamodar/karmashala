@@ -54,23 +54,27 @@ class AgentFolderTrust {
     final context = home.contains(r'\') ? p.windows : p.posix;
     final file = File(context.normalize(context.join(home, spec.settingsFile)));
     return switch (spec.format) {
-      AgentFolderTrustFormat.jsonProjects => _json(file, folder.path),
+      AgentFolderTrustFormat.jsonProjects => _json(
+        file,
+        (raw) => _jsonTrusting(raw, folder.path.replaceAll(r'\', '/')),
+      ),
       AgentFolderTrustFormat.tomlProjects => _rewrite(
         file,
         (raw) => _tomlTrusting(raw, folder.path, windowsAgent: windowsAgent),
         missingIsEmpty: true,
       ),
+      AgentFolderTrustFormat.jsonPathList => _json(
+        file,
+        (raw) => _jsonListTrusting(raw, spec.listKey, folder.path),
+      ),
     };
   }
 
-  Future<bool> _json(File file, String folder) async {
+  Future<bool> _json(File file, _Edit edit) async {
     // No file is an agent that never ran here: it asks for far more than
     // trust on its first start, and a file made here would skip that.
     if (!await file.exists()) return false;
-    return _rewrite(
-      file,
-      (raw) => _jsonTrusting(raw, folder.replaceAll(r'\', '/')),
-    );
+    return _rewrite(file, edit);
   }
 
   /// Read, edit, and rename over, read again from the start when the agent
@@ -164,6 +168,24 @@ _Edited _jsonTrusting(String raw, String key) {
       : _jsonProjectEntry;
   return _Changed(
     replaceTopLevelJsonValue(raw, 'projects', jsonEncode(projects)),
+  );
+}
+
+/// [raw] with [folder] appended to its top-level [key] array of paths, unless
+/// it is already there.
+_Edited _jsonListTrusting(String raw, String key, String folder) {
+  final decoded = jsonDecode(raw);
+  if (decoded is! Map<String, Object?>) {
+    throw const FormatException('the settings are not an object');
+  }
+  final current = decoded[key];
+  if (current != null && current is! List) {
+    throw FormatException('$key is not a list');
+  }
+  final paths = [...?current as List?];
+  if (paths.contains(folder)) return _Unchanged();
+  return _Changed(
+    replaceTopLevelJsonValue(raw, key, jsonEncode([...paths, folder])),
   );
 }
 

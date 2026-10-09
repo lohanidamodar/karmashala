@@ -490,7 +490,17 @@ const antigravityDescriptor = AgentDescriptor(
   // is unreadable, so there is no transcript to show, quote into a handoff
   // packet, or seed a resume from. The adapter's `AgentTranscripts` says
   // `buildsChatView: false`, so declaring the store turns none of that on.
-  store: AgentStoreSpec(homeDirectoryName: '.gemini/antigravity-cli'),
+  store: AgentStoreSpec(
+    homeDirectoryName: '.gemini/antigravity-cli',
+    // Answering "Yes, I trust this folder" in /tmp/r70-agytrust-… appended
+    // that path to `trustedWorkspaces` in `settings.json`, and nothing else
+    // in the home named it (agy 1.3.2 in WSL, 2026-10-09).
+    folderTrust: AgentFolderTrustSpec(
+      format: AgentFolderTrustFormat.jsonPathList,
+      settingsFile: 'settings.json',
+      listKey: 'trustedWorkspaces',
+    ),
+  ),
   // **Antigravity has hooks.** "Nothing can observe what a session is doing"
   // stood here until a live run disproved it, and the reason it survived so
   // long is that the CLI's `--help` says nothing about them: they are
