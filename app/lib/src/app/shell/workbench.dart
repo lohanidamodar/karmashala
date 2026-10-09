@@ -53,6 +53,8 @@ import '../../features/terminal/application/terminal_presets.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
+import '../../features/sessions/application/capacity_providers.dart';
+import '../../features/sessions/presentation/slot_wait_notice.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/settings/application/settings_controller.dart'
     show sessionsOpenInChatProvider;
