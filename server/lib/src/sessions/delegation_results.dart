@@ -397,6 +397,25 @@ class DelegationResults {
     unawaited(_follow(follow));
   }
 
+  /// [childId]'s process started again — resumed by a person, a send or a
+  /// restart. A delegation closed only because that process ended is
+  /// reopened and its next turn followed, so what the child finishes reaches
+  /// its parent. One stopped, detached, archived or set to `none` stays shut.
+  void started(String childId) {
+    if (_closed || _watched.containsKey(childId)) return;
+    if (_detached.contains(childId)) return;
+    final row = store.byChild(childId);
+    if (row == null || row.isOpen || row.reportMode == kReportModeNone) return;
+    if (row.reportVia != kReportViaTurn ||
+        row.reportState != ChildTurnState.ended.name) {
+      return;
+    }
+    if (isArchived?.call(childId) ?? false) return;
+    store.setReportMode(childId, row.reportMode, at: _now());
+    log?.call('delegation $childId: started again; its next turn is followed');
+    _stand(_childOf(store.byChild(childId)!));
+  }
+
   /// Follows the next turn [child] works, whenever that is.
   void _stand(DelegatedChild child) {
     final follow = _watched[child.childId] = _Follow(

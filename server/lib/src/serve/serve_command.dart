@@ -1767,6 +1767,15 @@ Future<int> _serve(
   )..start();
   sessionQueue.restate = delegations.restate;
   sessionInput.interrupted = delegations.stopped;
+  // A child started again after its process ended is followed again.
+  final delegationStarts = server.lifecycle.events.listen((event) {
+    const prefix = 'karmashala_';
+    if (event.kind != LifecycleEventKind.started ||
+        !event.sessionId.startsWith(prefix)) {
+      return;
+    }
+    delegations.started(event.sessionId.substring(prefix.length));
+  });
   // A person's Detach and a parent's `delegation_detach`: one path, which
   // leaves a line in the parent's thread.
   final detacher = SessionDetacher(
@@ -2150,6 +2159,7 @@ Future<int> _serve(
   storeDesk.close();
   await attention.close();
   await queueEnds.cancel();
+  await delegationStarts.cancel();
   await delegations.close();
   handoffSweep.cancel();
   toolImageSweep.cancel();
