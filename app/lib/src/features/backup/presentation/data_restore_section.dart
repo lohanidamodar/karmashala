@@ -124,6 +124,10 @@ class _DataRestoreSectionState extends ConsumerState<DataRestoreSection> {
 
   Future<void> _restart() async {
     await runServerCommand(context, ServerCommand.restart);
+    if (!mounted) return;
+    // Read again only once the link is back, or the page says the server is
+    // not running and keeps the staged note.
+    await ref.read(serverLinkBackProvider)();
     if (mounted) ref.invalidate(backupScheduleProvider);
   }
 }

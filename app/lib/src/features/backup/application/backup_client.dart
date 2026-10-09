@@ -205,3 +205,16 @@ final backupScheduleProvider =
     FutureProvider.autoDispose<BackupScheduleReading>(
       (ref) => ref.watch(backupClientProvider).schedule(),
     );
+
+/// Waits, up to [within], for the link to this machine's server to be back
+/// after a restart: it reattaches a moment after the server is up.
+final serverLinkBackProvider =
+    Provider<Future<void> Function({Duration within})>((ref) {
+      final link = ref.watch(hostCompanionLinkProvider);
+      return ({Duration within = const Duration(seconds: 15)}) async {
+        final deadline = DateTime.now().add(within);
+        while (!link.connected && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+      };
+    });
