@@ -23,6 +23,7 @@ import 'snippet_tool_set.dart';
 import 'session_archive_tool_set.dart' show sessionArchiveToolSchemas;
 import 'session_tool_schemas.dart';
 import 'usage_tool_set.dart';
+import 'capacity_tool_set.dart' show capacityToolSchemas;
 import 'webhook_tool_set.dart' show webhookToolSchemas;
 import 'secret_tool_set.dart' show secretToolSchemas;
 import 'store_tool_set.dart' show storeToolSchemas;
@@ -71,6 +72,7 @@ const List<Map<String, Object?>> serverToolSchemas = [
   ...sessionArchiveToolSchemas,
   ...launchToolSchemas,
   ...usageToolSchemas,
+  ...capacityToolSchemas,
   ...storeToolSchemas,
   ...inboxToolSchemas,
   ...browserToolSchemas,

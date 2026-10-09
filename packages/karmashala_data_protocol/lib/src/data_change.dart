@@ -58,6 +58,7 @@ import 'github_values.dart';
 import 'store_change_values.dart';
 import 'store_values.dart';
 import 'attention_values.dart';
+import 'capacity_values.dart';
 import 'usage_limit_values.dart';
 import 'files_values.dart' show QuickAccessPin;
 import 'package:karmashala_launch/karmashala_launch.dart' show AgentPaneLaunch;

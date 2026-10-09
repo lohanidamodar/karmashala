@@ -178,6 +178,7 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // Brings the search index up to date first, which is a cache, not the world.
   'session_search': McpToolAnnotations.read,
   'get_usage': McpToolAnnotations.read,
+  'capacity': McpToolAnnotations.read,
   // Lands in a pane, and `openAgentTab` makes that tab active and focused.
   'open_new_session': McpToolAnnotations(movesAttention: true),
   // open_new_session's launch, tab included, then a wait on its answer.
@@ -759,6 +760,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'get_usage': McpToolListing(
     McpToolCategory.sessions,
     'An agent\'s usage against its limit, where the agent reports one.',
+  ),
+  'capacity': McpToolListing(
+    McpToolCategory.sessions,
+    'The concurrency limits, how full each is, and who waits for a slot.',
   ),
 
   // Terminals.

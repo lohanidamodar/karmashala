@@ -60,7 +60,10 @@ class OpenSessionToolSet extends ServerToolSet {
           'where': _where(shown),
         };
       }
-      final started = await launches.resume(native.id);
+      final started = await launches.resume(
+        native.id,
+        priority: LaunchPriority.background,
+      );
       final shown = _show(
         started.sessionId,
         started.session.title,
@@ -71,6 +74,10 @@ class OpenSessionToolSet extends ServerToolSet {
         'opened': started.session.title,
         'sessionId': started.sessionId,
         'reattached': started.adopted,
+        if (started.wait case final wait?)
+          'waitingForSlot':
+              '${wait.reason} (place ${wait.place} in line). It starts by '
+              'itself when a slot frees.',
         // A directory that has gone resumes the agent at the checkout, and its
         // store is keyed by directory — hence an otherwise empty conversation.
         'note': ?started.workingDirectoryNotice,

@@ -24,6 +24,11 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     rows: args.optionalInt('rows') ?? 40,
   ),
   SessionEndRequest.name => SessionEndRequest(args.string('sessionId')),
+  SessionCapacityRead.name => const SessionCapacityRead(),
+  SessionWaitStartAnyway.name => SessionWaitStartAnyway(
+    args.string('ticketId'),
+  ),
+  SessionWaitCancel.name => SessionWaitCancel(args.string('ticketId')),
   SessionDetachRequest.name => SessionDetachRequest(args.string('sessionId')),
   SessionAttachRequest.name => SessionAttachRequest(
     args.string('sessionId'),
@@ -272,6 +277,70 @@ final class SessionEndRequest extends SessionWorkRequest<DataAck> {
 
   @override
   Map<String, Object?> argumentsToJson() => {'sessionId': sessionId};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// The concurrency limits, how full each is, and who waits for a slot.
+final class SessionCapacityRead extends SessionWorkRequest<CapacitySnapshot> {
+  const SessionCapacityRead();
+
+  static const String name = 'sessions.capacity';
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => const {};
+
+  @override
+  Object? resultToJson(CapacitySnapshot result) => result.toJson();
+
+  @override
+  CapacitySnapshot resultFromJson(Object? json) =>
+      _decode(kind, () => CapacitySnapshot.fromJson(_object(json, kind)));
+}
+
+/// Starts the launch waiting under [ticketId] now, over every limit — a
+/// person's confirmed choice. Refused `notFound` once it left the line.
+final class SessionWaitStartAnyway extends SessionWorkRequest<DataAck> {
+  const SessionWaitStartAnyway(this.ticketId);
+
+  static const String name = 'sessions.waitStartAnyway';
+
+  final String ticketId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'ticketId': ticketId};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Takes the launch waiting under [ticketId] out of line; a new session's
+/// waiting row is cancelled. Refused `notFound` once it left the line.
+final class SessionWaitCancel extends SessionWorkRequest<DataAck> {
+  const SessionWaitCancel(this.ticketId);
+
+  static const String name = 'sessions.waitCancel';
+
+  final String ticketId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'ticketId': ticketId};
 
   @override
   Object? resultToJson(DataAck result) => null;

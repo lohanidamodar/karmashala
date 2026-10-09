@@ -987,6 +987,7 @@ class LaunchToolSet extends ServerToolSet {
         modelId: modelId,
         parentSessionId: callerSessionId,
       ),
+      priority: LaunchPriority.background,
     );
     final session = started.session;
     final shown = _context.data.tellIntent(
@@ -1002,6 +1003,10 @@ class LaunchToolSet extends ServerToolSet {
     );
     final answer = <String, Object?>{
       'sessionId': session.id,
+      if (started.wait case final wait?)
+        'waitingForSlot':
+            '${wait.reason} (place ${wait.place} in line). It starts by '
+            'itself when a slot frees; see the capacity tool.',
       'opened': 'new ${install.agentId} session',
       'title': session.title,
       'repository': repo.name,

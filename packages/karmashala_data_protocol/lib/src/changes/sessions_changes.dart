@@ -27,6 +27,11 @@ DataChange? _sessionsChangeFromJson(String name, Map<String, Object?> json) =>
       'sessionUsageChanged' => SessionUsageChanged.fromJson(json),
       'sessionActiveModelChanged' => SessionActiveModelChanged.fromJson(json),
       'sessionQueueChanged' => SessionQueueChanged.fromJson(json),
+      'capacityChanged' => CapacityChanged(
+        CapacitySnapshot.fromJson(
+          (json['capacity']! as Map).cast<String, Object?>(),
+        ),
+      ),
       'sessionAgentChanged' => SessionAgentChanged.fromJson(json),
       'sessionCommandsChanged' => SessionCommandsChanged.fromJson(json),
       'sessionPromptKindsChanged' => SessionPromptKindsChanged(
@@ -431,6 +436,20 @@ final class SessionQueueChanged extends DataChange {
     'sessionId': sessionId,
     'messages': [for (final message in messages) message.toJson()],
     if (delivered.isNotEmpty) 'delivered': delivered,
+  };
+}
+
+/// The concurrency limits, how full each is, and who waits for a slot, as
+/// they now stand; a client replaces its copy whole.
+final class CapacityChanged extends DataChange {
+  const CapacityChanged(this.capacity);
+
+  final CapacitySnapshot capacity;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'capacityChanged',
+    'capacity': capacity.toJson(),
   };
 }
 

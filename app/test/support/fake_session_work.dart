@@ -239,6 +239,13 @@ class FakeSessionWork {
     return const DataAck();
   }
 
+  /// What `sessions.capacity` answers.
+  CapacitySnapshot capacity = CapacitySnapshot.empty;
+
+  /// The waits a client started anyway, and cancelled, by ticket.
+  final startedAnyway = <String>[];
+  final cancelledWaits = <String>[];
+
   Object? _handle(SessionWorkRequest<Object?> request) {
     asked.add(request);
     final refusal = refuseWith;
@@ -351,6 +358,14 @@ class FakeSessionWork {
         rewinds.add(r);
         if (rewindRefusesWith case final why?) throw DataRefused.invalid(why);
         return r.preview ? rewindPreview : rewindAnswer;
+      case SessionCapacityRead():
+        return capacity;
+      case SessionWaitStartAnyway(:final ticketId):
+        startedAnyway.add(ticketId);
+        return const DataAck();
+      case SessionWaitCancel(:final ticketId):
+        cancelledWaits.add(ticketId);
+        return const DataAck();
     }
   }
 

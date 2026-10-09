@@ -8,6 +8,7 @@ import 'package:karmashala_session/lineage.dart'
     show HandoffSourceBrief, SessionLink;
 import 'package:karmashala_session/session.dart';
 
+import 'capacity_values.dart' show SessionWait;
 import 'terminal_values.dart' show agentLaunchFromWire, agentLaunchToWire;
 
 // Starting sessions is the server's (slice 5b): a client names what to start
@@ -236,6 +237,7 @@ final class SessionStarted {
     this.credentialNotice,
     this.depth,
     this.switchNotice,
+    this.wait,
   });
 
   /// The row as the server wrote it.
@@ -264,6 +266,12 @@ final class SessionStarted {
   /// a scheduled resume of the leaving agent it cancelled.
   final String? switchNotice;
 
+  /// Set when nothing started yet: the session waits for a slot under a
+  /// concurrency limit, and starts by itself when one frees.
+  final SessionWait? wait;
+
+  bool get waiting => wait != null;
+
   /// This answer with [notice] as its [switchNotice].
   SessionStarted withNotice(String notice) => SessionStarted(
     session: session,
@@ -274,6 +282,7 @@ final class SessionStarted {
     credentialNotice: credentialNotice,
     depth: depth,
     switchNotice: notice,
+    wait: wait,
   );
 
   String get sessionId => session.id;
@@ -292,6 +301,7 @@ final class SessionStarted {
     'credentialNotice': ?credentialNotice,
     'depth': ?depth,
     'switchNotice': ?switchNotice,
+    if (wait != null) 'wait': wait!.toJson(),
   };
 
   static SessionStarted fromJson(Map<String, Object?> json) => SessionStarted(
@@ -311,6 +321,9 @@ final class SessionStarted {
     credentialNotice: json['credentialNotice'] as String?,
     depth: json['depth'] as int?,
     switchNotice: json['switchNotice'] as String?,
+    wait: json['wait'] is Map
+        ? SessionWait.fromJson((json['wait']! as Map).cast<String, Object?>())
+        : null,
   );
 }
 

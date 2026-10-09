@@ -1,3 +1,4 @@
+import '../../sessions/launch/capacity/slot_waits.dart';
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/read.dart'
     show conversationQueryTokens, kConversationQueryMinimum;
@@ -20,7 +21,7 @@ import 'server_tool_set.dart';
 /// identity: they describe the machine, read from the store and the
 /// server's own conversation index.
 class InventoryToolSet extends ServerToolSet {
-  InventoryToolSet(this._context, {this.quietSinceOf})
+  InventoryToolSet(this._context, {this.quietSinceOf, this.slotWaits})
     : _projects = ProjectDao(_context.database),
       _repositories = RepositoryDao(_context.database),
       _sessions = SessionDao(_context.database),
@@ -33,6 +34,9 @@ class InventoryToolSet extends ServerToolSet {
   /// When a native session last did anything, while the server reads it
   /// quiet; null when it is not.
   final DateTime? Function(String sessionId)? quietSinceOf;
+
+  /// The sessions waiting for a concurrency slot, and why.
+  final SlotWaits? slotWaits;
   final ProjectDao _projects;
   final RepositoryDao _repositories;
   final SessionDao _sessions;
@@ -97,6 +101,8 @@ class InventoryToolSet extends ServerToolSet {
       for (final resume in _resumes.live()) resume.sessionId: resume,
     };
 
+    final waits = slotWaits?.all() ?? const <String, String>{};
+
     bool wanted(List<String> haystack) =>
         matchesSearch(needle, haystack.join(' '));
 
@@ -123,7 +129,10 @@ class InventoryToolSet extends ServerToolSet {
             'project': project.name,
             'repository': repo.name,
             'environmentId': repo.path.environmentId,
-            'status': session.status.name,
+            'status': waits.containsKey(session.id)
+                ? 'waitingForSlot'
+                : session.status.name,
+            'waitingForSlot': ?waits[session.id],
             // What its agent last said it runs, never a setting.
             'model': _context.modelOf(session.id),
             'surface': session.surface.name,
