@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/automations/presentation/automation_runs
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
-import 'package:karmashala_core/verdicts.dart';
+import 'package:karmashala_verification/verification.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -247,5 +247,52 @@ void main() {
     }
     await pump(tester, size: const Size(390, 844), textScale: 1.6);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a check over code that changed since says it is stale', (
+    tester,
+  ) async {
+    const head = 'cccccccccccccccccccccccccccccccccccccccc';
+    server.verificationRows.insertRun(
+      VerificationRun(
+        id: 'vr1',
+        title: 'tests',
+        target: const VerificationTarget.change(),
+        startedAt: now,
+        finishedAt: now,
+        verdict: VerificationVerdict.pass,
+        artifactDirectory: 'C:/art/vr1',
+        identity: const CodeIdentity(
+          environmentId: 'windows',
+          path: '/src/demo',
+          head: head,
+          tree: '',
+          dirty: {},
+        ),
+      ),
+    );
+    server.gitWork.codeFreshness[head] = const CodeFreshness.stale(
+      'Uncommitted files changed since this ran.',
+      filesChanged: 2,
+    );
+    server.automationRows.insertRunCheck(
+      AutomationCheckVerdict(
+        runId: 'r1',
+        ordinal: 1,
+        name: 'analyze',
+        command: const ['dart', 'analyze'],
+        verdict: VerificationVerdict.pass,
+        reason: 'passed',
+        checkedAt: now,
+        verificationRunId: 'vr1',
+      ),
+    );
+    await pump(tester);
+    await tester.tap(find.text('7h ago'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Pass · stale (2 files changed since) · analyze'),
+      findsOneWidget,
+    );
   });
 }

@@ -28,6 +28,8 @@ import 'package:karmashala/src/features/sessions/presentation/approval_request_c
 import 'package:karmashala/src/features/sessions/presentation/prompt_cards/question_prompt_card.dart';
 import 'package:karmashala_remote/remote.dart';
 
+import 'package:karmashala_verification/verification.dart';
+
 import 'mission_fixture.dart';
 
 /// Records what the Overview sends, and sends nothing.
@@ -220,6 +222,61 @@ void main() {
         find.byKey(const ValueKey('overview-diff:ks-r32')),
       );
       expect(r32.textSpan!.toPlainText(), '+620 −40 · 3 files');
+      await unmountMission(tester);
+    });
+
+    testWidgets('a check over code that changed since is stale on the card', (
+      tester,
+    ) async {
+      const head = 'dddddddddddddddddddddddddddddddddddddddd';
+      await pump(
+        tester,
+        fixture: MissionFixture.full(
+          verificationRuns: [
+            VerificationRun(
+              id: 'vr-r30',
+              title: 'Project checks',
+              target: const VerificationTarget.change(),
+              startedAt: MissionFixture.now,
+              finishedAt: MissionFixture.now,
+              verdict: VerificationVerdict.pass,
+              artifactDirectory: '/art/vr-r30',
+              sessionId: 'ks-r30',
+              producedBySessionId: 'karmashala',
+              identity: const CodeIdentity(
+                environmentId: 'windows',
+                path: '/src/ks-r30',
+                head: head,
+                tree: '',
+                dirty: {},
+              ),
+            ),
+          ],
+          codeFreshness: {
+            head: const CodeFreshness.stale(
+              'Uncommitted files changed since this ran.',
+              filesChanged: 2,
+            ),
+          },
+        ),
+      );
+      final card = find.byKey(const ValueKey('overview-ready-card:ks-r30'));
+      await tester.scrollUntilVisible(card, 200, scrollable: hybridList);
+
+      final mark = find.byKey(const ValueKey('overview-verdict:ks-r30'));
+      expect(mark, findsOneWidget);
+      expect(
+        find.descendant(
+          of: mark,
+          matching: find.text('Checked: pass · stale (2 files changed since)'),
+        ),
+        findsOneWidget,
+      );
+      // A card nothing checked draws no verdict at all.
+      expect(
+        find.byKey(const ValueKey('overview-verdict:ks-r32')),
+        findsNothing,
+      );
       await unmountMission(tester);
     });
 

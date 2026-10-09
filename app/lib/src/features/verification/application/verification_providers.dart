@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -13,6 +14,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         VerificationRunChanged,
         VerificationRunRemoved;
 import 'package:karmashala_verification/artifacts.dart';
+import '../../git/data/git_data.dart' show CheckoutTouchWatch, gitDataProvider;
 import '../data/verification_data.dart';
 import '../domain/session_verdict.dart';
 import 'package:karmashala_verification/verification.dart';
@@ -138,3 +140,33 @@ class SelectedVerificationRun extends Notifier<String?> {
 
   void select(String? id) => state = id;
 }
+
+/// Whether run [runId]'s recorded code is still what its checkout holds:
+/// asked of the server, again whenever the run or that checkout moves — a
+/// write, a worktree, an agent's turn ending there. A run that recorded no
+/// code is "version unknown" without asking.
+final runFreshnessProvider = FutureProvider.autoDispose
+    .family<CodeFreshness, String>((ref, runId) async {
+      ref.watch(verificationRevisionProvider);
+      final identity = ref
+          .watch(verificationDataProvider)
+          .headers()
+          .where((run) => run.id == runId)
+          .firstOrNull
+          ?.identity;
+      if (identity == null) return CodeFreshness.notRecorded;
+      ref.watchCheckout(
+        EnvironmentPath(
+          environmentId: identity.environmentId,
+          path: identity.path,
+        ),
+      );
+      try {
+        return await ref.watch(gitDataProvider).codeFreshness(identity);
+      } on Object {
+        return const CodeFreshness.unknown(
+          'The server could not be asked whether this code changed since, so '
+          'that is unknown.',
+        );
+      }
+    });

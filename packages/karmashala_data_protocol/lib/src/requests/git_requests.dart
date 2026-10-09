@@ -42,6 +42,9 @@ DataRequest<Object?>? _gitRequestFromJson(String kind, _Arguments args) =>
       GitOriginFacts.name => GitOriginFacts(args._checkout()),
       GitMergeInProgress.name => GitMergeInProgress(args._checkout()),
       GitBlobShas.name => GitBlobShas(args._checkout(), args.strings('paths')),
+      GitCodeFreshness.name => GitCodeFreshness(
+        CodeIdentity.fromJson(args.values['identity']),
+      ),
       GitPresenceOf.name => GitPresenceOf(
         args.objects('checkouts', environmentPathFromJson),
       ),
@@ -1308,4 +1311,39 @@ final class GitHubRunLog extends CheckoutRequest<WorkflowRunLog> {
   @override
   WorkflowRunLog resultFromJson(Object? json) =>
       _decode(kind, () => WorkflowRunLog.fromJson(_object(json, kind)));
+}
+
+/// A recorded [identity] held against its checkout as it is now: fresh,
+/// stale or unknown. Null asks about a result that recorded none, and is
+/// answered "version unknown" without touching git.
+final class GitCodeFreshness extends CheckoutRequest<CodeFreshness> {
+  GitCodeFreshness(this.identity)
+    : super(
+        CheckoutRef.at(
+          EnvironmentPath(
+            environmentId: identity?.environmentId ?? '',
+            path: identity?.path ?? '',
+          ),
+        ),
+      );
+
+  static const String name = 'git.codeFreshness';
+
+  final CodeIdentity? identity;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    ..._checkoutJson,
+    'identity': identity?.toJson(),
+  };
+
+  @override
+  Object? resultToJson(CodeFreshness result) => result.toJson();
+
+  @override
+  CodeFreshness resultFromJson(Object? json) =>
+      CodeFreshness.fromJson(json) ?? _badAnswer(kind);
 }

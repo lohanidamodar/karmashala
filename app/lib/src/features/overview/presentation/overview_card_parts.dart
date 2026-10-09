@@ -11,6 +11,11 @@ import '../../agents/presentation/usage_chip.dart' show formatUsageDuration;
 
 import '../../explorer/application/agent_states.dart';
 import '../../explorer/application/session_diff_stat.dart';
+import '../../verification/application/verification_providers.dart'
+    show sessionVerdictProvider;
+import '../../verification/domain/session_verdict.dart'
+    show SessionVerdictState;
+import '../../verification/presentation/session_verdict_mark.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
@@ -119,6 +124,11 @@ class OverviewMetaLine extends ConsumerWidget {
       color: theme.colorScheme.onSurfaceVariant,
       fontFeatures: const [FontFeature.tabularFigures()],
     );
+    // A recorded check, held against the code now; nothing when none was.
+    final checked =
+        card.entry.native != null &&
+        ref.watch(sessionVerdictProvider(id)).state !=
+            SessionVerdictState.notRecorded;
     final fileCount = files?.length ?? stat?.changedFiles;
     final added = stat?.added;
     final removed = stat?.removed;
@@ -137,7 +147,9 @@ class OverviewMetaLine extends ConsumerWidget {
         TextSpan(text: fileCount == 1 ? '1 file' : '$fileCount files'),
       ],
     ];
-    if (step == null && diff.isEmpty) return const SizedBox.shrink();
+    if (step == null && diff.isEmpty && !checked) {
+      return const SizedBox.shrink();
+    }
     return Row(
       key: ValueKey('overview-meta:$id'),
       children: [
@@ -159,6 +171,15 @@ class OverviewMetaLine extends ConsumerWidget {
             maxLines: 1,
             style: muted,
           ),
+        if (checked) ...[
+          if (step != null || diff.isNotEmpty) const SizedBox(width: Insets.md),
+          Flexible(
+            child: SessionVerdictMark(
+              key: ValueKey('overview-verdict:$id'),
+              sessionId: id,
+            ),
+          ),
+        ],
       ],
     );
   }

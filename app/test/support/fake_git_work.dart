@@ -43,6 +43,10 @@ class FakeGitWork {
   final origins = <Checkout, RepositoryOrigin>{};
   final mergesInProgress = <Checkout, bool?>{};
   final blobShas = <Checkout, Map<String, String>>{};
+
+  /// What `git.codeFreshness` answers, by the recorded commit; anything else
+  /// is "version unknown".
+  final codeFreshness = <String?, CodeFreshness>{};
   final presences = <Checkout, GitPresence>{};
   final deliveries = <Checkout, SessionDelivery>{};
   final worktrees = <Checkout, List<GitWorktree>>{};
@@ -296,6 +300,8 @@ class FakeGitWork {
         return {for (final p in paths) p: ?known[p]};
       case GitDelivery():
         return deliveries[c] ?? SessionDelivery.unknown;
+      case GitCodeFreshness(:final identity):
+        return codeFreshness[identity?.head] ?? CodeFreshness.notRecorded;
       case GitStage() ||
           GitUnstage() ||
           GitDiscard() ||

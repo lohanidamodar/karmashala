@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_verification/verification.dart'
+    show CodeFreshness, VerificationRun;
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -74,7 +76,14 @@ class MissionFixture {
     this.contexts = const [],
     this.contextOfProject = const {},
     this.starting = const {},
+    this.verificationRuns = const [],
+    this.codeFreshness = const {},
   }) : sessions = sessions ?? realisticSessions();
+
+  /// Verification runs the server holds, and what each recorded commit's
+  /// freshness reads as now.
+  final List<VerificationRun> verificationRuns;
+  final Map<String?, CodeFreshness> codeFreshness;
 
   /// Sessions whose row is still `created`: started, with nothing reported.
   final Set<String> starting;
@@ -578,8 +587,12 @@ class MissionFixture {
   /// [MissionFixture] with every reading above filled in.
   static MissionFixture full({
     Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)? peekChat,
+    List<VerificationRun> verificationRuns = const [],
+    Map<String?, CodeFreshness> codeFreshness = const {},
   }) => MissionFixture(
     peekChat: peekChat,
+    verificationRuns: verificationRuns,
+    codeFreshness: codeFreshness,
     models: const {'ks-r32': 'Opus 5.5'},
     stats: realisticStats(),
     fileStats: const {
@@ -750,6 +763,8 @@ Future<ProviderContainer> pumpMission(
     ..upsert(sshEnvFixture(id: 'ssh:box', name: 'build-box'));
   server.installationRows.insert(agentInstallation());
   server.activity.addAll(fixture.activity);
+  fixture.verificationRuns.forEach(server.verificationRows.put);
+  server.gitWork.codeFreshness.addAll(fixture.codeFreshness);
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(machine: db, data: await server.override()),

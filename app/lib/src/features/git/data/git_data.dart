@@ -9,6 +9,8 @@ import 'package:karmashala_git/github.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_git/worktrees.dart';
 import 'package:karmashala_session/delivery.dart';
+import 'package:karmashala_verification/verification.dart'
+    show CodeFreshness, CodeIdentity;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_client.dart';
@@ -177,6 +179,13 @@ class GitData {
     EnvironmentPath repo,
     List<String> paths,
   ) => _ask(GitBlobShas(_at(repo), paths));
+
+  /// [identity] held against its checkout as it is now; nothing recorded is
+  /// "version unknown" without asking.
+  Future<CodeFreshness> codeFreshness(CodeIdentity? identity) =>
+      identity == null
+      ? Future.value(CodeFreshness.notRecorded)
+      : _ask(GitCodeFreshness(identity));
 
   final Map<EnvironmentPath, Completer<GitPresence>> _presenceAsked = {};
 

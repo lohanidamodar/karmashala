@@ -74,6 +74,29 @@ class SessionVerdictMark extends ConsumerWidget {
     ].join(' ');
   }
 
+  /// [label] with what [freshness] adds: nothing while it is still the code
+  /// checked, `· stale (3 files changed since)`, or — on a [pass], the one
+  /// claim that needs the code to hold still — `· version unknown`.
+  static String freshnessLabel(
+    String label,
+    CodeFreshness? freshness, {
+    required bool pass,
+  }) => switch (freshness?.state) {
+    CodeFreshnessState.stale => '$label · ${freshness!.label}',
+    CodeFreshnessState.unknown when pass => '$label · ${freshness!.label}',
+    _ => label,
+  };
+
+  /// The tooltip's sentence about which code the verdict is about.
+  static String freshnessSentence(CodeFreshness freshness) =>
+      switch (freshness.state) {
+        CodeFreshnessState.fresh => 'Taken on the code the checkout holds now.',
+        CodeFreshnessState.stale =>
+          '${freshness.reason} Run the checks again for a verdict on this '
+              'code.',
+        CodeFreshnessState.unknown => freshness.reason,
+      };
+
   /// A clock time, not an age: the tooltip is built when the mark is, and an
   /// age written then goes on being read long after it stopped being true.
   static String _clock(DateTime at) {
@@ -100,12 +123,26 @@ class SessionVerdictMark extends ConsumerWidget {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final look = appearanceOf(verdict.state, semantic);
-    // A pass the author gave itself is not drawn as a checked pass.
+    final run = verdict.run;
+    // Held against the checkout now: a verdict about other code is not this
+    // code's verdict.
+    final freshness = verdict.state.isVerdict && run != null
+        ? ref.watch(runFreshnessProvider(run.id)).value
+        : null;
+    // A pass the author gave itself is not drawn as a checked pass, nor is
+    // one about code that has changed since.
     final selfPass =
         verdict.isSelfGraded && verdict.state == SessionVerdictState.pass;
-    final colour = selfPass ? semantic.attention : look.color;
+    final stalePass =
+        verdict.state == SessionVerdictState.pass &&
+        (freshness?.isStale ?? false);
+    final colour = selfPass || stalePass ? semantic.attention : look.color;
+    final label = selfPass ? 'Self-checked: pass' : verdict.state.label;
     return Tooltip(
-      message: tooltipFor(verdict),
+      message: [
+        tooltipFor(verdict),
+        if (freshness != null) freshnessSentence(freshness),
+      ].join(' '),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -117,7 +154,11 @@ class SessionVerdictMark extends ConsumerWidget {
           // overflows instead.
           Flexible(
             child: Text(
-              selfPass ? 'Self-checked: pass' : verdict.state.label,
+              freshnessLabel(
+                label,
+                freshness,
+                pass: verdict.state == SessionVerdictState.pass,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(color: colour),

@@ -264,6 +264,7 @@ class ServerGit implements GitWork {
     GitOriginFacts() ||
     GitMergeInProgress() ||
     GitBlobShas() ||
+    GitCodeFreshness() ||
     GitDelivery() => checkouts.read(request),
     GitStage() ||
     GitUnstage() ||

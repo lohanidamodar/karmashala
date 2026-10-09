@@ -1,3 +1,5 @@
+import 'package:agent_cli/process.dart' show EnvironmentPath;
+import 'package:karmashala_ui/tokens.dart' show SemanticColors;
 import 'package:karmashala/src/core/data/data_client.dart';
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_automations/checks.dart';
@@ -149,7 +151,8 @@ void main() {
   // A test each, on a fresh database: the three must be told apart from one
   // another as well as from the four states that are not verdicts at all.
   for (final (verdict, label) in const [
-    (VerificationVerdict.pass, 'Checked: pass'),
+    // Nothing recorded which code it ran on: a pass says so (round 74).
+    (VerificationVerdict.pass, 'Checked: pass · version unknown'),
     (VerificationVerdict.fail, 'Checked: fail'),
     (VerificationVerdict.inconclusive, 'Checked: inconclusive'),
   ]) {
@@ -194,7 +197,7 @@ void main() {
     await pump(tester);
 
     // A fail that was fixed and checked again reads as the pass it now is.
-    expect(find.text('Checked: pass'), findsOneWidget);
+    expect(find.text('Checked: pass · version unknown'), findsOneWidget);
     expect(find.text('Checked: fail'), findsNothing);
   });
 
@@ -245,7 +248,7 @@ void main() {
 
     // One fact, drawn by whichever host is showing the facts — not a second
     // copy that can come to disagree with the first.
-    expect(find.text('Checked: pass'), findsOneWidget);
+    expect(find.text('Checked: pass · version unknown'), findsOneWidget);
   });
 
   testWidgets('it survives the window matrix', (tester) async {
@@ -391,8 +394,132 @@ void main() {
     );
     await pump(tester);
 
-    expect(find.text('Self-checked: pass'), findsOneWidget);
+    expect(find.text('Self-checked: pass · version unknown'), findsOneWidget);
     expect(find.text(SessionVerdictState.pass.label), findsNothing);
+  });
+
+  /// Round 74: a verdict is held against the code the checkout holds now.
+  group('the code it was taken on', () {
+    const head = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const checkout = EnvironmentPath(
+      environmentId: 'windows',
+      path: r'C:\src\demo',
+    );
+    const code = CodeIdentity(
+      environmentId: 'windows',
+      path: r'C:\src\demo',
+      head: head,
+      tree: '',
+      dirty: {},
+    );
+
+    void insertCheckedRun(VerificationVerdict verdict) {
+      db.server.verificationRows
+        ..insertRun(
+          VerificationRun(
+            id: 'v1',
+            title: 'Project checks',
+            target: const VerificationTarget.change(),
+            startedAt: testTime,
+            artifactDirectory: 'C:/art/v1',
+            sessionId: 's1',
+            producedBySessionId: 'karmashala',
+            identity: code,
+          ),
+        )
+        ..finishRun(
+          'v1',
+          finishedAt: testTime.add(const Duration(minutes: 2)),
+          verdict: verdict,
+        );
+    }
+
+    testWidgets('a pass on the code still there is a plain pass', (
+      tester,
+    ) async {
+      server.gitWork.codeFreshness[head] = const CodeFreshness.fresh();
+      insertSession();
+      insertCheckedRun(VerificationVerdict.pass);
+      await pump(tester);
+
+      expect(find.text('Checked: pass'), findsOneWidget);
+      final tooltip = tester.widget<Tooltip>(
+        find.ancestor(
+          of: find.text('Checked: pass'),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(tooltip.message, contains('the code the checkout holds now'));
+    });
+
+    testWidgets('a pass on code that changed since says stale, not green', (
+      tester,
+    ) async {
+      server.gitWork.codeFreshness[head] = const CodeFreshness.stale(
+        'Uncommitted files changed since this ran.',
+        filesChanged: 3,
+      );
+      insertSession();
+      insertCheckedRun(VerificationVerdict.pass);
+      await pump(tester);
+
+      const label = 'Checked: pass · stale (3 files changed since)';
+      expect(find.text(label), findsOneWidget);
+      final text = tester.widget<Text>(find.text(label));
+      final context = tester.element(find.text(label));
+      expect(text.style?.color, SemanticColors.of(context).attention);
+      final tooltip = tester.widget<Tooltip>(
+        find.ancestor(of: find.text(label), matching: find.byType(Tooltip)),
+      );
+      expect(tooltip.message, contains('Run the checks again'));
+    });
+
+    testWidgets('a write to the checkout asks again', (tester) async {
+      server.gitWork.codeFreshness[head] = const CodeFreshness.fresh();
+      insertSession();
+      insertCheckedRun(VerificationVerdict.pass);
+      await pump(tester);
+      expect(find.text('Checked: pass'), findsOneWidget);
+
+      server.gitWork.codeFreshness[head] = const CodeFreshness.stale(
+        'Uncommitted files changed since this ran.',
+        filesChanged: 1,
+      );
+      server.gitWork.touch(checkout);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Checked: pass · stale (1 file changed since)'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a fail on code that changed says so too', (tester) async {
+      server.gitWork.codeFreshness[head] = const CodeFreshness.stale(
+        'The checkout is on another commit.',
+      );
+      insertSession();
+      insertCheckedRun(VerificationVerdict.fail);
+      await pump(tester);
+
+      expect(
+        find.text('Checked: fail · stale (code changed since)'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a checkout that cannot be read now is version unknown', (
+      tester,
+    ) async {
+      server.gitWork.codeFreshness[head] = const CodeFreshness.unknown(
+        'The checkout could not be read now.',
+      );
+      insertSession();
+      insertCheckedRun(VerificationVerdict.pass);
+      await pump(tester);
+
+      expect(find.text('Checked: pass · version unknown'), findsOneWidget);
+    });
   });
 
   /// The repository's own checks, offered where the verdict is shown.
@@ -426,7 +553,9 @@ void main() {
       final tooltip = tester.widget<Tooltip>(
         find
             .ancestor(
-              of: find.text(SessionVerdictState.pass.label),
+              of: find.text(
+                '${SessionVerdictState.pass.label} · version unknown',
+              ),
               matching: find.byType(Tooltip),
             )
             .first,
