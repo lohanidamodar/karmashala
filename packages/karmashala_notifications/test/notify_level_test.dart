@@ -80,6 +80,7 @@ void main() {
         InboxItemKind.turnCutOff,
         InboxItemKind.automationProposed,
         InboxItemKind.wentQuiet,
+        InboxItemKind.storeNews,
       });
       for (final reason in NotificationReason.values) {
         expect(

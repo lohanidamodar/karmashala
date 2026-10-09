@@ -37,6 +37,16 @@ DataRequest<Object?>? _storesRequestFromJson(String kind, _Arguments args) =>
         appStoreId: args.string('appStoreId'),
         packageName: args.string('packageName'),
       ),
+      StoresSeen.name => StoresSeen(args.strings('appKeys')),
+      StoresScheduleSet.name => StoresScheduleSet(
+        Duration(
+          minutes:
+              args.optionalInt('everyMinutes') ??
+              (throw const DataRefused.invalid(
+                'stores.schedule.set: "everyMinutes" must be a whole number',
+              )),
+        ),
+      ),
       _ => null,
     };
 
@@ -220,4 +230,36 @@ final class StoreAppsUnlink extends _StoresViewRequest {
     'appStoreId': appStoreId,
     'packageName': packageName,
   };
+}
+
+/// Apps [appKeys] (each a `StoreApp.key`) were opened: what changed about
+/// them is seen, here and in the inbox. Not a credential: a phone may ask.
+final class StoresSeen extends _StoresViewRequest {
+  const StoresSeen(this.appKeys);
+
+  static const String name = 'stores.seen';
+
+  final List<String> appKeys;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'appKeys': appKeys};
+}
+
+/// How often the server reads the stores on its own; [every] is one of
+/// `StoreRefreshSchedule.choices`, [Duration.zero] for never.
+final class StoresScheduleSet extends _StoresViewRequest {
+  const StoresScheduleSet(this.every);
+
+  static const String name = 'stores.schedule.set';
+
+  final Duration every;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'everyMinutes': every.inMinutes};
 }

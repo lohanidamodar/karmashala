@@ -10,6 +10,10 @@ abstract interface class StoreDesk {
   /// a view younger than that is answered as it is. A refresh already under
   /// way is joined, not doubled.
   Future<StoresView> refresh({Duration? maxAge});
+
+  /// What reads found changed since [since], newest first; only what nobody
+  /// has opened yet with [unseenOnly].
+  List<StoreAppChanges> changesSince({DateTime? since, bool unseenOnly});
 }
 
 /// What answers the data protocol's `stores.*` requests; every answer is the

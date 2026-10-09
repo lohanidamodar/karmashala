@@ -689,7 +689,10 @@ class DaemonCompanion implements CompanionHandler {
         InboxItemKind.followUp ||
         InboxItemKind.turnCutOff ||
         InboxItemKind.automationProposed ||
-        InboxItemKind.wentQuiet => null,
+        InboxItemKind.wentQuiet ||
+        // A phone hears these live, as `storeChangesNoticed`.
+        InboxItemKind.storeAttention ||
+        InboxItemKind.storeNews => null,
       };
       if (kind == null) continue;
       if (item.kind == InboxItemKind.usageLimit) limitFiled = true;

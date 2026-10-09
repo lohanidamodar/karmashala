@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 import 'package:store_console/store_console.dart';
@@ -5,6 +7,7 @@ import 'package:store_console/store_console.dart';
 import '../../../core/data/data_providers.dart';
 import '../../../core/util/tab_progress.dart';
 import 'store_attention.dart';
+import 'store_changes.dart';
 import 'store_groups.dart';
 
 /// A view older than this is read again when the tab opens.
@@ -50,6 +53,7 @@ class StoresState {
     links: view.links,
     storeWide: storeWideByArea(storeWide),
     reads: view.reads,
+    changes: {for (final held in view.changes) held.app.key: held},
   );
 
   StoresState copyWith({
@@ -243,6 +247,46 @@ class StoresController extends AsyncNotifier<StoresState> {
       ),
     );
   }
+
+  /// Apps [appKeys] were opened: what changed about them is seen, at the
+  /// server and in its inbox. Nothing is asked when nothing is unseen.
+  void markSeen(Iterable<String> appKeys) {
+    final keys = appKeys.toSet();
+    final unseen = ref
+        .read(storeChangesProvider)
+        .any((held) => !held.seen && keys.contains(held.app.key));
+    if (!unseen) return;
+    ref.read(storeChangesProvider.notifier).seenHere(keys);
+    final current = state.value;
+    if (current != null) {
+      state = AsyncData(
+        current.copyWith(
+          view: StoresView(
+            apple: current.view.apple,
+            play: current.view.play,
+            stores: current.view.stores,
+            apps: current.view.apps,
+            icons: current.view.icons,
+            links: current.view.links,
+            refreshedAt: current.view.refreshedAt,
+            refreshing: current.view.refreshing,
+            reads: current.view.reads,
+            changes: [
+              for (final held in current.view.changes)
+                keys.contains(held.app.key) ? held.asSeen() : held,
+            ],
+            schedule: current.view.schedule,
+          ),
+        ),
+      );
+    }
+    unawaited(_write(StoresSeen(keys.toList()..sort())));
+  }
+
+  /// How often the server reads the stores on its own; [Duration.zero] is
+  /// never. Answers null when kept, else a sentence why not.
+  Future<String?> setBackgroundEvery(Duration every) =>
+      _write(StoresScheduleSet(every));
 
   /// Forgets [store]'s credential and what was read with it, at the server.
   Future<String?> remove(StoreKind store) =>

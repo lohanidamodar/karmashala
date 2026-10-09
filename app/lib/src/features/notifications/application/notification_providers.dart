@@ -5,7 +5,7 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show ApprovalAnswerRequest, PromptAsk, SessionPromptRefusal;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show InboxChanged;
+    show InboxChanged, storeAppKeyOfInboxId;
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/persistence.dart';
 import 'package:karmashala_notifications/policy.dart';
@@ -24,6 +24,8 @@ import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/session_prompt_answers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../stores/application/store_changes.dart'
+    show storesOpenRequestProvider;
 import '../../workspaces/data/workspace_data.dart';
 import '../data/desktop_notification_presenter.dart';
 import '../data/device_notification_store.dart';
@@ -73,6 +75,9 @@ class NotificationSettingsController extends Notifier<NotificationSettings> {
       _update(state.copyWith(onlyWhenUnfocused: value));
 
   void setChime(bool value) => _update(state.copyWith(chime: value));
+
+  void setStoreChanges(StoreChangeNotify value) =>
+      _update(state.copyWith(storeChanges: value));
 
   /// Focus's half here: Only when I'm needed, remembering [before].
   void startFocus(FocusMemory before) =>
@@ -184,6 +189,11 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
   final raisedFor = <String, PromptAsk>{};
   final presenter = DesktopNotificationPresenter(
     onActivated: (payload) {
+      if (storeAppKeyOfInboxId(payload.openId) case final appKey?) {
+        ref.read(storesOpenRequestProvider.notifier).open(appKey);
+        ref.read(windowRaiseRequestProvider.notifier).bump();
+        return;
+      }
       focusWatchedSession(
         ref.container,
         openId: payload.openId,
@@ -361,6 +371,10 @@ void openNotifiedSession(
   ProviderContainer container,
   NotificationPayload payload,
 ) {
+  if (storeAppKeyOfInboxId(payload.openId) case final appKey?) {
+    container.read(storesOpenRequestProvider.notifier).open(appKey);
+    return;
+  }
   void open() {
     final found = focusWatchedSession(
       container,

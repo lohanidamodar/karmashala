@@ -1,5 +1,5 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show StoreAppIcon, StoreAppRead;
+    show StoreAppChanges, StoreAppIcon, StoreAppRead;
 import 'package:store_console/store_console.dart';
 
 import 'store_attention.dart';
@@ -13,6 +13,7 @@ class StoreEntry {
     this.icon,
     this.signals = const [],
     this.read,
+    this.changes,
   });
 
   final StoreApp app;
@@ -27,6 +28,9 @@ class StoreEntry {
 
   /// What this store has to say about the app, loudest first.
   final List<StoreSignal> signals;
+
+  /// What the last read that changed this app found; null when none has.
+  final StoreAppChanges? changes;
 
   /// The release that most wants looking at: one somebody must act on, else
   /// one on its way.
@@ -104,6 +108,14 @@ class StoreAppGroup {
     return null;
   }
 
+  /// Each store's latest changes, App Store first.
+  List<StoreAppChanges> get changes => [
+    for (final entry in entries) ?entry.changes,
+  ];
+
+  /// Changes nobody has opened the app to see since they were found.
+  bool get changedUnseen => changes.any((held) => !held.seen);
+
   /// Every store's signals, loudest first.
   List<StoreSignal> get signals =>
       [for (final entry in entries) ...entry.signals]
@@ -154,6 +166,7 @@ List<StoreAppGroup> groupStoreApps(
   Iterable<StoreAppLink> links = const [],
   Map<StoreKind, Map<StoreArea, String>> storeWide = const {},
   Map<String, StoreAppRead> reads = const {},
+  Map<String, StoreAppChanges> changes = const {},
 }) {
   int rank(StoreAppGroup group) => group.needsAttention
       ? 0
@@ -172,6 +185,7 @@ List<StoreAppGroup> groupStoreApps(
               snapshots[app],
               icon: icons[app.key],
               read: reads[app.key],
+              changes: changes[app.key],
               signals: switch (snapshots[app]) {
                 final snapshot? => storeSignals(
                   snapshot,
@@ -201,6 +215,7 @@ List<StoreAppGroup> groupStoreView(
   Iterable<StoreAppLink> links = const [],
   Map<StoreKind, Map<StoreArea, String>> storeWide = const {},
   Map<String, StoreAppRead> reads = const {},
+  Map<String, StoreAppChanges> changes = const {},
 }) => groupStoreApps(
   [
     for (final reading in stores.values) ...?reading.valueOrNull,
@@ -211,4 +226,5 @@ List<StoreAppGroup> groupStoreView(
   links: links,
   storeWide: storeWide,
   reads: reads,
+  changes: changes,
 );
