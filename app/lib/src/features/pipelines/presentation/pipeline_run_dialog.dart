@@ -145,7 +145,7 @@ class _RunPipelineDialogState extends ConsumerState<RunPipelineDialog> {
             ),
           ],
         ),
-        const SizedBox(height: Insets.xs),
+        const SizedBox(height: Insets.md),
         DropdownButtonFormField<String>(
           key: const ValueKey('pipeline-run-checkout'),
           initialValue: repositoryId,

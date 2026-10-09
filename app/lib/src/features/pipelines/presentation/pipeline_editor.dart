@@ -314,7 +314,7 @@ class _StageEditor extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: Insets.xs),
+            const SizedBox(height: Insets.md),
             DropdownButtonFormField<String?>(
               key: ValueKey('pipeline-editor-agent:$index'),
               initialValue: installation?.id,
@@ -340,7 +340,7 @@ class _StageEditor extends ConsumerWidget {
               ),
             ),
             if (descriptor != null) ...[
-              const SizedBox(height: Insets.xs),
+              const SizedBox(height: Insets.md),
               Row(
                 children: [
                   Text('Model', style: theme.textTheme.bodySmall),
@@ -365,6 +365,7 @@ class _StageEditor extends ConsumerWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: Insets.md),
               AutomationPermissionModeField(
                 agentName: descriptor.displayName,
                 support: descriptor.launch.permission,
@@ -377,7 +378,7 @@ class _StageEditor extends ConsumerWidget {
                 ),
               ),
             ],
-            const SizedBox(height: Insets.xs),
+            const SizedBox(height: Insets.md),
             DropdownButtonFormField<PipelineWorkspace>(
               key: ValueKey('pipeline-editor-workspace:$index'),
               initialValue: stage.workspace,
@@ -395,7 +396,7 @@ class _StageEditor extends ConsumerWidget {
               onChanged: (w) =>
                   w == null ? null : _set(stage.copyWith(workspace: w)),
             ),
-            const SizedBox(height: Insets.xs),
+            const SizedBox(height: Insets.md),
             TextField(
               key: ValueKey('pipeline-editor-instruction:$index'),
               controller: draft.instruction,
@@ -412,7 +413,7 @@ class _StageEditor extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: Insets.xs),
+            const SizedBox(height: Insets.md),
             DropdownButtonFormField<PipelineGateKind>(
               key: ValueKey('pipeline-editor-gate:$index'),
               initialValue: stage.gate,
@@ -426,7 +427,7 @@ class _StageEditor extends ConsumerWidget {
                   g == null ? null : _set(stage.copyWith(gate: g)),
             ),
             if (stage.gate == PipelineGateKind.check) ...[
-              const SizedBox(height: Insets.xs),
+              const SizedBox(height: Insets.md),
               TextField(
                 key: ValueKey('pipeline-editor-check:$index'),
                 controller: draft.checkCommand,
@@ -436,7 +437,7 @@ class _StageEditor extends ConsumerWidget {
                 ),
               ),
             ],
-            const SizedBox(height: Insets.xs),
+            const SizedBox(height: Insets.md),
             DropdownButtonFormField<String?>(
               key: ValueKey('pipeline-editor-loop:$index'),
               initialValue: earlier.any((s) => s.key == stage.loopBackTo)
@@ -462,7 +463,7 @@ class _StageEditor extends ConsumerWidget {
               ),
             ),
             if (stage.loopBackTo != null) ...[
-              const SizedBox(height: Insets.xs),
+              const SizedBox(height: Insets.md),
               DropdownButtonFormField<int>(
                 key: ValueKey('pipeline-editor-loop-cap:$index'),
                 initialValue: stage.loopCap.clamp(1, kPipelineLoopCapMax),
