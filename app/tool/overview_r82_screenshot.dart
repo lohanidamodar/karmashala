@@ -14,9 +14,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
+import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
+import 'package:karmashala/src/features/overview/glances/dashboard_glances.dart';
 import 'package:karmashala/src/features/pipelines/application/pipelines_controller.dart';
 import 'package:karmashala/src/features/running/application/running_glance.dart';
 import 'package:karmashala/src/features/sessions/application/capacity_providers.dart';
+import 'package:karmashala/src/features/stores/application/store_glance.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 import 'package:karmashala_automations/pipelines.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -99,6 +102,7 @@ void main() {
     required Size size,
     bool phone = false,
     double textScale = 1,
+    String? glanceFirst,
   }) async {
     final key = GlobalKey();
     final c = await pumpMission(
@@ -116,6 +120,20 @@ void main() {
           const RunningGlance(
             servers: 3,
             newest: RunningGlanceServer(label: 'vite', port: 5173),
+          ),
+        ),
+        storesGlanceProvider.overrideWithValue(
+          StoresGlanceData(
+            attention: 2,
+            firstAttention: 'One (iOS)',
+            newestRelease: (
+              text: '1.34.6 Live',
+              at: _now.subtract(const Duration(hours: 3)),
+              app: 'Karmashala',
+            ),
+            ratingApp: 'Karmashala',
+            ratingTrend: const [4.2, 4.3, 4.3, 4.4, 4.3, 4.5, 4.6, 4.6],
+            rating: 4.6,
           ),
         ),
         capacityNowProvider.overrideWithValue(
@@ -138,6 +156,13 @@ void main() {
       ],
     );
     c.read(overviewSelectionProvider.notifier).selectAll(['ks-r21', 'ks-r32']);
+    if (glanceFirst != null) {
+      // Moved to the front of the phone's strip, as a person would.
+      final ids = [for (final g in c.read(dashboardGlancesProvider)) g.id];
+      for (var i = 0; i < ids.length; i++) {
+        c.read(glancePrefsProvider.notifier).move(glanceFirst, -1, ids: ids);
+      }
+    }
     await settleMission(tester);
     await tester.runAsync(() async {
       final render =
@@ -168,6 +193,16 @@ void main() {
   testWidgets(
     '390',
     (t) => shoot(t, 'r82-390', size: const Size(390, 844), phone: true),
+  );
+  testWidgets(
+    '390, the Stores glance first',
+    (t) => shoot(
+      t,
+      'r82-390-stores',
+      size: const Size(390, 844),
+      phone: true,
+      glanceFirst: 'stores',
+    ),
   );
   testWidgets(
     '390, text 1.6',

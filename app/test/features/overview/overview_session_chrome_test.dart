@@ -53,7 +53,8 @@ void main() {
   Future<void> open(WidgetTester tester, {required bool phone}) async {
     final row = phone
         ? find.byKey(const ValueKey('overview-phone-row:ks-r32'))
-        : find.text('Round 32 · Overview redesign').first;
+        // By key: a card not built yet is scrolled to, not a missing element.
+        : find.byKey(const ValueKey('overview-work-card:ks-r32'));
     await tester.scrollUntilVisible(row, 300, scrollable: hybridList);
     await tester.ensureVisible(row);
     await tester.pump();

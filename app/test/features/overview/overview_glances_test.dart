@@ -96,12 +96,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  test('the built-in glances are registered, Todos then Running', () {
+  test('every glance is registered, in its first order', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);
     expect(
       [for (final g in c.read(dashboardGlancesProvider)) g.id],
-      ['todos', 'running'],
+      ['todos', 'running', 'stores'],
     );
   });
 
@@ -222,7 +222,6 @@ void main() {
           overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
         ],
       );
-      addTearDown(c.dispose);
       await pump(tester, size: size, scale: scale, using: c);
       expect(tester.takeException(), isNull);
       final compact = size.width < 600;
@@ -245,6 +244,10 @@ void main() {
         }
       }
       expect(tester.takeException(), isNull);
+      // No server here: a page's read retries until its container goes.
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+      await tester.pump(const Duration(seconds: 1));
     });
   }
 }
