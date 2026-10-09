@@ -12,6 +12,7 @@ import '../../app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_local_ipc/karmashala_local_ipc.dart'
     show exitAfterSocketsSettle, settleUnixSockets;
+import '../../core/capabilities/capabilities.dart';
 import '../../core/lifecycle/app_lifecycle.dart';
 import '../../core/lifecycle/before_quit.dart';
 import '../../core/probe/probe_mode.dart';
@@ -36,6 +37,7 @@ import 'native_status.dart';
 const _kMenuShow = 'show';
 const _kMenuHide = 'hide';
 const _kMenuKeepAwake = 'keep_awake';
+const _kMenuPauseBackground = 'pause_background';
 const _kMenuNotifyPrefix = 'notify_';
 const _kMenuFocus = 'focus';
 const _kMenuOnlyWhenUnfocused = 'notifications_unfocused';
@@ -617,6 +619,12 @@ class SystemIntegrationService with TrayListener, WindowListener {
             label: 'Keep system awake',
             checked: settings.keepAwake,
           ),
+          if (_container.read(capabilitiesProvider).sessionCapacity)
+            TrayMenuItem.checkbox(
+              key: _kMenuPauseBackground,
+              label: 'Pause new background work',
+              checked: settings.launchLimits.pauseBackground,
+            ),
           TrayMenuItem.checkbox(
             key: _kMenuFocus,
             label: 'Focus',
@@ -912,6 +920,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
         _serverMenuItem(key);
       case _kMenuKeepAwake:
         _controller.setKeepAwake(!_settings.keepAwake);
+      case _kMenuPauseBackground:
+        _controller.setBackgroundPaused(
+          !_settings.launchLimits.pauseBackground,
+        );
       case _kMenuFocus:
         _container.read(focusModeProvider.notifier).toggle();
       case _ when key.startsWith(_kMenuNotifyPrefix):

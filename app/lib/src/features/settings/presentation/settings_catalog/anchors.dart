@@ -23,6 +23,17 @@ enum SettingsAnchor {
     'open',
     'session',
   ]),
+  sessionLimits(SettingsSectionId.general, 'Session limits', [
+    'limits',
+    'concurrency',
+    'capacity',
+    'slots',
+    'at once',
+    'queue',
+    'waiting',
+    'pause',
+    'background',
+  ]),
   launcherHotkey(SettingsSectionId.general, 'Launcher hotkey', [
     'hotkey',
     'launcher',

@@ -15,6 +15,7 @@ import 'overview_cards.dart';
 import 'overview_filters.dart';
 import 'overview_done_card.dart';
 import 'overview_heartbeat.dart';
+import 'overview_waiting_lane.dart';
 import 'overview_pins.dart';
 import 'overview_queue_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
@@ -279,6 +280,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           padding: EdgeInsets.fromLTRB(gutter, Insets.md, gutter, Insets.xxl),
           children: [
             const OverviewHeartbeat(),
+            const OverviewWaitingLane(),
             if (hasFilters)
               const Padding(
                 padding: EdgeInsets.only(top: Insets.md),

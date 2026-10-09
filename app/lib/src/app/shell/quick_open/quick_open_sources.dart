@@ -71,6 +71,7 @@ import '../../../features/automations/presentation/automations_tab_state.dart';
 import '../../../features/settings/presentation/settings_catalog.dart'
     show settingsEntries;
 import '../../../features/settings/presentation/settings_nav.dart';
+import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/snippets/application/snippet_insertion.dart';
 import '../../../features/snippets/application/snippet_providers.dart';
 import '../../../features/snippets/domain/command_snippet.dart';

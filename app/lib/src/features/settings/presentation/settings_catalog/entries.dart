@@ -36,6 +36,20 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['resume', 'start', 'background', 'tab', 'palette', 'dashboard'],
   ),
   SettingsEntry(
+    'Session limits',
+    anchor: SettingsAnchor.sessionLimits,
+    description:
+        'How many agent sessions run at once: in all, per machine, per '
+        'account, per project.',
+    keywords: ['limit', 'concurrency', 'at once', 'queue', 'slots', 'waiting'],
+  ),
+  SettingsEntry(
+    'Pause new background work',
+    anchor: SettingsAnchor.sessionLimits,
+    description: 'Automations and agents\' sessions wait; running ones go on.',
+    keywords: ['pause', 'background', 'automations', 'hold', 'usage'],
+  ),
+  SettingsEntry(
     'Launcher hotkey',
     anchor: SettingsAnchor.launcherHotkey,
     description: 'A global shortcut that brings Karmashala forward.',

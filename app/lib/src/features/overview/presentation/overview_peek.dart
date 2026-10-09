@@ -26,6 +26,7 @@ import '../../explorer/application/workspace_session_entry.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../../git/application/diff_tab_actions.dart' show diffForTargetProvider;
 import '../../git/presentation/diff_view.dart';
+import '../../sessions/presentation/slot_wait_notice.dart';
 import '../../sessions/presentation/hunk_review.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_chat_source.dart'
@@ -257,6 +258,7 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
               onNext: widget.onNext,
             ),
             const Divider(height: 1),
+            SlotWaitNotice(sessionId: id),
             Expanded(
               child: KeyedSubtree(
                 key: const ValueKey('overview-peek-body'),
