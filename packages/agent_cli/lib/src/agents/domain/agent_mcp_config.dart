@@ -3,7 +3,9 @@
 ///
 /// The opposite direction from `AgentMcpSupport`, which is how Karmashala
 /// *injects itself* for one launch. That one is about a command line; this one
-/// is about the user's own files, which Karmashala reads and never writes.
+/// is about the user's own files, which Karmashala reads — and writes into
+/// only for an agent that declares [installsKarmashalaEntry], whose CLI takes
+/// no server for one launch.
 ///
 /// Declared data with required evidence, exactly like `AgentHookSpec` and
 /// `AgentSkillSupport`, and defaulting the same conservative way: **an agent
@@ -28,6 +30,7 @@ class AgentMcpConfigSpec {
     this.perProjectServersPath = const [],
     this.approvedKey = '',
     this.refusedKey = '',
+    this.installsKarmashalaEntry = false,
   }) : refusal = '';
 
   /// Nobody has established where this agent reads its servers. The default.
@@ -40,6 +43,7 @@ class AgentMcpConfigSpec {
       perProjectServersPath = const [],
       approvedKey = '',
       refusedKey = '',
+      installsKarmashalaEntry = false,
       evidence = '';
 
   /// The file in the working directory, e.g. `.mcp.json`. Empty when this agent
@@ -70,6 +74,12 @@ class AgentMcpConfigSpec {
 
   /// The per-directory key listing project-file servers the user has refused.
   final String refusedKey;
+
+  /// Whether Karmashala keeps its own entry in the user file's server map.
+  /// For an agent with no per-launch MCP: the entry is read by every run of
+  /// it, so the bridge it names serves only a run carrying
+  /// `KARMASHALA_SESSION_ID` — one Karmashala started.
+  final bool installsKarmashalaEntry;
 
   /// Where this was read off, so a future CLI version can be re-checked.
   final String evidence;

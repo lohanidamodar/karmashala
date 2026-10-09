@@ -53,6 +53,10 @@ enum AgentFolderTrustFormat {
   /// A `[projects."<folder>"]` TOML table with `trust_level = "trusted"`,
   /// the folder keyed in lower case, as a literal string, on Windows.
   tomlProjects,
+
+  /// The folder's path appended to a top-level JSON array of paths, named
+  /// by [AgentFolderTrustSpec.listKey].
+  jsonPathList,
 }
 
 /// Where an agent remembers the folders it was told to trust.
@@ -60,6 +64,7 @@ class AgentFolderTrustSpec {
   const AgentFolderTrustSpec({
     required this.format,
     required this.settingsFile,
+    this.listKey = '',
   });
 
   final AgentFolderTrustFormat format;
@@ -67,6 +72,9 @@ class AgentFolderTrustSpec {
   /// The file, relative to the store home: `../.claude.json` beside
   /// `~/.claude`, `config.toml` inside `~/.codex`.
   final String settingsFile;
+
+  /// The array a [AgentFolderTrustFormat.jsonPathList] appends to.
+  final String listKey;
 }
 
 /// The best status source an agent supports. The status service falls back down

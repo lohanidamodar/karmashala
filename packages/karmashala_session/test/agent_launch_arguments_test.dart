@@ -22,6 +22,22 @@ void main() {
     expect(argv.last, 'Read the brief.');
   });
 
+  test('a read-only Codex is not handed --add-dir, which it refuses with '
+      'exit 1', () {
+    PermissionSelection mode(String sandbox) =>
+        PermissionSelection({'sandbox': sandbox, 'approval': 'on-request'});
+    List<String> argv(String sandbox) => agentPaneArguments(
+      registry.byId(AgentIds.codex),
+      mode(sandbox),
+      extraDirectoryPath: r'C:\data\handoff',
+      prompt: 'Read the brief.',
+    );
+    expect(argv('read-only'), isNot(contains('--add-dir')));
+    expect(argv('read-only'), containsAllInOrder(['--sandbox', 'read-only']));
+    expect(argv('read-only').last, 'Read the brief.');
+    expect(argv('workspace-write'), contains('--add-dir'));
+  });
+
   test('Claude Code is granted it in one entry, so its prompt stays the '
       'prompt', () {
     final argv = agentPaneArguments(

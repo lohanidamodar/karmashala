@@ -165,11 +165,16 @@ class ChildTurnWait {
           unawaited(consider(moved.report));
         });
     // Settled over a status that says nothing (unknown) is the quiet screen
-    // of a turn seen working; any other status is read as it says.
-    final quiet = this.settled?.where((id) => id == sessionId).listen((_) {
+    // of a turn seen working; any other status is read as it says. Never
+    // seen working, it is a turn only if an answer was recorded since the
+    // launch: an opening left unsent is a still screen too (bug 13).
+    final quiet = this.settled?.where((id) => id == sessionId).listen((
+      _,
+    ) async {
       final report = status.statusOf(sessionId)?.report;
       if (report == null || report.status == AgentActivityStatus.unknown) {
         if (afterWork && !worked) return;
+        if (!worked && await answerOf(sessionId, since: since) == null) return;
         worked = true;
         if (waits.blockedOn(sessionId) == null &&
             status.liveScreenOf(sessionId) != null) {

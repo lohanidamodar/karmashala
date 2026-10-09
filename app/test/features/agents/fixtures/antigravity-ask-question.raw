@@ -1,0 +1,80 @@
+[?9001h[?1004h[>q[?25l[2J[m[H]0;C:\WINDOWS\SYSTEM32\cmd.exe[?25h^[P>|xterm2 5.3.0^[\[?2004h[>4;2m[>1u[?u[0 q[?25l[H[K
+      [38;5;179m▄[38;5;208m[48;5;208m▀[38;5;203m[48;5;209m▀[49m▄        [94m[1mAntigravity CLI 1.3.2[m[K
+     [38;5;149m[48;5;113m▀[38;5;143m[48;5;107m▀[38;5;173m[48;5;173m▀[38;5;209m[48;5;209m▀[38;5;203m[48;5;167m▀▀[m       [90mdlohani48@gmail.com[K[m
+    [38;5;107m[48;5;113m▀[38;5;71m[48;5;72m▀[38;5;72m[48;5;68m▀[38;5;67m[49m▀[38;5;103m▀[38;5;98m[48;5;68m▀[38;5;97m[48;5;62m▀[38;5;132m[48;5;97m▀[m      [90m/tmp/r70-probe-agy[K[m
+   [38;5;78m▄[48;5;74m▀[38;5;73m▀[m    [38;5;68m[48;5;69m▀▀[49m▄[K[m
+  [38;5;75m▄[38;5;79m[48;5;75m▀[38;5;75m[49m▀      [38;5;69m▀[48;5;69m▀[49m▄[K[m
+[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts[K[m
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[9;3H[?25h[?25l[4;17H  [90mGemini 3.8 Flash (High)[5;19H/tmp/r70-probe-agy[m[2m[11;98HGemini 3.8 Flash · high[9;3H[?25h[22m[?25l[8;1H[K
+ [33m┃ [m[1mVerbosity now defaults to medium[22m
+ [33m┃ [mVerbosity is now medium by default, so tool calls and thoughts roll up into summaries. You can change your[K
+ [33m┃ [mpreferred verbosity anytime in /config > Verbosity.[K
+ [33m┃ [90mesc to dismiss[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                                  [K[m[2mGemini 3.8 Flash · high[14;3H[?25h[22m[?25l[90m[3;38H (Google AI Pro)[14;3H[?25h[m[?25lU[16;1H[97X[2m[97CG[14;4H[?25h[22mse[1Cyour[1Cask_question[1Ctool[1Cto[1Cask[1Cme[1Cone[1Cmultiple[1Cchoice[1Cquestion:[1Cwhich[1Ccolorcomma[1Cred[1Cor[1Cblue.[1CDo[1Cnothing[1Celse.[?25l[14;3H[K[?25h[?25l[90m[16;1H? for shortcuts[14;3H[?25h[?25l[m[90m[8;1H────────────────────────────────────────────────────────────[34m[1m
+> Use your ask_question tool to ask me one multiple choice question: which colorcomma red or blue. Do nothing else.[m
+⣾  [94mG[90menerating...[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m[14;1Hesc to cancel                                                                                    [K[m[2mGemini 3.8 Flash · high[22m
+[K
+                                                                                                                        
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[12;3H[?25h[?25l[10;1H⣷ [12;3H[?25h[?25l[94m[10;5He[90mn[12;3H[?25h[m[?25l[10;1H⣯ [12;3H[?25h[?25l[10;1H⣟  [94mGene[12;3H[?25h[m[?25l[10;1H⡿  [94mGener[12;3H[?25h[m[?25l[10;1H⢿  [90mG[94menera[12;3H[?25h[m[?25l[10;1H⣻  [90mGe[94mnerat[12;3H[?25h[m[?25l[10;1H⣽  [90mGene[94mratin[12;3H[?25h[m[?25l[10;1H⣾  [90mGener[94mating[12;3H[?25h[m[?25l[10;1H⣷  [90mGenera[94mting.[12;3H[?25h[m[?25l[10;1H⣯  [90mGenerat[94ming..[12;3H[?25h[m[?25l[10;1H⣟  [90mGeneratin[94mg...[12;3H[?25h[m[?25l[10;1H⡿  [90mGenerating[12;3H[?25h[m[?25l[10;1H⢿  [90mGenerating.[12;3H[?25h[m[?25l[10;1H⣻  [90mGenerating..[12;3H[?25h[m[?25l[10;1H⣽  [90mGenerating...[12;3H[?25h[m[?25l[10;1H⣾ [12;3H[?25h[?25l[10;1H⣷ [12;3H[?25h[?25l[10;1H⣯ [12;3H[?25h[?25l[10;1H⣟ [12;3H[?25h[?25l[10;1H⡿  [94mG[12;3H[?25h[m[?25l[10;1H⢿  [94mGe[12;3H[?25h[m[?25l[10;1H⣻  [94mGen[12;3H[?25h[m[?25l[10;1H⣽  [94mGener[12;3H[?25h[m[?25l[10;1H⣾  [90mG[94menera[12;3H[?25h[m[?25l[10;1H⣷  [90mGe[94mnerat[12;3H[?25h[m[?25l[10;1H⣯  [90mGen[94merati[12;3H[?25h[m[?25l[10;1H⣟  [90mGener[94mating[12;3H[?25h[m[?25l[10;1H⡿  [90mGenera[94mting.[12;3H[?25h[m[?25l[10;1H⢿  [90mGenerat[94ming..[12;3H[?25h[m[?25l[10;1H⣻  [90mGeneratin[94mg...[12;3H[?25h[m[?25l[10;1H⣽  [90mGenerating[12;3H[?25h[m[?25l[10;1H⣾  [90mGenerating.[12;3H[?25h[?25l[m[10;1H⣷  [90mGenerating..[12;3H[?25h[m[?25l[10;1H⣯  [90mGenerating...[12;3H[?25h[m[?25l[10;1H⣟ [12;3H[?25h[?25l[10;1H⡿ [12;3H[?25h[?25l[10;1H⢿ [12;3H[?25h[?25l[10;1H⣻ [12;3H[?25h[?25l[10;1H⣽  [94mG[12;3H[?25h[m[?25l[10;1H⣾  [94mGe[12;3H[?25h[m[?25l[10;1H⣷  [94mGen[12;3H[?25h[m[?25l[10;1H⣯  [94mGene[12;3H[?25h[m[?25l[10;1H⣟  [90mG[94menera[12;3H[?25h[m[?25l[10;1H⡿  [90mGe[94mnerat[12;3H[?25h[m[?25l[10;1H⢿  [90mGen[94merati[12;3H[?25h[m[?25l[10;1H⣻  [90mGene[94mratin[12;3H[?25h[m[?25l[10;3H [90mThe request is to pose a single multiple-choice question about color prefe[94mrence [90musing a specific tool. Examining t...
+└ Tip: Start your message with ! to run a shell command.[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+esc to cancel                                                                                    [K[m[2mGemini 3.8 Flash · high[13;3H[?25h[?25l[22m[10;1H⣽[13;3H[?25h[?25l[90m[10;78Hr[94mence [13;3H[?25h[m[0 q[?25l[10;1H[K[37m
+▸ Thought for 4s, 408 tokens[K
+  The request is to pose a single multiple-choice question about color preference using a specific tool. Examining t... [m
+[K[33m[1m
+?[m Which color?[K
+[K[33m[1m
+Question[m[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[m
+[K[1m
+Question 1/1: Which color?[22m[K
+[K[94m
+> 1. Red[K[m
+  2. Blue[K
+  3. Write-in...[K
+[K
+  [94m[1m↑/↓[90m[22m Navigate · [94m[1menter[90m[22m Select · [94m[1mesc[90m[22m Skip[K
+esc to cancel                                                                                    [K[m[2mGemini 3.8 Flash · high[22m[21;1H  1. Red[K[94m
+> 2. Blue[K[111C[m

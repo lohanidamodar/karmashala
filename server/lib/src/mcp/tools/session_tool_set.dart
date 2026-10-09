@@ -115,13 +115,27 @@ class SessionToolSet extends ServerToolSet {
         return runTool(() {
           final decision = arguments['decision'];
           final optionId = arguments['optionId'];
+          final option = arguments['option'];
           if (optionId != null && (optionId is! String || optionId.isEmpty)) {
             throw ArgumentError('optionId must be an option id.');
           }
-          if (optionId == null && decision != 'approve' && decision != 'deny') {
+          if (option != null) {
+            if (option is! int || option < 0) {
+              throw ArgumentError(
+                'option must be the index of a menu option, from 0.',
+              );
+            }
+            if (decision != null || optionId != null) {
+              throw ArgumentError(
+                'Give option alone: it picks a menu row by itself.',
+              );
+            }
+          } else if (optionId == null &&
+              decision != 'approve' &&
+              decision != 'deny') {
             throw ArgumentError(
-              "decision must be 'approve' or 'deny', or optionId one of the "
-              'options the agent offered.',
+              "decision must be 'approve' or 'deny', optionId one of the "
+              'options the agent offered, or option a menu row.',
             );
           }
           if (held && !runsHere) {
@@ -134,6 +148,9 @@ class SessionToolSet extends ServerToolSet {
               'Nothing is running that session, so there is no prompt to '
               'answer. open_session resumes it.',
             );
+          }
+          if (option is int) {
+            return _chooseRow(sessionId, option, callerSessionId);
           }
           return _answer(
             sessionId,
@@ -253,6 +270,75 @@ class SessionToolSet extends ServerToolSet {
       'answered': answer.answered,
       'effect': answer.effect,
     };
+  }
+
+  /// Picks row [option] of the menu open in [sessionId] — moves the highlight
+  /// there and presses Enter, reading the screen after each key. Only in a
+  /// session the caller started, or one of its descendants: it presses keys
+  /// no agent rule names.
+  Future<Object?> _chooseRow(
+    String sessionId,
+    int option,
+    String? callerSessionId,
+  ) async {
+    final target = _session(sessionId);
+    if (callerSessionId == null || !_descendsFrom(target, callerSessionId)) {
+      throw StateError(
+        '"${target.title}" ($sessionId) is not a session you started, so '
+        'option cannot press keys in it. Nothing was pressed. Answer it with '
+        'decision, or in its pane.',
+      );
+    }
+    final menu = prompts.answers.menuOnScreen(sessionId);
+    if (menu == null) {
+      throw StateError(
+        'No menu Karmashala can read is open in that session, so nothing was '
+        'pressed. Read it with session_transcript.',
+      );
+    }
+    if (menu.isChecklist || option >= menu.options.length) {
+      throw ArgumentError(
+        menu.isChecklist
+            ? 'That menu is a checklist; answer it in its pane.'
+            : 'option must be below ${menu.options.length}: '
+                  '${[for (var i = 0; i < menu.options.length; i++) '$i "${menu.options[i]}"'].join(', ')}.',
+      );
+    }
+    final SessionApprovalAnswer answer;
+    try {
+      answer = await prompts.answer(
+        MenuAnswerRequest(
+          sessionId: sessionId,
+          menuId: menu.id,
+          option: option,
+          decidedBy: 'an agent in session $callerSessionId',
+          decidedBySessionId: callerSessionId,
+        ),
+      );
+    } on SessionPromptRefusal catch (refusal) {
+      final message = refusal.message;
+      throw StateError(
+        '${message[0].toUpperCase()}${message.substring(1)}'
+        '${message.endsWith('.') ? '' : '.'} Nothing was chosen.',
+      );
+    }
+    return <String, Object?>{
+      'sessionId': sessionId,
+      'answered': answer.answered,
+      'effect': answer.effect,
+    };
+  }
+
+  /// Whether [row] is a child of [ancestor], or a child of one of its
+  /// descendants.
+  bool _descendsFrom(Session row, String ancestor) {
+    final seen = <String>{row.id};
+    var parent = row.parentSessionId;
+    while (parent != null && seen.add(parent)) {
+      if (parent == ancestor) return true;
+      parent = _sessions.getById(parent)?.parentSessionId;
+    }
+    return false;
   }
 
   /// Relays [text] into [sessionId]'s composer under the sender's own name;
@@ -554,9 +640,12 @@ class SessionToolSet extends ServerToolSet {
     final recentMessages = messages.length > capped
         ? messages.sublist(messages.length - capped)
         : messages;
+    // An ended pane the host still keeps is read too: a launch that died at
+    // once said why on it — a refused flag, a missing login.
+    final ended = held ? null : registry.find(hostSessionIdOf(sessionId));
     final screen = held
         ? prompts.status.liveScreenOf(sessionId)?.tailText(capped)
-        : null;
+        : ended?.tailText(capped);
     final relayed = _context.write(RelaysTo(sessionId, capped));
     return <String, Object?>{
       'sessionId': sessionId,
@@ -612,7 +701,19 @@ class SessionToolSet extends ServerToolSet {
       'screen': screen,
       'screenSource': screen == null
           ? 'not recorded — no live pane to read'
+          : ended != null
+          ? 'the pane as it stood when its process '
+                '${ended.lifecycle.describe()}'
           : 'the pane as it stands now',
+      // What session_answer's `option` indexes.
+      if (held &&
+          (prompts.status.statusOf(sessionId)?.report.hasOpenPrompt ?? false))
+        if (prompts.answers.menuOnScreen(sessionId) case final menu?)
+          'menu': <String, Object?>{
+            'prompt': menu.prompt,
+            'options': menu.options,
+            'highlighted': menu.highlighted,
+          },
     };
   }
 
@@ -655,6 +756,29 @@ class SessionToolSet extends ServerToolSet {
   }) async {
     final session = _session(sessionId);
     if (!held) {
+      // A row still saying "running" with nothing behind it — an ACP runtime
+      // that went with an old server, say — is recorded ended, so it can be
+      // archived. Not on an SSH box: a box out of reach may still run it.
+      if (session.status.claimsLive && !_onSshBox(session)) {
+        queue?.ended(
+          sessionId,
+          reason:
+              'The session was ended by an agent (session_end) before it '
+              'could take this message, so it was not sent.',
+          by: by,
+        );
+        _context.write(
+          SessionEdit(sessionId, SessionPatch.status(SessionStatus.cancelled)),
+        );
+        return <String, Object?>{
+          'sessionId': sessionId,
+          'title': session.title,
+          'ended': true,
+          'endedAt':
+              'its row only: nothing was running it, and its row said '
+              '"${session.status.name}"; it now says cancelled',
+        };
+      }
       throw StateError(
         'Nothing is running that session: no pane shows it and the session '
         'host is not running it, so there is nothing to end.',
@@ -682,6 +806,18 @@ class SessionToolSet extends ServerToolSet {
       'ended': true,
       'endedAt': 'the session host',
     };
+  }
+
+  /// Whether [session]'s checkout is on an SSH box.
+  bool _onSshBox(Session session) {
+    final rows = _context.database.query(
+      'SELECT environment_id FROM repositories WHERE id = ?;',
+      [session.repositoryId],
+    );
+    final environment =
+        session.workingDirectory?.environmentId ??
+        (rows.isEmpty ? null : rows.single['environment_id'] as String?);
+    return environment?.startsWith('ssh:') ?? false;
   }
 
   /// Types into the session's PTY as the host — its own, or a box session's

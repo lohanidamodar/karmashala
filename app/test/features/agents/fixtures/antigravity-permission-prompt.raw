@@ -1,0 +1,80 @@
+[?9001h[?1004h[>q[?25l[2J[m[H]0;C:\WINDOWS\SYSTEM32\cmd.exe[?25h^[P>|xterm2 5.3.0^[\[?2004h[>4;2m[>1u[?u[0 q[?25l[H[K
+      [38;5;179m▄[38;5;208m[48;5;208m▀[38;5;203m[48;5;209m▀[49m▄        [94m[1mAntigravity CLI 1.3.2[m[K
+     [38;5;149m[48;5;113m▀[38;5;143m[48;5;107m▀[38;5;173m[48;5;173m▀[38;5;209m[48;5;209m▀[38;5;203m[48;5;167m▀▀[m       [90mdlohani48@gmail.com[K[m
+    [38;5;107m[48;5;113m▀[38;5;71m[48;5;72m▀[38;5;72m[48;5;68m▀[38;5;67m[49m▀[38;5;103m▀[38;5;98m[48;5;68m▀[38;5;97m[48;5;62m▀[38;5;132m[48;5;97m▀[m      [90m/tmp/r70-probe-agy[K[m
+   [38;5;78m▄[48;5;74m▀[38;5;73m▀[m    [38;5;68m[48;5;69m▀▀[49m▄[K[m
+  [38;5;75m▄[38;5;79m[48;5;75m▀[38;5;75m[49m▀      [38;5;69m▀[48;5;69m▀[49m▄[K[m
+[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts[K[m
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[9;3H[?25h[?25l[4;17H  [90mGemini 3.8 Flash (High)[5;19H/tmp/r70-probe-agy[m[2m[11;98HGemini 3.8 Flash · high[9;3H[?25h[22m[?25l[8;1H[K
+ [33m┃ [m[1mVerbosity now defaults to medium[22m
+ [33m┃ [mVerbosity is now medium by default, so tool calls and thoughts roll up into summaries. You can change your[K
+ [33m┃ [mpreferred verbosity anytime in /config > Verbosity.[K
+ [33m┃ [90mesc to dismiss[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+? for shortcuts                                                                                  [K[m[2mGemini 3.8 Flash · high[14;3H[?25h[22m[?25l[90m[3;38H (Google AI Pro)[14;3H[?25h[m[?25lR[16;1H[97X[2m[97CG[14;4H[?25h[22mun[1Cthe[1Cshell[1Ccommand:[1Csleep[1C45[?25l[14;3H[K[90m[16;1H? for shortcuts[14;3H[?25h[m[?25l[90m[8;1H────────────────────────────────────────────────────────────[34m[1m
+> Run the shell command: sleep 45[m[K
+⣷  [90mGenerating...[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m[14;1Hesc to cancel                                                                                    [K[m[2mGemini 3.8 Flash · high[22m
+[K
+                                                                                                                        
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[12;3H[?25h[?25l[10;1H⣯  [94mG[12;3H[?25h[m[?25l[10;1H⣟  [94mGe[12;3H[?25h[m[?25l[10;1H⡿  [94mGene[12;3H[?25h[m[?25l[10;1H⢿  [94mGener[12;3H[?25h[m[?25l[10;1H⣻  [90mG[94menera[12;3H[?25h[m[?25l[10;1H⣽  [90mGe[94mnerat[12;3H[?25h[m[?25l[10;1H⣾  [90mGene[94mratin[12;3H[?25h[m[?25l[10;1H⣷  [90mGener[94mating[12;3H[?25h[m[?25l[10;1H⣯  [90mGenera[94mting.[12;3H[?25h[m[?25l[10;1H⣟  [90mGenerat[94ming..[12;3H[?25h[m[?25l[10;1H⡿  [90mGeneratin[94mg...[12;3H[?25h[m[?25l[10;1H⢿  [90mGenerating[12;3H[?25h[m[?25l[10;1H⣻  [90mGenerating.[12;3H[?25h[m[?25l[10;1H⣽  [90mGenerating..[12;3H[?25h[m[?25l[10;1H⣾  [90mGenerating...[12;3H[?25h[?25l[m[10;1H⣷ [12;3H[?25h[?25l[10;1H⣯ [12;3H[?25h[?25l[10;1H⣟ [12;3H[?25h[?25l[10;1H⡿ [12;3H[?25h[?25l[10;1H⢿  [94mG[12;3H[?25h[m[?25l[10;1H⣻  [94mGe[12;3H[?25h[?25l[m[10;1H⣽  [94mGen[12;3H[?25h[m[?25l[10;1H⣾  [94mGener[12;3H[?25h[m[?25l[10;1H⣷  [90mG[94menera[12;3H[?25h[m[?25l[10;1H⣯  [90mGe[94mnerat[12;3H[?25h[m[?25l[10;1H⣟  [90mGen[94merati[12;3H[?25h[m[?25l[10;1H⡿  [90mGener[94mating[12;3H[?25h[m[?25l[10;1H⢿  [90mGenera[94mting.[12;3H[?25h[m[?25l[10;1H⣻  [90mGenerat[94ming..[12;3H[?25h[m[?25l[10;1H⣽  [90mGenerati[94mng...[12;3H[?25h[m[?25l[10;1H⣾  [90mGenerating[12;3H[?25h[m[?25l[10;1H⣷  [90mGenerating.[12;3H[?25h[m[?25l[10;1H⣯  [90mGenerating..[12;3H[?25h[?25l[m[10;1H⣟  [90mGenerating...[12;3H[?25h[m[?25l[10;1H⡿ [12;3H[?25h[?25l[10;1H⢿ [12;3H[?25h[?25l[10;1H⣻ [12;3H[?25h[?25l[10;1H⣽ [12;3H[?25h[?25l[10;1H⣾  [94mG[12;3H[?25h[m[?25l[10;1H⣷  [94mGe[12;3H[?25h[m[?25l[10;1H⣯  [94mGen[12;3H[?25h[m[?25l[10;1H⣟  [94mGene[12;3H[?25h[m[?25l[10;1H⡿  [90mG[94menera[12;3H[?25h[m[?25l[10;1H⢿  [90mGe[94mnerat[12;3H[?25h[m[?25l[10;1H⣻  [90mGen[94merati[12;3H[?25h[m[?25l[10;1H⣽  [90mGene[94mratin[12;3H[?25h[m[?25l[10;1H⣾  [90mGenera[94mting.[12;3H[?25h[m[?25l[10;1H⣷  [90mGenerat[94ming..[12;3H[?25h[?25l[m[10;1H⣯  [90mGenerati[94mng...[12;3H[?25h[m[?25l[10;1H⣟  [90mGeneratin[12;3H[?25h[?25l[m[90m[10;13Hg[94m.[12;3H[?25h[?25l[m[10;1H⡿  [90mGenerating.[12;3H[?25h[m[?25l[10;1H⢿  [90mGenerating..[12;3H[?25h[m[?25l[10;1H⣻  [90mGenerating...[12;3H[?25h[?25l[m[10;1H⣽ [12;3H[?25h[?25l[10;1H⣾ [12;3H[?25h[?25l[10;1H⣷ [12;3H[?25h[?25l[10;1H⣯ [12;3H[?25h[?25l[10;1H⣟ [12;3H[?25h[?25l[10;1H⡿  [94mGe[12;3H[?25h[m[?25l[10;1H⢿  [94mGen[12;3H[?25h[m[?25l[10;1H⣻  [94mGene[12;3H[?25h[m[?25l[10;1H⣽  [94mGener[12;3H[?25h[m[?25l[10;3H [90mThe request [94mis t[90mo execute a shell command, specifically `sleep 45`. Reviewing the guidelines, there's a directive ...
+└ Tip: Use /fork to branch the conversation from an earlier point.[K
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[94m
+>[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+esc to cancel                                                                                    [K[m[2mGemini 3.8 Flash · high[13;3H[?25h[?25l[22m[10;1H⣾  [90mThe reques[94mt is [90mt[13;3H[?25h[?25l[m[10;1H⣷  [90mThe requ[94mest i[90ms [13;3H[?25h[?25l[m[10;1H⣯  [90mThe r[94meques[90mt i[13;3H[?25h[m[?25l[10;1H⣟  [90mTh[94me req[90mues[13;3H[?25h[m[?25l[10;1H⡿  [94mThe r[90meq[13;3H[?25h[m[?25l[10;1H⢿  [94mTh[90me r[13;3H[?25h[m[?25l[10;1H⣻  [90mTh[13;3H[?25h[m[?25l[10;1H⣽[13;3H[?25h[?25l[10;1H⣾[13;3H[?25h[?25l[10;1H⣷  [94mT[13;3H[?25h[m[?25l[10;1H⣯  [94mThe [13;3H[?25h[m[?25l[10;1H⣟  [90mTh[94me req[13;3H[?25h[m[?25l[10;1H⡿  [90mThe [94mreque[13;3H[?25h[m[?25l[10;1H⢿  [90mThe req[94muest [13;3H[?25h[m[?25l[10;1H⣻  [90mThe reque[94mst is[13;3H[?25h[m[?25l[10;1H⣽  [90mThe request [94mis to[13;3H[?25h[m[?25l[10;1H⣾  [90mThe request is [94mto e[13;3H[?25h[m[?25l[10;1H⣷  [90mThe request is t[94mo exe[13;3H[?25h[?25l[m[90m[10;20Ho [94mexec[13;3H[?25h[m[?25l[10;1H⣯  [90mThe request is to e[94mxecut[13;3H[?25h[m[?25l[10;1H⣟  [90mThe request is to exec[94mute a[13;3H[?25h[m[?25l[10;1H⡿  [90mThe request is to execut[94me a s[13;3H[?25h[m[?25l[10;1H⢿  [90mThe request is to execute a [94mshel[13;3H[?25h[m[?25l[10;1H⣻  [90mThe request is to execute a s[94mhell [13;3H[?25h[m[?25l[10;1H⣽  [90mThe request is to execute a shel[94ml com[13;3H[?25h[m[?25l[10;1H⣾  [90mThe request is to execute a shell [94mcomma[13;3H[?25h[m[?25l[10;1H⣷  [90mThe request is to execute a shell com[94mmand,[13;3H[?25h[m[?25l[10;1H⣯  [90mThe request is to execute a shell comma[94mnd, s[13;3H[?25h[m[?25l[10;1H⣟  [90mCareful examination of the `run_command` [94mparam[90meters and instructions reveals the intended behavior. The explicit u[13;3H[?25h[m[?25l[90m[10;45Hp[94marame[13;3H[?25h[0 q[?25l[m[10;1H[K[37m
+○ Thought for 9.0s (The request is to execute a shell command, specifically `sleep 45`. Reviewing the guidelines, t...)[33m
+● [1mRan[m [37m(sleep 45) (ctrl+o to expand)[K[m
+[K[33m[1m
+Command[m[K[90m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[m
+[K[37m[1m
+Requesting permission for:[m[K[37m
+   sleep 45[K[m
+[K[1m
+Run this command?[22m[K[94m
+> 1. Yes, run command[K[m
+  2. Yes, and always allow in this conversation for commands that start with 'sleep'[K
+  3. Yes, and always allow for commands that start with 'sleep' (Persist to settings.json)[K
+  4. No, cancel[K
+[K
+  [94m[1m↑/↓[90m[22m Navigate · [94m[1mtab[90m[22m Amend · [94m[1mctrl+g[90m[22m edit/expand command[K
+esc to cancel                                                                                    [K[m[2mGemini 3.8 Flash · high[22m[0 q[90m[12;1H● 

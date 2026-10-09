@@ -81,7 +81,10 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'be named. Use session_transcript first to see what is being asked. '
         'An ACP agent names its own answers (allow always, reject always…): '
         'session_wait lists them under blockedOn.options, and optionId '
-        'chooses one exactly.',
+        'chooses one exactly. For a session you started (or one of its '
+        'descendants), option picks any row of the menu on its screen by '
+        'index — session_transcript lists them under menu.options — moving '
+        'the highlight there and pressing Enter.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -92,7 +95,7 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'decision': {
           'type': 'string',
           'enum': ['approve', 'deny'],
-          'description': 'What to answer. Give this or optionId.',
+          'description': 'What to answer. Give this, optionId or option.',
         },
         'optionId': {
           'type': 'string',
@@ -100,6 +103,13 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
               "The id of one of the options the agent offered "
               "(blockedOn.options); that option's own kind decides whether "
               'it approves.',
+        },
+        'option': {
+          'type': 'integer',
+          'minimum': 0,
+          'description':
+              'A row of the menu on screen, from 0 (session_transcript '
+              'menu.options). Only in a session you started.',
         },
       },
     },
@@ -298,6 +308,23 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
           'items': {'type': 'string'},
         },
         'screenSource': {'type': 'string'},
+        'menu': {
+          'type': 'object',
+          'description':
+              'The menu an open prompt draws, when one can be read: '
+              "session_answer's option indexes its options.",
+          'properties': {
+            'prompt': {
+              'type': 'array',
+              'items': {'type': 'string'},
+            },
+            'options': {
+              'type': 'array',
+              'items': {'type': 'string'},
+            },
+            'highlighted': {'type': 'integer'},
+          },
+        },
       },
       'required': ['sessionId', 'turns', 'turnsSource', 'screenSource'],
     },

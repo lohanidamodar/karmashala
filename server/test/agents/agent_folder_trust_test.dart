@@ -237,6 +237,86 @@ void main() {
     });
   });
 
+  group('Antigravity', () {
+    String agyStore() {
+      final store = Directory(p.join(home.path, '.gemini', 'antigravity-cli'))
+        ..createSync(recursive: true);
+      return store.path;
+    }
+
+    File settings() =>
+        File(p.join(home.path, '.gemini', 'antigravity-cli', 'settings.json'));
+
+    test('the folder is appended to trustedWorkspaces, once, the rest of the '
+        'file left as it was', () async {
+      final store = agyStore();
+      const before =
+          '{\n  "permissions": {"allow": ["read"]},\n'
+          '  "trustedWorkspaces": ["/home/me", "/tmp/kprobe"]\n}';
+      settings().writeAsStringSync(before);
+      final folderTrust = trust({AgentIds.antigravity: store});
+
+      for (var i = 0; i < 2; i++) {
+        expect(
+          await folderTrust.trust(
+            agentId: AgentIds.antigravity,
+            folder: wslFolder,
+            windowsAgent: false,
+          ),
+          isTrue,
+        );
+      }
+
+      final after = settings().readAsStringSync();
+      expect(after, startsWith('{\n  "permissions": {"allow": ["read"]},\n'));
+      final decoded = jsonDecode(after) as Map<String, Object?>;
+      expect(decoded['trustedWorkspaces'], [
+        '/home/me',
+        '/tmp/kprobe',
+        wslFolder.path,
+      ]);
+      expect(decoded['permissions'], {
+        'allow': ['read'],
+      });
+    });
+
+    test('a file with no list gains one; no file is an agy that never ran, '
+        'and is not made', () async {
+      final store = agyStore();
+      final folderTrust = trust({AgentIds.antigravity: store});
+      Future<bool> mark() => folderTrust.trust(
+        agentId: AgentIds.antigravity,
+        folder: wslFolder,
+        windowsAgent: false,
+      );
+
+      expect(await mark(), isFalse);
+      expect(settings().existsSync(), isFalse);
+
+      settings().writeAsStringSync('{"permissions": {}}');
+      expect(await mark(), isTrue);
+      expect(
+        (jsonDecode(settings().readAsStringSync())
+            as Map<String, Object?>)['trustedWorkspaces'],
+        [wslFolder.path],
+      );
+    });
+
+    test('a list that is not one is left alone', () async {
+      final store = agyStore();
+      settings().writeAsStringSync('{"trustedWorkspaces": "nope"}');
+      expect(
+        await trust({AgentIds.antigravity: store}).trust(
+          agentId: AgentIds.antigravity,
+          folder: wslFolder,
+          windowsAgent: false,
+        ),
+        isFalse,
+      );
+      expect(settings().readAsStringSync(), '{"trustedWorkspaces": "nope"}');
+    });
+  });
+
   test(
     'another agent, or one with no store on that machine, is not touched',
     () async {

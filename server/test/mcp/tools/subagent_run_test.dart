@@ -371,6 +371,24 @@ void main() {
     expect(result['finalAnswer'], 'Done quietly.');
   });
 
+  // Bug 13: an opening pasted but never sent leaves a still screen, and was
+  // reported "done" though no turn ran.
+  test('a still screen with no turn seen and no answer is not done', () async {
+    insertCaller('caller');
+    final answer = await run({'prompt': 'Quiet job'}, screen: 'codex-tui');
+    var settled = false;
+    unawaited(answer.then((_) => settled = true));
+    settledTurns.add('new-1');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(settled, isFalse);
+
+    answers['new-1'] = 'It ran after all.';
+    settledTurns.add('new-1');
+    final result = await answer.timeout(const Duration(seconds: 5));
+    expect(result['state'], 'done');
+    expect(result['finalAnswer'], 'It ran after all.');
+  });
+
   test(
     'a settled turn over a status that says ready is read as it says',
     () async {

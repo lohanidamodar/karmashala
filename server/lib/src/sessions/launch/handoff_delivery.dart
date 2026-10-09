@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show composerHolds, messageProbe;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused, DataRefusalCode;
 
@@ -26,6 +28,8 @@ class HandoffDelivery {
     this.leadInFor,
     this.hold,
     this.release,
+    this.stillTyped,
+    this.submit,
     this.log,
     this.poll = const Duration(milliseconds: 500),
     DateTime Function()? now,
@@ -37,10 +41,16 @@ class HandoffDelivery {
     required SessionHandoffs handoffs,
     required DaemonAgentStatus status,
     required TurnSettlement turns,
-    required Future<void> Function(String sessionId, String text, String? leadIn)
+    required Future<void> Function(
+      String sessionId,
+      String text,
+      String? leadIn,
+    )
     deliver,
     String? Function(String sessionId)? leadInFor,
     SessionQueue? queue,
+    List<String>? Function(String sessionId)? markersOf,
+    String? Function(String sessionId)? placeholderOf,
     void Function(String message)? log,
   }) {
     AgentActivityStatus? activity(String id) =>
@@ -67,6 +77,19 @@ class HandoffDelivery {
       leadInFor: leadInFor,
       hold: queue?.hold,
       release: queue?.release,
+      stillTyped: (id) {
+        final rows = status.liveScreenOf(id)?.tailText(40);
+        final markers = markersOf?.call(id);
+        if (rows == null || markers == null || markers.isEmpty) {
+          return false;
+        }
+        final words = [
+          placeholderOf?.call(id),
+          leadInFor?.call(id)?.trim(),
+        ].whereType<String>().where((w) => w.isNotEmpty);
+        return words.any((w) => composerHolds(rows, markers, messageProbe(w)));
+      },
+      submit: (id) => status.typeAsServer(id, const [0x0d]),
       log: log,
     );
   }
@@ -93,6 +116,13 @@ class HandoffDelivery {
   /// Holds and lets go of the session's queue.
   final void Function(String sessionId)? hold;
   final void Function(String sessionId)? release;
+
+  /// Whether the session's composer still holds the typed opening — its
+  /// paste placeholder, or the lead-in typed before it.
+  final bool Function(String sessionId)? stillTyped;
+
+  /// Presses Return in the session; false without a pane.
+  final bool Function(String sessionId)? submit;
   final void Function(String message)? log;
   final Duration poll;
   final DateTime Function() _now;
@@ -106,6 +136,11 @@ class HandoffDelivery {
 
   /// How long the queue stays held for a turn the typed opening should start.
   static const turnStartGrace = Duration(seconds: 10);
+
+  /// How long after the opening is typed, with no turn seen, before a
+  /// composer still holding it is sent again; and how many times.
+  static const confirmAfter = Duration(seconds: 3);
+  static const maxResubmits = 2;
 
   final _watched = <String, _Watch>{};
   Timer? _timer;
@@ -175,6 +210,8 @@ class HandoffDelivery {
     final typed = handoffs.pendingTyped(id);
     if (typed != null) {
       await _type(id, watch, typed, now);
+    } else if (_unconfirmed(watch, now) && !isWorking) {
+      _resubmit(id, watch, now);
     } else if (watch.typedAt != null && watch.holdsQueue) {
       if (isWorking || now.difference(watch.typedAt!) > turnStartGrace) {
         watch.holdsQueue = false;
@@ -183,7 +220,8 @@ class HandoffDelivery {
     }
     if (handoffs.pendingTyped(id) == null &&
         handoffs.pendingFiles(id).isEmpty &&
-        !watch.holdsQueue) {
+        !watch.holdsQueue &&
+        !_unconfirmed(watch, now)) {
       _watched.remove(id);
     }
   }
@@ -221,6 +259,34 @@ class HandoffDelivery {
     }
   }
 
+  /// An opening typed, no turn seen since, and Return not yet pressed
+  /// again as often as it may be.
+  bool _unconfirmed(_Watch watch, DateTime now) =>
+      submit != null &&
+      stillTyped != null &&
+      watch.typedAt != null &&
+      !watch.sawWorking &&
+      watch.resubmits < maxResubmits;
+
+  /// The opening was pasted but no turn started: the Return went before
+  /// the paste was taken. Pressed again while the composer holds it.
+  void _resubmit(String id, _Watch watch, DateTime now) {
+    final last = watch.resubmittedAt ?? watch.typedAt!;
+    if (now.difference(last) < confirmAfter) return;
+    if (!stillTyped!(id)) {
+      watch.resubmits = maxResubmits;
+      return;
+    }
+    watch.resubmits++;
+    watch.resubmittedAt = now;
+    if (submit!(id)) {
+      log?.call(
+        'handoff $id: the opening was still in the composer with no turn '
+        'started; Return pressed again',
+      );
+    }
+  }
+
   void _drop(String id) {
     final watch = _watched.remove(id);
     if (watch != null && watch.holdsQueue) release?.call(id);
@@ -237,4 +303,6 @@ class _Watch {
   bool busy = false;
   DateTime? readySince;
   DateTime? typedAt;
+  int resubmits = 0;
+  DateTime? resubmittedAt;
 }

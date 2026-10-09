@@ -389,11 +389,11 @@ void main() {
   });
 
   test('an agent with no declared grid rules is never classified', () {
-    final antigravity = AgentRegistry.builtIn.byId(AgentIds.antigravity)!;
-    expect(antigravity.grid.isEmpty, isTrue);
+    final grok = AgentRegistry.builtIn.byId(AgentIds.grok)!;
+    expect(grok.grid.isEmpty, isTrue);
     expect(
       const TerminalGridStatusSource().read(
-        antigravity,
+        grok,
         const ['esc to interrupt', 'Enter to confirm'],
         DateTime.utc(2026, 8, 30),
         sessionId: 's',

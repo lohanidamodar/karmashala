@@ -33,6 +33,7 @@ import 'acp_builtin_agent_row.dart';
 import 'agent_detection_section.dart';
 import 'agent_health.dart' show newestAgentVersion;
 import 'agent_label.dart';
+import 'agent_mcp_entry_section.dart';
 import 'agent_path_section.dart' show AgentExecutableRows;
 import 'agents_group_section.dart';
 import 'agents_header_strip.dart';
@@ -186,6 +187,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
               anchor: SettingsAnchor.agentUpdates,
               child: AgentUpdatesSection(),
             ),
+            AgentMcpEntrySection(),
             ChildReportSection(),
             SettingsAnchorTarget(
               anchor: SettingsAnchor.detection,

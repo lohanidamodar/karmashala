@@ -747,13 +747,20 @@ class AgentApprovalRules {
 /// [AgentActivityStatus.unknown], which is a first-class state. A regex that
 /// half-matches produces a wrong answer, which is not.
 class GridMatcher {
-  const GridMatcher(this.contains);
+  const GridMatcher(this.contains, {this.atLineStart = false});
 
   /// Matched case-insensitively against one row of the screen.
   final String contains;
 
-  bool matches(String line) =>
-      line.toLowerCase().contains(contains.toLowerCase());
+  /// Only at the row's first column: two agents' footers can share words
+  /// and differ in where they start.
+  final bool atLineStart;
+
+  bool matches(String line) {
+    final row = line.toLowerCase();
+    final words = contains.toLowerCase();
+    return atLineStart ? row.startsWith(words) : row.contains(words);
+  }
 
   @override
   String toString() => 'GridMatcher($contains)';

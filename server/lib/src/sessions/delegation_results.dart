@@ -397,6 +397,25 @@ class DelegationResults {
     unawaited(_follow(follow));
   }
 
+  /// [childId]'s process started again — resumed by a person, a send or a
+  /// restart. A delegation closed only because that process ended is
+  /// reopened and its next turn followed, so what the child finishes reaches
+  /// its parent. One stopped, detached, archived or set to `none` stays shut.
+  void started(String childId) {
+    if (_closed || _watched.containsKey(childId)) return;
+    if (_detached.contains(childId)) return;
+    final row = store.byChild(childId);
+    if (row == null || row.isOpen || row.reportMode == kReportModeNone) return;
+    if (row.reportVia != kReportViaTurn ||
+        row.reportState != ChildTurnState.ended.name) {
+      return;
+    }
+    if (isArchived?.call(childId) ?? false) return;
+    store.setReportMode(childId, row.reportMode, at: _now());
+    log?.call('delegation $childId: started again; its next turn is followed');
+    _stand(_childOf(store.byChild(childId)!));
+  }
+
   /// Follows the next turn [child] works, whenever that is.
   void _stand(DelegatedChild child) {
     final follow = _watched[child.childId] = _Follow(
@@ -639,6 +658,14 @@ class DelegationResults {
       log?.call('delegation $id: archived; nothing more is pushed');
       return;
     }
+    // The process that ended was not the one there now: followed on it.
+    if (outcome.state == ChildTurnState.ended && isLive(id)) {
+      log?.call(
+        'delegation $id: a process of it ended, but it runs again; followed on',
+      );
+      unawaited(_follow(follow));
+      return;
+    }
     // A later turn settling says what a held quiet end would have.
     _held.remove(id)?.cancel();
     final mode = store.byChild(id)?.reportMode ?? child.reportMode;
@@ -816,12 +843,19 @@ class DelegationResults {
   /// from a child detached since.
   bool _stale(DelegationResult result) {
     if (_detached.contains(result.child.childId)) return true;
+    if (_endedButRuns(result)) return true;
     if (result.outcome.state != ChildTurnState.blocked) return false;
     final askOf = openAskOf;
     if (askOf == null) return false;
     final open = askOf(result.child.childId);
     return open == null || (result.ask != null && open != result.ask);
   }
+
+  /// An "ended" for a child something runs again: the process that ended was
+  /// one before the one there now — a resume, a restart — so it is no end.
+  bool _endedButRuns(DelegationResult result) =>
+      result.outcome.state == ChildTurnState.ended &&
+      isLive(result.child.childId);
 
   /// [head], when it is a batch of this tracker's, as it should go now: its
   /// stale blocked results dropped (`SessionQueue.restate`).
@@ -857,6 +891,15 @@ class DelegationResults {
     // A dropped blocked turn is still a turn: the child is followed on.
     for (final (result, follow) in pending) {
       if (!_stale(result)) continue;
+      if (_endedButRuns(result)) {
+        final id = follow.child.childId;
+        log?.call(
+          'delegation $id: a process of it ended, but it runs again; not '
+          'pushed, and followed on',
+        );
+        if (!_watched.containsKey(id)) _stand(follow.child);
+        continue;
+      }
       store.turnReported(follow.child.childId, turn: follow.turn);
       log?.call(
         'delegation ${follow.child.childId}: blocked, but answered before '

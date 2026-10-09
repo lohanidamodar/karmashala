@@ -571,6 +571,13 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Whether Karmashala keeps its entry in agy's own MCP file. The file
+  /// itself is written by `AgentMcpEntryService`, which the caller runs.
+  void setAgentMcpEntries(bool value) {
+    state = state.copyWith(agentMcpEntries: value);
+    _save();
+  }
+
   /// What a session hears of a session it starts, unless it says: one of
   /// [kChildReportModes]. Applies to the next session an agent starts.
   void setChildReportMode(String mode) {

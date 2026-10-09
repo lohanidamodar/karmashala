@@ -224,4 +224,50 @@ void main() {
       expect(composer.written, isEmpty);
     });
   });
+
+  // Bug 11: a long session_send reached its recipient with its start cut
+  // off, header included. Through a busy relay the message reaches the agent
+  // in several reads; a Return as soon as the first read showed sent the
+  // start alone, and the rest went as a second message.
+  test('a message that arrives in several reads is sent whole, after the '
+      'screen settles', () async {
+    final composer = FakeComposer();
+    final pieces = <String>[];
+    // The first read lands at once; the rest follow, 30 ms apart.
+    bool type(String sessionId, String text) {
+      composer.written.add(text);
+      for (var at = 0; at < text.length; at += 120) {
+        pieces.add(text.substring(at, (at + 120).clamp(0, text.length)));
+      }
+      composer.field += pieces.removeAt(0);
+      Future<void> feed() async {
+        while (pieces.isNotEmpty) {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+          composer.field += pieces.removeAt(0);
+        }
+      }
+
+      feed();
+      return true;
+    }
+
+    final typist = SessionMessageTypist(
+      readScreen: (_) => composer.rows,
+      markersFor: (_) => const ['❯'],
+      type: type,
+      press: composer.press,
+      poll: const Duration(milliseconds: 5),
+      typedPatience: const Duration(seconds: 2),
+      sendPatience: const Duration(milliseconds: 200),
+      settle: const Duration(milliseconds: 100),
+    );
+    final message = [
+      '[message from the Karmashala session "lead" (p1)]',
+      '',
+      for (var i = 1; i <= 8; i++) 'Line $i of a long brief.',
+    ].join('\n');
+
+    expect(await typist.send('s1', message), isTrue);
+    expect(composer.queued, [message]);
+  });
 }

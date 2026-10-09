@@ -18,6 +18,10 @@ import '../status/turn_settlement.dart';
 /// queue: a JSON list of ids, so a restart keeps the pause.
 const String kQueuePausedKey = 'queue_paused.v1';
 
+/// How long a session read as working must show its input prompt on a still
+/// screen before one queued message goes anyway.
+const Duration kPromptQuietPeriod = Duration(seconds: 20);
+
 /// What [SessionQueue.admit] decided for one message.
 sealed class QueueAdmission {
   const QueueAdmission();
@@ -84,6 +88,9 @@ class SessionQueue implements ResumeQueue {
     this.turnStartGrace = const Duration(seconds: 10),
     this.staleAfter = const Duration(minutes: 3),
     this.staleSweep = const Duration(seconds: 30),
+    this.promptMarkersOf,
+    this.promptQuietPeriod = kPromptQuietPeriod,
+    this.promptPoll = const Duration(seconds: 1),
     Duration quietPeriod = kTurnQuietPeriod,
     Duration quietPoll = const Duration(seconds: 1),
     DateTime Function()? now,
@@ -166,6 +173,23 @@ class SessionQueue implements ResumeQueue {
   /// never woke the queue must not leave a message sitting.
   final Duration staleAfter;
   final Duration staleSweep;
+
+  /// The glyphs row [String]'s agent starts its input prompt with (`❯`, `›`,
+  /// `>`), or null when unknown: then a session read as working is never
+  /// taken past its status.
+  final List<String>? Function(String sessionId)? promptMarkersOf;
+
+  /// How long a session read as working must show its input prompt on a
+  /// screen that does not move before one queued message goes anyway — a
+  /// status that missed the turn's end must not hold the queue for good.
+  final Duration promptQuietPeriod;
+  final Duration promptPoll;
+  final _promptScreens = <String, ({String text, DateTime since})>{};
+
+  /// Sessions the quiet-prompt fallback delivered to since their status last
+  /// moved: it goes once, never twice on the same reading.
+  final _promptSpent = <String>{};
+  Timer? _promptTimer;
 
   /// Delivers [text] as an immediate send would — set by `SessionInput`.
   /// Throws [DataRefused] when it cannot.
@@ -289,6 +313,7 @@ class SessionQueue implements ResumeQueue {
   Future<void> close() async {
     _closed = true;
     _sweep?.cancel();
+    _promptTimer?.cancel();
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }
@@ -669,6 +694,12 @@ class SessionQueue implements ResumeQueue {
   void _onStatus(HostedAgentStatus change) {
     final sessionId = change.sessionId;
     final kind = change.report.turnStatus;
+    // Only a reading that is no longer "working" lets the quiet-prompt
+    // fallback go again; a redraw of the same stuck reading does not.
+    if (kind != AgentActivityStatus.working) {
+      _promptSpent.remove(sessionId);
+      _promptScreens.remove(sessionId);
+    }
     if (_working(kind)) {
       if (_inFlight.contains(sessionId)) _sawWorking.add(sessionId);
       _awaitingTurn.remove(sessionId)?.cancel();
@@ -707,10 +738,68 @@ class SessionQueue implements ResumeQueue {
     // stopped moving.
     return switch (report?.turnStatus) {
       AgentActivityStatus.idle || AgentActivityStatus.failed => true,
-      AgentActivityStatus.working ||
+      AgentActivityStatus.working => _quietAtPrompt(sessionId),
       AgentActivityStatus.awaitingApproval => false,
       AgentActivityStatus.unknown || null => turns.quiet(sessionId),
     };
+  }
+
+  /// Whether [sessionId], read as working, has shown its input prompt on an
+  /// unmoving screen for [promptQuietPeriod] — once per reading. A working
+  /// agent's screen moves (a spinner, a timer); one that stopped was missed.
+  bool _quietAtPrompt(String sessionId) {
+    final markers = promptMarkersOf?.call(sessionId);
+    if (markers == null || markers.isEmpty) return false;
+    if (_promptSpent.contains(sessionId)) return false;
+    _watchPrompts();
+    final rows = status.liveScreenOf(sessionId)?.tailText(40);
+    if (rows == null || !_showsPrompt(rows, markers)) {
+      _promptScreens.remove(sessionId);
+      return false;
+    }
+    final text = rows.join('\n');
+    final now = _now();
+    final seen = _promptScreens[sessionId];
+    if (seen == null || seen.text != text) {
+      _promptScreens[sessionId] = (text: text, since: now);
+      return false;
+    }
+    if (now.difference(seen.since) < promptQuietPeriod) return false;
+    _promptSpent.add(sessionId);
+    _promptScreens.remove(sessionId);
+    log?.call(
+      'queue $sessionId: read as working, but its prompt has shown on a '
+      'still screen for ${promptQuietPeriod.inSeconds} s; one message goes',
+    );
+    return true;
+  }
+
+  /// An input prompt: a row starting with one of [markers]. A menu is an
+  /// open prompt and a typed draft a person's, both refused before this.
+  static bool _showsPrompt(List<String> rows, List<String> markers) =>
+      rows.any((row) {
+        final text = row.trimLeft();
+        return markers.any((m) => text == m || text.startsWith('$m '));
+      });
+
+  /// Reads again, every [promptPoll], each session with messages waiting
+  /// that is read as working and not yet taken past it.
+  void _watchPrompts() {
+    _promptTimer ??= Timer.periodic(promptPoll, (_) {
+      final watched = [
+        for (final sessionId in _withQueued)
+          if (!_promptSpent.contains(sessionId) &&
+              status.statusOf(sessionId)?.report.turnStatus ==
+                  AgentActivityStatus.working)
+            sessionId,
+      ];
+      if (_closed || watched.isEmpty) {
+        _promptTimer?.cancel();
+        _promptTimer = null;
+        return;
+      }
+      watched.forEach(_kick);
+    });
   }
 
   /// Whether nothing runs [sessionId] and [resumeStopped] would start it.

@@ -4,6 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../features/agents/application/acp_agent_icon_backfill.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
+import '../../features/agents/application/agent_mcp_entry_service.dart';
 import '../../features/agents/application/agent_skill_installation_service.dart';
 import '../../features/agents/application/agent_hook_endpoint_healer.dart';
 import '../../features/agents/application/agent_hook_sweep.dart';
@@ -309,6 +310,31 @@ class AppLifecycle {
       // skill in it, and the next launch sweeps again.
       _logger.warning('Agent skill installation failed.', error, stack);
     }
+  }
+
+  /// Keeps Karmashala's entry in agy's own MCP file, behind the same gate as
+  /// the skills. Unlike them it runs in a probe too: there it writes only
+  /// under the probe's own home, never the real one.
+  void installAgentMcpEntries({Future<void> Function()? afterFirstFrame}) {
+    unawaited(() async {
+      if (afterFirstFrame != null) {
+        try {
+          await afterFirstFrame();
+        } on Object catch (error, stack) {
+          _logger.warning(
+            'Waiting for the first frame before the agent MCP entry failed; '
+            'writing it now.',
+            error,
+            stack,
+          );
+        }
+      }
+      try {
+        await _container.read(agentMcpEntryServiceProvider).sweep();
+      } on Object catch (error, stack) {
+        _logger.warning('The agent MCP entry sweep failed.', error, stack);
+      }
+    }());
   }
 
   /// The last memory census printed, or null before the first sample — the

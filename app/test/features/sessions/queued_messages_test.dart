@@ -647,6 +647,26 @@ void main() {
     expect(find.text('run the unit tests'), findsOneWidget);
   });
 
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, every queued message offers Send now, warned '
+        'that it goes mid-turn', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'run the tests');
+
+      expect(find.byKey(const ValueKey('queued-send-now-q1')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('queued-send-now-note-q1')),
+        findsOneWidget,
+      );
+      expect(find.text('Goes at once, even mid-turn.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const ValueKey('queued-send-now-q1')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.sent.map((s) => s.text), ['run the tests']);
+    });
+  }
+
   testWidgets('Cancel takes it off the queue', (tester) async {
     await pump(tester, size: desktop);
     await send(tester, 'run the tests');
@@ -661,6 +681,78 @@ void main() {
       server.sessionWork.queueAsked.whereType<SessionQueueCancel>(),
       hasLength(1),
     );
+  });
+
+  /// A message the session "lead" queued for acp-1 with session_send.
+  void peerQueued(String id, String text) {
+    final queue = server.sessionWork.queues['acp-1'] ??= [];
+    queue.add(
+      QueuedMessage(
+        id: id,
+        sessionId: 'acp-1',
+        seq: queue.length + 1,
+        text: text,
+        state: QueuedMessageState.queued,
+        origin: QueuedMessageOrigin.mcp,
+        originId: 'lead',
+        createdAt: testTime,
+        updatedAt: testTime,
+      ),
+    );
+    server.sessionWork.holdQueue('acp-1', null);
+  }
+
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, a message another session queued says who sent '
+        'it, and Send now delivers it past the queue', (tester) async {
+      db.server.sessionRows.insert(
+        session(
+          id: 'lead',
+          title: 'Orchestrator',
+          status: SessionStatus.running,
+        ),
+      );
+      await pump(tester, size: size);
+      peerQueued('p1', 'from the parent');
+      peerQueued('p2', 'from the parent, again');
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('queued-from-p1')), findsOneWidget);
+      expect(find.text('From "Orchestrator"'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
+
+      final sendNow = find.byKey(const ValueKey('queued-send-now-p2'));
+      await tester.ensureVisible(sendNow);
+      await tester.pumpAndSettle();
+      await tester.tap(sendNow);
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.sent.map((s) => s.text), [
+        'from the parent, again',
+      ]);
+      expect(
+        server.sessionWork.queueAsked
+            .whereType<SessionQueueSendNow>()
+            .single
+            .id,
+        'p2',
+      );
+    });
+  }
+
+  testWidgets('a peer message the person cancels is never delivered', (
+    tester,
+  ) async {
+    await pump(tester, size: desktop);
+    peerQueued('p1', 'from the parent');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('queued-cancel-p1')));
+    await tester.pumpAndSettle();
+    server.sessionWork.deliverHead('acp-1');
+    await tester.pumpAndSettle();
+
+    expect(server.sessionWork.sent, isEmpty);
+    expect(find.text('from the parent'), findsNothing);
   });
 
   testWidgets('a delivered message leaves the queue; the next moves up', (

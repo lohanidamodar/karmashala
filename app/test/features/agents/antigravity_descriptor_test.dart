@@ -177,23 +177,26 @@ void main() {
   });
 
   group('what is still unverified stays unoffered', () {
-    test('status comes from hooks, and only from hooks', () {
-      // There is still no parseable state file and no watched TUI. What
-      // changed is that the CLI turned out to have a hook system after all —
-      // documented in a skill it ships rather than in `--help`, and proven by
-      // a live `agy` 1.1.23 run whose callbacks reached a local server.
+    test('status comes from hooks; the screen for its menus and idle', () {
+      // No parseable state file. Hooks are documented in a skill the CLI
+      // ships, and proven by a live `agy` 1.1.23 run. The screen reads what
+      // no hook announces — its menus — and its idle footer, the fallback
+      // once a hook goes stale; never working, whose footer a menu shares.
       expect(descriptor.statusStrategy, AgentStatusStrategy.hooks);
-      expect(descriptor.grid.isEmpty, isTrue);
+      expect(descriptor.grid.awaitingApproval, isNotEmpty);
+      expect(descriptor.grid.working, isEmpty);
+      expect(descriptor.grid.idle, isNotEmpty);
       expect(descriptor.stateFile, isNull);
       expect(descriptor.hooks, isNotNull);
     });
 
-    test('no approval keys, because the file that named them is gone', () {
-      // The 1.0.13 build wrote a keybindings.json binding `confirm.yes` to `y`
-      // and `confirm.no` to `n`. 1.1.22 ships no such file, so those keys
-      // describe a version nobody runs — and pressing a guessed key into a TUI
-      // is the one failure worse than sending the user to the terminal.
-      expect(descriptor.approval.isEmpty, isTrue);
+    test('no approve key; deny is the Esc its question names', () {
+      // The 1.0.13 keybindings.json (`y`/`n`) describes a version nobody
+      // runs: every prompt is a menu answered by option. The one key is the
+      // Esc agy's ask_question footer names ("esc Skip").
+      expect(descriptor.approval.approve, isNull);
+      expect(descriptor.approval.deny?.keys, '\x1b');
+      expect(descriptor.menus!.cancelDeclines, isNotEmpty);
     });
 
     test('concurrent resume is not claimed', () {

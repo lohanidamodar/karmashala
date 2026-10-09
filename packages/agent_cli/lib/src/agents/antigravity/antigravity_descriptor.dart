@@ -3,6 +3,7 @@ import '../domain/agent_descriptor.dart';
 import '../domain/agent_mcp_config.dart';
 import '../domain/agent_plan.dart';
 import '../domain/agent_permission_support.dart';
+import '../domain/agent_screen_menu.dart';
 import '../domain/agent_skill_support.dart';
 import '../domain/agent_status.dart';
 
@@ -311,6 +312,10 @@ const antigravityDescriptor = AgentDescriptor(
     // fresh instead of failing. A marker that never matches costs an
     // explanation; one that matches a live session reports it as dead.
     allowsConcurrentResume: false,
+    // `antigravity-trust-prompt.raw` (agy 1.3.2; 1.2.16 words it the same).
+    firstRunPrompt: AgentFirstRunPromptRules(
+      markers: [GridMatcher('Do you trust the contents of this project')],
+    ),
     // `fork` stays unsupported, now on evidence rather than on the default:
     // `agy --help` lists every subcommand it has (agent, changelog, help,
     // install, mcp, mic-serve, models, plugin, update) and none of them forks.
@@ -485,7 +490,17 @@ const antigravityDescriptor = AgentDescriptor(
   // is unreadable, so there is no transcript to show, quote into a handoff
   // packet, or seed a resume from. The adapter's `AgentTranscripts` says
   // `buildsChatView: false`, so declaring the store turns none of that on.
-  store: AgentStoreSpec(homeDirectoryName: '.gemini/antigravity-cli'),
+  store: AgentStoreSpec(
+    homeDirectoryName: '.gemini/antigravity-cli',
+    // Answering "Yes, I trust this folder" in /tmp/r70-agytrust-… appended
+    // that path to `trustedWorkspaces` in `settings.json`, and nothing else
+    // in the home named it (agy 1.3.2 in WSL, 2026-10-09).
+    folderTrust: AgentFolderTrustSpec(
+      format: AgentFolderTrustFormat.jsonPathList,
+      settingsFile: 'settings.json',
+      listKey: 'trustedWorkspaces',
+    ),
+  ),
   // **Antigravity has hooks.** "Nothing can observe what a session is doing"
   // stood here until a live run disproved it, and the reason it survived so
   // long is that the CLI's `--help` says nothing about them: they are
@@ -544,10 +559,8 @@ const antigravityDescriptor = AgentDescriptor(
     // finest-grained signal available and they are left undeclared anyway: a
     // hook that changes what the agent is allowed to do is not a status hook.
     //
-    // What is lost with them is `awaitingApproval`. Antigravity announces a
-    // pending permission nowhere this app can hear, so that state stays
-    // unreachable for this agent — see `grid`, which is empty for the same
-    // reason.
+    // What is lost with them is a hook for `awaitingApproval`: only `grid`
+    // below reads a prompt, off the screen.
     // **`Stop` is not the same thing as "finished".** Its payload carries a
     // `terminationReason`, and while this mapped `Stop` to `idle`
     // unconditionally, an `agy` run that died on an error, ran out of
@@ -629,12 +642,44 @@ const antigravityDescriptor = AgentDescriptor(
     },
   ),
   statusStrategy: AgentStatusStrategy.hooks,
-  // `approval` is left empty on purpose. The 1.0.13 build wrote a
-  // `keybindings.json` binding `confirm.yes` to `y` and `confirm.no` to `n`,
-  // which looked like the best-sourced approval keys in this file — but 1.1.23
-  // ships no such file, so those keys describe a version nobody is running.
-  // Pressing a guessed key into a TUI is the one failure worse than sending the
-  // user to the terminal, so nothing is declared.
+  // Read in a ConPTY through WSL on agy 1.3.2 (2026-10-09). Every menu it
+  // asks with — folder trust (`antigravity-trust-prompt.raw`; the owner saw
+  // it on 1.2.16) and a tool permission (`antigravity-permission-prompt.raw`)
+  // — ends `↑/↓ Navigate · …`, and no hook announces either. Idle, its footer
+  // is `? for shortcuts`, after a turn and after an Esc ("⎿ Interrupted",
+  // `antigravity-interrupted.raw`); working it is `esc to cancel`, which a
+  // permission menu also ends with, so no working marker is declared: the
+  // hooks say working. agy draws its footer from the first column; Claude
+  // Code's and Codex's `? for shortcuts` are indented or follow a mode.
+  grid: AgentGridRules(
+    awaitingApproval: [GridMatcher('↑/↓ Navigate ·')],
+    idle: [GridMatcher('? for shortcuts', atLineStart: true)],
+  ),
+  // Approve and deny pick the option by its words: `Yes, I trust this
+  // folder` / `No, exit`, `1. Yes, run command` / `4. No, cancel`, and the
+  // binary's other permission menus ("Allow creation of this file?", "Allow
+  // access to this URL?", "Allow calling this tool?", "Do you want to
+  // proceed?" / "Yes, accept this change") the same way. Enter on `No, exit`
+  // exits and trusts nothing (measured). Its ask_question menu
+  // (`antigravity-ask-question.raw`: "Question 1/1: …", `› 1. Red`, `3.
+  // Write-in...`, footer `enter Select · esc Skip`) has no yes or no: it is
+  // answered by option, and declined by its own Esc, which skips it.
+  menus: AgentMenuSupport(
+    markers: ['>'],
+    affirmative: [r'^Yes\b'],
+    negative: [r'^No\b'],
+    cancelDeclines: ['Question '],
+  ),
+  // Only the Esc a question names; every other prompt is a menu answered by
+  // its option above. The 1.0.13 `keybindings.json` keys (`y`/`n`) describe
+  // a version nobody runs.
+  approval: AgentApprovalRules(
+    deny: AgentApprovalKey(
+      keys: '\x1b',
+      label: 'Skip',
+      effect: 'Presses Esc, which skips the question ("esc Skip").',
+    ),
+  ),
   // Nothing is known. `agy` writes protobuf into a store whose schema is not
   // published and which this app reads none of, so there is no evidence either
   // way — and §19's rule is that an unknown is never reported as a zero, nor
@@ -676,9 +721,20 @@ const antigravityDescriptor = AgentDescriptor(
         'agy-customizations skill names ~/.gemini/config/ as the global '
         'discovery root. Read 2026-09-09.',
   ),
-  mcpConfig: AgentMcpConfigSpec.undeclared(
-    refusal:
-        'Nobody has established where agy reads its own MCP servers, so what '
-        'it would be given has not been read.',
+  // Store-home-relative and it walks out: the store is
+  // `~/.gemini/antigravity-cli`, the customization root `~/.gemini/config`.
+  mcpConfig: AgentMcpConfigSpec.json(
+    projectFileName: '',
+    projectServersPath: [],
+    userFileName: '../config/mcp_config.json',
+    userServersPath: ['mcpServers'],
+    installsKarmashalaEntry: true,
+    evidence:
+        'agy 1.3.2: the bundled agy-customizations skill, '
+        'docs/mcp_servers.md, names ~/.gemini/config/mcp_config.json as the '
+        'global file, `mcpServers` of `command`/`args`/`env` stdio entries. '
+        'Seen 2026-10-09 under a throwaway HOME: agy spawns them before '
+        'sign-in and they inherit its environment, KARMASHALA_SESSION_ID '
+        'included.',
   ),
 );

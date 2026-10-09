@@ -477,16 +477,11 @@ Future<int> _serve(
   // Every client's notes, todos, preferences, workspace and sessions: the
   // desktop app reads and writes them here, a phone's new project is written
   // here, and every row this server writes itself is told through it. The
-  // lifecycle status of a session it runs is its own to record.
-  final data = DataService(
-    database,
-    runsSession: (sessionId) {
-      final id = hostSessionIdOf(sessionId);
-      if (registry.findProcess(id) != null) return true;
-      final onBox = boxSessions?.byId(id);
-      return onBox != null && !onBox.lifecycle.hasEnded;
-    },
-  )..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
+  // lifecycle status of a session it runs is its own to record. Whether it
+  // runs is the answer `session_end` reads too: the registry keeps an ended
+  // process a while, and that is no agent running.
+  final data = DataService(database, runsSession: status.holds)
+    ..ensureEnvironment(localHostEnvironment(DateTime.now().toUtc()));
   // The model each session's agent last said it runs: what every client
   // and every agent tool shows, never a setting.
   final activeModels = SessionActiveModels(
@@ -742,9 +737,7 @@ Future<int> _serve(
     reach,
     onRecorded: agentWork.imports.checkoutsRecorded,
   );
-  final liveness = SessionLiveness(
-    (id) => registry.findProcess(hostSessionIdOf(id)) != null,
-  );
+  final liveness = SessionLiveness(status.holds);
   final worktrees = daemonWorktrees(
     database: database,
     registry: registry,
@@ -994,7 +987,7 @@ Future<int> _serve(
     // A project added or rescanned by a client imports the CLI history of
     // its new checkouts, as an agent's does.
     folders: folders,
-    hostsSession: (id) => registry.findProcess(hostSessionIdOf(id)) != null,
+    hostsSession: status.holds,
     livePaneDirectories: () => [
       for (final pane in sessionSync.panes.all)
         if (pane.live) ?pane.workingDirectory,
@@ -1393,6 +1386,8 @@ Future<int> _serve(
     dao: SessionQueueDao(database),
     status: prompts.status,
     turns: turnSettlement,
+    // A status stuck on working, over a still screen at the input prompt.
+    promptMarkersOf: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
     // A person's pause outlives a restart: it is theirs to lift.
     readPaused: () => database.readMetadata(kQueuePausedKey),
     writePaused: (value) => database.writeMetadata(kQueuePausedKey, value),
@@ -1543,6 +1538,10 @@ Future<int> _serve(
         sessionInput.deliverNow(sessionId, text, leadIn: leadIn),
     leadInFor: (sessionId) =>
         prompts.agentOf(sessionId)?.terminal.typedOpeningLeadIn,
+    // So an opening left in the composer with no turn started is sent.
+    markersOf: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
+    placeholderOf: (sessionId) =>
+        prompts.agentOf(sessionId)?.terminal.pastePlaceholder,
     queue: sessionQueue,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
@@ -1826,6 +1825,15 @@ Future<int> _serve(
   )..start();
   sessionQueue.restate = delegations.restate;
   sessionInput.interrupted = delegations.stopped;
+  // A child started again after its process ended is followed again.
+  final delegationStarts = server.lifecycle.events.listen((event) {
+    const prefix = 'karmashala_';
+    if (event.kind != LifecycleEventKind.started ||
+        !event.sessionId.startsWith(prefix)) {
+      return;
+    }
+    delegations.started(event.sessionId.substring(prefix.length));
+  });
   // A person's Detach and a parent's `delegation_detach`: one path, which
   // leaves a line in the parent's thread.
   final detacher = SessionDetacher(
@@ -2213,6 +2221,7 @@ Future<int> _serve(
   storeDesk.close();
   await attention.close();
   await queueEnds.cancel();
+  await delegationStarts.cancel();
   await delegations.close();
   handoffSweep.cancel();
   toolImageSweep.cancel();

@@ -202,6 +202,41 @@ void main() {
       },
     );
 
+    test(
+      'at Codex 0.160\'s folder-trust menu the session needs you: the '
+      'send is refused and nothing is typed, so the agent is not quit',
+      () async {
+        // Typed into that menu, a `q` or a `2` in the message quits Codex
+        // (measured on 0.160.0), which is how an agent-started session there
+        // ended within seconds of a send.
+        database.execute(
+          "UPDATE agent_installations SET agent_kind = ? WHERE id = 'a1';",
+          [AgentIds.codex],
+        );
+        final agent = await runAgent('codex-trust-prompt-0.160');
+        final report = status.statusOf('s1')!.report;
+        expect(report.status, AgentActivityStatus.awaitingApproval);
+        expect(report.hasOpenPrompt, isTrue);
+
+        await expectLater(
+          tools.call('session_send', {
+            'sessionId': 's1',
+            'text': 'quick review, 2 files',
+          }, 'caller'),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('approval prompt open'),
+            ),
+          ),
+        );
+        expect(agent.writes, isEmpty);
+        expect(agent.signals, isEmpty);
+        expect(status.holds('s1'), isTrue);
+      },
+    );
+
     test('stops at the budget: twenty relays in ten minutes', () async {
       await runAgent('claude-code-tui');
       for (var i = 0; i < relayBudget; i++) {
@@ -414,6 +449,130 @@ void main() {
       expect(answer['screen'], isNull);
       expect(answer['turnsSource'], startsWith('not recorded'));
     });
+
+    test('a launch that died at once still shows what it printed, and its '
+        'exit code', () async {
+      // Codex 0.160's refusal of `--add-dir` under a read-only sandbox,
+      // as it printed it in a ConPTY before exiting 1.
+      final agent = await runAgent('claude-code-tui');
+      agent
+        ..emit(
+          utf8.encode(
+            '\x1b[2J\x1b[HError adding directories: Ignoring --add-dir '
+            r'(C:\data) because the effective permissions do not allow '
+            'additional writable roots.\r\n',
+          ),
+        )
+        ..finish(1);
+      await pumpEventQueue();
+
+      final answer = await call('session_transcript', {'sessionId': 's1'});
+      expect(answer['live'], isFalse);
+      expect(
+        (answer['screen']! as List).join('\n'),
+        contains('Error adding directories'),
+      );
+      expect(
+        answer['screenSource'],
+        'the pane as it stood when its process exited 1',
+      );
+    });
+  });
+
+  group('session_answer option: a parent picks a menu row in its child', () {
+    late FakePtyHandle agent;
+
+    setUp(() async {
+      database.execute(
+        "UPDATE agent_installations SET agent_kind = ? WHERE id = 'a1';",
+        [AgentIds.codex],
+      );
+      agent = await runAgent('codex-trust-prompt-0.160');
+    });
+
+    void parentOf(String child, String parent) => database.execute(
+      'UPDATE sessions SET parent_session_id = ? WHERE id = ?;',
+      [parent, child],
+    );
+
+    test('the transcript lists the rows the option indexes', () async {
+      final answer = await call('session_transcript', {'sessionId': 's1'});
+      expect(answer['menu'], {
+        'prompt': contains(startsWith('Trust this folder?')),
+        'options': ['Trust and continue', 'Quit'],
+        'highlighted': 0,
+      });
+    });
+
+    test('in its own child: the row is chosen, by the caller', () async {
+      parentOf('s1', 'caller');
+      final answer = await call('session_answer', {
+        'sessionId': 's1',
+        'option': 0,
+      }, caller: 'caller');
+      expect(answer['answered'], 'Trust and continue');
+      expect(typedInto(agent), '\r');
+    });
+
+    test('in a grandchild too', () async {
+      insertSession('mid', title: 'Middle');
+      parentOf('mid', 'caller');
+      parentOf('s1', 'mid');
+      final answer = await call('session_answer', {
+        'sessionId': 's1',
+        'option': 0,
+      }, caller: 'caller');
+      expect(answer['answered'], 'Trust and continue');
+    });
+
+    test('refused, nothing pressed, in a session the caller did not start, '
+        'or with no calling session', () async {
+      for (final caller in ['caller', null]) {
+        await expectLater(
+          tools.call('session_answer', {
+            'sessionId': 's1',
+            'option': 1,
+          }, caller),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('is not a session you started'),
+            ),
+          ),
+        );
+      }
+      expect(agent.writes, isEmpty);
+    });
+
+    test(
+      'a row past the end, or option beside a decision, is refused',
+      () async {
+        parentOf('s1', 'caller');
+        await expectLater(
+          tools.call('session_answer', {
+            'sessionId': 's1',
+            'option': 2,
+          }, 'caller'),
+          throwsA(
+            isA<ArgumentError>().having(
+              (e) => e.message,
+              'message',
+              contains('0 "Trust and continue", 1 "Quit"'),
+            ),
+          ),
+        );
+        await expectLater(
+          tools.call('session_answer', {
+            'sessionId': 's1',
+            'option': 0,
+            'decision': 'approve',
+          }, 'caller'),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(agent.writes, isEmpty);
+      },
+    );
   });
 
   group('session_end', () {
@@ -455,6 +614,9 @@ void main() {
     });
 
     test('with no app, nothing running is said, never a success', () async {
+      database.execute(
+        "UPDATE sessions SET status = 'completed' WHERE id = 's1';",
+      );
       await expectLater(
         tools.call('session_end', {'sessionId': 's1'}, null),
         throwsA(

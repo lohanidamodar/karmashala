@@ -11,7 +11,16 @@ class SessionQueueDao {
   static const _open = "('queued', 'delivering', 'failed')";
   static const _waiting = "('queued', 'delivering')";
 
-  /// Appends a message after every other of [sessionId]'s.
+  /// The origins that are the person, not another session or a schedule.
+  static const personOrigins = {
+    QueuedMessageOrigin.app,
+    QueuedMessageOrigin.device,
+    QueuedMessageOrigin.companion,
+  };
+
+  /// Queues a message after every other of [sessionId]'s — except that the
+  /// person's own goes before what other sessions queued, behind only the
+  /// person's earlier messages.
   QueuedMessage enqueue({
     required String id,
     required String sessionId,
@@ -21,15 +30,9 @@ class SessionQueueDao {
     String? originId,
     String? requestId,
   }) => _db.transaction(() {
-    final seq =
-        (_db.query(
-                  'SELECT MAX(seq) AS seq FROM session_queued_messages '
-                  'WHERE session_id = ?;',
-                  [sessionId],
-                ).first['seq']
-                as int? ??
-            0) +
-        1;
+    final seq = personOrigins.contains(origin)
+        ? _personSlot(sessionId)
+        : _maxSeq(sessionId) + 1;
     final message = QueuedMessage(
       id: id,
       sessionId: sessionId,
@@ -61,6 +64,54 @@ class SessionQueueDao {
     );
     return message;
   });
+
+  int _maxSeq(String sessionId) =>
+      _db.query(
+            'SELECT MAX(seq) AS seq FROM session_queued_messages '
+            'WHERE session_id = ?;',
+            [sessionId],
+          ).first['seq']
+          as int? ??
+      0;
+
+  /// The seq a person's new message takes: just before the first message
+  /// another session queued after the person's last queued one, with that
+  /// one and every later row moved down by one; else the end.
+  int _personSlot(String sessionId) {
+    final people = [for (final o in personOrigins) o.name];
+    final marks = List.filled(people.length, '?').join(', ');
+    final lastOwn =
+        _db.query(
+              'SELECT MAX(seq) AS seq FROM session_queued_messages '
+              "WHERE session_id = ? AND state = 'queued' "
+              'AND origin IN ($marks);',
+              [sessionId, ...people],
+            ).first['seq']
+            as int? ??
+        0;
+    final firstPeer =
+        _db.query(
+              'SELECT MIN(seq) AS seq FROM session_queued_messages '
+              "WHERE session_id = ? AND state = 'queued' AND seq > ? "
+              'AND origin NOT IN ($marks);',
+              [sessionId, lastOwn, ...people],
+            ).first['seq']
+            as int?;
+    if (firstPeer == null) return _maxSeq(sessionId) + 1;
+    // In two steps, so no row passes through another's seq on the way.
+    const away = 1 << 30;
+    _db.execute(
+      'UPDATE session_queued_messages SET seq = seq + ? '
+      'WHERE session_id = ? AND seq >= ?;',
+      [away, sessionId, firstPeer],
+    );
+    _db.execute(
+      'UPDATE session_queued_messages SET seq = seq - ? '
+      'WHERE session_id = ? AND seq >= ?;',
+      [away - 1, sessionId, firstPeer + away],
+    );
+    return firstPeer;
+  }
 
   QueuedMessage? getById(String id) {
     final rows = _db.query(

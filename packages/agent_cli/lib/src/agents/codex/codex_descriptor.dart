@@ -242,9 +242,16 @@ const codexDescriptor = AgentDescriptor(
     // so it stands left of `resume` like the permission flags.
     extraDirectory: AgentExtraDirectorySupport.flag(
       '--add-dir',
+      // A read-only sandbox refuses it and exits 1 before drawing anything.
+      refusedUnder: {'sandbox': 'read-only'},
       evidence:
           'codex 0.153.4 --help lists --add-dir among its top-level options '
-          '(the list above), one directory per flag',
+          '(the list above), one directory per flag. codex 0.160.0 with '
+          '--sandbox read-only --add-dir <dir> in a ConPTY: "Error adding '
+          'directories: Ignoring --add-dir (<dir>) because the effective '
+          'permissions do not allow additional writable roots. Switch to '
+          'workspace-write or danger-full-access to allow them.", exit 1 '
+          '(2026-10-09)',
     ),
     // Left at the default (false): Codex enforces **one writer per thread**.
     // The lock is real and inspectable — a live Codex holds an flock on
@@ -266,7 +273,7 @@ const codexDescriptor = AgentDescriptor(
     // 2. No, quit · Press enter to continue". `Press enter to continue` alone
     // is not it — the update offer shares that footer. 0.160.0 words it
     // "Trust this folder? Codex can read, edit, and run files here, …" with
-    // "Trust and continue" (codex.exe strings, 2026-10-08).
+    // "Trust and continue", captured in `codex-trust-prompt-0.160.raw`.
     firstRunPrompt: AgentFirstRunPromptRules(
       markers: [
         GridMatcher('Do you trust the contents of this directory'),
@@ -676,8 +683,17 @@ const codexDescriptor = AgentDescriptor(
   // could tell apart from a busy one. That is not a gap to paper over — the
   // rollout file already answers idle, and an undeclared state resolves to
   // `unknown` rather than to a guess.
+  // 0.160.0's startup menus (folder trust, the update offer) end
+  // `enter continue · esc quit` / `· esc skip` instead, read in a real ConPTY
+  // (`codex-trust-prompt-0.160.raw`, 2026-10-09), and its command and edit
+  // approvals `Press enter to confirm or esc to cancel`
+  // (`codex-exec-approval-0.160.raw`, `codex-edit-approval-0.160.raw`).
   grid: AgentGridRules(
-    awaitingApproval: [GridMatcher('Press enter to continue')],
+    awaitingApproval: [
+      GridMatcher('Press enter to continue'),
+      GridMatcher('enter continue · esc'),
+      GridMatcher('Press enter to confirm or esc to cancel'),
+    ],
     working: [GridMatcher('esc to interrupt')],
     // `• Working (3s • esc to interrupt)`, rendered from `codex-tui.raw`.
     workingLine: WorkingLineRule(
@@ -700,14 +716,15 @@ const codexDescriptor = AgentDescriptor(
   // highlighted row, ↓/↑ move it, Enter confirms it.
   //
   // Approve and deny on a menu pick an option by its words: directory trust
-  // is `› 1. Yes, continue` / `2. No, quit`. The update offer (`Update now` /
-  // `Skip` / `Skip until next version`) matches neither on purpose, so approve
-  // refuses rather than running an updater. No cancel is declared safe:
-  // Codex's prompts name no way to decline but their `No` row.
+  // is `› 1. Yes, continue` / `2. No, quit`, and on 0.160.0 `› 1. Trust and
+  // continue` / `2. Quit` (`codex-trust-prompt-0.160.raw`). The update offer
+  // (`Update now` / `Skip` / `Skip until next version`) matches neither on
+  // purpose, so approve refuses rather than running an updater. No cancel is
+  // declared safe: on 0.160.0 Esc, `q` and `2` all quit at folder trust.
   menus: AgentMenuSupport(
     markers: ['›'],
-    affirmative: [r'^Yes\b'],
-    negative: [r'^No\b'],
+    affirmative: [r'^Yes\b', r'^Trust and continue$'],
+    negative: [r'^No\b', r'^Quit$'],
   ),
   // **Codex has images, and not through this door.** `codex --help` and
   // `codex exec --help` (codex-cli 0.153.4) both carry `-i, --image <FILE>...

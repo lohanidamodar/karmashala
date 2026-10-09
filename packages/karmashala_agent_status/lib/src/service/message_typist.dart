@@ -22,7 +22,14 @@ class SessionMessageTypist {
     this.sendPatience = const Duration(seconds: 2),
     this.presses = 3,
     this.leadInGap = const Duration(milliseconds: 200),
+    this.settle = const Duration(milliseconds: 300),
   });
+
+  /// How long the screen must stay unchanged, once the words show, before
+  /// Return: a long message reaches the agent in several reads, and a Return
+  /// among them sends its start alone and leaves the rest as a second
+  /// message — the tail is all the recipient sees as the latest.
+  final Duration settle;
 
   /// How long after a lead-in the message is typed, so the two reach the
   /// agent in separate reads.
@@ -117,6 +124,7 @@ class SessionMessageTypist {
         composerHolds(rows, markers!, probe) ||
         (placeholder != null && composerHolds(rows, markers, placeholder));
     final typed = markers != null && await _until(sessionId, holds);
+    if (typed) await _still(sessionId);
     if (!press(sessionId, _enter)) return MessageDelivery.none;
     if (!typed) return MessageDelivery.unverified;
 
@@ -136,6 +144,23 @@ class SessionMessageTypist {
         );
       }
       press(sessionId, _enter);
+    }
+  }
+
+  /// Waits until the pane's rows have not changed for [settle], or
+  /// [typedPatience] has passed.
+  Future<void> _still(String sessionId) async {
+    final deadline = DateTime.now().add(typedPatience);
+    var last = (readScreen(sessionId) ?? const []).join('\n');
+    var since = DateTime.now();
+    while (DateTime.now().difference(since) < settle) {
+      if (DateTime.now().isAfter(deadline)) return;
+      await Future<void>.delayed(poll);
+      final now = (readScreen(sessionId) ?? const []).join('\n');
+      if (now != last) {
+        last = now;
+        since = DateTime.now();
+      }
     }
   }
 

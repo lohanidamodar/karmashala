@@ -44,8 +44,7 @@ void main() {
     expect(dao.sessionsWithQueued(), ['s1']);
   });
 
-  test('waiting from some origins counts only theirs, and any on its way',
-      () {
+  test('waiting from some origins counts only theirs, and any on its way', () {
     const person = {QueuedMessageOrigin.app, QueuedMessageOrigin.device};
     add('q1', 'from an agent');
     expect(dao.hasWaitingFrom('s1', person), isFalse);
@@ -176,5 +175,73 @@ void main() {
     expect(failed.error, 'stopped');
     expect(dao.head('s1')?.id, 'q2');
     expect(dao.open('s1').map((m) => m.id), ['q1', 'q2']);
+  });
+  group('a person\'s message goes before what other sessions queued', () {
+    QueuedMessage person(String id) => dao.enqueue(
+      id: id,
+      sessionId: 's1',
+      text: id,
+      origin: QueuedMessageOrigin.app,
+      now: t0,
+    );
+
+    test('it jumps ahead of queued peer messages', () {
+      add('p1', 'from the parent');
+      add('p2', 'from the parent again');
+      final mine = person('me1');
+      expect(dao.head('s1')?.id, 'me1');
+      expect(dao.open('s1').map((m) => m.id), ['me1', 'p1', 'p2']);
+      expect(dao.positionOf('s1', mine.seq), 1);
+    });
+
+    test("the person's own order is kept, peers after them all", () {
+      add('p1', 'peer');
+      person('me1');
+      add('p2', 'peer, later');
+      person('me2');
+      expect(dao.open('s1').map((m) => m.id), ['me1', 'me2', 'p1', 'p2']);
+    });
+
+    test('a phone is the person too; a message on its way is not passed', () {
+      add('p1', 'peer');
+      dao.transition(
+        'p1',
+        from: QueuedMessageState.queued,
+        to: QueuedMessageState.delivering,
+        now: t0,
+      );
+      add('p2', 'peer');
+      dao.enqueue(
+        id: 'phone',
+        sessionId: 's1',
+        text: 'from the phone',
+        origin: QueuedMessageOrigin.device,
+        now: t0,
+      );
+      expect(dao.open('s1').map((m) => m.id), ['p1', 'phone', 'p2']);
+    });
+
+    test('a cancelled peer message never comes up again', () {
+      add('p1', 'peer');
+      person('me1');
+      expect(
+        dao.transition(
+          'p1',
+          from: QueuedMessageState.queued,
+          to: QueuedMessageState.cancelled,
+          now: t0,
+          cancelledBy: 'the person',
+        ),
+        isTrue,
+      );
+      expect(dao.head('s1')?.id, 'me1');
+      dao.transition(
+        'me1',
+        from: QueuedMessageState.queued,
+        to: QueuedMessageState.delivered,
+        now: t0,
+      );
+      expect(dao.head('s1'), isNull);
+    });
   });
 }
