@@ -224,19 +224,7 @@ List<StoreChange> storeChanges(
 ];
 
 /// `iOS`, `macOS`, `Android`: read off the App Store tracks [snapshot] has.
-String storePlatform(StoreAppSnapshot snapshot) {
-  if (snapshot.app.store == StoreKind.googlePlay) return 'Android';
-  final tracks = {
-    for (final release in snapshot.releases.valueOrNull ?? const [])
-      release.track,
-  };
-  if (tracks.contains('App Store') || tracks.isEmpty) return 'iOS';
-  for (final track in tracks) {
-    final match = RegExp(r'^App Store \((.+)\)$').firstMatch(track);
-    if (match != null) return match.group(1)!;
-  }
-  return 'iOS';
-}
+String storePlatform(StoreAppSnapshot snapshot) => snapshot.platform;
 
 bool _testTrack(StoreKind store, String track) => store == StoreKind.appStore
     ? track == kTestFlightTrack

@@ -40,6 +40,10 @@ class _Stores extends StoresController {
 }
 
 const _phone = Size(390, 844);
+
+/// [finder] within the app cards: the summary above them names each app too.
+Finder _inCards(Finder finder) =>
+    find.descendant(of: find.byType(StoreGroupCard), matching: finder);
 const _desktop = Size(1440, 900);
 
 void main() {
@@ -161,13 +165,13 @@ void main() {
       expect(find.byType(StoreGroupCard), findsNWidgets(2));
       // In review sorts before the settled app, under its own heading.
       expect(
-        tester.getTopLeft(find.text('Notes')).dy,
-        lessThanOrEqualTo(tester.getTopLeft(find.text('Tasks')).dy),
+        tester.getTopLeft(_inCards(find.text('Notes'))).dy,
+        lessThanOrEqualTo(tester.getTopLeft(_inCards(find.text('Tasks'))).dy),
       );
       expect(find.text('IN PROGRESS · 1'), findsOneWidget);
-      expect(find.text('2.3.0'), findsOneWidget);
+      expect(_inCards(find.text('2.3.0')), findsOneWidget);
       expect(find.text('2.4.0 · In review'), findsOneWidget);
-      expect(find.text('4.6'), findsOneWidget);
+      expect(_inCards(find.text('4.6')), findsOneWidget);
       // A rating the store did not give is said with its reason, not a zero.
       expect(find.text('Rating unavailable'), findsOneWidget);
       expect(
@@ -225,7 +229,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('Reading…'), findsOneWidget);
       // In place of the numbers being read, not beside them.
-      expect(find.text('4.6'), findsNothing);
+      expect(_inCards(find.text('4.6')), findsNothing);
       expect(find.text('Queued'), findsOneWidget);
       expect(find.text('The App Store did not answer.'), findsOneWidget);
 
@@ -308,7 +312,7 @@ void main() {
   ) async {
     await pump(tester, size: _desktop, state: populated());
 
-    await tester.tap(find.text('Notes'));
+    await tester.tap(_inCards(find.text('Notes')));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
@@ -324,7 +328,7 @@ void main() {
   ) async {
     await pump(tester, size: _phone, state: populated());
 
-    await tester.tap(find.text('Notes'));
+    await tester.tap(_inCards(find.text('Notes')));
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);

@@ -31,6 +31,7 @@ export 'src/session_values.dart';
 export 'src/session_work_values.dart';
 export 'src/ssh_values.dart';
 export 'src/store_change_values.dart';
+export 'src/store_history_values.dart';
 export 'src/store_values.dart';
 export 'src/subagent_values.dart';
 export 'src/terminal_values.dart';
