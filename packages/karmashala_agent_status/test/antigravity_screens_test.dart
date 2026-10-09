@@ -66,6 +66,30 @@ void main() {
     });
   });
 
+  group('ask_question (antigravity-ask-question.raw)', () {
+    test('needs you, as a menu answered by option, skipped by Esc', () {
+      final screen = rows('antigravity-ask-question');
+      hook('PreInvocation');
+      clock.now = clock.now.add(const Duration(seconds: 1));
+      final report = keeper.screen('row-1', screen)!.report;
+      expect(report.status, AgentActivityStatus.awaitingApproval);
+      expect(report.hasOpenPrompt, isTrue);
+
+      final menu = readScreenMenu(screen, agy.menus!)!;
+      expect(menu.options, ['Red', 'Blue', 'Write-in...']);
+      expect(menu.prompt.last, 'Question 1/1: Which color?');
+      expect(agy.menus!.affirmativeIn(menu), isNull);
+      expect(agy.menus!.cancelDeclinesIn(menu), isTrue);
+      // A permission menu is never declined by Esc.
+      expect(
+        agy.menus!.cancelDeclinesIn(
+          readScreenMenu(rows('antigravity-permission-prompt'), agy.menus!)!,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('an Esc mid-turn (antigravity-interrupted.raw)', () {
     test('with no hook the screen reads idle, waiting for input', () {
       final report = keeper.screen('row-1', rows('antigravity-interrupted'))!;

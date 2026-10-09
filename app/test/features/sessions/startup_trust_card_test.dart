@@ -39,6 +39,31 @@ void main() {
         highlighted: 0,
       ),
     ),
+    // agy's run-command permission (`antigravity-permission-prompt.raw`).
+    (
+      AgentIds.antigravity,
+      const AgentScreenMenu(
+        prompt: ['Requesting permission for:', 'sleep 45', 'Run this command?'],
+        options: [
+          'Yes, run command',
+          "Yes, and always allow in this conversation for commands that "
+              "start with 'sleep'",
+          "Yes, and always allow for commands that start with 'sleep' "
+              '(Persist to settings.json)',
+          'No, cancel',
+        ],
+        highlighted: 0,
+      ),
+    ),
+    // agy's ask_question (`antigravity-ask-question.raw`).
+    (
+      AgentIds.antigravity,
+      const AgentScreenMenu(
+        prompt: ['Question 1/1: Which color?'],
+        options: ['Red', 'Blue', 'Write-in...'],
+        highlighted: 0,
+      ),
+    ),
   ]) {
     for (final (size, textScale, touch) in [
       (const Size(1440, 900), 1.0, false),

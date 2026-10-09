@@ -656,17 +656,30 @@ const antigravityDescriptor = AgentDescriptor(
     idle: [GridMatcher('? for shortcuts', atLineStart: true)],
   ),
   // Approve and deny pick the option by its words: `Yes, I trust this
-  // folder` / `No, exit`, `1. Yes, run command` / `4. No, cancel`. Enter on
-  // `No, exit` exits and trusts nothing (measured), so no cancel is declared.
+  // folder` / `No, exit`, `1. Yes, run command` / `4. No, cancel`, and the
+  // binary's other permission menus ("Allow creation of this file?", "Allow
+  // access to this URL?", "Allow calling this tool?", "Do you want to
+  // proceed?" / "Yes, accept this change") the same way. Enter on `No, exit`
+  // exits and trusts nothing (measured). Its ask_question menu
+  // (`antigravity-ask-question.raw`: "Question 1/1: …", `› 1. Red`, `3.
+  // Write-in...`, footer `enter Select · esc Skip`) has no yes or no: it is
+  // answered by option, and declined by its own Esc, which skips it.
   menus: AgentMenuSupport(
     markers: ['>'],
     affirmative: [r'^Yes\b'],
     negative: [r'^No\b'],
+    cancelDeclines: ['Question '],
   ),
-  // `approval` keys are left empty on purpose: a prompt is answered by its
-  // menu's option above. The 1.0.13 build wrote a `keybindings.json` binding
-  // `confirm.yes` to `y` and `confirm.no` to `n`, but 1.1.23 ships no such
-  // file, and a guessed key pressed into a TUI is worse than the terminal.
+  // Only the Esc a question names; every other prompt is a menu answered by
+  // its option above. The 1.0.13 `keybindings.json` keys (`y`/`n`) describe
+  // a version nobody runs.
+  approval: AgentApprovalRules(
+    deny: AgentApprovalKey(
+      keys: '\x1b',
+      label: 'Skip',
+      effect: 'Presses Esc, which skips the question ("esc Skip").',
+    ),
+  ),
   // Nothing is known. `agy` writes protobuf into a store whose schema is not
   // published and which this app reads none of, so there is no evidence either
   // way — and §19's rule is that an unknown is never reported as a zero, nor

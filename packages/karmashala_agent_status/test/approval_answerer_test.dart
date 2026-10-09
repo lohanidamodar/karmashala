@@ -218,6 +218,53 @@ void main() {
     });
   }
 
+  group('Antigravity run command (antigravity-permission-prompt.raw)', () {
+    final agy = AgentRegistry.builtIn.byId(AgentIds.antigravity)!;
+    setUp(
+      () => screen = FixtureMenuScreen.fixture(
+        'antigravity-permission-prompt',
+        marker: '>',
+      ),
+    );
+
+    test('approve confirms "Yes, run command"', () async {
+      final answer = await answererFor(agy).answer('s', approve: true);
+      expect(screen.sent, ['\r']);
+      expect(answer.answered, 'Yes, run command');
+    });
+
+    test('deny moves to "No, cancel", never pressing Esc', () async {
+      final answer = await answererFor(agy).answer('s', approve: false);
+      expect(screen.sent, ['\x1b[B', '\x1b[B', '\x1b[B', '\r']);
+      expect(screen.confirmed, 'No, cancel');
+      expect(answer.answered, 'No, cancel');
+    });
+  });
+
+  group('Antigravity ask_question (antigravity-ask-question.raw)', () {
+    final agy = AgentRegistry.builtIn.byId(AgentIds.antigravity)!;
+    setUp(
+      () => screen = FixtureMenuScreen.fixture(
+        'antigravity-ask-question',
+        marker: '>',
+      ),
+    );
+
+    test('deny skips it with Esc, as its footer names', () async {
+      final answer = await answererFor(agy).answer('s', approve: false);
+      expect(screen.sent, ['\x1b']);
+      expect(answer.answered, 'Skip');
+    });
+
+    test('approve names no option and presses nothing', () async {
+      await expectLater(
+        answererFor(agy).answer('s', approve: true),
+        throwsA(isA<SessionPromptRefusal>()),
+      );
+      expect(screen.sent, isEmpty);
+    });
+  });
+
   test('Codex update offer: no option means yes, so approve refuses', () async {
     // The menu measured on 0.154.0 (screen_menu_test.dart), drawn as output.
     screen = FixtureMenuScreen.text(
