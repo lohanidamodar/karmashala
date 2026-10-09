@@ -16,9 +16,12 @@ abstract interface class StoreDesk {
   List<StoreAppChanges> changesSince({DateTime? since, bool unseenOnly});
 }
 
-/// What answers the data protocol's `stores.*` requests; every answer is the
-/// view as it stands after the work.
+/// What answers the data protocol's `stores.*` requests; every answer but
+/// [history]'s is the view as it stands after the work.
 abstract interface class StoreWork {
   /// Does [request]'s work; throws [DataRefused].
   Future<StoresView> handle(StoreRequest<Object?> request);
+
+  /// What is kept of the apps over time, as [request] asks.
+  Future<StoreHistoryView> history(StoresHistoryGet request);
 }

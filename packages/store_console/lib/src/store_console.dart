@@ -58,6 +58,22 @@ class StoreAppSnapshot {
     return null;
   }
 
+  /// `iOS`, `macOS`, `Android`: what the app is called beside its name, read
+  /// off the App Store tracks it has.
+  String get platform {
+    if (app.store == StoreKind.googlePlay) return 'Android';
+    final tracks = {
+      for (final release in releases.valueOrNull ?? const <StoreRelease>[])
+        release.track,
+    };
+    if (tracks.contains('App Store') || tracks.isEmpty) return 'iOS';
+    for (final track in tracks) {
+      final match = RegExp(r'^App Store \((.+)\)$').firstMatch(track);
+      if (match != null) return match.group(1)!;
+    }
+    return 'iOS';
+  }
+
   /// Releases somebody is waiting on or has to act on, those to act on first.
   /// One a newer release on its track has gone live past is history, not
   /// work: a rejected 1.0 under a live 1.1 is not stuck.

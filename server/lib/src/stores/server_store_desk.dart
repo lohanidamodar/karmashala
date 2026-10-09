@@ -15,6 +15,7 @@ import 'package:store_console_play/store_console_play.dart';
 import 'server_store_vault.dart';
 import 'store_desk.dart';
 import 'store_digest.dart';
+import 'store_history.dart';
 import 'store_refresh_timer.dart';
 
 /// The app stores as this server reads them, with the credentials in
@@ -47,6 +48,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
        _watchFile = File(
          p.join(dataDirectory, snapshotDirectoryName, watchFileName),
        ),
+       _historyFile = File(
+         p.join(dataDirectory, snapshotDirectoryName, historyFileName),
+       ),
        _tell = tell,
        _log = log ?? _silent,
        _now = clock ?? _utcNow,
@@ -55,6 +59,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
     _loadSnapshot();
     _loadLinks();
     _loadWatch();
+    _loadHistory();
     _schedule = StoreRefreshTimer(
       every: () => _every,
       connected: () => _connected.isNotEmpty && !_closed,
@@ -85,6 +90,12 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   static const String watchFileName = 'changes.json';
   static const int _watchVersion = 1;
 
+  /// Each app's numbers a day and its releases' steps, for the charts and
+  /// timelines: [kStoreHistoryDays] of them. Beside the snapshot, not in it,
+  /// for the same reason as [watchFileName].
+  static const String historyFileName = 'history.json';
+  static const int _historyVersion = 1;
+
   /// How many change sets are kept, and for how long, for `store_changes`.
   static const int changeLogLimit = 200;
   static const Duration changeLogAge = Duration(days: 30);
@@ -111,6 +122,9 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   final Directory _iconDirectory;
   final File _linksFile;
   final File _watchFile;
+  final File _historyFile;
+  var _history = StoreHistoryBook();
+  Future<void> _historyWrites = Future<void>.value();
   final void Function(List<DataChange> changes) _tell;
 
   /// Change sets found by a read, for the inbox and a phone; set once the
@@ -468,7 +482,10 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
           'The read stopped before the store answered (${error.runtimeType}).';
     }
     if (current(app.store)) {
-      if (snapshot != null) changed = _compare(snapshot);
+      if (snapshot != null) {
+        changed = _compare(snapshot);
+        _history.record(snapshot, _now());
+      }
       final held = _apps[key];
       if (snapshot != null && (failure == null || held == null)) {
         _apps[key] = _withListingInstalls(snapshot.carriedFrom(held));
@@ -567,6 +584,59 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
   void _forgetChanges(StoreKind store) {
     _digests.removeWhere((key, _) => _storeOfKey(key) == store);
     _changeLog.removeWhere((held) => held.app.store == store);
+    _history.forget((app) => app.store == store);
+  }
+
+  /// The last [StoresHistoryGet.days] days of the apps asked for, of the
+  /// stores connected now.
+  @override
+  Future<StoreHistoryView> history(StoresHistoryGet request) async {
+    final connected = _connected;
+    final keys = request.appKeys.toSet();
+    return _history.view(
+      days: request.days.clamp(1, kStoreHistoryDays),
+      now: _now(),
+      include: (app) =>
+          connected.contains(app.store) &&
+          (keys.isEmpty || keys.contains(app.key)),
+    );
+  }
+
+  void _loadHistory() {
+    final file = _historyFile;
+    if (!file.existsSync()) return;
+    try {
+      final decoded = (jsonDecode(file.readAsStringSync()) as Map)
+          .cast<String, Object?>();
+      if (decoded['version'] != _historyVersion) {
+        _log('stores: the kept history is of another version; not read');
+        return;
+      }
+      _history = StoreHistoryBook.fromJson(
+        ((decoded['apps'] as Map?) ?? const {}).cast<String, Object?>(),
+      );
+    } on Object catch (error) {
+      _history = StoreHistoryBook();
+      _log('stores: the kept history was not read (${error.runtimeType})');
+    }
+  }
+
+  Future<void> _persistHistory() {
+    final contents = {'version': _historyVersion, 'apps': _history.toJson()};
+    final done = _historyWrites.then((_) async {
+      try {
+        final directory = _historyFile.parent;
+        if (!directory.existsSync()) directory.createSync(recursive: true);
+        final temp = File('${_historyFile.path}.tmp');
+        await temp.writeAsString(jsonEncode(contents), flush: true);
+        await temp.rename(_historyFile.path);
+      } on Object catch (error) {
+        // Not kept: the charts lose the days since the last write.
+        _log('stores: the history was not kept (${error.runtimeType})');
+      }
+    });
+    _historyWrites = done;
+    return done;
   }
 
   void _loadWatch() {
@@ -1072,7 +1142,7 @@ class ServerStoreDesk implements StoreDesk, StoreWork {
       }),
     );
     _snapshotWrites = done;
-    return done;
+    return Future.wait([done, _persistHistory()]);
   }
 
   Future<void> _writeSnapshot(Map<String, Object?> contents) async {

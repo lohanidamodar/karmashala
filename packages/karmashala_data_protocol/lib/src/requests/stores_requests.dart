@@ -38,6 +38,10 @@ DataRequest<Object?>? _storesRequestFromJson(String kind, _Arguments args) =>
         packageName: args.string('packageName'),
       ),
       StoresSeen.name => StoresSeen(args.strings('appKeys')),
+      StoresHistoryGet.name => StoresHistoryGet(
+        appKeys: args.strings('appKeys', orEmpty: true),
+        days: args.optionalInt('days') ?? 365,
+      ),
       StoresScheduleSet.name => StoresScheduleSet(
         Duration(
           minutes:
@@ -262,4 +266,32 @@ final class StoresScheduleSet extends _StoresViewRequest {
 
   @override
   Map<String, Object?> argumentsToJson() => {'everyMinutes': every.inMinutes};
+}
+
+/// What the server kept of apps [appKeys] (each a `StoreApp.key`; every app
+/// when empty) over the last [days] days: each day's numbers and each
+/// release's steps. Read from what the server keeps; never asks a store.
+final class StoresHistoryGet extends StoreRequest<StoreHistoryView> {
+  const StoresHistoryGet({this.appKeys = const [], this.days = 365});
+
+  static const String name = 'stores.history';
+
+  final List<String> appKeys;
+  final int days;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    if (appKeys.isNotEmpty) 'appKeys': appKeys,
+    'days': days,
+  };
+
+  @override
+  Object? resultToJson(StoreHistoryView result) => result.toJson();
+
+  @override
+  StoreHistoryView resultFromJson(Object? json) =>
+      _decode(kind, () => StoreHistoryView.fromJson(_object(json, kind)));
 }

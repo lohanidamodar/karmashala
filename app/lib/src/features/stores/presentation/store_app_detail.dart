@@ -20,7 +20,9 @@ import 'store_combine.dart';
 import 'store_detail_errors.dart';
 import 'store_detail_releases.dart';
 import 'store_detail_reviews.dart';
+import 'store_history_charts.dart';
 import 'store_installs.dart';
+import 'store_release_timeline.dart';
 import 'stores_format.dart';
 
 part 'store_app_detail/header.dart';
@@ -150,7 +152,24 @@ class _Body extends StatelessWidget {
             child: StoreErrorIssuesSection(group: group),
           )
         : null;
-    final numbersSide = [?numbers, ?downloads];
+    final timeline = read
+        ? _Section(
+            'Release timeline',
+            key: const ValueKey('release-timeline'),
+            child: StoreReleaseTimelines(group: group),
+          )
+        : null;
+    final overTime = read
+        ? _Section(
+            'Over time',
+            key: const ValueKey('over-time'),
+            child: StoreHistoryCharts(
+              group: group,
+              narrow: layout == _Layout.narrow,
+            ),
+          )
+        : null;
+    final numbersSide = [?numbers, ?downloads, ?overTime];
 
     final Widget status;
     if (wide && numbersSide.isNotEmpty) {
@@ -187,6 +206,7 @@ class _Body extends StatelessWidget {
             'Releases',
             child: _Releases(group: group, sideBySide: wide),
           ),
+          ?timeline,
           ...numbersSide,
         ],
       );
@@ -203,6 +223,8 @@ class _Body extends StatelessWidget {
             child: _Card(child: StoreWhatChanged(group: group)),
           ),
         status,
+        // Full width beside two columns, so its steps can run across.
+        if (wide && numbersSide.isNotEmpty) ?timeline,
         ?crashes,
         // Keyed so its filters and paging survive a change of layout.
         _Section(

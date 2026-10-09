@@ -13,9 +13,11 @@ import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_catalog.dart';
 import '../application/store_attention.dart';
 import '../application/store_groups.dart';
+import '../application/store_summary.dart';
 import '../application/stores_controller.dart';
 import 'store_app_card.dart';
 import 'store_app_detail.dart';
+import 'store_summary_table.dart';
 import 'stores_format.dart';
 import 'stores_tab_state.dart';
 

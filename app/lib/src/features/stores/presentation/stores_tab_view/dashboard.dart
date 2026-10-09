@@ -175,12 +175,26 @@ class _Overview extends ConsumerWidget {
       ));
     }
     final shown = sections.fold(0, (sum, section) => sum + section.$2.length);
+    final summary = selected == null
+        ? storeSummaryRows(groups)
+        : const <StoreSummaryRow>[];
     // How long the overview takes to fade from one state to the next; nothing
     // under reduced motion.
     final swap = Motion.of(context).base;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Every app at a glance, what needs attention first; not beside an
+        // open detail, where the list is already narrow.
+        if (selected == null) ...[
+          Semantics(
+            header: true,
+            child: EyebrowLabel('All apps · ${summary.length}'),
+          ),
+          const SizedBox(height: Insets.sm),
+          StoreSummaryTable(rows: summary, onOpen: onSelect),
+          const SizedBox(height: Insets.lg),
+        ],
         _SummaryStrip(
           counts: counts,
           filter: filter,
