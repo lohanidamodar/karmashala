@@ -17,6 +17,34 @@ installs claim the same version name.
 
 ---
 
+## 1.34.5 — 2026-10-09 (build 72)
+
+- **Every agent's prompts reach the chat.**
+  - Codex's and Antigravity's folder-trust questions, Codex's command and edit approvals, and Antigravity's command approvals and questions show as cards. Answer them from the chat, the peek, the inbox or the phone; the session shows Needs you.
+  - Antigravity's scratch folders are trusted up front.
+- **The message queue puts you first.**
+  - What you type goes ahead of messages other sessions queued.
+  - Every queued message has Send now.
+  - A session that sits at its prompt for 20 s gets its queued message.
+  - Send is offered when Karmashala can't be sure the agent is working.
+  - Long messages arrive whole, and an opening prompt left in the box is sent.
+- **No false states.** A session whose process is gone can be ended and archived. A restarted child keeps reporting to its parent. "Done" means a turn really ran.
+- **Chat-form agents:**
+  - They can read and write every checkout attached to their session.
+  - WSL sessions reach Karmashala's tools again.
+  - Their conversations are searchable.
+  - Terminal Antigravity gets Karmashala's tools through its config, removable in Settings.
+- **@ mentions in the composer:** files, `@diff`, `@terminal`, `@session` and `@subagent`, shown as chips.
+- **Review in the editor:** changed lines in the gutter; Keep, Revert or Comment per change; comments go to the session as one message.
+- **Checks you can trust.**
+  - A pass records the code it checked, and shows "stale" once the code changes.
+  - Checks time out (30 min by default) and can be cancelled.
+  - The New-session dialog warns when other sessions are working in the same checkout.
+- **Store changes.** After each read, what changed since the last one (release state, builds, reviews, rating, crashes) lands in the inbox and on the app's card. Stores are read in the background every 3 hours.
+- **Backup and restore** in Settings → Data, with optional daily or weekly backups. Credentials are never included.
+- **A faster server while it indexes.** The activity backfill no longer stops on a large store.
+- **Codex in read-only mode** starts again.
+
 ## 1.34.4 — 2026-10-09 (build 71)
 
 - **A chat that's easier to read.**
