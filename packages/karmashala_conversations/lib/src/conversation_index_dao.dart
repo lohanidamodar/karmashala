@@ -61,6 +61,10 @@ typedef RankedConversation = ({
 /// call; six columns a row caps this at 5 461 variables per statement.
 const int kConversationInsertBatch = 128;
 
+/// Turns one transaction writes of a large conversation's first reading; the
+/// indexer hands the event loop back between slices.
+const int kConversationWriteSlice = 128;
+
 /// How many matching turns one [ConversationIndexDao.search] reads.
 const int kConversationSearchLimit = 50;
 
@@ -196,6 +200,26 @@ class ConversationIndexDao {
         resumePoint: resumePoint,
       );
       if (turns.isNotEmpty || removed > 0) _bumpGeneration();
+    });
+  }
+
+  /// One slice of a first reading, [clear]ing first what an interrupted one
+  /// left. Its state row is not touched: [keepTurns] writes it after the last.
+  void addTurns({
+    required String sessionId,
+    required String cli,
+    required List<ConversationTurn> turns,
+    bool clear = false,
+  }) {
+    _db.transaction(() {
+      if (clear) {
+        statements++;
+        _db.execute('DELETE FROM conversation_turns WHERE session_id = ?;', [
+          sessionId,
+        ]);
+      }
+      _insert(sessionId, cli, turns);
+      _bumpGeneration();
     });
   }
 

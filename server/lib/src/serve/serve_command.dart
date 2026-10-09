@@ -2082,9 +2082,11 @@ Future<int> _serve(
     }),
   );
   // The activity log's backfill: what the store held before the log, once,
-  // in chunks, resumed after a restart, and never in the first moments.
+  // in chunks, resumed after a restart, and never in the first moments. After
+  // the conversation index's: run together, they doubled a client's p95.
   unawaited(
     Future<void>.delayed(agentScanDelay).then((_) async {
+      await data.conversations.backfill();
       if (stopping.isCompleted) return;
       final backfill = ActivityBackfill(
         database,

@@ -9,8 +9,7 @@ void main() {
   late AppDatabase db;
   late ActivityLog log;
   final day = DateTime.utc(2026, 10, 6);
-  DateTime h(num hours) =>
-      day.add(Duration(minutes: (hours * 60).round()));
+  DateTime h(num hours) => day.add(Duration(minutes: (hours * 60).round()));
 
   setUp(() {
     db = activityStore();
@@ -63,7 +62,11 @@ void main() {
     insertSession(db, 's1', at: h(9));
     db.execute("DELETE FROM sessions WHERE id = 's1';");
     final written = log.append([
-      ActivityDraft(at: h(10), kind: ActivityKind.sessionEnded, sessionId: 's1'),
+      ActivityDraft(
+        at: h(10),
+        kind: ActivityKind.sessionEnded,
+        sessionId: 's1',
+      ),
     ]);
     expect(written.single.title, 'Title s1');
     expect(written.single.projectName, 'Alpha');
@@ -123,10 +126,9 @@ void main() {
         ),
     ]);
     expect(rangeOf().entries, hasLength(7));
-    expect(
-      rangeOf(projects: ['p2']).entries.map((e) => e.sessionId).toSet(),
-      {'b'},
-    );
+    expect(rangeOf(projects: ['p2']).entries.map((e) => e.sessionId).toSet(), {
+      'b',
+    });
 
     final first = rangeOf(projects: ['p1'], limit: 4);
     expect(first.entries, hasLength(4));
@@ -135,7 +137,10 @@ void main() {
     expect(second.entries, hasLength(2));
     expect(second.next, isNull);
     final all = [...first.entries, ...second.entries];
-    expect(all.map((e) => e.at), orderedEquals([...all.map((e) => e.at)]..sort()));
+    expect(
+      all.map((e) => e.at),
+      orderedEquals([...all.map((e) => e.at)]..sort()),
+    );
     expect(all.map((e) => e.id).toSet(), hasLength(6));
   });
 
@@ -180,13 +185,29 @@ void main() {
     ]);
   });
 
+  test('an append past SQLite\'s variable limit answers every entry', () {
+    insertSession(db, 's1', at: h(9));
+    // A backfill chunk of long transcripts: one `IN` of these ids failed.
+    const count = 33000;
+    final written = log.append([
+      for (var i = 0; i < count; i++)
+        ActivityDraft(
+          at: h(10),
+          kind: ActivityKind.turnStarted,
+          sessionId: 's1',
+          source: 'transcript',
+          sourceId: 's1:$i',
+          backfilled: true,
+        ),
+    ]);
+    expect(written, hasLength(count));
+    expect(written.map((e) => e.id).toSet(), hasLength(count));
+  });
+
   test('retention prunes what is older than the cut-off', () {
     insertSession(db, 'old', at: day.subtract(const Duration(days: 40)));
     insertSession(db, 'new', at: h(1));
     expect(log.prune(day.subtract(const Duration(days: 30))), 1);
-    expect(
-      log.after(0).map((e) => e.sessionId),
-      ['new'],
-    );
+    expect(log.after(0).map((e) => e.sessionId), ['new']);
   });
 }

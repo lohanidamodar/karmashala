@@ -51,7 +51,11 @@ void main() {
       'INSERT INTO scheduled_resumes (id, session_id, fire_at, state, '
       "scheduled_at, finished_at, window_label) VALUES ('r1', 's1', ?, "
       "'done', ?, ?, '5-hour');",
-      [h(11).toIso8601String(), h(10).toIso8601String(), h(11).toIso8601String()],
+      [
+        h(11).toIso8601String(),
+        h(10).toIso8601String(),
+        h(11).toIso8601String(),
+      ],
     );
     // What a log written live would not have: the store as of before v80.
     db.execute('DELETE FROM activity_log;');
@@ -81,16 +85,18 @@ void main() {
   });
   tearDown(() => db.close());
 
-  ActivityBackfill backfill({int chunk = 50}) => ActivityBackfill(
-    db,
-    log: log,
-    messagesOf: (id) async {
-      read.add(id);
-      return transcripts[id] ?? const [];
-    },
-    chunk: chunk,
-    pause: Duration.zero,
-  );
+  ActivityBackfill backfill({int chunk = 50, int appendSlice = 500}) =>
+      ActivityBackfill(
+        db,
+        log: log,
+        messagesOf: (id) async {
+          read.add(id);
+          return transcripts[id] ?? const [];
+        },
+        chunk: chunk,
+        appendSlice: appendSlice,
+        pause: Duration.zero,
+      );
 
   List<ActivityEntry> of(String sessionId) => [
     for (final e in log.after(0))
@@ -99,10 +105,10 @@ void main() {
 
   test('session rows: their start, archive and parent link', () async {
     await backfill().run();
-    expect(of('cp').where((e) => e.source == 'session').map((e) => (e.kind, e.at)), [
-      (ActivityKind.sessionStarted, h(12)),
-      (ActivityKind.archived, h(18)),
-    ]);
+    expect(
+      of('cp').where((e) => e.source == 'session').map((e) => (e.kind, e.at)),
+      [(ActivityKind.sessionStarted, h(12)), (ActivityKind.archived, h(18))],
+    );
     final link = of('child').singleWhere((e) => e.kind == ActivityKind.linked);
     expect(link.parentSessionId, 's1');
     expect(link.backfilled, isTrue);
@@ -138,7 +144,9 @@ void main() {
   test('checkpoints give turns only to a session no transcript did', () async {
     await backfill().run();
     expect(
-      of('cp').where((e) => e.source == 'checkpoint').map((e) => (e.kind, e.at)),
+      of(
+        'cp',
+      ).where((e) => e.source == 'checkpoint').map((e) => (e.kind, e.at)),
       [(ActivityKind.turnStarted, h(12.5)), (ActivityKind.turnEnded, h(12.75))],
     );
     expect(of('s1').where((e) => e.source == 'checkpoint'), isEmpty);
@@ -156,9 +164,9 @@ void main() {
   test('a scheduled resume pauses, approximately, and resumes', () async {
     await backfill().run();
     expect(
-      of('s1').where((e) => e.source == 'resume').map(
-        (e) => (e.kind, e.at, e.approximate),
-      ),
+      of('s1')
+          .where((e) => e.source == 'resume')
+          .map((e) => (e.kind, e.at, e.approximate)),
       [
         (ActivityKind.limitPaused, h(10), true),
         (ActivityKind.limitResumed, h(11), false),
@@ -169,7 +177,9 @@ void main() {
   test('a finished session ends, approximately, at its last known activity; '
       'one with only a start stays a start', () async {
     await backfill().run();
-    final end = of('s1').singleWhere((e) => e.kind == ActivityKind.sessionEnded);
+    final end = of(
+      's1',
+    ).singleWhere((e) => e.kind == ActivityKind.sessionEnded);
     expect(end.at, h(11));
     expect(end.approximate, isTrue);
     expect(end.detail, 'completed');
@@ -208,9 +218,10 @@ void main() {
         messagesOf: (id) async => transcripts[id] ?? const [],
         pause: Duration.zero,
       ).run();
-      return ActivityLog(whole).after(0).map((e) => (e.sessionId, e.kind, e.at)).toSet();
+      return ActivityLog(
+        whole,
+      ).after(0).map((e) => (e.sessionId, e.kind, e.at)).toSet();
     }();
-
 
     final interrupted = backfill(chunk: 1);
     await interrupted.run(shouldStop: () => read.contains('s1'));
@@ -221,7 +232,10 @@ void main() {
     read.clear();
     await backfill(chunk: 1).run();
     expect(read, isNot(contains('s1')), reason: 'done before the stop');
-    final resumed = log.after(0).map((e) => (e.sessionId, e.kind, e.at)).toSet();
+    final resumed = log
+        .after(0)
+        .map((e) => (e.sessionId, e.kind, e.at))
+        .toSet();
     expect(resumed, await reference);
     expect(log.after(0).length, resumed.length, reason: 'nothing twice');
     whole.close();
@@ -229,23 +243,39 @@ void main() {
 
   test('a session deleted before the log existed draws nothing', () async {
     db.execute("DELETE FROM sessions WHERE id = 'quiet';");
-    db.execute(
-      "DELETE FROM activity_log WHERE session_id = 'quiet';",
-    );
+    db.execute("DELETE FROM activity_log WHERE session_id = 'quiet';");
     await backfill().run();
     expect(of('quiet'), isEmpty);
   });
 
-  test('a transcript that cannot be read costs that session, not the run',
-      () async {
-    await ActivityBackfill(
-      db,
-      log: log,
-      messagesOf: (id) async =>
-          id == 's1' ? throw StateError('gone') : transcripts[id] ?? const [],
-      pause: Duration.zero,
-    ).run();
-    expect(of('i1').where((e) => e.source == 'transcript'), isNotEmpty);
-    expect(of('s1').where((e) => e.source == 'transcript'), isEmpty);
+  test(
+    'a transcript that cannot be read costs that session, not the run',
+    () async {
+      await ActivityBackfill(
+        db,
+        log: log,
+        messagesOf: (id) async =>
+            id == 's1' ? throw StateError('gone') : transcripts[id] ?? const [],
+        pause: Duration.zero,
+      ).run();
+      expect(of('i1').where((e) => e.source == 'transcript'), isNotEmpty);
+      expect(of('s1').where((e) => e.source == 'transcript'), isEmpty);
+    },
+  );
+
+  test('a chunk appended a slice at a time ends with the same log', () async {
+    List<(String, ActivityKind, DateTime, bool)> logged() => [
+      for (final e in log.after(0)) (e.sessionId, e.kind, e.at, e.approximate),
+    ];
+    final written = await backfill(appendSlice: 1).run();
+    final sliced = logged();
+    expect(sliced, hasLength(written));
+
+    db.execute('DELETE FROM activity_log;');
+    db.execute('DELETE FROM app_metadata WHERE key = ?;', [
+      kActivityBackfillKey,
+    ]);
+    expect(await backfill().run(), written);
+    expect(logged(), sliced);
   });
 }

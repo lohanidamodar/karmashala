@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:agent_cli/read.dart' show TranscriptMessage;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -12,9 +13,8 @@ const String kActivityBackfillKey = 'activity_backfill.v1';
 
 /// One phase's step: the entries for the rows after `after`, and the last
 /// row read — null once there are no more.
-typedef _Step = Future<({List<ActivityDraft> drafts, int? last})> Function(
-  int after,
-);
+typedef _Step =
+    Future<({List<ActivityDraft> drafts, int? last})> Function(int after);
 
 /// **The activity log's backfill**: what the store already held before the
 /// log existed, recovered once and marked so. Chunked, with its place saved
@@ -28,6 +28,7 @@ class ActivityBackfill {
     required ActivityLog log,
     required this.messagesOf,
     this.chunk = 50,
+    this.appendSlice = 500,
     this.pause = const Duration(milliseconds: 20),
     this.onWritten,
   }) : _log = log;
@@ -38,6 +39,9 @@ class ActivityBackfill {
   /// A session's transcript, native or imported, by the server's one reader.
   final Future<List<TranscriptMessage>> Function(String sessionId) messagesOf;
   final int chunk;
+
+  /// Entries one transaction appends; the event loop turns between them.
+  final int appendSlice;
 
   /// Between chunks, so the store is never held for long.
   final Duration pause;
@@ -85,7 +89,15 @@ class ActivityBackfill {
       final (_, step) = _phases[phase];
       final result = await step(after);
       if (result.drafts.isNotEmpty) {
-        written += _log.append(result.drafts).length;
+        // A chunk of long transcripts is tens of thousands of entries: one
+        // transaction of them held the server for seconds. Every write is
+        // keyed, so a stop between slices costs nothing on the rerun.
+        final drafts = result.drafts;
+        for (var start = 0; start < drafts.length; start += appendSlice) {
+          if (start > 0) await Future<void>.delayed(Duration.zero);
+          final end = min(start + appendSlice, drafts.length);
+          written += _log.append(drafts.sublist(start, end)).length;
+        }
         onWritten?.call();
       }
       final last = result.last;
@@ -148,50 +160,51 @@ class ActivityBackfill {
 
   /// A row's start, its archive and its parent link — the keys the v80
   /// triggers use, so a row they already logged is not logged again.
-  Future<({List<ActivityDraft> drafts, int? last})> _sessions(int after) async =>
-      _page(
-        _rows(
-          'SELECT rowid AS rid, id, created_at, archived_at, '
-          'parent_session_id, parent_link_kind FROM sessions '
-          'WHERE rowid > ? ORDER BY rowid LIMIT ?;',
-          after,
-        ),
-        (row) sync* {
-          final id = row['id']! as String;
-          final created = _at(row['created_at']);
-          if (created == null) return;
-          yield _draft(
-            id,
-            ActivityKind.sessionStarted,
-            created,
-            source: 'session',
-            sourceId: '$id:started',
-          );
-          final archivedRaw = row['archived_at'];
-          final archived = _at(archivedRaw);
-          if (archived != null) {
-            yield _draft(
-              id,
-              ActivityKind.archived,
-              archived,
-              source: 'session',
-              sourceId: '$id:archived:$archivedRaw',
-            );
-          }
-          final parent = row['parent_session_id'];
-          if (parent is String) {
-            yield _draft(
-              id,
-              ActivityKind.linked,
-              created,
-              source: 'lineage',
-              sourceId: id,
-              parent: parent,
-              detail: row['parent_link_kind'] as String?,
-            );
-          }
-        },
+  Future<({List<ActivityDraft> drafts, int? last})> _sessions(
+    int after,
+  ) async => _page(
+    _rows(
+      'SELECT rowid AS rid, id, created_at, archived_at, '
+      'parent_session_id, parent_link_kind FROM sessions '
+      'WHERE rowid > ? ORDER BY rowid LIMIT ?;',
+      after,
+    ),
+    (row) sync* {
+      final id = row['id']! as String;
+      final created = _at(row['created_at']);
+      if (created == null) return;
+      yield _draft(
+        id,
+        ActivityKind.sessionStarted,
+        created,
+        source: 'session',
+        sourceId: '$id:started',
       );
+      final archivedRaw = row['archived_at'];
+      final archived = _at(archivedRaw);
+      if (archived != null) {
+        yield _draft(
+          id,
+          ActivityKind.archived,
+          archived,
+          source: 'session',
+          sourceId: '$id:archived:$archivedRaw',
+        );
+      }
+      final parent = row['parent_session_id'];
+      if (parent is String) {
+        yield _draft(
+          id,
+          ActivityKind.linked,
+          created,
+          source: 'lineage',
+          sourceId: id,
+          parent: parent,
+          detail: row['parent_link_kind'] as String?,
+        );
+      }
+    },
+  );
 
   /// A delegation's own time, for a child linked without a parent column.
   Future<({List<ActivityDraft> drafts, int? last})> _delegations(
@@ -218,16 +231,15 @@ class ActivityBackfill {
     },
   );
 
-  Future<({List<ActivityDraft> drafts, int? last})> _transcripts(
-    int after,
-  ) => _fromTranscripts(
-    _rows(
-      'SELECT rowid AS rid, id FROM sessions WHERE rowid > ? '
-      'ORDER BY rowid LIMIT ?;',
-      after,
-    ),
-    imported: false,
-  );
+  Future<({List<ActivityDraft> drafts, int? last})> _transcripts(int after) =>
+      _fromTranscripts(
+        _rows(
+          'SELECT rowid AS rid, id FROM sessions WHERE rowid > ? '
+          'ORDER BY rowid LIMIT ?;',
+          after,
+        ),
+        imported: false,
+      );
 
   Future<({List<ActivityDraft> drafts, int? last})> _imported(int after) =>
       _fromTranscripts(
@@ -274,17 +286,20 @@ class ActivityBackfill {
         if (m.at != null && !m.queued) m,
     ];
     if (dated.isEmpty) return const [];
-    ActivityDraft draft(ActivityKind kind, DateTime at, String key,
-            {bool approximate = false}) =>
-        ActivityDraft(
-          at: at.toUtc(),
-          kind: kind,
-          sessionId: sessionId,
-          source: 'transcript',
-          sourceId: '$sessionId:$key',
-          backfilled: true,
-          approximate: approximate,
-        );
+    ActivityDraft draft(
+      ActivityKind kind,
+      DateTime at,
+      String key, {
+      bool approximate = false,
+    }) => ActivityDraft(
+      at: at.toUtc(),
+      kind: kind,
+      sessionId: sessionId,
+      source: 'transcript',
+      sourceId: '$sessionId:$key',
+      backfilled: true,
+      approximate: approximate,
+    );
     final drafts = <ActivityDraft>[
       if (imported)
         draft(
@@ -343,13 +358,11 @@ class ActivityBackfill {
       };
       final at = _at(row['created_at']);
       if (kind == null || at == null) return;
-      final hasTranscript = dated[sessionId] ??= _db
-          .query(
-            "SELECT 1 FROM activity_log WHERE session_id = ? AND source = "
-            "'transcript' LIMIT 1;",
-            [sessionId],
-          )
-          .isNotEmpty;
+      final hasTranscript = dated[sessionId] ??= _db.query(
+        "SELECT 1 FROM activity_log WHERE session_id = ? AND source = "
+        "'transcript' LIMIT 1;",
+        [sessionId],
+      ).isNotEmpty;
       if (hasTranscript) return;
       yield _draft(
         sessionId,
@@ -381,7 +394,9 @@ class ActivityBackfill {
         at,
         source: 'decision',
         sourceId: '${row['id']}',
-        detail: summary.length <= 120 ? summary : '${summary.substring(0, 119)}…',
+        detail: summary.length <= 120
+            ? summary
+            : '${summary.substring(0, 119)}…',
       );
     },
   );

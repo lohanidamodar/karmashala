@@ -12,11 +12,15 @@ class ConversationIndexBackfill {
     required this.indexer,
     required this.clock,
     required this.locateTranscripts,
+    this.pause = const Duration(milliseconds: 20),
   });
 
   final ConversationIndexDao dao;
   final ConversationIndexer indexer;
   final Clock clock;
+
+  /// Between conversations, so clients' reads are not queued behind its own.
+  final Duration pause;
 
   /// `'<agentId>/<conversationId>' → path`, one walk of every store.
   final Future<Map<String, String>> Function() locateTranscripts;
@@ -72,7 +76,7 @@ class ConversationIndexBackfill {
       }
       // The writes are synchronous on the server's one isolate, so a
       // conversation's inserts hold it. Hand the event loop back between them.
-      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(pause);
     }
     // Written whatever happened: one unreadable transcript is not a reason to
     // walk every store again next start. A real trigger will queue it.
