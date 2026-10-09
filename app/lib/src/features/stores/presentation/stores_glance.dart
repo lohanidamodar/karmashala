@@ -5,6 +5,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/workbench_tabs.dart' show openStoresTab;
+import '../../../app/widgets/dashboard_glance.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/store_glance.dart';
 
@@ -12,18 +14,30 @@ import '../application/store_glance.dart';
 const double kGlanceSparklineWidth = 72;
 const double kGlanceSparklineHeight = 18;
 
-/// **The Stores glance** for the dashboard: how many apps need attention and
-/// the first of them, the newest release change, and the rating's month.
-/// Read-only; a tap opens the Stores tab through [onOpen].
-class StoresGlance extends ConsumerWidget {
-  const StoresGlance({required this.onOpen, super.key});
+/// **The Stores glance** for the dashboard: the apps needing attention, the
+/// newest release change, and the rating's month. A tap opens the Stores tab.
+const storesGlance = DashboardGlance(
+  id: 'stores',
+  title: 'Stores',
+  icon: AppIcons.package,
+  build: _body,
+  onOpen: _open,
+);
 
-  final VoidCallback onOpen;
+Widget _body(BuildContext context) => const StoresGlanceBody();
+
+void _open(BuildContext context, WidgetRef ref) => openStoresTab(ref);
+
+/// The glance's body alone: the dashboard draws the tile around it. One line
+/// on a phone's strip ([GlanceScope.compactOf]).
+class StoresGlanceBody extends ConsumerWidget {
+  const StoresGlanceBody({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final data = ref.watch(storesGlanceProvider);
     final now = ref.watch(clockProvider).nowUtc();
+    final compact = GlanceScope.compactOf(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
@@ -32,59 +46,63 @@ class StoresGlance extends ConsumerWidget {
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
-    final lines = <Widget>[];
-    final spoken = <String>['Stores'];
     if (data == null) {
-      const text = 'No store connected';
-      lines.add(Text(text, style: muted));
-      spoken.add(text);
-    } else {
-      final attention = data.attention == 0
-          ? 'Nothing needs you'
-          : '${data.attention} need${data.attention == 1 ? 's' : ''} '
-                'attention · ${data.firstAttention}';
-      spoken.add(attention);
-      lines.add(
-        Row(
-          children: [
-            Icon(
-              data.attention == 0 ? AppIcons.checkCircle : AppIcons.warning,
-              size: Chrome.iconAction,
-              color: data.attention == 0 ? semantic.idle : semantic.failure,
-            ),
-            const SizedBox(width: Insets.xs),
-            Expanded(
-              child: Text(
-                attention,
-                key: const ValueKey('stores-glance-attention'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-          ],
-        ),
+      return Text(
+        'No store connected',
+        key: const ValueKey('stores-glance-empty'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: muted,
       );
-      if (data.newestRelease case final release?) {
-        final text =
-            '${release.text} · ${compactAge(now.difference(release.at))}';
-        spoken.add('${release.app}: $text');
-        lines.add(
+    }
+
+    final attentionText = data.attention == 0
+        ? 'Nothing needs you'
+        : '${data.attention} need${data.attention == 1 ? 's' : ''} '
+              'attention · ${data.firstAttention}';
+    final attention = Row(
+      children: [
+        Icon(
+          data.attention == 0 ? AppIcons.checkCircle : AppIcons.warning,
+          size: Chrome.iconAction,
+          color: data.attention == 0 ? semantic.idle : semantic.failure,
+        ),
+        const SizedBox(width: Insets.xs),
+        Expanded(
+          child: Text(
+            attentionText,
+            key: const ValueKey('stores-glance-attention'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+    if (compact) return attention;
+
+    final release = data.newestRelease;
+    final rating = data.rating;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        attention,
+        if (release != null) ...[
+          const SizedBox(height: Insets.xs),
           Tooltip(
             message: release.app,
             child: Text(
-              text,
+              '${release.text} · ${compactAge(now.difference(release.at))}',
               key: const ValueKey('stores-glance-release'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: muted,
             ),
           ),
-        );
-      }
-      if (data.rating case final rating?) {
-        spoken.add('${data.ratingApp} rated ${rating.toStringAsFixed(1)}');
-        lines.add(
+        ],
+        if (rating != null) ...[
+          const SizedBox(height: Insets.xs),
           Row(
             children: [
               Icon(
@@ -105,7 +123,7 @@ class StoresGlance extends ConsumerWidget {
                   width: kGlanceSparklineWidth,
                   height: kGlanceSparklineHeight,
                   area: false,
-                  semanticsLabel: 'Rating over the last 30 days',
+                  semanticsLabel: '${data.ratingApp} rating, last 30 days',
                 ),
               ],
               const SizedBox(width: Insets.xs),
@@ -119,51 +137,8 @@ class StoresGlance extends ConsumerWidget {
               ),
             ],
           ),
-        );
-      }
-    }
-
-    return Semantics(
-      button: true,
-      label: spoken.join(', '),
-      child: ExcludeSemantics(
-        child: Material(
-          key: const ValueKey('stores-glance'),
-          color: scheme.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.md),
-            side: BorderSide(color: scheme.outlineVariant),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onOpen,
-            child: Padding(
-              padding: const EdgeInsets.all(Insets.md),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        AppIcons.package,
-                        size: Chrome.iconTitle,
-                        color: scheme.tertiary,
-                      ),
-                      const SizedBox(width: Insets.sm),
-                      Text('Stores', style: theme.textTheme.titleSmall),
-                    ],
-                  ),
-                  for (final line in lines) ...[
-                    const SizedBox(height: Insets.xs),
-                    line,
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+        ],
+      ],
     );
   }
 }

@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/widgets/dashboard_glance.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/stores/application/store_glance.dart';
 import 'package:karmashala/src/features/stores/application/stores_controller.dart';
@@ -151,34 +154,53 @@ void main() {
     expect(container.read(storesGlanceProvider), isNull);
   });
 
+  test('the glance is the stores one, and its body imports no data layer', () {
+    expect(storesGlance.id, 'stores');
+    expect(storesGlance.title, 'Stores');
+    final source = File(
+      'lib/src/features/stores/presentation/stores_glance.dart',
+    ).readAsStringSync();
+    expect(source, isNot(contains('/data/')));
+  });
+
+  Future<void> pump(
+    WidgetTester tester,
+    Size size, {
+    bool compact = false,
+  }) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          clockProvider.overrideWithValue(FixedClock(now)),
+          storesProvider.overrideWith(() => _Stores(state())),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              // A dashboard tile's body width, whatever the window.
+              child: SizedBox(
+                width: size.width < 600 ? size.width - 48 : 240,
+                child: GlanceScope(
+                  compact: compact,
+                  child: Builder(builder: storesGlance.build),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
   for (final size in kStoreTestSizes) {
     for (final scale in kStoreTestTextScales) {
       testWidgets('draws at ${size.width.round()} px, text ${scale}x', (
         tester,
       ) async {
         setStoreTestSurface(tester, size, scale);
-        var opened = 0;
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              clockProvider.overrideWithValue(FixedClock(now)),
-              storesProvider.overrideWith(() => _Stores(state())),
-            ],
-            child: MaterialApp(
-              home: Scaffold(
-                body: Align(
-                  alignment: Alignment.topLeft,
-                  // A dashboard tile's width, whatever the window.
-                  child: SizedBox(
-                    width: size.width < 600 ? size.width - 32 : 320,
-                    child: StoresGlance(onOpen: () => opened++),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
+        await pump(tester, size);
         expect(tester.takeException(), isNull);
         expect(find.text('1 needs attention · Stuck (iOS)'), findsOneWidget);
         expect(find.text('1.34.6 Ready for sale · 2h'), findsOneWidget);
@@ -186,9 +208,16 @@ void main() {
           find.byKey(const ValueKey('stores-glance-sparkline')),
           findsOneWidget,
         );
-        await tester.tap(find.byKey(const ValueKey('stores-glance')));
-        expect(opened, 1);
       });
     }
   }
+
+  testWidgets('on a phone strip it keeps to one line', (tester) async {
+    setStoreTestSurface(tester, const Size(360, 800), 1.6);
+    await pump(tester, const Size(360, 800), compact: true);
+    expect(tester.takeException(), isNull);
+    expect(find.text('1 needs attention · Stuck (iOS)'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stores-glance-release')), findsNothing);
+    expect(find.byKey(const ValueKey('stores-glance-sparkline')), findsNothing);
+  });
 }
