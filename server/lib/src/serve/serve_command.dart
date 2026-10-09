@@ -1960,8 +1960,8 @@ Future<int> _serve(
   final pipelines = ServerPipelines(
     records: PipelineDao(database),
     launcher: ServerStageLauncher(
-      start: launches.start,
-      gate: const OpenStageLaunchGate(),
+      // Behind the launch limits: a stage may wait for a slot.
+      start: (spec, priority) => launches.start(spec, priority: priority),
       defaultInstallation: (repositoryId) {
         final repository =
             checkoutRows.repository(repositoryId) ??
@@ -1998,6 +1998,12 @@ Future<int> _serve(
           automations?.runStageChecks(sessionId, only: only) ??
           (throw StateError('this server runs no checks')),
       now: () => DateTime.now().toUtc(),
+      worktreeOf: (sessionId) {
+        final session = SessionDao(database).getById(sessionId);
+        return session == null || session.worktreeRemoved
+            ? null
+            : session.worktree;
+      },
     ),
     tell: data.announce,
     hasRepository: (id) => checkoutRows.repository(id) != null,

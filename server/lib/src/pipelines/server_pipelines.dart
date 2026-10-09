@@ -18,80 +18,70 @@ abstract interface class PipelinesWork {
   Future<Object?> handle(PipelinesRequest<Object?> request);
 }
 
-/// **Where a stage launch waits its turn.** The server's concurrency gate
-/// (round 79) admits it; until that is wired, [OpenStageLaunchGate] lets
-/// every launch through at once.
-abstract interface class StageLaunchGate {
-  Future<T> admit<T>(StagePriority priority, Future<T> Function() launch);
-}
-
-class OpenStageLaunchGate implements StageLaunchGate {
-  const OpenStageLaunchGate();
-
-  @override
-  Future<T> admit<T>(StagePriority priority, Future<T> Function() launch) =>
-      launch();
-}
-
 /// Starts each stage as a real session through the server's one launch path,
-/// behind [gate], and opens its tab beside its parent's.
+/// which holds it behind the launch limits — a person's run as interactive,
+/// anything else as background — and opens its tab beside its parent's.
 class ServerStageLauncher implements StageLauncher {
   ServerStageLauncher({
     required this.start,
     required this.defaultInstallation,
-    required this.gate,
     this.opened,
   });
 
-  final Future<SessionStarted> Function(SessionStartSpec spec) start;
+  final Future<SessionStarted> Function(
+    SessionStartSpec spec,
+    LaunchPriority priority,
+  )
+  start;
 
   /// The installation a stage that names none starts: the checkout's default.
   final String Function(String repositoryId) defaultInstallation;
-  final StageLaunchGate gate;
   final void Function(SessionStarted started, StageLaunch launch)? opened;
 
   @override
-  Future<StageLaunched> launch(StageLaunch launch) => gate.admit(
-    launch.priority,
-    () async {
-      final previous = launch.worktreePath;
-      final started = await start(
-        SessionStartSpec(
-          repositoryId: launch.repositoryId,
-          installationId:
-              launch.installationId ?? defaultInstallation(launch.repositoryId),
-          title: launch.title,
-          titleTyped: true,
-          prompt: launch.prompt,
-          systemPrompt: launch.systemPrompt,
-          worktree: launch.workspace == PipelineWorkspace.newWorktree,
-          existingWorktree:
-              launch.workspace == PipelineWorkspace.previousWorktree &&
-                  previous != null
-              ? EnvironmentPath(
-                  environmentId: launch.environmentId ?? '',
-                  path: previous,
-                )
-              : null,
-          permissionMode: launch.permissionMode,
-          modelId: launch.modelId,
-          parentSessionId: launch.parentSessionId,
-          parentLink: launch.parentSessionId == null ? null : SessionLink.spawn,
-        ),
-      );
-      opened?.call(started, launch);
-      final session = started.session;
-      final worktree = session.worktreeRemoved ? null : session.worktree;
-      return StageLaunched(
-        sessionId: session.id,
-        worktreePath: worktree?.path,
-        environmentId: worktree?.environmentId,
-        branch: launch.workspace == PipelineWorkspace.newWorktree
-            ? sessionBranchName(session.id)
+  Future<StageLaunched> launch(StageLaunch launch) async {
+    final previous = launch.worktreePath;
+    final started = await start(
+      SessionStartSpec(
+        repositoryId: launch.repositoryId,
+        installationId:
+            launch.installationId ?? defaultInstallation(launch.repositoryId),
+        title: launch.title,
+        titleTyped: true,
+        prompt: launch.prompt,
+        systemPrompt: launch.systemPrompt,
+        worktree: launch.workspace == PipelineWorkspace.newWorktree,
+        existingWorktree:
+            launch.workspace == PipelineWorkspace.previousWorktree &&
+                previous != null
+            ? EnvironmentPath(
+                environmentId: launch.environmentId ?? '',
+                path: previous,
+              )
             : null,
-      );
-    },
-  );
+        permissionMode: launch.permissionMode,
+        modelId: launch.modelId,
+        parentSessionId: launch.parentSessionId,
+        parentLink: launch.parentSessionId == null ? null : SessionLink.spawn,
+      ),
+      launch.priority == StagePriority.person
+          ? LaunchPriority.interactive
+          : LaunchPriority.background,
+    );
+    opened?.call(started, launch);
+    final session = started.session;
+    // A launch waiting for a slot has no worktree yet; the runner reads it
+    // once the stage has run ([StageEvidence.placeOf]).
+    final worktree = session.worktreeRemoved ? null : session.worktree;
+    return StageLaunched(
+      sessionId: session.id,
+      worktreePath: worktree?.path,
+      environmentId: worktree?.environmentId,
+      branch: launch.workspace == PipelineWorkspace.newWorktree
+          ? sessionBranchName(session.id)
+          : null,
+    );
+  }
 }
 
 /// How long one wait on a stage's turn lasts before it is asked again.
@@ -150,6 +140,7 @@ class ServerStageEvidence implements StageEvidence {
     required this.contentOf,
     required this.runChecks,
     required this.now,
+    this.worktreeOf,
   });
 
   final List<PipelineArtifactRef> Function(String sessionId) listArtifacts;
@@ -159,6 +150,23 @@ class ServerStageEvidence implements StageEvidence {
     List<ProjectCheck>? only,
   })
   runChecks;
+
+  /// Where a session works now, from its row; null reads as unknown.
+  final EnvironmentPath? Function(String sessionId)? worktreeOf;
+
+  @override
+  Future<StageLaunched?> placeOf(String sessionId) async {
+    final worktree = worktreeOf?.call(sessionId);
+    return worktree == null
+        ? null
+        : StageLaunched(
+            sessionId: sessionId,
+            worktreePath: worktree.path,
+            environmentId: worktree.environmentId,
+            branch: sessionBranchName(sessionId),
+          );
+  }
+
   final DateTime Function() now;
 
   @override

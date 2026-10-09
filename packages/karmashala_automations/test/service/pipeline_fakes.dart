@@ -48,6 +48,9 @@ class FakeStageLauncher implements StageLauncher {
   /// A launch for this role throws.
   String? failRole;
 
+  /// Launches wait for a slot: no worktree is known when they return.
+  var queued = false;
+
   @override
   Future<StageLaunched> launch(StageLaunch launch) async {
     if (failRole != null && launch.title.startsWith(failRole!)) {
@@ -56,7 +59,7 @@ class FakeStageLauncher implements StageLauncher {
     launches.add(launch);
     final id = 's${++_next}';
     final worktree = switch (launch.workspace) {
-      PipelineWorkspace.newWorktree => '/wt/$id',
+      PipelineWorkspace.newWorktree => queued ? null : '/wt/$id',
       PipelineWorkspace.previousWorktree => launch.worktreePath,
       PipelineWorkspace.source => null,
     };
@@ -110,6 +113,12 @@ class FakeStageEvidence implements StageEvidence {
 
   @override
   Future<String?> artifactText(String artifactId) async => texts[artifactId];
+
+  /// Where each session works now, for a launch that waited for a slot.
+  final places = <String, StageLaunched>{};
+
+  @override
+  Future<StageLaunched?> placeOf(String sessionId) async => places[sessionId];
 
   @override
   Future<PipelineCheckRecord> check({

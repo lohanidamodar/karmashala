@@ -88,6 +88,10 @@ abstract interface class StageEvidence {
   /// The text of artifact [artifactId], or null when it cannot be read.
   Future<String?> artifactText(String artifactId);
 
+  /// Where [sessionId] works now — for a stage whose launch waited for a
+  /// slot, so had no worktree when it was recorded. Null when unknown.
+  Future<StageLaunched?> placeOf(String sessionId);
+
   /// Runs [command] — or, when blank, the checkout's project checks — in the
   /// stage's workspace, recorded as one verification run with its identity.
   Future<PipelineCheckRecord> check({

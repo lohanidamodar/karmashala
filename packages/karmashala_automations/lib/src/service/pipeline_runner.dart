@@ -485,11 +485,24 @@ class PipelineRunner {
       _log('reading ${record.role} artifacts failed: $error');
       artifacts = const [];
     }
+    StageLaunched? place;
+    final stage = run.definition.stages[record.stageIndex];
+    if (record.worktreePath == null &&
+        stage.workspace == PipelineWorkspace.newWorktree) {
+      try {
+        place = await _evidence.placeOf(record.sessionId!);
+      } on Object catch (error) {
+        _log('reading where ${record.role} worked failed: $error');
+      }
+    }
     final latest = _stillAt(runId, record);
     if (latest == null) return;
     final answered = latest.current!.copyWith(
       answer: turn.answer ?? '',
       artifacts: artifacts,
+      worktreePath: place?.worktreePath,
+      environmentId: place?.environmentId,
+      branch: place?.branch,
       finishedAt: _now(),
     );
     _put(latest.withCurrent(answered));

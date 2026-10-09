@@ -298,6 +298,36 @@ void main() {
     expect(now.reason, contains('no agent'));
   });
 
+  test('a stage that waited for a slot hands on the worktree it got', () async {
+    launcher.queued = true;
+    final started = runner.start(
+      definition: threeStages.copyWith(
+        stages: [
+          threeStages.stages[0].copyWith(gate: PipelineGateKind.auto),
+          ...threeStages.stages.skip(1),
+        ],
+      ),
+      repositoryId: 'repo',
+      input: 'x',
+    );
+    await pumpEventQueue();
+    watcher.answer('s1', 'plan');
+    await pumpEventQueue();
+    expect(run(started.id).current!.worktreePath, isNull);
+    evidence.places['s2'] = const StageLaunched(
+      sessionId: 's2',
+      worktreePath: '/wt/late',
+      environmentId: 'local',
+      branch: 'session/late',
+    );
+    watcher.answer('s2', 'did it');
+    await pumpEventQueue();
+    expect(run(started.id).records[1].worktreePath, '/wt/late');
+    final review = launcher.launches[2];
+    expect(review.worktreePath, '/wt/late');
+    expect(review.prompt, contains('branch session/late'));
+  });
+
   test('a definition that cannot run is refused before anything starts', () {
     expect(
       () => runner.start(

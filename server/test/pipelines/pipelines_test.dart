@@ -19,7 +19,7 @@ import '../mcp/tools/tool_harness.dart';
 /// the MCP tools an agent drives a run with, and the requests a client sends.
 void main() {
   late ToolHarness h;
-  late _CountingGate gate;
+  late List<LaunchPriority> priorities;
   late List<SessionStartSpec> specs;
   late _Turns turns;
   late List<DataChange> told;
@@ -28,7 +28,7 @@ void main() {
 
   setUp(() {
     h = ToolHarness();
-    gate = _CountingGate();
+    priorities = [];
     specs = [];
     turns = _Turns();
     told = [];
@@ -36,9 +36,9 @@ void main() {
     pipelines = ServerPipelines(
       records: PipelineDao(h.db),
       launcher: ServerStageLauncher(
-        gate: gate,
         defaultInstallation: (_) => 'a1',
-        start: (spec) async {
+        start: (spec, priority) async {
+          priorities.add(priority);
           specs.add(spec);
           final id = 'stage-${++started}';
           return SessionStarted(
@@ -83,53 +83,59 @@ void main() {
     expect((answer['fields']! as Map).keys, contains('{{loop.feedback}}'));
   });
 
-  test("an agent's run starts its stages as sub-sessions through the gate, "
-      'and only it may approve them', () async {
-    final run = await h.map(tools, 'pipeline_run', {
-      'input': 'Add a cart badge',
-    }, 's1');
-    final runId = run['runId']! as String;
-    await pumpEventQueue();
-    expect(gate.admitted, [StagePriority.background]);
-    final plan = specs.single;
-    expect(plan.repositoryId, 'r1', reason: "the caller's own checkout");
-    expect(plan.parentSessionId, 's1');
-    expect(plan.worktree, isFalse);
-    expect(plan.titleTyped, isTrue);
-    expect(plan.title, 'Plan · Plan → Implement → Review');
-    expect(plan.systemPrompt, contains('read-only'));
-    expect(plan.prompt, contains('Add a cart badge'));
+  test(
+    "an agent's run starts its stages as sub-sessions behind the launch limits, "
+    'and only it may approve them',
+    () async {
+      final run = await h.map(tools, 'pipeline_run', {
+        'input': 'Add a cart badge',
+      }, 's1');
+      final runId = run['runId']! as String;
+      await pumpEventQueue();
+      expect(priorities, [LaunchPriority.background]);
+      final plan = specs.single;
+      expect(plan.repositoryId, 'r1', reason: "the caller's own checkout");
+      expect(plan.parentSessionId, 's1');
+      expect(plan.worktree, isFalse);
+      expect(plan.titleTyped, isTrue);
+      expect(plan.title, 'Plan · Plan → Implement → Review');
+      expect(plan.systemPrompt, contains('read-only'));
+      expect(plan.prompt, contains('Add a cart badge'));
 
-    turns.answer('stage-1', 'The plan');
-    await pumpEventQueue();
-    final waiting = await h.map(tools, 'pipeline_status', {'runId': runId});
-    expect(waiting['state'], 'waiting');
-    expect(waiting['handoff'], 'The plan');
+      turns.answer('stage-1', 'The plan');
+      await pumpEventQueue();
+      final waiting = await h.map(tools, 'pipeline_status', {'runId': runId});
+      expect(waiting['state'], 'waiting');
+      expect(waiting['handoff'], 'The plan');
 
-    await expectLater(
-      h.call(tools, 'pipeline_approve', {'runId': runId}, 's2'),
-      throwsA(isA<StateError>()),
-    );
-    await h.call(tools, 'pipeline_approve', {
-      'runId': runId,
-      'handoff': 'The plan, trimmed',
-    }, 's1');
-    await pumpEventQueue();
-    expect(specs, hasLength(2));
-    expect(specs[1].worktree, isTrue);
-    expect(specs[1].prompt, contains('The plan, trimmed'));
-    expect(gate.admitted, hasLength(2));
+      await expectLater(
+        h.call(tools, 'pipeline_approve', {'runId': runId}, 's2'),
+        throwsA(isA<StateError>()),
+      );
+      await h.call(tools, 'pipeline_approve', {
+        'runId': runId,
+        'handoff': 'The plan, trimmed',
+      }, 's1');
+      await pumpEventQueue();
+      expect(specs, hasLength(2));
+      expect(specs[1].worktree, isTrue);
+      expect(specs[1].prompt, contains('The plan, trimmed'));
+      expect(priorities, [
+        LaunchPriority.background,
+        LaunchPriority.background,
+      ]);
 
-    turns.answer('stage-2', 'Done');
-    await pumpEventQueue();
-    expect(specs[2].existingWorktree?.path, '/wt/stage-2');
-    expect(told.whereType<PipelineRunChanged>(), isNotEmpty);
+      turns.answer('stage-2', 'Done');
+      await pumpEventQueue();
+      expect(specs[2].existingWorktree?.path, '/wt/stage-2');
+      expect(told.whereType<PipelineRunChanged>(), isNotEmpty);
 
-    final status = await h.map(tools, 'pipeline_status', {'runId': runId});
-    final stages = status['stages']! as List;
-    expect((stages[1] as Map)['branch'], sessionBranchName('stage-2'));
-    expect((stages[0] as Map)['handoff'], 'The plan, trimmed');
-  });
+      final status = await h.map(tools, 'pipeline_status', {'runId': runId});
+      final stages = status['stages']! as List;
+      expect((stages[1] as Map)['branch'], sessionBranchName('stage-2'));
+      expect((stages[0] as Map)['handoff'], 'The plan, trimmed');
+    },
+  );
 
   test("a person's run goes ahead of background work, and no agent may "
       'approve it', () async {
@@ -143,7 +149,7 @@ void main() {
             )
             as PipelineRun;
     await pumpEventQueue();
-    expect(gate.admitted, [StagePriority.person]);
+    expect(priorities, [LaunchPriority.interactive]);
     expect(specs.single.parentSessionId, isNull);
     turns.answer('stage-1', 'plan');
     await pumpEventQueue();
@@ -192,6 +198,25 @@ void main() {
       throwsA(isA<DataRefused>()),
     );
   });
+
+  test(
+    'a stage that waited for a slot is found where it works once it ran',
+    () async {
+      final evidence = ServerStageEvidence(
+        listArtifacts: (_) => const [],
+        contentOf: (_) async => const [],
+        runChecks: (_, {only}) async => null,
+        now: () => h.now,
+        worktreeOf: (id) => id == 'queued'
+            ? const EnvironmentPath(environmentId: 'here', path: '/wt/queued')
+            : null,
+      );
+      final place = await evidence.placeOf('queued');
+      expect(place!.worktreePath, '/wt/queued');
+      expect(place.branch, sessionBranchName('queued'));
+      expect(await evidence.placeOf('unknown'), isNull);
+    },
+  );
 
   group('a check gate', () {
     test(
@@ -268,16 +293,6 @@ SessionChecks _ran(VerificationVerdict verdict, {required int exitCode}) => (
     ),
   ),
 );
-
-class _CountingGate implements StageLaunchGate {
-  final admitted = <StagePriority>[];
-
-  @override
-  Future<T> admit<T>(StagePriority priority, Future<T> Function() launch) {
-    admitted.add(priority);
-    return launch();
-  }
-}
 
 class _Turns implements StageWatcher {
   final _turns = <String, Completer<StageTurn>>{};
