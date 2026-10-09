@@ -64,6 +64,7 @@ class NotificationsSection extends ConsumerWidget {
             onChanged: controller.setChime,
           ),
           const _StoreChangesChoice(),
+          const _UsageForecastSwitch(),
           const _QuietAfterChoice(),
         ],
       ),
@@ -109,6 +110,28 @@ class _PhoneNotificationsSection extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Whether a usage forecast that runs out before its reset interrupts. Off
+/// by default: the chip already turns amber.
+class _UsageForecastSwitch extends ConsumerWidget {
+  const _UsageForecastSwitch();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SettingsSwitchRow(
+    key: const ValueKey('settings-usage-forecast'),
+    label: 'Usage running out early',
+    help:
+        'Once per window, when an account’s usage at its recent pace runs '
+        'out at least 15 minutes before the window resets. The usage chip '
+        'turns amber either way.',
+    value: ref.watch(
+      notificationSettingsControllerProvider.select((s) => s.usageForecast),
+    ),
+    onChanged: ref
+        .read(notificationSettingsControllerProvider.notifier)
+        .setUsageForecast,
+  );
 }
 
 /// Which changes on the app stores interrupt. The inbox files every one.
