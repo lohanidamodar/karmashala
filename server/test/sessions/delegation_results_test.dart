@@ -908,6 +908,32 @@ void main() {
       );
     });
 
+    // Bug 8: "its process ended · exit 1" reached the parent while the child's
+    // pane was alive — the process that exited was the one before a restart.
+    test('a process that exits while another already runs the child says '
+        'nothing of an end; its finish still comes', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(childIn('c1', kReportModeFinal));
+      pty.handles.last.finish(1);
+      while (!registry.find('karmashala_c1')!.lifecycle.hasEnded) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await runTerminal('c1');
+      await settle();
+      expect(delivered['parent'] ?? const <String>[], isEmpty);
+      expect(SessionDelegationDao(database).byChild('c1')!.isOpen, isTrue);
+
+      await works('c1', 'Reviewed; the answer is in the brief.');
+      expect(delivered['parent'], hasLength(1));
+      expect(
+        delivered['parent']!.single,
+        contains('Reviewed; the answer is in the brief.'),
+      );
+      expect(delivered['parent']!.single, isNot(contains('process ended')));
+    });
+
     test(
       'a child a person stopped stays unfollowed when started again',
       () async {
