@@ -170,12 +170,14 @@ void main() {
       expect(unexamined.approval.isEmpty, isTrue);
     });
 
-    test('Antigravity declares nothing, on evidence rather than by default', () {
-      // Its 1.0.13 build wrote a `keybindings.json` binding `confirm.yes` to
-      // `y` and `confirm.no` to `n`, which briefly looked like the best-sourced
-      // approval keys in the registry. 1.1.22 ships no such file, so those keys
-      // describe a version nobody runs, and the honest answer is still none.
-      expect(registry.byId(AgentIds.antigravity)!.approval.isEmpty, isTrue);
+    test('Antigravity declares only the Esc its question names', () {
+      // The 1.0.13 `keybindings.json` keys (`y`/`n`) describe a version nobody
+      // runs. 1.3.2, captured in a ConPTY (round 70), names one key outside its
+      // menus: Esc skips a question ("esc Skip"). Its other prompts are menus,
+      // answered by option, so there is still no key that means yes.
+      final approval = registry.byId(AgentIds.antigravity)!.approval;
+      expect(approval.approve, isNull);
+      expect(approval.deny?.keys, '\x1b');
     });
 
     test('every declared key is a control sequence, never prose', () {

@@ -76,6 +76,9 @@ class _DataRestoreSectionState extends ConsumerState<DataRestoreSection> {
     final picked = await pickOneFile(
       what: 'a Karmashala backup',
       context: context,
+      // Where the backups are kept, so the shell need not restore its own
+      // last folder (file_picking_test).
+      startNear: ref.read(backupScheduleProvider).value?.folder,
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Karmashala backup', extensions: ['zip']),
       ],
