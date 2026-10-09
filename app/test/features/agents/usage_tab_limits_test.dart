@@ -258,11 +258,28 @@ void main() {
         tester,
       ) async {
         seedSteadyHistory();
-        await pump(tester, size: size, textScale: scale);
+        await pump(
+          tester,
+          size: size,
+          textScale: scale,
+          rows: [
+            UsageSessionRow(
+              sessionId: 's1',
+              title: 'A long session title that has to ellipsise on a phone',
+              project: 'karmashala',
+              agentId: 'claudeCode',
+              tokens: 1200000,
+              tokensByModel: const {'claude-opus-5-5': 1200000},
+              costAmount: 1.25,
+              costCurrency: 'USD',
+              lastActivityAt: testTime.subtract(const Duration(minutes: 5)),
+            ),
+          ],
+        );
         expect(tester.takeException(), isNull);
         // Down the whole page: every section lays out in the width.
         await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('usage-limit-pause')),
+          find.byKey(const ValueKey('usage-cost-row-s1')),
           300,
         );
         expect(tester.takeException(), isNull);
