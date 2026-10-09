@@ -8,6 +8,8 @@ import '../../../core/capabilities/capabilities.dart';
 
 import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../automations/presentation/automations_settings_link.dart';
+import '../../backup/presentation/data_backup_section.dart';
+import '../../backup/presentation/data_restore_section.dart';
 import '../../automations/presentation/automations_tab_state.dart';
 import '../../checkpoints/presentation/checkpoint_settings_section.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
@@ -198,6 +200,8 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.serverStatus => const ServerStatusSection(),
   SettingsAnchor.serverLog => const ServerLogSection(),
   SettingsAnchor.serverStorage => const ServerStorageSection(),
+  SettingsAnchor.dataBackup => const DataBackupSection(),
+  SettingsAnchor.dataRestore => const DataRestoreSection(),
   SettingsAnchor.remoteAccess => const RemoteAccessSection(),
   SettingsAnchor.storeCredentials => const StoresSettingsSection(),
   SettingsAnchor.debugMode => const DebugModeSection(),

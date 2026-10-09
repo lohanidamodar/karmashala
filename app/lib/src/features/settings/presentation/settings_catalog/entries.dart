@@ -284,6 +284,30 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['timeline', 'activity', 'history', 'retention', 'overview'],
   ),
   SettingsEntry(
+    'Back up now',
+    anchor: SettingsAnchor.dataBackup,
+    description:
+        'One archive of the sessions, settings, artifacts and evidence, in '
+        'a folder you choose. Credentials are left out.',
+    keywords: ['backup', 'back up', 'export', 'archive', 'zip'],
+  ),
+  SettingsEntry(
+    'Scheduled backups',
+    anchor: SettingsAnchor.dataBackup,
+    description:
+        'Off, daily or weekly, made by the server, keeping the newest '
+        'few.',
+    keywords: ['schedule', 'automatic', 'daily', 'weekly', 'keep'],
+  ),
+  SettingsEntry(
+    'Restore from backup',
+    anchor: SettingsAnchor.dataRestore,
+    description:
+        'Check a backup, see what it holds, and switch to it; the data it '
+        'replaces is kept.',
+    keywords: ['restore', 'recover', 'migrate', 'new machine'],
+  ),
+  SettingsEntry(
     'Worktree setup',
     anchor: SettingsAnchor.worktreeSetup,
     description: 'What to copy and run in a checkout’s new worktree.',

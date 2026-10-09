@@ -374,6 +374,22 @@ enum SettingsAnchor {
     'clean up',
     'old sessions',
   ]),
+  dataBackup(SettingsSectionId.data, 'Back up', [
+    'backup',
+    'back up',
+    'schedule',
+    'daily',
+    'weekly',
+    'retention',
+    'archive',
+  ]),
+  dataRestore(SettingsSectionId.data, 'Restore', [
+    'restore',
+    'recover',
+    'recovery',
+    'migrate',
+    'new machine',
+  ]),
   remoteAccess(SettingsSectionId.remote, 'Remote access', [
     'companion',
     'phone',
@@ -440,6 +456,8 @@ enum SettingsAnchor {
     serverLog => caps.hostsServer,
     // Read from and cleared at this machine's server, by this machine's app.
     serverStorage => caps.hostsServer && caps.serverSettings,
+    // Made and restored by this machine's server, from its own disk.
+    dataBackup || dataRestore => caps.hostsServer && caps.serverSettings,
     _ => true,
   };
 }
