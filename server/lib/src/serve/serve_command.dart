@@ -1495,6 +1495,10 @@ Future<int> _serve(
         sessionInput.deliverNow(sessionId, text, leadIn: leadIn),
     leadInFor: (sessionId) =>
         prompts.agentOf(sessionId)?.terminal.typedOpeningLeadIn,
+    // So an opening left in the composer with no turn started is sent.
+    markersOf: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
+    placeholderOf: (sessionId) =>
+        prompts.agentOf(sessionId)?.terminal.pastePlaceholder,
     queue: sessionQueue,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );

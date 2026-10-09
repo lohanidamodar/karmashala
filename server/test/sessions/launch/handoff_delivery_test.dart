@@ -228,4 +228,79 @@ void main() {
     await after(step);
     expect(delivered, [('s1', 'hi\nthere')]);
   });
+
+  // Bug 13: a new terminal Claude's opening was pasted — "[Pasted text #1 +5
+  // lines]" — and never sent, and its parent was told it was done.
+  group('an opening pasted but not sent', () {
+    late HandoffDelivery confirming;
+    late Map<String, bool> stillTyped;
+    late List<String> submitted;
+
+    setUp(() async {
+      await delivery.close();
+      stillTyped = {};
+      submitted = [];
+      confirming = HandoffDelivery(
+        handoffs: handoffs,
+        holds: (id) => held[id] ?? false,
+        ready: (id) => ready[id] ?? false,
+        working: (id) => working[id] ?? false,
+        deliver: (id, text, leadIn) async => delivered.add((id, text)),
+        hold: holds.add,
+        release: releases.add,
+        stillTyped: (id) => stillTyped[id] ?? false,
+        submit: (id) {
+          submitted.add(id);
+          return true;
+        },
+        now: () => clock,
+      );
+      delivery = confirming;
+      handoffs.record(
+        's1',
+        HandoffKind.opening,
+        'one\ntwo',
+        HandoffRoute.typed,
+      );
+      confirming.watch('s1');
+      held['s1'] = true;
+      ready['s1'] = true;
+      await after(step);
+      await after(step);
+      expect(delivered, hasLength(1));
+    });
+
+    test('is sent again while it sits in the composer and no turn starts, '
+        'at most twice', () async {
+      stillTyped['s1'] = true;
+      await after(step);
+      expect(submitted, isEmpty, reason: 'given a moment to start');
+      await after(HandoffDelivery.confirmAfter);
+      expect(submitted, ['s1']);
+      await after(HandoffDelivery.confirmAfter);
+      await after(HandoffDelivery.confirmAfter);
+      expect(submitted, ['s1', 's1']);
+      // Then the queue goes as before.
+      await after(HandoffDelivery.turnStartGrace);
+      expect(releases, ['s1']);
+    });
+
+    test(
+      'is left alone once its turn starts, or when the composer let it go',
+      () async {
+        working['s1'] = true;
+        stillTyped['s1'] = true;
+        await after(HandoffDelivery.confirmAfter + step);
+        expect(submitted, isEmpty);
+        expect(releases, ['s1']);
+      },
+    );
+
+    test('a composer that no longer holds it is not pressed', () async {
+      stillTyped['s1'] = false;
+      await after(HandoffDelivery.confirmAfter + step);
+      await after(HandoffDelivery.confirmAfter + step);
+      expect(submitted, isEmpty);
+    });
+  });
 }
