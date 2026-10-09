@@ -1098,7 +1098,7 @@
     },
     {
       "name": "list_checkouts",
-      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free.",
+      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free. writersHere narrows it to the live sessions that may write there (not read-only), with their agent and whether they are working or idle: if it names anyone, prefer a new worktree (worktree_create) over sharing.",
       "inputSchema": {
         "type": "object",
         "properties": {

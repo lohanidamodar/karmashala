@@ -6,7 +6,10 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
+import 'package:karmashala_session/session.dart' show occupancySentence;
 import '../../../app/widgets/fact_list.dart';
+import '../application/checkout_occupancy_providers.dart';
 import '../application/session_providers.dart';
 import '../application/session_repositories_service.dart';
 import '../application/session_ui_providers.dart';
@@ -83,8 +86,37 @@ class _Repositories {
     }
   }
 
-  Future<void> attach(BuildContext context, WidgetRef ref, String repoId) =>
-      _change(context, ref, () => service.attach(sessionId, repoId));
+  /// Attaches [repoId] — after saying so, when other sessions that may write
+  /// are working in it: attaching shares its working tree with them.
+  Future<void> attach(
+    BuildContext context,
+    WidgetRef ref,
+    String repoId,
+  ) async {
+    final repository = workspace.repository(repoId);
+    if (repository != null) {
+      final occupants = ref.read(
+        checkoutOccupantsProvider((
+          directory: repository.path,
+          excluding: sessionId,
+        )),
+      );
+      if (occupancySentence(occupants) case final sentence?) {
+        final attach = await showConfirmDialog(
+          context,
+          title: 'Attach ${repository.name}?',
+          message:
+              '$sentence Attaching it shares one working tree, index and '
+              'branch with them: their edits and this session\'s land in the '
+              'same files.',
+          confirmLabel: 'Attach anyway',
+          cancelLabel: 'Wait',
+        );
+        if (!attach || !context.mounted) return;
+      }
+    }
+    await _change(context, ref, () => service.attach(sessionId, repoId));
+  }
 
   Future<void> detach(BuildContext context, WidgetRef ref, String repoId) =>
       _change(context, ref, () => service.detach(sessionId, repoId));

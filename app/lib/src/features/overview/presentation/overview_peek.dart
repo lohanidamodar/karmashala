@@ -31,6 +31,8 @@ import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_chat_source.dart'
     show ChatsShownOutsideGroups, chatsShownOutsideGroupsProvider;
 import '../../sessions/presentation/approval_request_card.dart';
+import '../../sessions/presentation/checkout_occupancy_views.dart'
+    show SharedCheckoutBadge;
 import '../../sessions/presentation/delivery_strip.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/operator_chip.dart';

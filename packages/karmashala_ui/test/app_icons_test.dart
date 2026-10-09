@@ -42,6 +42,7 @@ void main() {
     'webhooksLogo': (AppIcons.webhooksLogo, 0xecae, regular),
     'bellSimple': (AppIcons.bellSimple, 0xe0d0, regular),
     'calendarBlank': (AppIcons.calendarBlank, 0xe10a, regular),
+    'usersThree': (AppIcons.usersThree, 0xe68e, regular),
   };
 
   expected.forEach((name, entry) {

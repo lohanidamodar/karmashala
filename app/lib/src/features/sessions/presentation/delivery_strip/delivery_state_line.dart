@@ -63,11 +63,16 @@ class DeliveryStateLine extends ConsumerWidget {
         ref.watch(
           sessionActiveModelProvider(sessionId).select((a) => a != null),
         );
+    // The same for the sessions sharing its checkout.
+    final shared = ref.watch(
+      sessionCheckoutSharersProvider(sessionId).select((s) => s.isNotEmpty),
+    );
     final facts = _deliveryFacts(
       context,
       delivery,
       sessionId,
       withModel: hasModel,
+      withSharers: shared,
     );
     if (singleLine) {
       // The stage, first, ends with an ellipsis once it is all that fits.
@@ -187,6 +192,7 @@ List<Widget> _deliveryFacts(
   SessionDelivery delivery,
   String sessionId, {
   bool withModel = false,
+  bool withSharers = false,
 }) {
   final theme = Theme.of(context);
   final semantic = SemanticColors.of(context);
@@ -214,6 +220,8 @@ List<Widget> _deliveryFacts(
     // Beside the stage: how far the work got, and whether anything checked it.
     // Nothing when nothing ever did (SessionVerdictMark).
     SessionVerdictMark(sessionId: sessionId),
+    // Other live sessions writing in the same checkout, named on hover.
+    if (withSharers) SharedCheckoutBadge(sessionId: sessionId),
     if (delivery.branch case final branch?)
       Row(
         mainAxisSize: MainAxisSize.min,

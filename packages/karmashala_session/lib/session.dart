@@ -3,6 +3,7 @@
 /// signs text it puts into another session.
 library;
 
+export 'src/checkout_occupancy.dart';
 export 'src/queued_message.dart';
 export 'src/scratch_preamble.dart';
 export 'src/session_agent_span.dart';
