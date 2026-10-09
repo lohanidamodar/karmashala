@@ -391,6 +391,10 @@ class Touch {
   /// accessibility guidelines agree on 48; a 26px [Chrome.row] is a miss.
   static const target = 48.0;
 
+  /// What a compact control draws inside its [target]: the composer's Send
+  /// and Stop, whose tap area stays a thumb's.
+  static const compactControl = 36.0;
+
   /// The least space between two targets, so a thumb cannot hit both.
   static const gap = Insets.sm;
 

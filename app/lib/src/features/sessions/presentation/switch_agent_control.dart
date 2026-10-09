@@ -161,14 +161,67 @@ class _SwitchAgentControlState extends ConsumerState<SwitchAgentControl> {
           ),
         ];
       },
-      child: Tooltip(
-        message: 'Switch agent',
-        child: PickerFace(
-          icon: AppIcons.arrowsClockwise,
-          label: _switching
-              ? 'Switching…'
-              : current?.agentName ?? 'Switch agent',
-          maxLabelWidth: 160,
+      child: UiDensity.of(context).isTouch
+          // On a phone it shares the composer's one row, so it is the
+          // agent's mark and a caret, named in words for a screen reader.
+          ? _CompactFace(
+              agentId: current?.installation.agentId,
+              label: _switching
+                  ? 'Switching…'
+                  : 'Switch agent: ${current?.agentName ?? 'none running'}',
+            )
+          : Tooltip(
+              message: 'Switch agent',
+              child: PickerFace(
+                icon: AppIcons.arrowsClockwise,
+                label: _switching
+                    ? 'Switching…'
+                    : current?.agentName ?? 'Switch agent',
+                maxLabelWidth: 160,
+              ),
+            ),
+    );
+  }
+}
+
+/// The switch's face at touch density: the running agent's mark and a caret,
+/// a thumb's height.
+class _CompactFace extends StatelessWidget {
+  const _CompactFace({required this.agentId, required this.label});
+
+  final String? agentId;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final agentId = this.agentId;
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: Touch.target),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (agentId == null)
+                  Icon(AppIcons.arrowsClockwise, size: Touch.icon, color: muted)
+                else
+                  AgentLogo(agentId: agentId, size: Touch.icon),
+                Icon(
+                  AppIcons.caretDown,
+                  size: PickerFace.caretSize,
+                  color: muted,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
