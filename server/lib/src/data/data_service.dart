@@ -1051,7 +1051,9 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
           (throw const DataRefused.unavailable(
             'this server holds no app stores',
           ));
-      final result = await work.handle(asked);
+      final result = asked is StoresHistoryGet
+          ? await work.history(asked)
+          : await work.handle(asked);
       return DataReply(result as R, _service._revision);
     }
     if (request case final FilesWorkRequest<Object?> asked) {

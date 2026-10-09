@@ -87,6 +87,7 @@ import 'browser_values.dart';
 import 'terminal_values.dart';
 import 'env_values.dart';
 import 'github_values.dart';
+import 'store_history_values.dart';
 import 'store_values.dart';
 import 'package:store_console/store_console.dart' show StoreKind;
 import 'attention_values.dart';
