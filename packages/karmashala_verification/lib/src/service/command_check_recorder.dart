@@ -51,6 +51,11 @@ class CommandCheckRecorder {
           summary: '${check.name}: ${check.command.join(' ')}',
           detail: _withResults(
             check.refusal ??
+                switch (check.timedOutAfter) {
+                  final limit? =>
+                    'timed out after ${checkLimitWords(limit)} and was stopped',
+                  _ => null,
+                } ??
                 switch (check.exitCode) {
                   0 => 'passed',
                   null => 'stopped without an exit code Karmashala observed',
@@ -120,6 +125,7 @@ class CommandCheckRecorder {
     required String environmentId,
     required DateTime startedAt,
     required int? exitCode,
+    Duration? timedOutAfter,
     String output = '',
     String? sessionId,
     String? producedBySessionId,
@@ -130,6 +136,7 @@ class CommandCheckRecorder {
     final directory = await _store.createDirectory(id);
     final finishedAt = _now();
     final verdict = switch (exitCode) {
+      _ when timedOutAfter != null => VerificationVerdict.fail,
       0 => VerificationVerdict.pass,
       null => VerificationVerdict.inconclusive,
       _ => VerificationVerdict.fail,
@@ -149,7 +156,7 @@ class CommandCheckRecorder {
         ).resultsLine,
       ),
       at: finishedAt,
-      ok: exitCode == 0,
+      ok: verdict == VerificationVerdict.pass,
     );
     final run = VerificationRun(
       id: id,
@@ -161,6 +168,9 @@ class CommandCheckRecorder {
       finishedAt: finishedAt,
       verdict: verdict,
       reason: switch (exitCode) {
+        _ when timedOutAfter != null =>
+          '$line timed out after ${checkLimitWords(timedOutAfter)} and was '
+              'stopped; what it printed until then is kept.',
         0 => '$line passed.',
         null =>
           '$line stopped without an exit code Karmashala observed, so whether '

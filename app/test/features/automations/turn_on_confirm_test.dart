@@ -362,6 +362,10 @@ void main() {
       expect(limits['While a run is going'], contains('merges'));
       expect(limits['Run a command time limit'], 'Stopped after 10 min');
       expect(
+        limits['Check the result time limit'],
+        'Each check is stopped after 30 min, and fails',
+      );
+      expect(
         review.changes.firstWhere((l) => l.label == 'Permission mode').text,
         'mode=auto',
       );

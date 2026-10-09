@@ -189,11 +189,14 @@ List<TurnOnLine> _limits(Automation automation) {
           : 'A run is stopped after ${durationWords(automation.maxRuntime!)}',
     ),
     for (final step in automation.steps.after)
-      if (step.kind == AutomationStepKind.command ||
-          step.kind == AutomationStepKind.webhook)
+      if (step.kind != AutomationStepKind.tell &&
+          step.kind != AutomationStepKind.notify)
         (
           label: '${step.kind.label} time limit',
-          text: 'Stopped after ${durationWords(step.timeout)}',
+          text: step.kind == AutomationStepKind.check
+              ? 'Each check is stopped after ${durationWords(step.timeout)}, '
+                    'and fails'
+              : 'Stopped after ${durationWords(step.timeout)}',
         ),
     (
       label: 'After failures',

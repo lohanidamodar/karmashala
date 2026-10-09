@@ -10,6 +10,7 @@ class CommandCheck {
     required this.name,
     required this.command,
     this.exitCode,
+    this.timedOutAfter,
     this.output = '',
     this.refusal,
     this.results,
@@ -19,6 +20,9 @@ class CommandCheck {
   final String name;
   final List<String> command;
   final int? exitCode;
+
+  /// The time limit it was stopped at, which fails it.
+  final Duration? timedOutAfter;
   final String output;
 
   /// Why it never ran, or null when it did.
@@ -36,13 +40,21 @@ class CommandCheck {
       : '${results!.summary}${change == null ? '' : ' — ${change!.summary}'}';
 
   /// The verdict this one check earns. A check that never ran, or whose exit
-  /// nobody observed, is inconclusive — never a pass (§19).
-  VerificationVerdict get verdict => refusal != null || exitCode == null
+  /// nobody observed, is inconclusive — never a pass (§19). One that ran past
+  /// its time limit failed.
+  VerificationVerdict get verdict => timedOutAfter != null
+      ? VerificationVerdict.fail
+      : refusal != null || exitCode == null
       ? VerificationVerdict.inconclusive
       : exitCode == 0
       ? VerificationVerdict.pass
       : VerificationVerdict.fail;
 }
+
+/// [limit] as a person says it: "30 min", "45 s".
+String checkLimitWords(Duration limit) => limit.inSeconds % 60 == 0
+    ? '${limit.inMinutes} min'
+    : '${limit.inSeconds} s';
 
 /// The worst of [verdicts] — fail, then inconclusive, then pass — so the newest
 /// verdict of a batch cannot be the last check's pass on top of an earlier
