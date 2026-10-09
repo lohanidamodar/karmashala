@@ -16,4 +16,5 @@ export 'runs.dart';
 export 'scheduler.dart';
 export 'schedules.dart';
 export 'unattended.dart';
+export 'pipelines.dart';
 export 'webhooks.dart';

@@ -1278,3 +1278,31 @@ void _migrateToV91(Database db) {
     db.execute('ALTER TABLE $table ADD COLUMN code_identity TEXT;');
   }
 }
+
+/// Pipelines a person saved, and pipeline runs: each run keeps a snapshot of
+/// its definition and a record per stage attempt as JSON, so a restarted
+/// server carries on at the stage it was at.
+void _migrateToV92(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS pipelines (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      definition TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS pipeline_runs (
+      id            TEXT PRIMARY KEY,
+      repository_id TEXT NOT NULL,
+      state         TEXT NOT NULL,
+      run           TEXT NOT NULL,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_pipeline_runs_state '
+    'ON pipeline_runs (state, created_at);',
+  );
+}

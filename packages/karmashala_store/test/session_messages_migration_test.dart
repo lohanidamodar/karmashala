@@ -31,11 +31,11 @@ void main() {
     );
   });
 
-  test('the head is 91 and the keys stay contiguous', () {
+  test('the head is 92 and the keys stay contiguous', () {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 91);
+    expect(db.schemaVersion, 92);
   });
 
   test('v65 creates session_messages with its revision index', () {
