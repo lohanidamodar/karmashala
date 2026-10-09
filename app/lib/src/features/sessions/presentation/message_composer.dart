@@ -17,9 +17,11 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_session/mentions.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
+import '../domain/composer_draft_file.dart';
 import '../domain/composer_mentions.dart';
 import 'mention_text_controller.dart';
 
+export '../domain/composer_draft_file.dart';
 export '../domain/composer_mentions.dart';
 export 'mention_text_controller.dart' show MentionTextController;
 
@@ -101,6 +103,7 @@ class MessageComposer extends StatefulWidget {
     this.takeServerFiles,
     this.serverFilesWaiting,
     this.focusRequests,
+    this.files,
     this.working = false,
     this.uncertain = false,
     this.onStop,
@@ -188,8 +191,42 @@ class MessageComposer extends StatefulWidget {
   /// a message put back in it to edit.
   final Listenable? focusRequests;
 
+  /// The box's files, for a host that keeps them with its draft. Supplied
+  /// means owned, like [controller].
+  final ComposerFilesController? files;
+
   @override
   State<MessageComposer> createState() => _MessageComposerState();
+}
+
+/// **The files in a composer's box**, for its host to keep with the draft's
+/// text while no view of the session is open, and to put back: what a
+/// [TextEditingController] is to the words. Files put before a box mounts, or
+/// left by one that unmounted, wait here for the next.
+class ComposerFilesController {
+  _ComposerAttaching? _box;
+  var _waiting = <ComposerDraftFile>[];
+
+  bool get isEmpty => _waiting.isEmpty && !(_box?._holdsFiles ?? false);
+
+  /// Every file in the box, taken out of it.
+  List<ComposerDraftFile> take() {
+    final box = _box;
+    final taken = [..._waiting, if (box != null) ...box._handOverFiles()];
+    _waiting = [];
+    return taken;
+  }
+
+  /// Puts [files] in the box, after any it holds.
+  void put(List<ComposerDraftFile> files) {
+    if (files.isEmpty) return;
+    final box = _box;
+    if (box == null) {
+      _waiting = [..._waiting, ...files];
+    } else {
+      box._receiveFiles(files);
+    }
+  }
 }
 
 final _log = AppLogger.named('composer');
@@ -228,6 +265,7 @@ class _MessageComposerState extends State<MessageComposer>
     _drops = widget.droppedFiles?.listen(_attachDropped);
     widget.serverFilesWaiting?.addListener(_scheduleDrain);
     widget.focusRequests?.addListener(_takeFocus);
+    _bindFiles(widget.files);
     // Files queued before this box existed — while the transcript loaded.
     _scheduleDrain();
   }
@@ -300,6 +338,10 @@ class _MessageComposerState extends State<MessageComposer>
       oldWidget.serverFilesWaiting?.removeListener(_scheduleDrain);
       widget.serverFilesWaiting?.addListener(_scheduleDrain);
     }
+    if (oldWidget.files != widget.files) {
+      _unbindFiles(oldWidget.files);
+      _bindFiles(widget.files);
+    }
     if (oldWidget.focusRequests != widget.focusRequests) {
       oldWidget.focusRequests?.removeListener(_takeFocus);
       widget.focusRequests?.addListener(_takeFocus);
@@ -317,6 +359,8 @@ class _MessageComposerState extends State<MessageComposer>
     unawaited(_drops?.cancel());
     widget.serverFilesWaiting?.removeListener(_scheduleDrain);
     widget.focusRequests?.removeListener(_takeFocus);
+    // Before the uploads stop: the draft keeps them, to go at the next Send.
+    _unbindFiles(widget.files);
     for (final upload in _uploads) {
       upload.cancelled = true;
     }
@@ -535,9 +579,7 @@ class _MessageComposerState extends State<MessageComposer>
               _TouchAttachmentList(
                 attachments: _attachments,
                 uploads: _uploads,
-                onRemove: canType
-                    ? (i) => setState(() => _attachments.removeAt(i))
-                    : null,
+                onRemove: canType ? _removeAttachment : null,
                 onCancel: _cancelUpload,
                 // Queued again, not uploaded: Send uploads it.
                 onRetry: (upload) => setState(
@@ -551,7 +593,7 @@ class _MessageComposerState extends State<MessageComposer>
                 attachments: _attachments,
                 uploading: _uploading,
                 asImages: widget.imagesGoAsImages?.call() ?? false,
-                onRemove: (i) => setState(() => _attachments.removeAt(i)),
+                onRemove: _removeAttachment,
               ),
             if (_sendError case final error?)
               Padding(
@@ -587,7 +629,7 @@ class _MessageComposerState extends State<MessageComposer>
                 onPicked: _pickCommand,
               ),
             if (touch)
-              _touchRow(field, canType: canType)
+              _touchRow(field, canType: canType, width: box.maxWidth)
             else ...[
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -698,80 +740,143 @@ class _MessageComposerState extends State<MessageComposer>
     );
   }
 
-  Widget _touchRow(Widget field, {required bool canType}) {
+  /// The row's tools. On a phone's width, more than one fold into one "+"
+  /// that lists them: three 48dp buttons took a third of the row (owner,
+  /// 2026-10-09). Each keeps a thumb's tap target.
+  List<Widget> _touchTools({required bool canType, required double width}) {
     final snippets = widget.snippets;
-    final tools =
-        widget.attaches ||
-        snippets != null ||
-        (widget.mentions != null && canType);
-    return Padding(
-      padding: const EdgeInsets.all(Insets.xs),
-      child: Column(
+    // Only while the box takes input: a held box's hint needs the row's
+    // width more than a button that could do nothing.
+    final mentions = widget.mentions != null && canType;
+    final count =
+        (widget.attaches ? 1 : 0) +
+        (snippets != null ? 1 : 0) +
+        (mentions ? 1 : 0);
+    if (count > 1 && width < UiDensity.compactWidth) {
+      return [
+        _ToolbarIconButton(
+          key: const ValueKey('composer-tools'),
+          tooltip: 'Attach, insert a snippet or mention',
+          icon: AppIcons.plus,
+          touch: true,
+          onPressed: canType ? () => unawaited(_openTools()) : null,
+        ),
+      ];
+    }
+    return [
+      if (widget.attaches)
+        _ToolbarIconButton(
+          tooltip: 'Attach a file',
+          icon: AppIcons.plus,
+          touch: true,
+          onPressed: canType ? _attachAnyFile : null,
+        ),
+      if (snippets != null)
+        _SnippetsButton(
+          snippets: snippets,
+          touch: true,
+          onPicked: canType ? _insertSnippet : null,
+        ),
+      if (mentions)
+        _ToolbarIconButton(
+          key: const ValueKey('composer-mention-button'),
+          tooltip: 'Mention a file, diff, terminal or session',
+          icon: AppIcons.at,
+          touch: true,
+          onPressed: () => unawaited(_openMentionSheet()),
+        ),
+    ];
+  }
+
+  /// The folded tools as a sheet; the pick runs once it has closed.
+  Future<void> _openTools() async {
+    final snippets = widget.snippets;
+    final picked = await showAdaptiveModal<_Tool>(
+      context: context,
+      title: 'Add to the message',
+      builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (widget.attaches)
-                _ToolbarIconButton(
-                  tooltip: 'Attach a file',
-                  icon: AppIcons.plus,
-                  touch: true,
-                  onPressed: canType ? _attachAnyFile : null,
-                ),
-              if (snippets != null)
-                _SnippetsButton(
-                  snippets: snippets,
-                  touch: true,
-                  onPicked: canType ? _insertSnippet : null,
-                ),
-              // Only while the box takes input: a held box's hint needs the
-              // row's width more than a button that could do nothing.
-              if (widget.mentions != null && canType)
-                _ToolbarIconButton(
-                  key: const ValueKey('composer-mention-button'),
-                  tooltip: 'Mention a file, diff, terminal or session',
-                  icon: AppIcons.at,
-                  touch: true,
-                  onPressed: () => unawaited(_openMentionSheet()),
-                ),
-              Expanded(
-                // A thumb's height even for one line, the text centred in it,
-                // so the row's controls line up with the words.
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: Touch.target),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        tools ? Insets.xs : Insets.md,
-                        Insets.sm,
-                        Insets.sm,
-                        Insets.sm,
-                      ),
-                      child: field,
-                    ),
+          if (widget.attaches)
+            ListTile(
+              key: const ValueKey('composer-tool-attach'),
+              minTileHeight: Touch.target,
+              leading: const Icon(AppIcons.paperclip, size: Touch.icon),
+              title: const Text('Attach a file'),
+              onTap: () => Navigator.of(context).pop(_Tool.attach),
+            ),
+          if (snippets != null)
+            ListTile(
+              key: const ValueKey('composer-tool-snippet'),
+              minTileHeight: Touch.target,
+              leading: const Icon(AppIcons.code, size: Touch.icon),
+              title: const Text('Insert a snippet'),
+              onTap: () => Navigator.of(context).pop(_Tool.snippet),
+            ),
+          if (widget.mentions != null)
+            ListTile(
+              key: const ValueKey('composer-tool-mention'),
+              minTileHeight: Touch.target,
+              leading: const Icon(AppIcons.at, size: Touch.icon),
+              title: const Text('Mention a file, diff, terminal or session'),
+              onTap: () => Navigator.of(context).pop(_Tool.mention),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || picked == null) return;
+    switch (picked) {
+      case _Tool.attach:
+        await _attachAnyFile();
+      case _Tool.snippet:
+        if (snippets == null) return;
+        final text = await _SnippetsButton.pick(context, snippets);
+        if (text != null && mounted) _insertSnippet(text);
+      case _Tool.mention:
+        await _openMentionSheet();
+    }
+  }
+
+  Widget _touchRow(
+    Widget field, {
+    required bool canType,
+    required double width,
+  }) {
+    final tools = _touchTools(canType: canType, width: width);
+    return Padding(
+      padding: const EdgeInsets.all(Insets.xs),
+      // **One row on a phone**: the tools, the field, any chips (the agent
+      // switch) and Send. The chips used to take a line of their own.
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          ...tools,
+          Expanded(
+            // A thumb's height even for one line, the text centred in it,
+            // so the row's controls line up with the words.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: Touch.target),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    tools.isNotEmpty ? Insets.xs : Insets.md,
+                    Insets.sm,
+                    Insets.xs,
+                    Insets.sm,
                   ),
+                  child: field,
                 ),
-              ),
-              _sendOrStop(canType: canType, touch: true),
-            ],
-          ),
-          if (widget.chips.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.sm,
-                Insets.xs,
-                Insets.sm,
-                Insets.xs,
-              ),
-              child: Wrap(
-                spacing: Insets.xs,
-                runSpacing: Insets.xs,
-                children: widget.chips,
               ),
             ),
+          ),
+          for (final chip in widget.chips)
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: Touch.target),
+              child: Center(widthFactor: 1, child: chip),
+            ),
+          _sendOrStop(canType: canType, touch: true),
         ],
       ),
     );
@@ -800,7 +905,6 @@ class _MessageComposerState extends State<MessageComposer>
     // the chips' own line is chrome.
     if (touch) {
       var height = palette + Insets.md + 2 + 2 * Insets.xs + 2 * Insets.sm;
-      if (widget.chips.isNotEmpty) height += 2 * Insets.xs + Chrome.control;
       final rows = _attachments.length + _uploads.length;
       if (rows > 0) height += Insets.sm + rows * _TouchAttachmentRow.height;
       return height;
@@ -826,6 +930,9 @@ class _MessageComposerState extends State<MessageComposer>
     return height;
   }
 }
+
+/// A tool the phone's folded "+" lists.
+enum _Tool { attach, snippet, mention }
 
 /// What stays in a box that held [now] once [sent] — the box's text when Send
 /// was pressed — has gone: anything added meanwhile, never the sent words.

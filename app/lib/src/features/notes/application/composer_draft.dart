@@ -13,6 +13,7 @@ import 'package:karmashala_terminal_core/profiles.dart' show TerminalShell;
 import '../../agents/data/agents_data.dart';
 import '../../environments/data/environments_data.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/domain/composer_draft_file.dart';
 import '../../snippets/application/snippet_insertion.dart';
 import '../../snippets/domain/command_snippet.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -356,24 +357,55 @@ CommandSnippet _offered(String text) => CommandSnippet(
   updatedAt: DateTime.utc(1970),
 );
 
-/// Half-typed text a session's composer left when it closed, keyed by session
-/// id — the peek and the tab share one. Unlike an offer ([ComposerDrafts]) it
-/// is only ever put back into an **empty** box, so it never joins words
-/// someone is typing in another view of the same session.
-class ParkedDrafts {
-  final _parked = <String, String>{};
+/// What a session's composer held when its last view closed: the half-typed
+/// text and the files attached to it.
+class ParkedDraft {
+  const ParkedDraft({required this.text, this.files = const []});
 
-  /// Keeps [text] for [sessionId], after any already kept that differs.
-  void park(String sessionId, String text) {
-    if (text.trim().isEmpty) return;
+  final String text;
+  final List<ComposerDraftFile> files;
+}
+
+/// Half-typed text and its attachments a session's composer left when it
+/// closed, keyed by session id — the peek and the tab share one. Unlike an
+/// offer ([ComposerDrafts]) it is only ever put back into an **empty** box, so
+/// it never joins words someone is typing in another view of the same session.
+/// It lives as long as the app does, files included.
+class ParkedDrafts {
+  final _parked = <String, ParkedDraft>{};
+
+  /// Keeps [text] and [files] for [sessionId], after any already kept that
+  /// differ; one file kept by two views is one attachment.
+  void park(
+    String sessionId,
+    String text, {
+    List<ComposerDraftFile> files = const [],
+  }) {
+    final words = text.trim().isEmpty ? '' : text;
+    if (words.isEmpty && files.isEmpty) return;
     final kept = _parked[sessionId];
-    _parked[sessionId] = kept == null || kept.trim() == text.trim()
-        ? text
-        : '$kept\n\n$text';
+    if (kept == null) {
+      _parked[sessionId] = ParkedDraft(text: words, files: files);
+      return;
+    }
+    final keptWords = kept.text;
+    final paths = {for (final file in kept.files) file.path};
+    _parked[sessionId] = ParkedDraft(
+      text: keptWords.trim().isEmpty || keptWords.trim() == words.trim()
+          ? (words.isEmpty ? keptWords : words)
+          : words.isEmpty
+          ? keptWords
+          : '$keptWords\n\n$words',
+      files: [
+        ...kept.files,
+        for (final file in files)
+          if (paths.add(file.path)) file,
+      ],
+    );
   }
 
-  /// Takes [sessionId]'s parked text, leaving nothing behind.
-  String? take(String sessionId) => _parked.remove(sessionId);
+  /// Takes [sessionId]'s parked draft, leaving nothing behind.
+  ParkedDraft? take(String sessionId) => _parked.remove(sessionId);
 }
 
 final parkedDraftsProvider = Provider<ParkedDrafts>((_) => ParkedDrafts());

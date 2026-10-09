@@ -58,20 +58,22 @@ mixin _ComposerAttaching on State<MessageComposer> {
     final preview = mounted && _touch
         ? ResizeImage(MemoryImage(bytes), width: (_thumbnail * 2).round())
         : null;
-    if (server != null) {
-      // Straight to the server's uploads folder, with no temp file: a path
-      // on this machine is nothing an agent there can read.
-      await _startUpload(
-        DevicePick(XFile.fromData(bytes, name: name)),
-        server,
-        image: true,
-        preview: preview,
-      );
-      return;
-    }
     final dir = await _attachmentsDir();
     final file = File('${dir.path}/$name');
     await file.writeAsBytes(bytes);
+    if (server != null) {
+      // To the server's uploads folder: a path on this machine is nothing an
+      // agent there can read. The file holds the bytes until they land, so a
+      // draft parked meanwhile keeps a file, not memory.
+      await _startUpload(
+        DevicePick(XFile(file.path, name: name)),
+        server,
+        image: true,
+        preview: preview,
+        spilled: true,
+      );
+      return;
+    }
     if (mounted) {
       setState(
         () => _attachments.add(
@@ -96,14 +98,34 @@ mixin _ComposerAttaching on State<MessageComposer> {
     PickServer server, {
     required bool image,
     ImageProvider? preview,
+    bool spilled = false,
   }) async {
     // A clipboard or picker read before this yields; the composer may be gone.
-    if (!mounted) return;
+    if (!mounted) {
+      if (spilled) _deleteOwned(pick.file.path);
+      return;
+    }
+    if (pick.file.path.isEmpty) {
+      final name = pick.name;
+      final bytes = await pick.file.readAsBytes();
+      final dir = await _attachmentsDir();
+      final file = File(
+        '${dir.path}/${DateTime.now().microsecondsSinceEpoch}_$name',
+      );
+      await file.writeAsBytes(bytes);
+      if (!mounted) {
+        _deleteOwned(file.path);
+        return;
+      }
+      pick = DevicePick(XFile(file.path, name: name));
+      spilled = true;
+    }
     final upload = _Upload(
       pick: pick,
       server: server,
       image: image,
       preview: preview,
+      spilled: spilled,
     );
     if (_touch) {
       setState(() => _uploads.add(upload..queued = true));
@@ -157,6 +179,7 @@ mixin _ComposerAttaching on State<MessageComposer> {
         },
       );
       if (stale()) return;
+      if (upload.spilled) _deleteOwned(upload.pick.file.path);
       setState(() {
         _uploads.remove(upload);
         _attachments.add(
@@ -203,10 +226,121 @@ mixin _ComposerAttaching on State<MessageComposer> {
 
   /// Stops [upload]: `files.upload.abort` drops what the server staged.
   void _cancelUpload(_Upload upload) {
+    if (upload.spilled) _deleteOwned(upload.pick.file.path);
     setState(() {
       upload.cancelled = true;
       _uploads.remove(upload);
     });
+  }
+
+  /// Takes the chip away; a pasted image's file goes with it, since nothing
+  /// else names it.
+  void _removeAttachment(int index) {
+    final removed = _attachments[index];
+    if (removed.from == _From.temp) _deleteOwned(removed.path);
+    setState(() => _attachments.removeAt(index));
+  }
+
+  /// Deletes [path] if it is in the composer's attachments folder, the only
+  /// files the composer made; anything else is someone's own file.
+  void _deleteOwned(String path) {
+    String plain(String p) => File(p).absolute.path.replaceAll(r'\', '/');
+    final dir = plain('${Directory.systemTemp.path}/karmashala/attachments');
+    if (!plain(path).startsWith('$dir/')) return;
+    final file = File(path);
+    unawaited(
+      file.delete().then<void>(
+        (_) {},
+        onError: (Object e) {
+          _log.debug('Could not delete the attachment $path: $e');
+        },
+      ),
+    );
+  }
+
+  bool get _holdsFiles =>
+      _attachments.isNotEmpty || _uploads.any((upload) => !upload.cancelled);
+
+  /// Every file in the box as a draft keeps it, the box emptied of them. An
+  /// upload under way is stopped, and kept to go at the next Send.
+  List<ComposerDraftFile> _giveFiles() {
+    final files = [
+      for (final attachment in _attachments)
+        ComposerDraftFile(path: attachment.path, payload: attachment),
+      for (final upload in _uploads)
+        if (!upload.cancelled)
+          ComposerDraftFile(path: upload.pick.file.path, payload: upload),
+    ];
+    for (final upload in _uploads) {
+      upload.cancelled = true;
+    }
+    _attachments.clear();
+    _uploads.clear();
+    return files;
+  }
+
+  /// [_giveFiles] for a box that stays on screen.
+  List<ComposerDraftFile> _handOverFiles() {
+    late final List<ComposerDraftFile> files;
+    setState(() => files = _giveFiles());
+    return files;
+  }
+
+  /// Puts a parked draft's files back. An upload waits for Send as it would
+  /// on a phone; under a pointer, where a waiting upload has no chip, it is
+  /// sent at once, as attaching it did.
+  void _receiveFiles(List<ComposerDraftFile> files, {bool rebuild = true}) {
+    if (files.isEmpty) return;
+    final held = {
+      for (final attachment in _attachments) attachment.path,
+      for (final upload in _uploads) upload.pick.file.path,
+    };
+    final restored = <_Upload>[];
+    void add() {
+      for (final file in files) {
+        if (!held.add(file.path)) continue;
+        switch (file.payload) {
+          case final _Attachment attachment:
+            _attachments.add(attachment);
+          case final _Upload upload:
+            final again = _Upload(
+              pick: upload.pick,
+              server: upload.server,
+              image: upload.image,
+              preview: upload.preview,
+              spilled: upload.spilled,
+            )..queued = true;
+            _uploads.add(again);
+            restored.add(again);
+        }
+      }
+    }
+
+    rebuild ? setState(add) : add();
+    if (restored.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _touch) return;
+      for (final upload in restored) {
+        if (!upload.queued || upload.cancelled) continue;
+        setState(() => upload.queued = false);
+        unawaited(_runUpload(upload));
+      }
+    });
+  }
+
+  void _bindFiles(ComposerFilesController? files) {
+    if (files == null) return;
+    files._box = this;
+    final waiting = files._waiting;
+    files._waiting = [];
+    _receiveFiles(waiting, rebuild: false);
+  }
+
+  /// Leaves the box's files with [files] for whichever box binds it next.
+  void _unbindFiles(ComposerFilesController? files) {
+    if (files == null || !identical(files._box, this)) return;
+    files._box = null;
+    files._waiting = [...files._waiting, ..._giveFiles()];
   }
 
   /// A server elsewhere: an image from this device (uploaded) or one already

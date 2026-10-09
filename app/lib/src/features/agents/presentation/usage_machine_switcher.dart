@@ -1,6 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:agent_cli/usage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -9,7 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../application/agent_installations_controller.dart';
 import '../application/agent_providers.dart';
-import '../application/agent_usage_providers.dart';
+import '../application/agent_account_switch.dart';
 import '../application/claude_accounts_controller.dart';
 import '../application/codex_accounts_controller.dart';
 
@@ -37,36 +36,32 @@ String? usageSavedPlanOf(WidgetRef ref, String agentId, String? email) {
 @immutable
 class _SwitchOption {
   const _SwitchOption({
+    required this.id,
     required this.label,
     required this.current,
-    required this.switchTo,
   });
 
+  final String id;
   final String label;
 
   /// The account this machine is signed in with now — checked, not offered.
   final bool current;
-
-  /// Asks the server to switch the machine; throws with the server's words.
-  final Future<void> Function() switchTo;
 }
 
 /// **A machine's account switcher**, on the usage card's machine row (spec
 /// §5): the agent's saved accounts, the one in force checked, the others a
-/// click away. It asks the same controllers Settings' account sections do —
-/// the server captures and switches on its own machine, so no credential and
-/// no new store is involved here.
+/// click away. It asks [AccountSwitchController], the switch Settings asks
+/// too; the server captures and switches on its own machine.
 ///
 /// Only agents whose adapter declares a switchable sign-in have one (Claude's
 /// OAuth, Codex's `auth.json`); for any other agent, or a machine whose
 /// installation is not known, or no saved account yet, it draws nothing and
 /// the row stays a plain statement of where the account is used.
 ///
-/// A nested [MenuAnchor] on purpose: inside the usage card's own menu it
-/// becomes a submenu, sharing the card's tap region, so picking an account
-/// does not count as a tap outside the card and close it mid-switch — a
-/// pushed popup route would.
-class UsageMachineSwitcher extends ConsumerStatefulWidget {
+/// A nested [MenuAnchor] whose items do not close on activation: closing
+/// would close the card around it too, and the pick would land on a disposed
+/// row and never be asked.
+class UsageMachineSwitcher extends ConsumerWidget {
   const UsageMachineSwitcher({
     required this.agentId,
     required this.environmentId,
@@ -81,122 +76,98 @@ class UsageMachineSwitcher extends ConsumerStatefulWidget {
   /// did not say, and then nothing is checked.
   final String? currentEmail;
 
-  @override
-  ConsumerState<UsageMachineSwitcher> createState() =>
-      _UsageMachineSwitcherState();
-}
-
-class _UsageMachineSwitcherState extends ConsumerState<UsageMachineSwitcher> {
-  bool _busy = false;
-  String? _failure;
-
   bool _isCurrent(String? email) {
-    final current = widget.currentEmail;
+    final current = currentEmail;
     return current != null &&
         email != null &&
         email.toLowerCase() == current.toLowerCase();
   }
 
-  /// The saved accounts this machine could switch to, or null when its agent
-  /// or installation offers no switch.
-  List<_SwitchOption>? _options() {
-    final adapter = ref.watch(agentRegistryProvider).adapterFor(widget.agentId);
-    final kind = adapter?.accounts;
-    if (kind is! AnthropicOAuthAccounts && kind is! OpenAiAuthFileAccounts) {
-      return null;
-    }
-    AgentInstallation? installation;
+  AgentInstallation? _installation(WidgetRef ref) {
     for (final candidate in ref.watch(agentInstallationsControllerProvider)) {
-      if (candidate.agentId == widget.agentId &&
-          candidate.environmentId == widget.environmentId) {
-        installation = candidate;
-        break;
+      if (candidate.agentId == agentId &&
+          candidate.environmentId == environmentId) {
+        return candidate;
       }
     }
-    if (installation == null) return null;
-    final install = installation;
+    return null;
+  }
+
+  /// The saved accounts this machine could switch to, or null when its agent
+  /// offers no switch.
+  List<_SwitchOption>? _options(WidgetRef ref) {
+    final kind = ref.watch(agentRegistryProvider).adapterFor(agentId)?.accounts;
     if (kind is AnthropicOAuthAccounts) {
-      final controller = ref.read(claudeAccountsControllerProvider.notifier);
       return [
         for (final account in ref.watch(claudeAccountsControllerProvider))
           _SwitchOption(
+            id: account.id,
             label: account.email,
             current: _isCurrent(account.email),
-            switchTo: () => controller.switchTo(install, account),
           ),
       ];
     }
-    final controller = ref.read(codexAccountsControllerProvider.notifier);
-    return [
-      for (final account in ref.watch(codexAccountsControllerProvider))
-        _SwitchOption(
-          label: account.email ?? account.accountId,
-          current: _isCurrent(account.email),
-          switchTo: () => controller.switchTo(install, account),
-        ),
-    ];
-  }
-
-  Future<void> _switch(_SwitchOption option) async {
-    setState(() {
-      _busy = true;
-      _failure = null;
-    });
-    String? failure;
-    try {
-      await option.switchTo();
-      // A new sign-in is a new quota: ask for this machine's reading now so
-      // the card (and the chip) move with it rather than at the next poll.
-      // Its own failure is the Refresh button's to report, not the switch's.
-      await ref
-          .read(usageReadingsProvider)
-          .refresh(usageAccountKeyOf(widget.agentId, widget.environmentId))
-          .catchError((Object _) {});
-    } on ClaudeAuthException catch (e) {
-      failure = e.message;
-    } on CodexAuthException catch (e) {
-      failure = e.message;
-    } catch (e) {
-      failure = '$e';
+    if (kind is OpenAiAuthFileAccounts) {
+      return [
+        for (final account in ref.watch(codexAccountsControllerProvider))
+          _SwitchOption(
+            id: account.id,
+            label: account.email ?? account.accountId,
+            current: _isCurrent(account.email),
+          ),
+      ];
     }
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _failure = failure;
-    });
+    return null;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final options = _options();
-    if (options == null || options.isEmpty) return const SizedBox.shrink();
-    if (_busy) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final install = _installation(ref);
+    final options = install == null ? null : _options(ref);
+    if (install == null || options == null || options.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final switching = ref.watch(accountSwitchControllerProvider);
+    if (switching.busy.contains(install.id)) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: Insets.sm),
         child: InlineSpinner(semanticsLabel: 'Switching account'),
       );
     }
+    final last = switching.last;
+    final failed =
+        last != null && last.installationId == install.id && !last.succeeded;
     final theme = Theme.of(context);
-    final failure = _failure;
-    final ink = failure == null
-        ? theme.colorScheme.onSurfaceVariant
-        : SemanticColors.of(context).failure;
+    final ink = failed
+        ? SemanticColors.of(context).failure
+        : theme.colorScheme.onSurfaceVariant;
     final label = theme.textTheme.bodySmall?.copyWith(color: ink);
     final menu = MenuAnchor(
       menuChildren: [
         for (final option in options)
-          MenuItemButton(
-            // The account in force is checked and not offered again.
-            onPressed: option.current ? null : () => _switch(option),
-            leadingIcon: Icon(
-              option.current ? AppIcons.check : AppIcons.userCircle,
-              size: Chrome.iconAction,
+          Builder(
+            builder: (item) => MenuItemButton(
+              key: ValueKey('usage-switch-$environmentId-${option.id}'),
+              closeOnActivate: false,
+              // The account in force is checked and not offered again.
+              onPressed: option.current
+                  ? null
+                  : () {
+                      MenuController.maybeOf(item)?.close();
+                      ref
+                          .read(accountSwitchControllerProvider.notifier)
+                          .switchTo(install, option.id);
+                    },
+              leadingIcon: Icon(
+                option.current ? AppIcons.check : AppIcons.userCircle,
+                size: Chrome.iconAction,
+              ),
+              child: Text(option.label, overflow: TextOverflow.ellipsis),
             ),
-            child: Text(option.label, overflow: TextOverflow.ellipsis),
           ),
       ],
       builder: (context, controller, _) => InkWell(
-        key: ValueKey('usage-switch-${widget.environmentId}'),
+        key: ValueKey('usage-switch-$environmentId'),
         borderRadius: BorderRadius.circular(Radii.sm),
         onTap: () => controller.isOpen ? controller.close() : controller.open(),
         child: Padding(
@@ -207,7 +178,7 @@ class _UsageMachineSwitcherState extends ConsumerState<UsageMachineSwitcher> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (failure != null) ...[
+              if (failed) ...[
                 Icon(AppIcons.warning, size: Chrome.iconAction, color: ink),
                 const SizedBox(width: Insets.xs),
               ],
@@ -218,15 +189,11 @@ class _UsageMachineSwitcherState extends ConsumerState<UsageMachineSwitcher> {
         ),
       ),
     );
-    // The server's words, where the switch was asked: a snackbar would land
-    // under the card, behind the thing that failed.
     return Semantics(
       button: true,
-      label: failure == null
-          ? 'Switch the account on this machine'
-          : 'Switch failed: $failure',
+      label: 'Switch the account on this machine',
       child: Tooltip(
-        message: failure ?? 'Switch the account on this machine',
+        message: 'Switch the account on this machine',
         child: menu,
       ),
     );

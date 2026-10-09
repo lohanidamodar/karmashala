@@ -65,7 +65,22 @@ sealed class _AccountStore {
   AsyncValue<_SignIn> signIn(WidgetRef ref, AgentInstallation install);
   void reread(WidgetRef ref, AgentInstallation install);
   Future<void> capture(WidgetRef ref, AgentInstallation install);
-  Future<void> switchTo(WidgetRef ref, AgentInstallation install, _Saved to);
+
+  /// The switch the usage card asks too; throws [AccountSwitchFailed] with
+  /// the server's words.
+  Future<void> switchTo(
+    WidgetRef ref,
+    AgentInstallation install,
+    _Saved to,
+  ) async {
+    final outcome = await ref
+        .read(accountSwitchControllerProvider.notifier)
+        .switchTo(install, to.id);
+    if (outcome.failure case final failure?) {
+      throw AccountSwitchFailed(failure);
+    }
+  }
+
   Future<void> forget(WidgetRef ref, _Saved account);
 }
 
@@ -109,12 +124,6 @@ final class _ClaudeStore extends _AccountStore {
   Future<void> capture(WidgetRef ref, AgentInstallation install) => ref
       .read(claudeAccountsControllerProvider.notifier)
       .captureCurrent(install);
-
-  @override
-  Future<void> switchTo(WidgetRef ref, AgentInstallation install, _Saved to) =>
-      ref
-          .read(claudeAccountsControllerProvider.notifier)
-          .switchTo(install, to.raw as ClaudeAccount);
 
   @override
   Future<void> forget(WidgetRef ref, _Saved account) => ref
@@ -165,12 +174,6 @@ final class _CodexStore extends _AccountStore {
   Future<void> capture(WidgetRef ref, AgentInstallation install) => ref
       .read(codexAccountsControllerProvider.notifier)
       .captureCurrent(install);
-
-  @override
-  Future<void> switchTo(WidgetRef ref, AgentInstallation install, _Saved to) =>
-      ref
-          .read(codexAccountsControllerProvider.notifier)
-          .switchTo(install, to.raw as CodexAccount);
 
   @override
   Future<void> forget(WidgetRef ref, _Saved account) => ref

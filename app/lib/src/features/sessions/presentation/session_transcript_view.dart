@@ -3,7 +3,7 @@ import '../../workspaces/data/workspace_data.dart';
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:flutter/foundation.dart' show mapEquals, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -167,6 +167,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
   @override
   final _composer = MentionTextController();
 
+  /// The person's latest messages in the transcript, so a delivered one is
+  /// not drawn a second time below it.
+  @override
+  final _sentInTranscript = ValueNotifier<Set<String>>(const {});
+
+  /// The box's files, parked with its text.
+  @override
+  final _composerFiles = ComposerFilesController();
+
   /// Files dropped on the conversation, for the composer to attach.
   @override
   final _dropped = StreamController<List<String>>.broadcast();
@@ -250,7 +259,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
     if (old.holdForPrompt != widget.holdForPrompt) _footer = null;
     if (old.sessionId != widget.sessionId) {
       // Text typed for the last session is kept for it, never sent to this.
-      _parked.park(old.sessionId, _composer.text);
+      _parked.park(old.sessionId, _composer.text, files: _composerFiles.take());
       _composer.clear();
       _restoreDue = true;
       _footer = null;
@@ -267,7 +276,12 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
     // The workbench unmounts the conversation when it moves to another session,
     // so half-typed text is parked where the next mount already looks for it.
     _leaving = true;
-    _parked.park(widget.sessionId, _composer.text);
+    // The composer has already left its files with [_composerFiles].
+    _parked.park(
+      widget.sessionId,
+      _composer.text,
+      files: _composerFiles.take(),
+    );
     _composer.removeListener(_tellHolding);
     if (_heldFor case final id? when _held) {
       final tell = _holding;
@@ -276,9 +290,30 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
     _composer.dispose();
     unawaited(_dropped.close());
     _filesQueued.dispose();
+    _sentInTranscript.dispose();
     _toLatest.dispose();
     _composerFocus.dispose();
     super.dispose();
+  }
+
+  /// How many of the person's latest messages the queue is matched against:
+  /// a delivered one is among the newest.
+  static const _sentLooked = 8;
+
+  /// Tells the queue strip which of the person's messages the transcript
+  /// shows, after the frame: the strip is another widget's to rebuild.
+  void _noteSent(List<ChatMessage>? messages) {
+    if (messages == null) return;
+    final shown = <String>{};
+    for (final message in messages.reversed) {
+      if (message.role != 'user') continue;
+      shown.add(sentMessageKey(message.text));
+      if (shown.length == _sentLooked) break;
+    }
+    if (setEquals(shown, _sentInTranscript.value)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _sentInTranscript.value = shown;
+    });
   }
 
   /// Takes the reader to the open ask: the conversation's newest message,
@@ -311,18 +346,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
     );
   }
 
-  /// Puts back what this session's last closed view left typed — only into
-  /// an empty box; otherwise it stays parked for the next one.
+  /// Puts back what this session's last closed view left typed and attached
+  /// — only into an empty box; otherwise it stays parked for the next one.
   void _restoreParked() {
     if (_leaving || !_restoreDue) return;
     _restoreDue = false;
-    if (_composer.text.trim().isNotEmpty) return;
+    if (_composer.text.trim().isNotEmpty || !_composerFiles.isEmpty) return;
     final parked = _parked.take(widget.sessionId);
     if (parked == null) return;
+    final text = parked.text;
     _composer.value = TextEditingValue(
-      text: parked,
-      selection: TextSelection.collapsed(offset: parked.length),
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
+    _composerFiles.put(parked.files);
   }
 
   /// A queued message that failed, back in the box to send again — appended
@@ -511,6 +548,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
                             window != null && window.hasOlder && !compacted
                             ? window.from
                             : 0;
+                        _noteSent(transcript.asData?.value);
                         return _conversation(
                           transcript: transcript,
                           // The badge's reading only while a process is behind

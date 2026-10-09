@@ -149,8 +149,17 @@ class _SnippetsButton extends StatelessWidget {
     BuildContext context,
     ValueChanged<String> onPicked,
   ) async {
+    final picked = await pick(context, snippets);
+    if (picked != null) onPicked(picked);
+  }
+
+  /// The library as a sheet; the picked snippet's text, or null.
+  static Future<String?> pick(
+    BuildContext context,
+    List<ComposerSnippet> Function() snippets,
+  ) {
     final list = snippets();
-    final picked = await showAdaptiveModal<String>(
+    return showAdaptiveModal<String>(
       context: context,
       title: 'Insert a snippet',
       builder: (context) => Column(
@@ -174,7 +183,6 @@ class _SnippetsButton extends StatelessWidget {
         ],
       ),
     );
-    if (picked != null) onPicked(picked);
   }
 
   @override
@@ -239,10 +247,11 @@ class _SendButton extends StatelessWidget {
   /// Files picked on a phone and waiting to be uploaded by this press.
   final bool queued;
 
-  /// Board N2's 30px circle; a thumb's 48dp at touch density, where it is the
-  /// only way to send — a soft keyboard's Enter is a new line.
+  /// Board N2's 30px circle; at touch density a compact circle in a thumb's
+  /// 48dp tap area, where it is the only way to send — a soft keyboard's
+  /// Enter is a new line.
   static double diameterFor({required bool touch}) =>
-      touch ? Touch.target : 30.0;
+      touch ? Touch.compactControl : 30.0;
 
   final TextEditingController input;
   final List<_Attachment> attachments;
@@ -277,6 +286,8 @@ class _SendButton extends StatelessWidget {
             padding: EdgeInsets.zero,
             fixedSize: Size.square(diameter),
             minimumSize: Size.square(diameter),
+            // The circle is compact; the thumb's 48dp around it is not.
+            tapTargetSize: touch ? MaterialTapTargetSize.padded : null,
             shape: const CircleBorder(),
             backgroundColor: ready
                 ? scheme.primary
@@ -317,6 +328,7 @@ class _StopButton extends StatelessWidget {
           padding: EdgeInsets.zero,
           fixedSize: Size.square(diameter),
           minimumSize: Size.square(diameter),
+          tapTargetSize: touch ? MaterialTapTargetSize.padded : null,
           shape: const CircleBorder(),
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,

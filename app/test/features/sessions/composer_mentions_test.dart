@@ -255,7 +255,10 @@ void main() {
       'narrows it, an entry goes in at the caret', (tester) async {
     await pump(tester, size: const Size(390, 844), touch: true);
     await type(tester, 'Check');
-    await tester.tap(find.byKey(const ValueKey('composer-mention-button')));
+    // On a phone's width "@" is one of the tools under "+".
+    await tester.tap(find.byKey(const ValueKey('composer-tools')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('composer-tool-mention')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('composer-mention-search')), findsOne);
 
