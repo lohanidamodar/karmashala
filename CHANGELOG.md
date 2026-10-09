@@ -17,6 +17,16 @@ installs claim the same version name.
 
 ---
 
+## 1.34.6 — 2026-10-09 (build 73)
+
+- **Switching accounts from the usage card works.**
+  - Picking an account there used to close the card before the switch ran.
+  - The card and Settings now share one switch.
+  - The card says "Switched <machine> to <account>.", or why it couldn't.
+- **Drafts keep their files.** A pasted, attached or dropped image stays with the draft's text when you leave a session and come back, in the dashboard peek, the tab and the phone. On the phone, a paste waiting to send is kept on disk, not in memory.
+- **A compact phone composer.** One row: +, the message box, a small agent chip, and Send or Stop.
+- **A sent message shows once,** without a second "Delivered" card.
+
 ## 1.34.5 — 2026-10-09 (build 72)
 
 - **Every agent's prompts reach the chat.**
