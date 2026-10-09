@@ -12,6 +12,7 @@ export 'package:re_editor/re_editor.dart'
     show CodeLineEditingController, CodeLinePosition, CodeLineSelection;
 
 export 'src/code/app_code_editor.dart';
+export 'src/code/code_change_gutter.dart';
 export 'src/code/code_editor_keys.dart';
 export 'src/code/code_editor_menu.dart'
     show

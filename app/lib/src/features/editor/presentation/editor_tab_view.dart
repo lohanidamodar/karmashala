@@ -23,6 +23,7 @@ import '../../files/data/files_client.dart';
 import '../domain/document_id.dart';
 import '../domain/source_document.dart';
 import 'disk_change_notice.dart';
+import 'editor_change_review_view.dart';
 import 'editor_menu_actions.dart';
 
 /// One open file, as the content of a workbench tab. The buffer lives in
@@ -240,8 +241,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
 
   /// Whether this machine's own programs could open it: the server runs here
   /// and the file is not on an SSH host.
-  bool get _onThisMachine =>
-      ref.read(filesClientProvider).canOpenHere(_file);
+  bool get _onThisMachine => ref.read(filesClientProvider).canOpenHere(_file);
 
   /// What "Copy path" copies: the path as its own environment spells it.
   String get _shownPath => _file.path;
@@ -509,34 +509,60 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
             onOpenExternally: _openExternally,
           ),
           Expanded(
-            child: AppCodeEditor(
-              controller: _controller,
-              language: document.canHighlight ? document.language : null,
-              readOnly: true,
-              fontSize: fontSize,
-              wrap: wrap,
-              revealLine: reveal,
-              onWrapChanged: _setWrap,
-              menuItems: _menuItems,
-              onMenuItem: _onMenuItem,
+            child: _reviewed(
+              document,
+              (review) => AppCodeEditor(
+                controller: _controller,
+                language: document.canHighlight ? document.language : null,
+                readOnly: true,
+                fontSize: fontSize,
+                wrap: wrap,
+                revealLine: reveal,
+                onWrapChanged: _setWrap,
+                menuItems: _menuItems,
+                onMenuItem: _onMenuItem,
+                changeMarks: review?.marks,
+                onChangeMarkTap: review?.onMarkTap,
+                onNextChange: review?.onNext,
+                onPreviousChange: review?.onPrevious,
+              ),
             ),
           ),
         ],
       );
     }
-    return AppCodeEditor(
-      controller: _controller,
-      focusNode: _focus,
-      language: document.canHighlight ? document.language : null,
-      fontSize: fontSize,
-      wrap: wrap,
-      revealLine: reveal,
-      onSave: _save,
-      onWrapChanged: _setWrap,
-      menuItems: _menuItems,
-      onMenuItem: _onMenuItem,
+    return _reviewed(
+      document,
+      (review) => AppCodeEditor(
+        controller: _controller,
+        focusNode: _focus,
+        language: document.canHighlight ? document.language : null,
+        fontSize: fontSize,
+        wrap: wrap,
+        revealLine: reveal,
+        onSave: _save,
+        onWrapChanged: _setWrap,
+        menuItems: _menuItems,
+        onMenuItem: _onMenuItem,
+        changeMarks: review?.marks,
+        onChangeMarkTap: review?.onMarkTap,
+        onNextChange: review?.onNext,
+        onPreviousChange: review?.onPrevious,
+      ),
     );
   }
+
+  /// [editor] with the session's uncommitted changes to this file, where a
+  /// session's checkout holds it.
+  Widget _reviewed(
+    SourceDocument document,
+    Widget Function(EditorReviewHooks? review) editor,
+  ) => EditorChangeReview(
+    documentId: widget.hostPath,
+    controller: _controller,
+    isDirty: document.isDirty,
+    editor: editor,
+  );
 
   /// The line this file was asked to show, consumed: cleared once read, so
   /// asking for the same line twice scrolls twice.

@@ -55,6 +55,8 @@ abstract final class CodeEditorKeys {
       'Save the file',
       types: [CodeShortcutType.save],
     ),
+    CodeEditorCommand('editor.nextChange', 'Next uncommitted change'),
+    CodeEditorCommand('editor.previousChange', 'Previous uncommitted change'),
   ];
 
   static bool get _mac => kIsMacOS;
@@ -81,11 +83,7 @@ abstract final class CodeEditorKeys {
     'editor.findPrevious' => [
       const SingleActivator(LogicalKeyboardKey.f3, shift: true),
       if (_mac)
-        const SingleActivator(
-          LogicalKeyboardKey.keyG,
-          meta: true,
-          shift: true,
-        ),
+        const SingleActivator(LogicalKeyboardKey.keyG, meta: true, shift: true),
     ],
     'editor.goToLine' => [
       const SingleActivator(LogicalKeyboardKey.keyG, control: true),
@@ -101,6 +99,12 @@ abstract final class CodeEditorKeys {
     'editor.save' => [
       const SingleActivator(LogicalKeyboardKey.keyS, control: true),
       const SingleActivator(LogicalKeyboardKey.keyS, meta: true),
+    ],
+    'editor.nextChange' => [
+      const SingleActivator(LogicalKeyboardKey.f5, alt: true),
+    ],
+    'editor.previousChange' => [
+      const SingleActivator(LogicalKeyboardKey.f5, alt: true, shift: true),
     ],
     _ => const [],
   };
