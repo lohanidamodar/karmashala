@@ -9,6 +9,7 @@ import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/presentation/usage_chip.dart' show formatResetClock;
+import '../application/session_providers.dart';
 import '../application/session_queue_providers.dart';
 import 'session_queue_sheet.dart';
 
@@ -330,6 +331,13 @@ class _QueuedBubble extends ConsumerWidget {
     };
     final labelColor = failed ? scheme.error : scheme.onSurfaceVariant;
     final now = ref.watch(clockProvider).nowUtc().toLocal();
+    final from = queuedSenderWords(
+      message,
+      titleOf: (id) => ref.watch(sessionsDataProvider).getById(id)?.title,
+    );
+    final sendNow =
+        message.state == QueuedMessageState.queued &&
+        ref.watch(capabilitiesProvider.select((c) => c.sessionQueueManage));
     final compact = TextButton.styleFrom(
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
@@ -404,6 +412,16 @@ class _QueuedBubble extends ConsumerWidget {
                           ),
                       ],
                     ),
+                    if (from != null)
+                      Text(
+                        from,
+                        key: ValueKey('queued-from-${message.id}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
                     if (message.state == QueuedMessageState.queued)
                       Text(
                         queuedWhenWords(message.hold, now),
@@ -438,6 +456,19 @@ class _QueuedBubble extends ConsumerWidget {
                           child: const Text('Back to composer'),
                         ),
                       ),
+                    // Another session's message waits behind the person's;
+                    // they may let it go ahead.
+                    if (sendNow && from != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          key: ValueKey('queued-send-now-${message.id}'),
+                          style: compact,
+                          onPressed: () =>
+                              sendQueuedMessageNow(context, ref, message),
+                          child: const Text('Send now'),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -452,6 +483,41 @@ class _QueuedBubble extends ConsumerWidget {
   Future<void> _backToComposer(BuildContext context, WidgetRef ref) async {
     onBackToComposer?.call(message.text);
     await cancelQueuedMessage(context, ref, message);
+  }
+}
+
+/// Who queued [message], when it was not the person: another session, its
+/// delegated work, or a schedule. Null for the person's own.
+String? queuedSenderWords(
+  QueuedMessage message, {
+  required String? Function(String sessionId) titleOf,
+}) {
+  final id = message.originId;
+  final title = id == null ? null : titleOf(id);
+  final named = title == null ? 'another session' : '"$title"';
+  return switch (message.origin) {
+    QueuedMessageOrigin.mcp => 'From $named',
+    QueuedMessageOrigin.delegation => 'Results from $named',
+    QueuedMessageOrigin.automation => 'From a scheduled resume',
+    _ => null,
+  };
+}
+
+/// Delivers queued [message] now, ahead of the rest; a refusal is said.
+Future<void> sendQueuedMessageNow(
+  BuildContext context,
+  WidgetRef ref,
+  QueuedMessage message,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    await ref
+        .read(sessionQueueActionsProvider)
+        .sendNow(message.sessionId, message.id);
+  } on DataRefused catch (refusal) {
+    messenger?.showSnackBar(
+      SnackBar(content: Text('Could not send it now: ${refusal.message}')),
+    );
   }
 }
 
