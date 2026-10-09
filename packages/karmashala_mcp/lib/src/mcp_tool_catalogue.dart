@@ -328,6 +328,12 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'fanout_list': McpToolAnnotations.read,
   'fanout_get': McpToolAnnotations.read,
 
+  // Pipelines. A run starts sessions, each opened in a background tab.
+  'pipeline_templates': McpToolAnnotations.read,
+  'pipeline_run': McpToolAnnotations(movesAttention: false),
+  'pipeline_status': McpToolAnnotations.read,
+  'pipeline_approve': McpToolAnnotations(movesAttention: false),
+
   // Devices. Everything here touches a phone, so all of it is open-world.
   'list_devices': McpToolAnnotations.readOutside,
   'device_screenshot': McpToolAnnotations.readOutside,
@@ -604,6 +610,10 @@ enum McpToolCategory {
   fanout(
     'Fan-out comparisons',
     'One prompt run on several agents at once, and how they compared.',
+  ),
+  pipelines(
+    'Pipelines',
+    'Stages of agents with hand-offs and gates: plan, implement, review.',
   ),
   devices(
     'Devices and simulators',
@@ -1033,6 +1043,24 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'fanout_get': McpToolListing(
     McpToolCategory.fanout,
     'One comparison in full: every candidate, its diff and its verdict.',
+  ),
+
+  // Pipelines.
+  'pipeline_templates': McpToolListing(
+    McpToolCategory.pipelines,
+    'The built-in and saved pipelines, with their stages and fields.',
+  ),
+  'pipeline_run': McpToolListing(
+    McpToolCategory.pipelines,
+    "Start a pipeline: each stage a sub-session, handed the last one's work.",
+  ),
+  'pipeline_status': McpToolListing(
+    McpToolCategory.pipelines,
+    "A run in full: every stage's session, answer, artifacts and checks.",
+  ),
+  'pipeline_approve': McpToolListing(
+    McpToolCategory.pipelines,
+    'Approve or stop a gate in a pipeline run you started.',
   ),
 
   // Devices and simulators.
