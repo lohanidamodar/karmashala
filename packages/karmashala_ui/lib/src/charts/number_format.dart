@@ -35,3 +35,15 @@ String? formatShare(int part, int whole) {
   if (percent > 99 && part < whole) return '>99%';
   return '${percent.round()}%';
 }
+
+/// An amount an agent reported spending: `$0.42`, `1.20 EUR`, or `0.42` when
+/// it named no currency. Two decimals; never called for an amount nobody
+/// recorded — that is "not recorded", not `$0.00`.
+String formatMoney(double amount, String? currency) {
+  final fixed = amount.toStringAsFixed(2);
+  return switch (currency?.trim() ?? '') {
+    'USD' => '\$$fixed',
+    '' => fixed,
+    final other => '$fixed $other',
+  };
+}

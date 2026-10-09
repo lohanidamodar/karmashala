@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_stats_providers.dart';
@@ -29,6 +30,8 @@ class UsageSessionRow {
     this.reasoning,
     this.tokensByModel,
     this.lastActivityAt,
+    this.costAmount,
+    this.costCurrency,
   });
 
   final String sessionId;
@@ -54,6 +57,12 @@ class UsageSessionRow {
   /// The last record in its own file. Null when unknown, and such a session
   /// is placed in no range at all.
   final DateTime? lastActivityAt;
+
+  /// What its agent reported spending, over its protocol; null when it
+  /// reported no money — "not recorded", never zero. Only agents that say
+  /// (over ACP) ever fill it.
+  final double? costAmount;
+  final String? costCurrency;
 }
 
 /// What the Usage tab says about the sessions of one agent in one range.
@@ -195,6 +204,7 @@ final usageSessionRowsProvider =
       final stats = ref.read(sessionStatsServiceProvider);
       final workspace = ref.read(workspaceDataProvider);
       final installations = ref.read(agentInstallationsDataProvider);
+      final client = ref.read(dataClientProvider);
       final recent = sessions.take(kTokenTotalsMaxSessions).toList();
       // One `sessions.stats` request for all of them, through the server.
       final views = await stats.countsFor([for (final s in recent) s.id]);
@@ -209,6 +219,7 @@ final usageSessionRowsProvider =
             ? null
             : workspace.project(repository.projectId);
         final models = counted?.tokensByModel;
+        final reported = client.sessionUsage[session.id];
         rows.add(
           UsageSessionRow(
             sessionId: session.id,
@@ -229,6 +240,8 @@ final usageSessionRowsProvider =
                       key: ?value.total,
                   },
             lastActivityAt: last,
+            costAmount: reported?.costAmount,
+            costCurrency: reported?.costCurrency,
           ),
         );
       }
@@ -247,3 +260,79 @@ final usageRecountProvider = Provider<void Function()>(
 /// The agent's name as the tab writes it.
 String usageAgentName(String agentId) =>
     AgentRegistry.builtIn.displayNameFor(agentId);
+
+/// One project's reported spending in one currency.
+class UsageProjectCost {
+  const UsageProjectCost({
+    required this.project,
+    required this.amount,
+    required this.currency,
+    required this.sessions,
+  });
+
+  final String project;
+  final double amount;
+  final String? currency;
+
+  /// How many sessions reported it.
+  final int sessions;
+}
+
+/// **What agents reported spending, by project**, over [rows] last active
+/// at or after [since], largest first. Only reported amounts — a session
+/// that reported none adds nothing, rather than a zero. One entry per
+/// project and currency: amounts in two currencies are never summed.
+List<UsageProjectCost> usageCostByProject(
+  Iterable<UsageSessionRow> rows, {
+  required DateTime since,
+}) {
+  final sums = <(String, String?), (double, int)>{};
+  for (final row in rows) {
+    final amount = row.costAmount;
+    final last = row.lastActivityAt;
+    if (amount == null || last == null || last.isBefore(since)) continue;
+    final key = (row.project, row.costCurrency?.trim());
+    final (sum, count) = sums[key] ?? (0.0, 0);
+    sums[key] = (sum + amount, count + 1);
+  }
+  return [
+    for (final MapEntry(:key, :value) in sums.entries)
+      UsageProjectCost(
+        project: key.$1,
+        currency: key.$2,
+        amount: value.$1,
+        sessions: value.$2,
+      ),
+  ]..sort((a, b) => b.amount.compareTo(a.amount));
+}
+
+/// How many sessions "most expensive today" lists.
+const int kUsageMostExpensive = 5;
+
+/// **The sessions that cost the most since [since]** — today's, by the
+/// caller's local midnight: reported cost first, largest first, then the
+/// rest by recorded tokens. A session that recorded neither is not listed.
+List<UsageSessionRow> usageMostExpensive(
+  Iterable<UsageSessionRow> rows, {
+  required DateTime since,
+  int limit = kUsageMostExpensive,
+}) {
+  final listed = [
+    for (final row in rows)
+      if (row.lastActivityAt case final last?
+          when !last.isBefore(since) &&
+              (row.costAmount != null || row.tokens != null))
+        row,
+  ];
+  listed.sort((a, b) {
+    final ca = a.costAmount;
+    final cb = b.costAmount;
+    if (ca != null || cb != null) {
+      if (ca == null) return 1;
+      if (cb == null) return -1;
+      if (ca != cb) return cb.compareTo(ca);
+    }
+    return (b.tokens ?? 0).compareTo(a.tokens ?? 0);
+  });
+  return listed.take(limit).toList();
+}

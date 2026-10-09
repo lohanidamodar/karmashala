@@ -19,7 +19,9 @@ import '../../application/usage_session_tokens.dart';
 import '../agent_logo.dart';
 import '../usage_chip.dart' show formatUsageDuration;
 import 'usage_breakdown_section.dart';
+import 'usage_cost_section.dart';
 import 'usage_limits_section.dart';
+import 'usage_machines_section.dart';
 import 'usage_tab_state.dart';
 import 'usage_windows_section.dart';
 
@@ -279,6 +281,10 @@ class _AccountBody extends ConsumerWidget {
             now: now,
             forecasts: forecasts,
           ),
+        if (account.states.length > 1) ...[
+          const SizedBox(height: Insets.lg),
+          UsageMachinesOverTime(account: account, range: range, now: now),
+        ],
         const SizedBox(height: Insets.xl),
         UsageLimitsSection(account: account, forecasts: forecasts),
         const SizedBox(height: Insets.xl),
@@ -306,6 +312,10 @@ class _AccountBody extends ConsumerWidget {
         ),
         const SizedBox(height: Insets.sm),
         ..._breakdownBody(context, rows, breakdown, muted),
+        if (rows.value case final value?) ...[
+          const SizedBox(height: Insets.xl),
+          UsageCostSection(rows: value, range: range, now: now),
+        ],
       ],
     );
   }
