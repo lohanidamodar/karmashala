@@ -81,6 +81,7 @@ void main() {
         InboxItemKind.automationProposed,
         InboxItemKind.wentQuiet,
         InboxItemKind.storeNews,
+        InboxItemKind.waitingForSlot,
       });
       for (final reason in NotificationReason.values) {
         expect(

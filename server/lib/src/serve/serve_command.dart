@@ -1354,9 +1354,15 @@ Future<int> _serve(
     onCancelled: launches.waitCancelled,
   );
   data.greeters.add(() => [CapacityChanged(launchGate.snapshot())]);
-  final capacityAnnounce = launchGate.changes.listen(
-    (_) => data.announce([CapacityChanged(launchGate.snapshot())]),
+  final slotWaitInbox = SlotWaitInbox(
+    raise: attention.waitingForSlot,
+    retire: attention.slotWaitOver,
   );
+  final capacityAnnounce = launchGate.changes.listen((_) {
+    final capacity = launchGate.snapshot();
+    data.announce([CapacityChanged(capacity)]);
+    slotWaitInbox.update(capacity);
+  });
   // A slot frees when a process ends or its agent goes idle, and the limits
   // live in Settings; the timer catches a change nothing announces.
   final capacityStatus = status.changes.listen((_) => launchGate.pump());
