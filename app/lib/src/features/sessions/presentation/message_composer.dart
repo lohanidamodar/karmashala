@@ -94,6 +94,7 @@ class MessageComposer extends StatefulWidget {
     this.serverFilesWaiting,
     this.focusRequests,
     this.working = false,
+    this.uncertain = false,
     this.onStop,
     super.key,
   });
@@ -102,6 +103,10 @@ class MessageComposer extends StatefulWidget {
   /// (■) with the box empty, and Stop stands beside Send once something is
   /// typed — Send still queues. Without [onStop] Stop is never offered.
   final bool working;
+
+  /// Whether [working] is only a guess: Send then stands beside Stop even
+  /// with the box empty, so a turn that may be over never hides it.
+  final bool uncertain;
 
   /// Stops the running turn.
   final VoidCallback? onStop;
@@ -649,7 +654,7 @@ class _MessageComposerState extends State<MessageComposer>
             _input.text.trim().isNotEmpty ||
             _attachments.isNotEmpty ||
             _uploads.isNotEmpty;
-        if (!typed) return stop;
+        if (!typed && !widget.uncertain) return stop;
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [

@@ -23,6 +23,21 @@ final sessionTurnWorkingProvider = Provider.autoDispose.family<bool, String>(
   ),
 );
 
+/// Whether [String]'s "working" is a guess: read off its screen or its
+/// state file, never said by the agent itself (a hook, its protocol). The
+/// composer then offers Send beside Stop, nothing typed or not.
+final sessionTurnUncertainProvider = Provider.autoDispose.family<bool, String>(
+  (ref, sessionId) => ref.watch(
+    agentSessionStatusProvider(sessionId).select((status) {
+      final report = status.asData?.value;
+      return report != null &&
+          report.turnStatus == AgentActivityStatus.working &&
+          report.source != AgentStatusSource.hook &&
+          report.source != AgentStatusSource.protocol;
+    }),
+  ),
+);
+
 /// One session's Stop: when it was pressed, whether the turn ran on past
 /// [kStopEscalationAfter], and whether it has ended since.
 @immutable

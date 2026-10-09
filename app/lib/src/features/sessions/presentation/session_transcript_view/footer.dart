@@ -159,6 +159,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
           // Watched here, not by the view: a turn starting or ending
           // rebuilds the box's buttons and nothing else.
           working: ref.watch(sessionTurnWorkingProvider(widget.sessionId)),
+          uncertain: ref.watch(sessionTurnUncertainProvider(widget.sessionId)),
           onStop: _stop,
           // Mode, model and stats are on the pane's status bar (owner,
           // 2026-09-28); switching agent is the composer's (2026-10-03).

@@ -349,4 +349,34 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  for (final (name, size, touch) in [
+    ('phone', phone, true),
+    ('desktop', desktop, false),
+  ]) {
+    testWidgets('on a $name, a "working" read off the screen offers Send '
+        'beside Stop with the box empty; one the agent said offers Stop '
+        'alone', (tester) async {
+      await pump(tester, size: size, touch: touch);
+      final send = find.byTooltip(RegExp('^Send'));
+
+      statuses.add(
+        AgentStatusReport(
+          agentId: AgentIds.claudeAcp,
+          sessionId: 'acp-1',
+          status: AgentActivityStatus.working,
+          observedAt: testTime,
+          source: AgentStatusSource.terminalGrid,
+        ),
+      );
+      await frames(tester);
+      expect(stop, findsOneWidget);
+      expect(send, findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await working(tester, AgentActivityStatus.working);
+      expect(stop, findsOneWidget);
+      expect(send, findsNothing);
+    });
+  }
 }
