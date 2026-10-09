@@ -15,6 +15,23 @@ import 'chat_cards_support.dart';
 /// large text.
 void main() {
   for (final (agentId, menu) in [
+    // Codex 0.160's command approval (`codex-exec-approval-0.160.raw`).
+    (
+      AgentIds.codex,
+      const AgentScreenMenu(
+        prompt: [
+          'Would you like to run the following command?',
+          r'$ echo hi > out.txt',
+        ],
+        options: [
+          'Yes, proceed (y)',
+          "Yes, and don't ask again for commands that start with "
+              '`echo hi > out.txt` (p)',
+          'No, and tell Codex what to do differently (esc)',
+        ],
+        highlighted: 0,
+      ),
+    ),
     (
       AgentIds.codex,
       const AgentScreenMenu(

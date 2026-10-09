@@ -685,11 +685,14 @@ const codexDescriptor = AgentDescriptor(
   // `unknown` rather than to a guess.
   // 0.160.0's startup menus (folder trust, the update offer) end
   // `enter continue · esc quit` / `· esc skip` instead, read in a real ConPTY
-  // (`codex-trust-prompt-0.160.raw`, 2026-10-09).
+  // (`codex-trust-prompt-0.160.raw`, 2026-10-09), and its command and edit
+  // approvals `Press enter to confirm or esc to cancel`
+  // (`codex-exec-approval-0.160.raw`, `codex-edit-approval-0.160.raw`).
   grid: AgentGridRules(
     awaitingApproval: [
       GridMatcher('Press enter to continue'),
       GridMatcher('enter continue · esc'),
+      GridMatcher('Press enter to confirm or esc to cancel'),
     ],
     working: [GridMatcher('esc to interrupt')],
     // `• Working (3s • esc to interrupt)`, rendered from `codex-tui.raw`.
