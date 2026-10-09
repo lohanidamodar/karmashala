@@ -756,6 +756,29 @@ class SessionToolSet extends ServerToolSet {
   }) async {
     final session = _session(sessionId);
     if (!held) {
+      // A row still saying "running" with nothing behind it — an ACP runtime
+      // that went with an old server, say — is recorded ended, so it can be
+      // archived. Not on an SSH box: a box out of reach may still run it.
+      if (session.status.claimsLive && !_onSshBox(session)) {
+        queue?.ended(
+          sessionId,
+          reason:
+              'The session was ended by an agent (session_end) before it '
+              'could take this message, so it was not sent.',
+          by: by,
+        );
+        _context.write(
+          SessionEdit(sessionId, SessionPatch.status(SessionStatus.cancelled)),
+        );
+        return <String, Object?>{
+          'sessionId': sessionId,
+          'title': session.title,
+          'ended': true,
+          'endedAt':
+              'its row only: nothing was running it, and its row said '
+              '"${session.status.name}"; it now says cancelled',
+        };
+      }
       throw StateError(
         'Nothing is running that session: no pane shows it and the session '
         'host is not running it, so there is nothing to end.',
@@ -783,6 +806,18 @@ class SessionToolSet extends ServerToolSet {
       'ended': true,
       'endedAt': 'the session host',
     };
+  }
+
+  /// Whether [session]'s checkout is on an SSH box.
+  bool _onSshBox(Session session) {
+    final rows = _context.database.query(
+      'SELECT environment_id FROM repositories WHERE id = ?;',
+      [session.repositoryId],
+    );
+    final environment =
+        session.workingDirectory?.environmentId ??
+        (rows.isEmpty ? null : rows.single['environment_id'] as String?);
+    return environment?.startsWith('ssh:') ?? false;
   }
 
   /// Types into the session's PTY as the host — its own, or a box session's

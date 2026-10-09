@@ -133,4 +133,49 @@ void main() {
       expect(SessionDao(database).getById('child')!.isArchived, isTrue);
     });
   }
+
+  test('a row that says running with nothing behind it — an ACP chat whose '
+      'runtime is gone — is ended on its row, then archived', () async {
+    insert('chat', parent: 'lead', status: SessionStatus.running);
+    expect(status.holds('chat'), isFalse);
+    await expectLater(
+      archive('chat'),
+      throwsA(isA<StateError>()),
+      reason: 'its row claims a run',
+    );
+
+    final ended = await end('chat') as Map;
+    expect(ended['ended'], isTrue);
+    expect(ended['endedAt'], startsWith('its row only'));
+    expect(
+      SessionDao(database).getById('chat')!.status,
+      SessionStatus.cancelled,
+    );
+
+    final answer = await archive('chat') as Map;
+    expect(answer['archived'], ['chat']);
+  });
+
+  test('a running row on an SSH box out of reach is not ended blind', () async {
+    database.execute(
+      'INSERT INTO repositories (id, project_id, name, environment_id, path, '
+      'created_at) VALUES (?, ?, ?, ?, ?, ?);',
+      ['r1', 'p1', 'api', 'ssh:box-1', '/srv/api', t0.toIso8601String()],
+    );
+    insert('remote', parent: 'lead', status: SessionStatus.running);
+    await expectLater(
+      end('remote'),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          startsWith('Nothing is running that session'),
+        ),
+      ),
+    );
+    expect(
+      SessionDao(database).getById('remote')!.status,
+      SessionStatus.running,
+    );
+  });
 }

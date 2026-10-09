@@ -614,6 +614,9 @@ void main() {
     });
 
     test('with no app, nothing running is said, never a success', () async {
+      database.execute(
+        "UPDATE sessions SET status = 'completed' WHERE id = 's1';",
+      );
       await expectLater(
         tools.call('session_end', {'sessionId': 's1'}, null),
         throwsA(
