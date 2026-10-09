@@ -127,6 +127,7 @@ part 'fake_files_work.dart';
 part 'fake_env_vault.dart';
 part 'fake_github_access.dart';
 part 'fake_stores.dart';
+part 'fake_pipelines.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -352,6 +353,9 @@ class FakeDataServer {
   late final worktreeRows = FakeWorktreeRows._(this);
   late final snippetRows = FakeSnippetRows._(this);
 
+  /// Saved pipelines and runs, and every act a client asked of a run.
+  late final pipelineRows = FakePipelineRows._(this);
+
   /// [preferences] as a store — for a test to seed before a client
   /// connects, or to read back what one wrote (once it has landed).
   late final PreferenceStore store = _MapStore(preferences);
@@ -566,6 +570,9 @@ class FakeDataServer {
         // Nothing kept: told as it is.
         case GitChange():
           // Nothing kept: it says what to read again.
+          break;
+        case PipelinesChange():
+          // Kept by [pipelineRows] as it answers.
           break;
         case FilesChange() || TranscriptChanged() || ArtifactChange():
           // A watch's news is one link's.
@@ -998,6 +1005,7 @@ class FakeDataServer {
         'this fake reads no transcripts',
       ),
       final ArtifactsRequest<Object?> r => _handleArtifacts(r),
+      final PipelinesRequest<Object?> r => pipelineRows._handle(r, changes),
       final SessionInputRequest<Object?> r => sessionWork._input(r),
       SessionSetMode() ||
       SessionSetConfigOption() ||

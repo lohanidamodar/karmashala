@@ -117,3 +117,20 @@ class _NewSessionButton extends ConsumerWidget {
           );
   }
 }
+
+/// **Run a pipeline**, beside New session where the header has room for it;
+/// narrower, the window's + menu and the command palette offer it.
+class _RunPipelineButton extends StatelessWidget {
+  const _RunPipelineButton();
+
+  @override
+  Widget build(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < WidthClass.expandedMin
+      ? const SizedBox.shrink()
+      : IconButton(
+          key: const ValueKey('overview-run-pipeline'),
+          tooltip: 'Run a pipeline…',
+          onPressed: () => unawaited(showRunPipeline(context)),
+          icon: const Icon(AppIcons.treeStructure),
+        );
+}

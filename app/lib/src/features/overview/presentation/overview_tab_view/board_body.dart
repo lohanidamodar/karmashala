@@ -393,6 +393,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const OverviewBatchBar(),
+          const OverviewPipelines(),
           Expanded(
             // A click on the board's own space closes the peek, as Esc does.
             // A card, a button or a field clicked wins the tap — the

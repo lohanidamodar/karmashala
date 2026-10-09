@@ -40,6 +40,20 @@ extension _CommandSources on QuickOpenSources {
           icon: AppIcons.gitBranch,
           onSelect: () => FanOutDialog.show(context),
         ),
+      _command(
+        'Run pipeline…',
+        subtitle: 'Stages of agents with hand-offs: plan, implement, review',
+        icon: AppIcons.treeStructure,
+        keywords: const ['pipeline', 'stages', 'plan', 'review', 'hand-off'],
+        onSelect: () => showRunPipeline(context),
+      ),
+      _command(
+        'Pipeline runs',
+        subtitle: 'Each run, its stages, answers and checks',
+        icon: AppIcons.list,
+        keywords: const ['pipeline', 'runs'],
+        onSelect: () => showPipelineRuns(context),
+      ),
       ..._resumeCommands(),
       // Listed as verbs, not places: "Notes · Context panel" only answers if
       // you already know the name. Each opens its surface on the way.
