@@ -47,8 +47,9 @@ class ChatCardHarness {
     AgentStatusReport? status,
     List<Override> overrides = const [],
     String? permissionMode,
+    String? agent,
   }) async {
-    final agentId = agentIdOf(kind);
+    final agentId = agent ?? agentIdOf(kind);
     final db = TestMachine();
     final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
@@ -126,10 +127,8 @@ class ChatCardHarness {
     ChatCardSession.acp => AgentIds.claudeAcp,
   };
 
-  static AgentStatusReport idle(ChatCardSession kind) => statusOf(
-    kind,
-    AgentActivityStatus.idle,
-  );
+  static AgentStatusReport idle(ChatCardSession kind) =>
+      statusOf(kind, AgentActivityStatus.idle);
 
   static AgentStatusReport statusOf(
     ChatCardSession kind,
@@ -137,8 +136,9 @@ class ChatCardHarness {
     AgentWaitKind waiting = AgentWaitKind.unrecorded,
     AgentToolAsk? toolAsk,
     List<String> evidence = const [],
+    String? agent,
   }) => AgentStatusReport(
-    agentId: agentIdOf(kind),
+    agentId: agent ?? agentIdOf(kind),
     sessionId: 's1',
     status: status,
     observedAt: testTime,

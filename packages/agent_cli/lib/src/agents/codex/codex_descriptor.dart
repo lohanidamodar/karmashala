@@ -266,7 +266,7 @@ const codexDescriptor = AgentDescriptor(
     // 2. No, quit · Press enter to continue". `Press enter to continue` alone
     // is not it — the update offer shares that footer. 0.160.0 words it
     // "Trust this folder? Codex can read, edit, and run files here, …" with
-    // "Trust and continue" (codex.exe strings, 2026-10-08).
+    // "Trust and continue", captured in `codex-trust-prompt-0.160.raw`.
     firstRunPrompt: AgentFirstRunPromptRules(
       markers: [
         GridMatcher('Do you trust the contents of this directory'),
@@ -676,8 +676,14 @@ const codexDescriptor = AgentDescriptor(
   // could tell apart from a busy one. That is not a gap to paper over — the
   // rollout file already answers idle, and an undeclared state resolves to
   // `unknown` rather than to a guess.
+  // 0.160.0's startup menus (folder trust, the update offer) end
+  // `enter continue · esc quit` / `· esc skip` instead, read in a real ConPTY
+  // (`codex-trust-prompt-0.160.raw`, 2026-10-09).
   grid: AgentGridRules(
-    awaitingApproval: [GridMatcher('Press enter to continue')],
+    awaitingApproval: [
+      GridMatcher('Press enter to continue'),
+      GridMatcher('enter continue · esc'),
+    ],
     working: [GridMatcher('esc to interrupt')],
     // `• Working (3s • esc to interrupt)`, rendered from `codex-tui.raw`.
     workingLine: WorkingLineRule(
@@ -700,14 +706,15 @@ const codexDescriptor = AgentDescriptor(
   // highlighted row, ↓/↑ move it, Enter confirms it.
   //
   // Approve and deny on a menu pick an option by its words: directory trust
-  // is `› 1. Yes, continue` / `2. No, quit`. The update offer (`Update now` /
-  // `Skip` / `Skip until next version`) matches neither on purpose, so approve
-  // refuses rather than running an updater. No cancel is declared safe:
-  // Codex's prompts name no way to decline but their `No` row.
+  // is `› 1. Yes, continue` / `2. No, quit`, and on 0.160.0 `› 1. Trust and
+  // continue` / `2. Quit` (`codex-trust-prompt-0.160.raw`). The update offer
+  // (`Update now` / `Skip` / `Skip until next version`) matches neither on
+  // purpose, so approve refuses rather than running an updater. No cancel is
+  // declared safe: on 0.160.0 Esc, `q` and `2` all quit at folder trust.
   menus: AgentMenuSupport(
     markers: ['›'],
-    affirmative: [r'^Yes\b'],
-    negative: [r'^No\b'],
+    affirmative: [r'^Yes\b', r'^Trust and continue$'],
+    negative: [r'^No\b', r'^Quit$'],
   ),
   // **Codex has images, and not through this door.** `codex --help` and
   // `codex exec --help` (codex-cli 0.153.4) both carry `-i, --image <FILE>...

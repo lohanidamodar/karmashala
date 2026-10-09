@@ -3,6 +3,7 @@ import '../domain/agent_descriptor.dart';
 import '../domain/agent_mcp_config.dart';
 import '../domain/agent_plan.dart';
 import '../domain/agent_permission_support.dart';
+import '../domain/agent_screen_menu.dart';
 import '../domain/agent_skill_support.dart';
 import '../domain/agent_status.dart';
 
@@ -311,6 +312,10 @@ const antigravityDescriptor = AgentDescriptor(
     // fresh instead of failing. A marker that never matches costs an
     // explanation; one that matches a live session reports it as dead.
     allowsConcurrentResume: false,
+    // `antigravity-trust-prompt.raw` (agy 1.3.2; 1.2.16 words it the same).
+    firstRunPrompt: AgentFirstRunPromptRules(
+      markers: [GridMatcher('Do you trust the contents of this project')],
+    ),
     // `fork` stays unsupported, now on evidence rather than on the default:
     // `agy --help` lists every subcommand it has (agent, changelog, help,
     // install, mcp, mic-serve, models, plugin, update) and none of them forks.
@@ -544,10 +549,8 @@ const antigravityDescriptor = AgentDescriptor(
     // finest-grained signal available and they are left undeclared anyway: a
     // hook that changes what the agent is allowed to do is not a status hook.
     //
-    // What is lost with them is `awaitingApproval`. Antigravity announces a
-    // pending permission nowhere this app can hear, so that state stays
-    // unreachable for this agent — see `grid`, which is empty for the same
-    // reason.
+    // What is lost with them is a hook for `awaitingApproval`: only `grid`
+    // below reads a prompt, off the screen.
     // **`Stop` is not the same thing as "finished".** Its payload carries a
     // `terminationReason`, and while this mapped `Stop` to `idle`
     // unconditionally, an `agy` run that died on an error, ran out of
@@ -629,12 +632,23 @@ const antigravityDescriptor = AgentDescriptor(
     },
   ),
   statusStrategy: AgentStatusStrategy.hooks,
-  // `approval` is left empty on purpose. The 1.0.13 build wrote a
-  // `keybindings.json` binding `confirm.yes` to `y` and `confirm.no` to `n`,
-  // which looked like the best-sourced approval keys in this file — but 1.1.23
-  // ships no such file, so those keys describe a version nobody is running.
-  // Pressing a guessed key into a TUI is the one failure worse than sending the
-  // user to the terminal, so nothing is declared.
+  // The folder-trust menu no hook announces, read in a ConPTY through WSL on
+  // agy 1.3.2 (`antigravity-trust-prompt.raw`, 2026-10-09; the owner saw the
+  // same screen on 1.2.16): `> Yes, I trust this folder` / `  No, exit`, then
+  // `↑/↓ Navigate · enter Confirm`. ↓/↑ move the `>`, Enter confirms; the
+  // idle composer's footer is `? for shortcuts`, never this one.
+  grid: AgentGridRules(awaitingApproval: [GridMatcher('· enter Confirm')]),
+  // Approve and deny pick the option by its words. Enter on `No, exit` exits
+  // and trusts nothing (measured), so no cancel is declared.
+  menus: AgentMenuSupport(
+    markers: ['>'],
+    affirmative: [r'^Yes\b'],
+    negative: [r'^No\b'],
+  ),
+  // `approval` keys are left empty on purpose: a prompt is answered by its
+  // menu's option above. The 1.0.13 build wrote a `keybindings.json` binding
+  // `confirm.yes` to `y` and `confirm.no` to `n`, but 1.1.23 ships no such
+  // file, and a guessed key pressed into a TUI is worse than the terminal.
   // Nothing is known. `agy` writes protobuf into a store whose schema is not
   // published and which this app reads none of, so there is no evidence either
   // way — and §19's rule is that an unknown is never reported as a zero, nor

@@ -185,6 +185,39 @@ void main() {
     });
   });
 
+  for (final (agent, fixture, marker, yes, no) in [
+    (codex, 'codex-trust-prompt-0.160', '›', 'Trust and continue', 'Quit'),
+    (
+      AgentRegistry.builtIn.byId(AgentIds.antigravity)!,
+      'antigravity-trust-prompt',
+      '>',
+      'Yes, I trust this folder',
+      'No, exit',
+    ),
+  ]) {
+    group('${agent.displayName} folder trust ($fixture.raw)', () {
+      setUp(() => screen = FixtureMenuScreen.fixture(fixture, marker: marker));
+
+      test('approve confirms "$yes"', () async {
+        final answer = await answererFor(agent).answer('s', approve: true);
+
+        expect(screen.sent, ['\r']);
+        expect(screen.confirmed, yes);
+        expect(answer.answered, yes);
+        expect(recorded.single, (granted: true, option: yes));
+      });
+
+      test('deny moves to "$no" and confirms it', () async {
+        final answer = await answererFor(agent).answer('s', approve: false);
+
+        expect(screen.sent, ['\x1b[B', '\r']);
+        expect(screen.confirmed, no);
+        expect(answer.answered, no);
+        expect(recorded.single, (granted: false, option: no));
+      });
+    });
+  }
+
   test('Codex update offer: no option means yes, so approve refuses', () async {
     // The menu measured on 0.154.0 (screen_menu_test.dart), drawn as output.
     screen = FixtureMenuScreen.text(

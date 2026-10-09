@@ -179,7 +179,8 @@ class _AskDock extends ConsumerWidget {
           ),
         ),
         const SizedBox(width: Insets.sm),
-        _WaitingFor(since: report.waitingSince),
+        // A wait of hours, at a phone's width and large text, shrinks too.
+        Flexible(child: _WaitingFor(since: report.waitingSince)),
       ],
     );
     // Held to a height, the header stays and the body scrolls under it.
@@ -503,6 +504,7 @@ class _WaitingForState extends State<_WaitingFor> {
       'waiting $age',
       key: const ValueKey('dock-waiting'),
       maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: UiDensity.of(context).muted(Theme.of(context)),
     );
   }
