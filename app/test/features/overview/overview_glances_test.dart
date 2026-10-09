@@ -205,4 +205,46 @@ void main() {
       expect(tester.getTopLeft(tile('b')).dy, tester.getTopLeft(tile('a')).dy);
     });
   }
+
+  // The registered glances themselves — other pages' too, once added — in
+  // the area, with nothing read yet: their empty and loading states.
+  for (final (size, scale) in [
+    (const Size(360, 800), 1.0),
+    (const Size(360, 800), 1.6),
+    (const Size(1440, 900), 1.0),
+    (const Size(1440, 900), 1.6),
+  ]) {
+    testWidgets('${size.width}px at ${scale}x: every registered glance draws', (
+      tester,
+    ) async {
+      final c = ProviderContainer(
+        overrides: [
+          overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
+        ],
+      );
+      addTearDown(c.dispose);
+      await pump(tester, size: size, scale: scale, using: c);
+      expect(tester.takeException(), isNull);
+      final compact = size.width < 600;
+      for (final g in c.read(dashboardGlancesProvider)) {
+        await tester.ensureVisible(tile(g.id));
+        await tester.pumpAndSettle();
+        expect(tile(g.id), findsOneWidget, reason: g.id);
+        expect(
+          find.byKey(ValueKey('overview-glance-body:${g.id}')),
+          findsOneWidget,
+          reason: g.id,
+        );
+        if (compact) {
+          // One row on a phone's strip, whatever the glance draws.
+          expect(
+            tester.getSize(tile(g.id)).height,
+            lessThanOrEqualTo(Touch.target * scale + Insets.xs),
+            reason: g.id,
+          );
+        }
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
