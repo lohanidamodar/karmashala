@@ -202,6 +202,41 @@ void main() {
       },
     );
 
+    test(
+      'at Codex 0.160\'s folder-trust menu the session needs you: the '
+      'send is refused and nothing is typed, so the agent is not quit',
+      () async {
+        // Typed into that menu, a `q` or a `2` in the message quits Codex
+        // (measured on 0.160.0), which is how an agent-started session there
+        // ended within seconds of a send.
+        database.execute(
+          "UPDATE agent_installations SET agent_kind = ? WHERE id = 'a1';",
+          [AgentIds.codex],
+        );
+        final agent = await runAgent('codex-trust-prompt-0.160');
+        final report = status.statusOf('s1')!.report;
+        expect(report.status, AgentActivityStatus.awaitingApproval);
+        expect(report.hasOpenPrompt, isTrue);
+
+        await expectLater(
+          tools.call('session_send', {
+            'sessionId': 's1',
+            'text': 'quick review, 2 files',
+          }, 'caller'),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('approval prompt open'),
+            ),
+          ),
+        );
+        expect(agent.writes, isEmpty);
+        expect(agent.signals, isEmpty);
+        expect(status.holds('s1'), isTrue);
+      },
+    );
+
     test('stops at the budget: twenty relays in ten minutes', () async {
       await runAgent('claude-code-tui');
       for (var i = 0; i < relayBudget; i++) {
