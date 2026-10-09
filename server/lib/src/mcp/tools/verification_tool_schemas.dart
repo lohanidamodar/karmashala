@@ -145,7 +145,11 @@ const List<Map<String, Object?>> verificationToolSchemas = [
         'default — step summaries and a list of artifacts, no images and no '
         'file contents. Pass full:true for step detail and the text of the '
         'evidence files, or images:true to attach the screenshots. Ask for '
-        'images only when you need to look at one; they are the expensive part.',
+        'images only when you need to look at one; they are the expensive part. '
+        'It also says which code the run was taken on (commit and uncommitted '
+        'files) and whether the checkout still holds it: FRESH, STALE (the '
+        'code changed since, or while it ran) or VERSION UNKNOWN. A stale pass '
+        'is not a pass for the code as it is now.',
     'inputSchema': {
       'type': 'object',
       'properties': {

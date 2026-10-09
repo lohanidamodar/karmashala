@@ -51,6 +51,7 @@ class ProjectCheckRunner {
     required this._recorder,
     required this._now,
     this._results,
+    this._identityOf,
     void Function()? onChanged,
     void Function(String message)? log,
   }) : _dao = automations,
@@ -66,6 +67,10 @@ class ProjectCheckRunner {
 
   /// Where parsed results are kept and their baselines read; null keeps none.
   final CheckResultRecords? _results;
+
+  /// Which code a directory holds ([CodeIdentityReader.read]); null records
+  /// none, and every result then reads as "version unknown".
+  final Future<CodeIdentity?> Function(EnvironmentPath directory)? _identityOf;
   final void Function() _onChanged;
   final void Function(String message) _log;
 
@@ -109,6 +114,10 @@ class ProjectCheckRunner {
       return;
     }
     directory ??= _facts.repository(automation.repositoryId)?.path;
+    // The code the batch was asked about. Each check is held against it when
+    // it ends, so a change anywhere in the batch is caught by the first
+    // check to finish after it — and its pass is not counted.
+    final batchStart = await _identity(directory);
     var ordinal = 0;
     for (final check in checks) {
       ordinal++;
@@ -117,6 +126,7 @@ class ProjectCheckRunner {
         check: check,
         ordinal: ordinal,
         directory: directory,
+        batchStart: batchStart,
       );
       _dao.insertRunCheck(verdict);
       _onChanged();
@@ -160,6 +170,7 @@ class ProjectCheckRunner {
     required ProjectCheck check,
     required int ordinal,
     required EnvironmentPath? directory,
+    required CodeIdentity? batchStart,
   }) async {
     final startedAt = _now();
     final result = await _execute(
@@ -167,6 +178,7 @@ class ProjectCheckRunner {
       directory,
       title: '${check.name} · ${run.id}',
     );
+    final identity = batchStart?.settledAgainst(await _identity(directory));
     VerificationVerdict verdict;
     String reason;
     String? verificationRunId;
@@ -199,6 +211,7 @@ class ProjectCheckRunner {
         producedBySessionId: kAppVerifierId,
         results: results,
         change: change,
+        identity: identity,
       );
       if (automation != null && results != null) {
         _keep(
@@ -208,6 +221,7 @@ class ProjectCheckRunner {
           directory: directory,
           checkName: check.name,
           results: results,
+          identity: identity,
         );
       }
       verdict = recorded.verdict ?? VerificationVerdict.inconclusive;
@@ -237,6 +251,7 @@ class ProjectCheckRunner {
     final checks = _checks.forRepository(session.repositoryId);
     if (checks.isEmpty) return null;
     final startedAt = _now();
+    final before = await _identity(directory);
     final ran = <CommandCheck>[];
     for (final check in checks) {
       final result = await _execute(
@@ -266,12 +281,14 @@ class ProjectCheckRunner {
         ),
       );
     }
+    final identity = before?.settledAgainst(await _identity(directory));
     final run = await _recorder.recordBatch(
       title: 'Project checks · ${session.title}',
       startedAt: startedAt,
       checks: ran,
       sessionId: session.id,
       producedBySessionId: kAppVerifierId,
+      identity: identity,
     );
     for (final check in ran) {
       if (check.results case final results?) {
@@ -282,6 +299,7 @@ class ProjectCheckRunner {
           directory: directory,
           checkName: check.name,
           results: results,
+          identity: identity,
         );
       }
     }
@@ -354,6 +372,7 @@ class ProjectCheckRunner {
     required EnvironmentPath? directory,
     required String checkName,
     required CheckResults results,
+    required CodeIdentity? identity,
   }) {
     final records = _results;
     if (records == null) return;
@@ -367,11 +386,25 @@ class ProjectCheckRunner {
           checkName: checkName,
           recordedAt: _now(),
           results: results,
+          identity: identity,
         ),
       );
     } on Object catch (error) {
       // The verdict is already recorded; losing its structure loses no verdict.
       _log('recording structured check results failed: $error');
+    }
+  }
+
+  /// [directory]'s code now; null when nothing reads it, or it could not be
+  /// read — a result without one is "version unknown", never fresh.
+  Future<CodeIdentity?> _identity(EnvironmentPath? directory) async {
+    final read = _identityOf;
+    if (read == null || directory == null) return null;
+    try {
+      return await read(directory);
+    } on Object catch (error) {
+      _log('reading which code $directory holds failed: $error');
+      return null;
     }
   }
 

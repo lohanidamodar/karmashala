@@ -1,4 +1,5 @@
 import '../domain/check_results.dart';
+import '../domain/code_identity.dart';
 import '../domain/check_results_change.dart';
 
 /// One check's structured results as recorded: whose, where, and when.
@@ -12,6 +13,7 @@ class RecordedCheckResults {
     this.verificationRunId,
     this.sessionId,
     this.directory,
+    this.identity,
   });
 
   final int? id;
@@ -25,6 +27,9 @@ class RecordedCheckResults {
   final DateTime recordedAt;
   final CheckResults results;
 
+  /// The code the reading was taken on, or null for an older row.
+  final CodeIdentity? identity;
+
   Map<String, Object?> toJson({int limit = 50}) {
     final all = results.toJson();
     List<Object?> capped(String key) =>
@@ -35,6 +40,7 @@ class RecordedCheckResults {
       if (verificationRunId != null) 'verificationRunId': verificationRunId,
       if (sessionId != null) 'sessionId': sessionId,
       if (directory != null) 'directory': directory,
+      if (identity != null) 'code': identity!.label,
       'summary': results.summary,
       ...all,
       if (all.containsKey('diagnostics')) 'diagnostics': capped('diagnostics'),

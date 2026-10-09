@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../domain/check_results.dart';
 import '../domain/check_results_change.dart';
+import '../domain/code_identity.dart';
 import '../domain/command_check.dart';
 import '../domain/verification_artifact.dart';
 import '../domain/verification_run.dart';
@@ -38,11 +39,14 @@ class CommandCheckRecorder {
     required List<CommandCheck> checks,
     String? sessionId,
     String? producedBySessionId,
+    CodeIdentity? identity,
   }) async {
     final id = _newId();
     final directory = await _store.createDirectory(id);
     final finishedAt = _now();
     final verdicts = [for (final check in checks) check.verdict];
+    final verdict = worstVerdict(verdicts);
+    final moved = _moved(verdict, identity);
     final steps = <VerificationStep>[
       for (final (i, check) in checks.indexed)
         VerificationStep(
@@ -75,13 +79,15 @@ class CommandCheckRecorder {
       producedBySessionId: producedBySessionId,
       startedAt: startedAt,
       finishedAt: finishedAt,
-      verdict: worstVerdict(verdicts),
+      verdict: moved ? VerificationVerdict.inconclusive : verdict,
       reason: failed.isEmpty
-          ? '${checks.length == 1 ? 'The check' : 'All ${checks.length} checks'} passed.'
+          ? '${checks.length == 1 ? 'The check' : 'All ${checks.length} checks'} '
+                'passed${moved ? _movedClause : '.'}'
           : '$passed of ${checks.length} passed; not passed: '
                 '${failed.join(', ')}.',
       artifactDirectory: directory.path,
       steps: steps,
+      identity: identity,
     );
     final artifacts = [
       for (final (i, check) in checks.indexed)
@@ -125,15 +131,18 @@ class CommandCheckRecorder {
     String? producedBySessionId,
     CheckResults? results,
     CheckResultsChange? change,
+    CodeIdentity? identity,
   }) async {
     final id = _newId();
     final directory = await _store.createDirectory(id);
     final finishedAt = _now();
-    final verdict = switch (exitCode) {
+    final exited = switch (exitCode) {
       0 => VerificationVerdict.pass,
       null => VerificationVerdict.inconclusive,
       _ => VerificationVerdict.fail,
     };
+    final moved = _moved(exited, identity);
+    final verdict = moved ? VerificationVerdict.inconclusive : exited;
     final line = command.join(' ');
     final step = VerificationStep(
       ordinal: 1,
@@ -161,7 +170,7 @@ class CommandCheckRecorder {
       finishedAt: finishedAt,
       verdict: verdict,
       reason: switch (exitCode) {
-        0 => '$line passed.',
+        0 => '$line passed${moved ? _movedClause : '.'}',
         null =>
           '$line stopped without an exit code Karmashala observed, so whether '
               'it passed is unknown.',
@@ -169,6 +178,7 @@ class CommandCheckRecorder {
       },
       artifactDirectory: directory.path,
       steps: <VerificationStep>[step],
+      identity: identity,
     );
     final artifacts = [
       if (output.trim().isNotEmpty)
@@ -220,6 +230,17 @@ class CommandCheckRecorder {
     at: at,
   );
 }
+
+/// Whether a pass was taken while the code moved under it — which makes it
+/// inconclusive: it describes neither the code it started on nor the code
+/// it ended on.
+bool _moved(VerificationVerdict verdict, CodeIdentity? identity) =>
+    verdict == VerificationVerdict.pass &&
+    (identity?.changedDuringRun ?? false);
+
+const String _movedClause =
+    ', but the code changed while it ran, so the pass is not counted: run '
+    'the checks again on code that holds still.';
 
 String _withResults(String detail, String? results) =>
     results == null ? detail : '$detail · $results';

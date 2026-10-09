@@ -1,3 +1,4 @@
+import 'code_identity.dart';
 import 'verification_artifact.dart';
 import 'verification_run.dart';
 import 'verification_step.dart';
@@ -27,6 +28,7 @@ Map<String, Object?> verificationRunToJson(VerificationRun run) => {
   'verdict': ?run.verdict?.name,
   'reason': ?run.reason,
   'artifactDirectory': run.artifactDirectory,
+  'identity': ?run.identity?.toJson(),
   if (run.steps.isNotEmpty)
     'steps': [for (final step in run.steps) verificationStepToJson(step)],
   if (run.artifacts.isNotEmpty)
@@ -57,6 +59,7 @@ VerificationRun verificationRunFromJson(Map<String, Object?> json) {
       verdict: VerificationVerdict.parse(json['verdict'] as String?),
       reason: json['reason'] as String?,
       artifactDirectory: json['artifactDirectory']! as String,
+      identity: CodeIdentity.fromJson(json['identity']),
       steps: [
         for (final step in (json['steps'] as List? ?? const []))
           verificationStepFromJson((step as Map).cast<String, Object?>()),
@@ -138,6 +141,7 @@ VerificationRun verificationHeaderOf(VerificationRun run) =>
         finishedAt: run.finishedAt,
         verdict: run.verdict,
         reason: run.reason,
+        identity: run.identity,
       );
 
 /// Whether two run headers say the same thing.
@@ -154,7 +158,12 @@ bool sameVerificationHeader(VerificationRun a, VerificationRun b) =>
     a.finishedAt == b.finishedAt &&
     a.verdict == b.verdict &&
     a.reason == b.reason &&
-    a.artifactDirectory == b.artifactDirectory;
+    a.artifactDirectory == b.artifactDirectory &&
+    _sameIdentity(a.identity, b.identity);
+
+bool _sameIdentity(CodeIdentity? a, CodeIdentity? b) => a == null || b == null
+    ? a == b
+    : a.sameCode(b) && a.changedDuringRun == b.changedDuringRun;
 
 /// The store's order for runs: newest first, then by id descending.
 int compareVerificationRuns(VerificationRun a, VerificationRun b) {
