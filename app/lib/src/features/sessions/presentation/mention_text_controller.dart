@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:karmashala_session/mentions.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// The composer's text, with each `@` mention in it drawn as a chip and
 /// taken out whole by one backspace.
@@ -70,8 +71,8 @@ class MentionTextController extends TextEditingController {
     }
     final scheme = Theme.of(context).colorScheme;
     final chip = (style ?? const TextStyle()).copyWith(
-      color: scheme.onSecondaryContainer,
-      background: Paint()..color = scheme.secondaryContainer,
+      color: scheme.primary,
+      background: Paint()..color = StateLayers.selected(scheme),
     );
     final composing = withComposing && value.isComposingRangeValid
         ? value.composing
