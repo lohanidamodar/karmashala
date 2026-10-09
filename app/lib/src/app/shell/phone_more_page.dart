@@ -16,6 +16,7 @@ import '../../features/settings/presentation/settings_layout.dart';
 import '../../features/settings/presentation/settings_tab_view.dart';
 import '../../features/settings/presentation/settings_theme.dart';
 import '../../features/stores/presentation/stores_tab_view.dart';
+import '../../features/todos/presentation/todos_view.dart';
 import 'activity_strip.dart' show ActivityStrip;
 import 'phone_log_page.dart';
 import 'shell_area.dart';
@@ -30,6 +31,12 @@ class PhoneMoreList extends StatelessWidget {
 
   static (String, IconData, WidgetBuilder) _entry(PhoneMoreEntry entry) =>
       switch (entry) {
+        // Under its own app bar, which names it: its header keeps the filter.
+        PhoneMoreEntry.todos => (
+          'Todos',
+          AppIcons.listChecks,
+          (_) => const PaneTitleOverride(child: TodosView()),
+        ),
         // Every session, the Dashboard's first tab's place before it.
         PhoneMoreEntry.sessions => (
           'Sessions',

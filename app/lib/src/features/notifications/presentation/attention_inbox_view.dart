@@ -25,8 +25,9 @@ import '../../automations/presentation/proposal_actions.dart'
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../explorer/presentation/sidebar_chrome.dart';
 import '../application/attention_inbox.dart';
+import '../../../app/shell/reveal_session.dart';
 import '../application/notification_providers.dart'
-    show focusWatchedSession, notificationSettingsControllerProvider;
+    show notificationSettingsControllerProvider;
 import 'package:karmashala_notifications/policy.dart' show NotifyLevel;
 import 'package:karmashala_notifications/attention.dart';
 import '../../sessions/presentation/approval_refusal_text.dart';
@@ -127,7 +128,6 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
     final inbox = ref.watch(attentionInboxProvider);
     final controller = ref.read(attentionInboxProvider.notifier);
     final now = ref.watch(clockProvider).nowUtc();
-    final showWorkbench = phoneWorkbenchOpener(context, ref);
 
     // Two groups (spec §4): what waits on an answer, then everything else.
     final asks = [
@@ -172,23 +172,16 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
           color: SemanticColors.of(context).attention,
           count: '${asks.length}',
         ),
-      for (final item in asks) row(item, controller, now, showWorkbench),
+      for (final item in asks) row(item, controller, now),
       for (final gone in leaving)
-        row(
-          gone.item,
-          controller,
-          now,
-          showWorkbench,
-          left: true,
-          said: gone.said,
-        ),
+        row(gone.item, controller, now, left: true, said: gone.said),
       if (updates.isNotEmpty)
         SidebarGroupLabel(
           label: 'Updates',
           count: '${updates.length}',
           spaceAbove: asks.isNotEmpty || leaving.isNotEmpty,
         ),
-      for (final item in updates) row(item, controller, now, showWorkbench),
+      for (final item in updates) row(item, controller, now),
       if (showQuiet && quiet.isNotEmpty) ...[
         SidebarGroupLabel(
           label: 'Quiet',
@@ -196,7 +189,7 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
           spaceAbove:
               asks.isNotEmpty || leaving.isNotEmpty || updates.isNotEmpty,
         ),
-        for (final item in quiet) row(item, controller, now, showWorkbench),
+        for (final item in quiet) row(item, controller, now),
       ],
       ?quietLine,
     ];
@@ -241,8 +234,7 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
   Widget row(
     InboxItem item,
     AttentionInboxController controller,
-    DateTime now,
-    VoidCallback? showWorkbench, {
+    DateTime now, {
     bool left = false,
     String? said,
   }) => _InboxRow(
@@ -254,17 +246,14 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
     onOpen: () {
       // The server tells every window to show the app in the Stores tab.
       if (isStoreInboxItem(item)) return controller.open(item);
-      // An ask already gone is no longer the server's to open.
-      if (!left) {
-        controller.open(item);
-      } else if (!focusWatchedSession(
+      // The server tells this window to reveal its session ([revealSession]);
+      // an ask already gone is no longer the server's to open.
+      if (!left) return controller.open(item);
+      revealSession(
         ref.container,
         openId: item.session.openId,
         imported: item.session.imported,
-      )) {
-        return;
-      }
-      showWorkbench?.call();
+      );
     },
     onDismiss: () => left ? _forget(item.id) : controller.dismiss(item.id),
   );

@@ -52,6 +52,7 @@ class TerminalSessionsState {
     this.workingDirectories = const {},
     this.launchedSessions = const {},
     this.unseenTabIds = const {},
+    this.pinnedTabId,
     this.titleRevision = 0,
   });
 
@@ -85,6 +86,10 @@ class TerminalSessionsState {
   /// Tabs opened behind the one in front that have not been brought forward
   /// since: what the strip marks as new.
   final Set<String> unseenTabIds;
+
+  /// The tab no close takes away — the desktop's Agent dashboard — or null
+  /// where nothing is pinned (the phone).
+  final String? pinnedTabId;
 
   /// Incremented on every publish so title and metadata watchers can detect
   /// mutations even when tab layout is structurally identical.
@@ -123,6 +128,7 @@ class TerminalSessionsState {
           identical(other.workingDirectories, workingDirectories) &&
           identical(other.launchedSessions, launchedSessions) &&
           identical(other.unseenTabIds, unseenTabIds) &&
+          other.pinnedTabId == pinnedTabId &&
           other.titleRevision == titleRevision;
 
   @override
@@ -136,6 +142,7 @@ class TerminalSessionsState {
     identityHashCode(workingDirectories),
     identityHashCode(launchedSessions),
     identityHashCode(unseenTabIds),
+    pinnedTabId,
     titleRevision,
   );
 }

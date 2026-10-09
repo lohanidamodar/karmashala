@@ -43,6 +43,10 @@ class WorkbenchTabScaffold extends StatelessWidget {
   /// The room the glyph and the name keep in the bar, at 1x text.
   static const minTitleWidth = 96.0;
 
+  /// The room the [controls] take in the bar, at 1x text: a two- or
+  /// three-way switcher.
+  static const minControlsWidth = 200.0;
+
   @override
   Widget build(BuildContext context) {
     if (PaneTitleOverride.maybeOf(context) != null) {
@@ -96,9 +100,17 @@ class WorkbenchTabScaffold extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final scaler = MediaQuery.textScalerOf(context);
+        // And only with room beside the name and the actions: a tab in a
+        // narrow group of a wide window is not compact, and overflowed.
         final inBar =
             controls.isNotEmpty &&
-            !WidthClass.of(constraints.maxWidth, textScaler: scaler).isCompact;
+            !WidthClass.of(
+              constraints.maxWidth,
+              textScaler: scaler,
+            ).isCompact &&
+            constraints.maxWidth >=
+                actions.length * Touch.target +
+                    scaler.scale(minTitleWidth + minControlsWidth);
         // The name keeps room for a few words; past that the actions give way
         // to the strip rather than squeeze it to nothing.
         final actionsInBar =

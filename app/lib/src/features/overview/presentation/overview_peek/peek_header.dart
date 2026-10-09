@@ -103,6 +103,17 @@ class _PeekHeaderState extends ConsumerState<_PeekHeader> {
           AppIcons.caretUp,
           onPeek == null ? null : () => onPeek(parent),
         ),
+      // The phone's way to the todos of what this session works on.
+      if (widget.compact && native != null)
+        'todos': (
+          'Todos for this project',
+          AppIcons.listChecks,
+          () => openTodosPage(
+            context,
+            ref,
+            scope: todoScopeOfSession(ref.container, id),
+          ),
+        ),
     };
     Future<void> more(BuildContext button) => showOverviewSessionMenu(
       button,

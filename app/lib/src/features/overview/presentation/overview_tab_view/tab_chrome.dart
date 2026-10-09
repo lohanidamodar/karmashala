@@ -44,12 +44,14 @@ class _OnScreenState extends ConsumerState<_OnScreen> {
 /// **Resume…**: a stopped or ended session brought back from here, kept on
 /// the dashboard unless the person unticks it, which this device remembers.
 class _ResumeButton extends ConsumerWidget {
-  const _ResumeButton();
+  const _ResumeButton({required this.narrow});
+
+  /// Whether the tab is too narrow for words beside the glyph.
+  final bool narrow;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     void resume() => unawaited(showOverviewResume(context, ref));
-    final narrow = MediaQuery.sizeOf(context).width < WidthClass.mediumMin;
     return narrow
         ? IconButton(
             key: const ValueKey('overview-resume'),
@@ -73,7 +75,10 @@ class _ResumeButton extends ConsumerWidget {
 /// agent has one, kept here — started at the server, no tab, its card picked
 /// and peeked — unless the person unticks it, which this device remembers.
 class _NewSessionButton extends ConsumerWidget {
-  const _NewSessionButton();
+  const _NewSessionButton({required this.narrow});
+
+  /// As [_ResumeButton.narrow].
+  final bool narrow;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -101,7 +106,6 @@ class _NewSessionButton extends ConsumerWidget {
       );
     }
 
-    final narrow = MediaQuery.sizeOf(context).width < WidthClass.mediumMin;
     return narrow
         ? IconButton(
             key: const ValueKey('overview-new-session'),
@@ -124,13 +128,34 @@ class _RunPipelineButton extends StatelessWidget {
   const _RunPipelineButton();
 
   @override
-  Widget build(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < WidthClass.expandedMin
-      ? const SizedBox.shrink()
-      : IconButton(
-          key: const ValueKey('overview-run-pipeline'),
-          tooltip: 'Run a pipeline…',
-          onPressed: () => unawaited(showRunPipeline(context)),
-          icon: const Icon(AppIcons.treeStructure),
-        );
+  Widget build(BuildContext context) => IconButton(
+    key: const ValueKey('overview-run-pipeline'),
+    tooltip: 'Run a pipeline…',
+    onPressed: () => unawaited(showRunPipeline(context)),
+    icon: const Icon(AppIcons.treeStructure),
+  );
+}
+
+/// **Todos**, on the phone's Dashboard header: the open count on it, and the
+/// todos a tap away as a page of their own.
+class OverviewTodosButton extends ConsumerWidget {
+  const OverviewTodosButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final open = ref.watch(openTodoCountProvider);
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      key: const ValueKey('overview-todos'),
+      tooltip: open == 0 ? 'Todos' : 'Todos · $open open',
+      onPressed: () => openTodosPage(context, ref),
+      icon: Badge.count(
+        count: open,
+        isLabelVisible: open > 0,
+        backgroundColor: scheme.primary,
+        textColor: scheme.onPrimary,
+        child: const Icon(AppIcons.listChecks),
+      ),
+    );
+  }
 }

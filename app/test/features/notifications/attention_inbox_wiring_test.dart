@@ -12,7 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala_terminal_core/geometry.dart' show chatPaneId;
+import 'package:karmashala_terminal_core/geometry.dart'
+    show chatPaneId, kOverviewPaneId;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -37,6 +38,8 @@ final _foregroundProvider = NotifierProvider<_ForegroundPanes, List<String>>(
 );
 
 void main() {
+  // Opening an item peeks it on the dashboard, which waits a frame for it.
+  TestWidgetsFlutterBinding.ensureInitialized();
   late TestMachine db;
   late ProviderContainer container;
 
@@ -229,7 +232,16 @@ void main() {
 
     expect(container.read(selectedProjectIdProvider), 'p1');
     expect(container.read(selectedRepositoryIdProvider), 'r1');
-    expect(container.read(selectedSessionIdProvider), 's1');
+    // With no tab here it is shown on the dashboard, not selected over an
+    // empty workbench (round 81).
+    expect(container.read(selectedSessionIdProvider), isNull);
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    expect(
+      container.read(terminalSessionsControllerProvider).activeTabId,
+      terminals.tabIdOfPane(kOverviewPaneId),
+    );
     expect(container.read(attentionInboxProvider).items, isEmpty);
   });
 

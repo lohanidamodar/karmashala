@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'ask_toasts.dart';
 import 'narrow_overlay.dart';
 import 'phone_shell.dart';
+import 'reveal_session.dart';
 import 'zen_bar.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
@@ -210,6 +211,19 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
+  bool _dashboardPinned = false;
+
+  /// Pins the Agent dashboard in the workbench, once, the first time the
+  /// desktop layout is drawn: the phone's home tab is its Dashboard already.
+  void _pinDashboard() {
+    if (_dashboardPinned) return;
+    _dashboardPinned = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(terminalSessionsControllerProvider.notifier).pinDashboard();
+    });
+  }
+
   /// Removes the before-quit guards this shell registered.
   late final void Function() _removeQuitGuard;
   late final void Function() _removeSessionQuitGuard;
@@ -317,6 +331,13 @@ class _AppShellState extends ConsumerState<AppShell> {
       ref.read(storesSelectionProvider.notifier).select(request.appKey);
       openStoresTab(ref);
     });
+    // A notification for a session that is gone says so where it landed.
+    ref.listen(sessionRevealNoticeProvider, (_, notice) {
+      if (notice == null || !mounted) return;
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(notice.message)));
+    });
     // A limit notice's "Options…" is pressed in a bar that holds no dialog.
     ref.listen(resumeDialogRequestProvider, (_, request) {
       if (request == null || !mounted) return;
@@ -333,6 +354,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       _trackWidthClass(ShellWidth.compact);
       return const ShellShortcuts(child: PhoneShell());
     }
+    _pinDashboard();
     // The macOS menu bar is mounted above this, in `KarmashalaApp`.
     return ShellShortcuts(
       child: Scaffold(

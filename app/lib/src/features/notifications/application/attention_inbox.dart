@@ -7,6 +7,7 @@ import 'package:karmashala_terminal_core/geometry.dart' show chatPaneSessionId;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/phone_routes.dart' show phoneWorkbenchProvider;
+import '../../../app/shell/reveal_session.dart';
 import '../../../core/data/data_providers.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -47,12 +48,9 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
           ref
               .read(storesOpenRequestProvider.notifier)
               .open(storeAppKeyOfInboxId(openId)!);
+        // The tray, the Inbox and "go to the next agent" all land here.
         case InboxOpenWanted(:final openId, :final imported):
-          focusWatchedSession(
-            ref.container,
-            openId: openId,
-            imported: imported,
-          );
+          revealSession(ref.container, openId: openId, imported: imported);
         default:
           break;
       }

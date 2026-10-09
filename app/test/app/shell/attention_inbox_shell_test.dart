@@ -6,12 +6,12 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter/services.dart';
@@ -212,7 +212,8 @@ void main() {
     await tester.tap(find.text('Finished  ·  just now'));
     await tester.pumpAndSettle();
 
-    expect(container.read(selectedSessionIdProvider), 's1');
+    // No tab here: the dashboard, with it peeked (round 81).
+    expect(container.read(overviewFocusProvider).peeked, 's1');
     expect(container.read(attentionCountProvider), 0);
     expect(find.text('1 needs you'), findsNothing);
     expect(find.text('Nothing needs you.'), findsOneWidget);

@@ -6,6 +6,7 @@ import 'package:riverpod/riverpod.dart';
 
 /// The More tab's pages, in list order.
 enum PhoneMoreEntry {
+  todos,
   sessions,
   usage,
   stores,

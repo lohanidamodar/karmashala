@@ -795,6 +795,9 @@ class Chrome {
   /// The workbench tab strip, the context panel's header and every pane header.
   static const tabStrip = 30.0;
 
+  /// A pinned tab's chip in the [tabStrip]: its glyph alone, no title, no close.
+  static const pinnedTab = 40.0;
+
   /// The title bar at the top of the window — board A2's 38px row, which the
   /// owner chose over the 30px one it used to share with [tabStrip]. Its own
   /// value, not [tabStrip]'s: the bar now carries the quick panel field and

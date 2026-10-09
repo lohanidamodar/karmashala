@@ -7,6 +7,8 @@ import 'package:karmashala_notes/karmashala_notes.dart';
 
 import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../workspaces/data/workspace_data.dart';
 import '../data/todos_repository.dart';
 import '../domain/project_scope.dart';
 
@@ -129,6 +131,29 @@ class TodosController extends Notifier<List<Todo>> {
 
 final todosProvider = NotifierProvider<TodosController, List<Todo>>(
   TodosController.new,
+);
+
+/// The todos to show for session [sessionId]: its project's. A todo names a
+/// project and nothing narrower, so a session's are its project's; everything
+/// when its project is not known here.
+ProjectScope todoScopeOfSession(ProviderContainer container, String sessionId) {
+  final repositoryId = container
+      .read(sessionsDataProvider)
+      .getById(sessionId)
+      ?.repositoryId;
+  final projectId = repositoryId == null
+      ? null
+      : container
+            .read(workspaceDataProvider)
+            .repository(repositoryId)
+            ?.projectId;
+  return projectId == null ? ProjectScope.all : ProjectScope.project(projectId);
+}
+
+/// How many todos are still to do, in every project: the count a Todos
+/// button wears.
+final openTodoCountProvider = Provider<int>(
+  (ref) => ref.watch(todosProvider).where((todo) => !todo.isDone).length,
 );
 
 /// Which project's todos the panel is showing. Starts at
