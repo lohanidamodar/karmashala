@@ -642,14 +642,22 @@ const antigravityDescriptor = AgentDescriptor(
     },
   ),
   statusStrategy: AgentStatusStrategy.hooks,
-  // The folder-trust menu no hook announces, read in a ConPTY through WSL on
-  // agy 1.3.2 (`antigravity-trust-prompt.raw`, 2026-10-09; the owner saw the
-  // same screen on 1.2.16): `> Yes, I trust this folder` / `  No, exit`, then
-  // `↑/↓ Navigate · enter Confirm`. ↓/↑ move the `>`, Enter confirms; the
-  // idle composer's footer is `? for shortcuts`, never this one.
-  grid: AgentGridRules(awaitingApproval: [GridMatcher('· enter Confirm')]),
-  // Approve and deny pick the option by its words. Enter on `No, exit` exits
-  // and trusts nothing (measured), so no cancel is declared.
+  // Read in a ConPTY through WSL on agy 1.3.2 (2026-10-09). Every menu it
+  // asks with — folder trust (`antigravity-trust-prompt.raw`; the owner saw
+  // it on 1.2.16) and a tool permission (`antigravity-permission-prompt.raw`)
+  // — ends `↑/↓ Navigate · …`, and no hook announces either. Idle, its footer
+  // is `? for shortcuts`, after a turn and after an Esc ("⎿ Interrupted",
+  // `antigravity-interrupted.raw`); working it is `esc to cancel`, which a
+  // permission menu also ends with, so no working marker is declared: the
+  // hooks say working. agy draws its footer from the first column; Claude
+  // Code's and Codex's `? for shortcuts` are indented or follow a mode.
+  grid: AgentGridRules(
+    awaitingApproval: [GridMatcher('↑/↓ Navigate ·')],
+    idle: [GridMatcher('? for shortcuts', atLineStart: true)],
+  ),
+  // Approve and deny pick the option by its words: `Yes, I trust this
+  // folder` / `No, exit`, `1. Yes, run command` / `4. No, cancel`. Enter on
+  // `No, exit` exits and trusts nothing (measured), so no cancel is declared.
   menus: AgentMenuSupport(
     markers: ['>'],
     affirmative: [r'^Yes\b'],

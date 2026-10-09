@@ -177,15 +177,15 @@ void main() {
   });
 
   group('what is still unverified stays unoffered', () {
-    test('status comes from hooks; the screen only for its trust menu', () {
+    test('status comes from hooks; the screen for its menus and idle', () {
       // No parseable state file. Hooks are documented in a skill the CLI
-      // ships, and proven by a live `agy` 1.1.23 run. The screen is read for
-      // one thing no hook announces: the folder-trust menu
-      // (`antigravity-trust-prompt.raw`), never for working or idle.
+      // ships, and proven by a live `agy` 1.1.23 run. The screen reads what
+      // no hook announces — its menus — and its idle footer, the fallback
+      // once a hook goes stale; never working, whose footer a menu shares.
       expect(descriptor.statusStrategy, AgentStatusStrategy.hooks);
       expect(descriptor.grid.awaitingApproval, isNotEmpty);
       expect(descriptor.grid.working, isEmpty);
-      expect(descriptor.grid.idle, isEmpty);
+      expect(descriptor.grid.idle, isNotEmpty);
       expect(descriptor.stateFile, isNull);
       expect(descriptor.hooks, isNotNull);
     });
