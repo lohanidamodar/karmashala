@@ -245,22 +245,29 @@ class AgentSystemPromptFileSupport {
 class AgentExtraDirectorySupport {
   /// The directory rides on [token], as two argv entries, one directory per
   /// flag. [evidence] is what it was read off.
-  const AgentExtraDirectorySupport.flag(this.token, {required this.evidence})
-    : isSupported = true,
-      joined = false;
+  const AgentExtraDirectorySupport.flag(
+    this.token, {
+    required this.evidence,
+    this.refusedUnder = const {},
+  }) : isSupported = true,
+       joined = false;
 
   /// The directory rides in one argv entry, `<token>=<path>`: for an option
   /// that takes several values and would otherwise swallow the prompt after it.
-  const AgentExtraDirectorySupport.joined(this.token, {required this.evidence})
-    : isSupported = true,
-      joined = true;
+  const AgentExtraDirectorySupport.joined(
+    this.token, {
+    required this.evidence,
+    this.refusedUnder = const {},
+  }) : isSupported = true,
+       joined = true;
 
   /// Nobody established one. **The default**: nothing is granted.
   const AgentExtraDirectorySupport.unsupported()
     : token = '',
       evidence = '',
       isSupported = false,
-      joined = false;
+      joined = false,
+      refusedUnder = const {};
 
   /// The option itself, e.g. `--add-dir`. Empty otherwise.
   final String token;
@@ -273,9 +280,20 @@ class AgentExtraDirectorySupport {
   /// Whether the directory is joined to [token] with `=`.
   final bool joined;
 
-  /// The arguments that grant this agent [path], or nothing.
-  List<String> argumentsFor(String? path) {
+  /// Permission values (axis id to value id) the CLI refuses [token] under,
+  /// exiting before it draws anything; the flag is left out with them.
+  final Map<String, String> refusedUnder;
+
+  /// The arguments that grant this agent [path] under [permission], or
+  /// nothing.
+  List<String> argumentsFor(
+    String? path, {
+    PermissionSelection permission = PermissionSelection.empty,
+  }) {
     if (!isSupported || path == null || path.isEmpty) return const [];
+    for (final MapEntry(key: axis, value: value) in refusedUnder.entries) {
+      if (permission.valueFor(axis) == value) return const [];
+    }
     return joined ? ['$token=$path'] : [token, path];
   }
 }

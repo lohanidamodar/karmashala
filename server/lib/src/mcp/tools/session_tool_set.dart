@@ -554,9 +554,12 @@ class SessionToolSet extends ServerToolSet {
     final recentMessages = messages.length > capped
         ? messages.sublist(messages.length - capped)
         : messages;
+    // An ended pane the host still keeps is read too: a launch that died at
+    // once said why on it — a refused flag, a missing login.
+    final ended = held ? null : registry.find(hostSessionIdOf(sessionId));
     final screen = held
         ? prompts.status.liveScreenOf(sessionId)?.tailText(capped)
-        : null;
+        : ended?.tailText(capped);
     final relayed = _context.write(RelaysTo(sessionId, capped));
     return <String, Object?>{
       'sessionId': sessionId,
@@ -612,6 +615,9 @@ class SessionToolSet extends ServerToolSet {
       'screen': screen,
       'screenSource': screen == null
           ? 'not recorded — no live pane to read'
+          : ended != null
+          ? 'the pane as it stood when its process '
+                '${ended.lifecycle.describe()}'
           : 'the pane as it stands now',
     };
   }

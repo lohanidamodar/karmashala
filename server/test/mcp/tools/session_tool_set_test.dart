@@ -449,6 +449,34 @@ void main() {
       expect(answer['screen'], isNull);
       expect(answer['turnsSource'], startsWith('not recorded'));
     });
+
+    test('a launch that died at once still shows what it printed, and its '
+        'exit code', () async {
+      // Codex 0.160's refusal of `--add-dir` under a read-only sandbox,
+      // as it printed it in a ConPTY before exiting 1.
+      final agent = await runAgent('claude-code-tui');
+      agent
+        ..emit(
+          utf8.encode(
+            '\x1b[2J\x1b[HError adding directories: Ignoring --add-dir '
+            r'(C:\data) because the effective permissions do not allow '
+            'additional writable roots.\r\n',
+          ),
+        )
+        ..finish(1);
+      await pumpEventQueue();
+
+      final answer = await call('session_transcript', {'sessionId': 's1'});
+      expect(answer['live'], isFalse);
+      expect(
+        (answer['screen']! as List).join('\n'),
+        contains('Error adding directories'),
+      );
+      expect(
+        answer['screenSource'],
+        'the pane as it stood when its process exited 1',
+      );
+    });
   });
 
   group('session_end', () {

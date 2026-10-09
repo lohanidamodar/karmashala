@@ -242,9 +242,16 @@ const codexDescriptor = AgentDescriptor(
     // so it stands left of `resume` like the permission flags.
     extraDirectory: AgentExtraDirectorySupport.flag(
       '--add-dir',
+      // A read-only sandbox refuses it and exits 1 before drawing anything.
+      refusedUnder: {'sandbox': 'read-only'},
       evidence:
           'codex 0.153.4 --help lists --add-dir among its top-level options '
-          '(the list above), one directory per flag',
+          '(the list above), one directory per flag. codex 0.160.0 with '
+          '--sandbox read-only --add-dir <dir> in a ConPTY: "Error adding '
+          'directories: Ignoring --add-dir (<dir>) because the effective '
+          'permissions do not allow additional writable roots. Switch to '
+          'workspace-write or danger-full-access to allow them.", exit 1 '
+          '(2026-10-09)',
     ),
     // Left at the default (false): Codex enforces **one writer per thread**.
     // The lock is real and inspectable — a live Codex holds an flock on

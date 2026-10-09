@@ -30,7 +30,10 @@ List<String> agentPaneArguments(
     if (suppressSelfUpdate) ...?launch?.selfUpdate.disableArguments,
     ...?launch?.permission.argumentsFor(permissionMode),
     ...?launch?.model.argumentsFor(modelId),
-    ...?launch?.extraDirectory.argumentsFor(extraDirectoryPath),
+    ...?launch?.extraDirectory.argumentsFor(
+      extraDirectoryPath,
+      permission: permissionMode,
+    ),
     ...?launch?.systemPromptFile.argumentsFor(systemPromptFilePath),
     ...?launch?.systemPromptFile.argumentsForText(systemPromptText),
     if (sessionId != null && resumeSessionId == null && !forking)
