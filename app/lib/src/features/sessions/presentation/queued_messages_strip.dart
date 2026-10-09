@@ -456,17 +456,33 @@ class _QueuedBubble extends ConsumerWidget {
                           child: const Text('Back to composer'),
                         ),
                       ),
-                    // Another session's message waits behind the person's;
-                    // they may let it go ahead.
-                    if (sendNow && from != null)
+                    // The way past a queue whose turn may never be seen to
+                    // end, said for what it is.
+                    if (sendNow)
                       Align(
                         alignment: Alignment.centerRight,
-                        child: TextButton(
-                          key: ValueKey('queued-send-now-${message.id}'),
-                          style: compact,
-                          onPressed: () =>
-                              sendQueuedMessageNow(context, ref, message),
-                          child: const Text('Send now'),
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: Insets.xs,
+                          children: [
+                            Text(
+                              'Goes at once, even mid-turn.',
+                              key: ValueKey(
+                                'queued-send-now-note-${message.id}',
+                              ),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            TextButton(
+                              key: ValueKey('queued-send-now-${message.id}'),
+                              style: compact,
+                              onPressed: () =>
+                                  sendQueuedMessageNow(context, ref, message),
+                              child: const Text('Send now'),
+                            ),
+                          ],
                         ),
                       ),
                   ],

@@ -647,6 +647,26 @@ void main() {
     expect(find.text('run the unit tests'), findsOneWidget);
   });
 
+  for (final (name, size) in [('phone', phone), ('desktop', desktop)]) {
+    testWidgets('on a $name, every queued message offers Send now, warned '
+        'that it goes mid-turn', (tester) async {
+      await pump(tester, size: size);
+      await send(tester, 'run the tests');
+
+      expect(find.byKey(const ValueKey('queued-send-now-q1')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('queued-send-now-note-q1')),
+        findsOneWidget,
+      );
+      expect(find.text('Goes at once, even mid-turn.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const ValueKey('queued-send-now-q1')));
+      await tester.pumpAndSettle();
+      expect(server.sessionWork.sent.map((s) => s.text), ['run the tests']);
+    });
+  }
+
   testWidgets('Cancel takes it off the queue', (tester) async {
     await pump(tester, size: desktop);
     await send(tester, 'run the tests');
