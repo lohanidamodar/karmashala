@@ -23,6 +23,10 @@ DataChange? _storesChangeFromJson(String name, Map<String, Object?> json) =>
             ? null
             : StoreAppIcon.fromJson(_storesMap(json['icon'])),
       ),
+      'storeChangesNoticed' => StoreChangesNoticed([
+        for (final held in (json['changes'] as List?) ?? const [])
+          StoreAppChanges.fromJson(_storesMap(held)),
+      ]),
       _ => null,
     };
 
@@ -88,6 +92,8 @@ extension StoresViewApps on StoresView {
           if (other != key) other: value,
         key: ?read,
       },
+      changes: changes,
+      schedule: schedule,
     );
   }
 }
@@ -119,5 +125,20 @@ final class StoresProgress extends DataChange {
     'change': 'storesProgress',
     'done': done,
     'total': total,
+  };
+}
+
+/// What a read of the stores found changed, told once as it finishes: for a
+/// client's notification. The view's own [StoresView.changes] keeps it after.
+final class StoreChangesNoticed extends DataChange {
+  const StoreChangesNoticed(this.changes);
+
+  /// One per app that changed.
+  final List<StoreAppChanges> changes;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'storeChangesNoticed',
+    'changes': [for (final held in changes) held.toJson()],
   };
 }

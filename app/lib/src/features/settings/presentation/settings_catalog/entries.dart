@@ -78,6 +78,18 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['density', 'compact', 'roomy'],
   ),
   SettingsEntry(
+    'Store changes',
+    anchor: SettingsAnchor.notifications,
+    description: 'Notify when an app changes on the App Store or Google Play.',
+    keywords: ['app store', 'play', 'release', 'review', 'rejected'],
+  ),
+  SettingsEntry(
+    'Read the stores in the background',
+    anchor: SettingsAnchor.storeCredentials,
+    description: 'How often the server checks the stores on its own.',
+    keywords: ['refresh', 'interval', 'poll', 'app store', 'play'],
+  ),
+  SettingsEntry(
     'Mark a session quiet after',
     anchor: SettingsAnchor.notifications,
     description: 'How long a working session may go with nothing new.',

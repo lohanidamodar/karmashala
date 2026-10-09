@@ -19,6 +19,8 @@ import '../../core/lifecycle/before_quit.dart';
 import '../../features/automations/application/resume_announcer.dart';
 import '../../features/automations/application/scheduled_resume_observer.dart';
 import '../../features/automations/application/usage_limit_notices.dart';
+import '../../features/stores/application/store_changes.dart';
+import '../../features/stores/presentation/stores_tab_state.dart';
 import '../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
@@ -276,6 +278,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(serverResumeEndingsProvider);
     // And for a usage limit the server noticed, whose notice is shown here.
     ref.watch(usageLimitNoticesProvider);
+    // And for what a read of the stores found changed, told as Settings say.
+    ref.watch(storeChangeNoticesProvider);
     // And for what the server has to say of a session it delivered to.
     ref.watch(serverSessionNoticesProvider);
     // And for note tabs, which close with their note and flush on the way out.
@@ -307,6 +311,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
     // The tray's Restart and Stop confirm here, in the window it raised.
     listenForServerCommandRequests(context, ref);
+    // A store notification or inbox item opens its app in the Stores tab.
+    ref.listen(storesOpenRequestProvider, (_, request) {
+      if (request == null || !mounted) return;
+      ref.read(storesSelectionProvider.notifier).select(request.appKey);
+      openStoresTab(ref);
+    });
     // A limit notice's "Options…" is pressed in a bar that holds no dialog.
     ref.listen(resumeDialogRequestProvider, (_, request) {
       if (request == null || !mounted) return;

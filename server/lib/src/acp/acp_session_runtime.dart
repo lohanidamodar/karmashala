@@ -30,6 +30,7 @@ import 'acp_extensions.dart';
 import 'acp_login_required.dart';
 import 'acp_path_scope.dart';
 import 'acp_prompt_images.dart';
+import 'acp_prompt_mentions.dart';
 import 'acp_runtime_host.dart';
 import 'acp_terminals.dart';
 import 'acp_transport.dart';
@@ -535,10 +536,46 @@ class AcpSessionRuntime implements ScreenSession {
       a.length == b.length &&
       [for (var i = 0; i < a.length; i++) a[i] == b[i]].every((same) => same);
 
+  /// [text] as prompt blocks: its `@` mentions as links and resources
+  /// ([mentionPromptBlocks]), then its images as [_withImages] has them.
+  (List<ContentBlock>, String?) _promptOf(String text) {
+    final (blocks, notice) = _withImages(text);
+    return (
+      [
+        for (final block in blocks)
+          if (block is TextContent) ..._withMentions(block.text) else block,
+      ],
+      notice,
+    );
+  }
+
+  List<ContentBlock> _withMentions(String message) {
+    final (:text, :blocks) = mentionPromptBlocks(
+      message,
+      embeddedContext: _capabilities.promptCapabilities.embeddedContext,
+      linkFor: _mentionLink,
+    );
+    return [ContentBlock.text(text), ...blocks];
+  }
+
+  /// A mentioned path's `file:` URI when it is in the working directory.
+  String? _mentionLink(String path) {
+    try {
+      final resolved = _files.resolve(path, verb: 'linked');
+      if (FileSystemEntity.typeSync(resolved.host) ==
+          FileSystemEntityType.notFound) {
+        return null;
+      }
+      return agentFileUri(resolved.agent);
+    } on AcpRpcError {
+      return null;
+    }
+  }
+
   /// [text] as prompt blocks: its attached images as image blocks when the
   /// agent takes them, each one that cannot be left as its path; and what
   /// the sender should be told of any left.
-  (List<ContentBlock>, String?) _promptOf(String text) {
+  (List<ContentBlock>, String?) _withImages(String text) {
     final attached = splitAttachedImages(text);
     final count = attached.paths.length;
     if (count == 0) return ([ContentBlock.text(text)], null);

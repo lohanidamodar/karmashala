@@ -96,6 +96,7 @@ class _ToolbarIconButton extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     required this.touch,
+    super.key,
   });
 
   final String tooltip;

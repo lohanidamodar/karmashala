@@ -114,6 +114,9 @@ import '../sessions/session_transcripts.dart';
 import '../status/child_turn_wait.dart';
 import '../status/hosted_session_wait.dart';
 import '../stores/server_store_desk.dart';
+import 'package:store_console/store_console.dart' show StoreKind;
+import '../stores/probe_store_fixture.dart';
+import '../stores/store_change_inbox.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
@@ -542,11 +545,24 @@ Future<int> _serve(
     ..envVault = envVault
     ..greeters.add(envVault.greeting);
   // The app stores, read with credentials only this server holds.
+  // A probe may read its stores from a fixture file, never the network.
+  final storeFixture = probeStoreFixture(environment ?? Platform.environment);
   final storeDesk = ServerStoreDesk(
     dataDirectory: dataDirectory,
     tell: data.announce,
     log: (message) => errSink.writeln('karmashala_host: $message'),
+    appleClient: storeFixture == null
+        ? null
+        : (_) => FixtureStoreClient(StoreKind.appStore, storeFixture),
+    playClient: storeFixture == null
+        ? null
+        : (_) => FixtureStoreClient(StoreKind.googlePlay, storeFixture),
   );
+  if (storeFixture != null) {
+    errSink.writeln(
+      'karmashala_host: probe: the stores are read from a fixture file',
+    );
+  }
   data
     ..storeWork = storeDesk
     ..greeters.add(storeDesk.greeting);
@@ -893,6 +909,19 @@ Future<int> _serve(
   );
   status.start();
   attention.start();
+  // What a read of the stores found changed is filed, one item per app;
+  // opening the app there sees its items here. Then the stores are read on
+  // their own, window or no window.
+  storeDesk
+    ..onChanges = (found) {
+      for (final changes in found) {
+        attention.attention.raise(storeChangesInboxItem(changes));
+      }
+    }
+    ..onSeen = (appKeys) {
+      attention.attention.viewedElsewhere(storeInboxOpenIds(appKeys));
+    }
+    ..startSchedule();
   final recording = SessionStatusRecording(
     server.lifecycle,
     database,
@@ -2060,9 +2089,11 @@ Future<int> _serve(
     }),
   );
   // The activity log's backfill: what the store held before the log, once,
-  // in chunks, resumed after a restart, and never in the first moments.
+  // in chunks, resumed after a restart, and never in the first moments. After
+  // the conversation index's: run together, they doubled a client's p95.
   unawaited(
     Future<void>.delayed(agentScanDelay).then((_) async {
+      await data.conversations.backfill();
       if (stopping.isCompleted) return;
       final backfill = ActivityBackfill(
         database,

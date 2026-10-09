@@ -24,6 +24,11 @@ class _ContinueAction extends StatelessWidget {
   }
 }
 
+/// Whether [item] is about an app on a store rather than a session.
+bool isStoreInboxItem(InboxItem item) =>
+    item.kind == InboxItemKind.storeAttention ||
+    item.kind == InboxItemKind.storeNews;
+
 /// The glyph and colour an inbox kind is drawn with. Two failure kinds share
 /// the failure colour; nothing else carries it.
 ({IconData icon, Color color}) inboxKindAppearance(
@@ -65,6 +70,11 @@ class _ContinueAction extends StatelessWidget {
     icon: AppIcons.lightning,
     color: semantic.attention,
   ),
+  InboxItemKind.storeAttention => (
+    icon: AppIcons.package,
+    color: semantic.attention,
+  ),
+  InboxItemKind.storeNews => (icon: AppIcons.package, color: semantic.idle),
 };
 
 /// One waiting thing, and the two verbs it is for. No `⋮`: every action this
@@ -117,7 +127,7 @@ class _InboxRow extends ConsumerWidget {
       itemBuilder: () => [
         DesktopMenuItem(
           value: 'open',
-          label: 'Open the session',
+          label: isStoreInboxItem(item) ? 'Open the app' : 'Open the session',
           icon: AppIcons.arrowSquareOut,
         ),
         if (canContinue)

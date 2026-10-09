@@ -216,3 +216,7 @@ String? reportsBucketName(String? bucket) {
   name = name.split('/').first;
   return name.isEmpty ? null : name;
 }
+
+/// [at] as a 24-hour clock, `14:05`.
+String formatClock(DateTime at) =>
+    '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';

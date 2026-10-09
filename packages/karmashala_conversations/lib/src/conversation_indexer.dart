@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/read.dart';
@@ -143,10 +144,46 @@ class ConversationIndexer {
     return changed;
   }
 
+  /// Reads in flight, by conversation.
+  final Map<String, Future<bool>> _indexing = {};
+
   /// Brings one conversation's rows up to date with its transcript, reading
   /// only what it appended when it can. A whole read that finds nothing keeps
-  /// the old rows: it cannot be told from format drift.
+  /// the old rows: it cannot be told from format drift. One read of a
+  /// conversation at a time: another's write must not land among the slices
+  /// of a first reading.
   Future<bool> indexConversation({
+    required String conversationId,
+    required String cli,
+    required String filePath,
+  }) async {
+    for (
+      var running = _indexing[conversationId];
+      running != null;
+      running = _indexing[conversationId]
+    ) {
+      try {
+        await running;
+      } on Object {
+        // Its own caller is told.
+      }
+    }
+    final run = _indexConversation(
+      conversationId: conversationId,
+      cli: cli,
+      filePath: filePath,
+    );
+    _indexing[conversationId] = run;
+    try {
+      return await run;
+    } finally {
+      _indexing.removeWhere(
+        (id, running) => id == conversationId && identical(running, run),
+      );
+    }
+  }
+
+  Future<bool> _indexConversation({
     required String conversationId,
     required String cli,
     required String filePath,
@@ -225,18 +262,65 @@ class ConversationIndexer {
       );
       return false;
     }
-    dao.replaceTurns(
+    if ((state?.turns ?? 0) == 0 && turns.length > kConversationWriteSlice) {
+      await _writeFirstReading(
+        conversationId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: now,
+        watermark: watermark,
+        resumePoint: read.resumePoint,
+      );
+    } else {
+      dao.replaceTurns(
+        sessionId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: now,
+        modifiedAt: watermark.modifiedAt,
+        size: watermark.size,
+        resumePoint: read.resumePoint,
+      );
+    }
+    writes++;
+    return true;
+  }
+
+  /// A large conversation's first reading, a slice per transaction with the
+  /// event loop handed back between them: one transaction held the server's
+  /// isolate for seconds. Nothing indexed is lost meanwhile, there was none;
+  /// the state row goes last, so an interrupted write is read whole again.
+  Future<void> _writeFirstReading({
+    required String conversationId,
+    required String cli,
+    required String filePath,
+    required List<ConversationTurn> turns,
+    required DateTime indexedAt,
+    required TranscriptWatermark watermark,
+    TranscriptResumePoint? resumePoint,
+  }) async {
+    const slice = kConversationWriteSlice;
+    for (var start = 0; start < turns.length; start += slice) {
+      dao.addTurns(
+        sessionId: conversationId,
+        cli: cli,
+        turns: turns.sublist(start, min(start + slice, turns.length)),
+        clear: start == 0,
+      );
+      await Future<void>.delayed(Duration.zero);
+    }
+    dao.keepTurns(
       sessionId: conversationId,
       cli: cli,
       filePath: filePath,
-      turns: turns,
-      indexedAt: now,
+      turns: turns.length,
+      indexedAt: indexedAt,
       modifiedAt: watermark.modifiedAt,
       size: watermark.size,
-      resumePoint: read.resumePoint,
+      resumePoint: resumePoint,
     );
-    writes++;
-    return true;
   }
 }
 
