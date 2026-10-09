@@ -190,7 +190,9 @@ class ConversationIndexer {
   }) async {
     final state = dao.stateFor(conversationId);
     final row = recordedRowOf(filePath);
-    if (row != null) return _indexRecorded(conversationId, cli, row, state);
+    if (row != null) {
+      return await _indexRecorded(conversationId, cli, row, state);
+    }
     // Once read from `session_messages`, always: they are what the chat
     // showed, where a file the agent also keeps may say it differently.
     if (state != null && recordedRowOf(state.filePath) != null) return false;
@@ -326,13 +328,14 @@ class ConversationIndexer {
 
 extension on ConversationIndexer {
   /// [conversationId] read whole from session row [rowId]'s messages, unless
-  /// its newest revision is the one already read.
-  bool _indexRecorded(
+  /// its newest revision is the one already read. A large first reading is
+  /// written in slices, as a transcript's is.
+  Future<bool> _indexRecorded(
     String conversationId,
     String cli,
     String rowId,
     ConversationIndexState? state,
-  ) {
+  ) async {
     final filePath = recordedConversationPath(rowId);
     final watermark = dao.recordedWatermark(rowId);
     _unreadable.remove(conversationId);
@@ -343,15 +346,27 @@ extension on ConversationIndexer {
       return false;
     }
     parses++;
-    dao.replaceTurns(
-      sessionId: conversationId,
-      cli: cli,
-      filePath: filePath,
-      turns: dao.recordedTurns(rowId),
-      indexedAt: clock.nowUtc(),
-      modifiedAt: watermark.modifiedAt,
-      size: watermark.size,
-    );
+    final turns = dao.recordedTurns(rowId);
+    if ((state?.turns ?? 0) == 0 && turns.length > kConversationWriteSlice) {
+      await _writeFirstReading(
+        conversationId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: clock.nowUtc(),
+        watermark: watermark,
+      );
+    } else {
+      dao.replaceTurns(
+        sessionId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        indexedAt: clock.nowUtc(),
+        modifiedAt: watermark.modifiedAt,
+        size: watermark.size,
+      );
+    }
     writes++;
     return true;
   }
