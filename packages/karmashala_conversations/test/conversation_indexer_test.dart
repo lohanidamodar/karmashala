@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/read.dart' show TranscriptTurnsRead;
 import 'package:karmashala_conversations/store.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_store/database.dart';
@@ -411,6 +412,8 @@ void main() {
 
       expect(scans, 1);
       expect(indexer.hasWork, isFalse);
+      // Dropped, but not forgotten as a gap: search says it could not read.
+      expect(indexer.unreadable, {'gone'});
     });
   });
 
@@ -494,7 +497,33 @@ void main() {
         isTrue,
       );
       expect(dao.turnCountFor('c1'), 0);
+      expect(indexer.unreadable, {'c1'});
     });
+
+    test(
+      'a read that works again clears the conversation as unreadable',
+      () async {
+        var fail = true;
+        indexer = ConversationIndexer(
+          dao: dao,
+          clock: clock,
+          read: (path, cli, {from}) => fail
+              ? Future.error(const FileSystemException('locked'))
+              : Future.value(TranscriptTurnsRead.nothing),
+          stat: (_) async => (modifiedAt: null, size: null),
+        );
+        Future<bool> read() => indexer.indexConversation(
+          conversationId: 'c1',
+          cli: AgentIds.claudeCode,
+          filePath: '${dir.path}/c1.jsonl',
+        );
+        await read();
+        expect(indexer.unreadable, {'c1'});
+        fail = false;
+        await read();
+        expect(indexer.unreadable, isEmpty);
+      },
+    );
 
     test('a stat that cannot answer leaves no watermark', () async {
       final path = claudeTranscript('c1.jsonl', [

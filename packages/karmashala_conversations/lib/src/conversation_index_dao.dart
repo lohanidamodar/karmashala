@@ -669,6 +669,26 @@ class ConversationIndexDao {
     ];
   }
 
+  /// The conversations a session row, a switched thread's span or an imported
+  /// record names, and how many of them the index holds no reading of.
+  ({int named, int unindexed}) coverage() {
+    statements++;
+    final row = _db
+        .query(
+          'WITH named(id) AS ('
+          'SELECT external_session_id FROM sessions '
+          "WHERE external_session_id IS NOT NULL AND external_session_id <> '' "
+          'UNION SELECT external_session_id FROM session_agent_spans '
+          "WHERE external_session_id IS NOT NULL AND external_session_id <> '' "
+          'UNION SELECT external_id FROM imported_sessions) '
+          'SELECT COUNT(*) AS n, COALESCE(SUM(NOT EXISTS ('
+          'SELECT 1 FROM conversation_index_state state '
+          'WHERE state.session_id = named.id)), 0) AS u FROM named;',
+        )
+        .first;
+    return (named: row['n'] as int, unindexed: row['u'] as int);
+  }
+
   /// Conversations read at least once, and the turns held.
   ({int conversations, int turns}) counts() {
     statements++;

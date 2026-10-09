@@ -198,7 +198,11 @@ class ConversationsHandler {
 
   ConversationIndexStatus status() {
     final counts = dao.counts();
+    final coverage = dao.coverage();
     return ConversationIndexStatus(
+      named: coverage.named,
+      unindexed: coverage.unindexed,
+      unreadable: indexer.unreadable.length,
       conversations: counts.conversations,
       turns: counts.turns,
       generation: dao.generation,

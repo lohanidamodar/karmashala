@@ -85,6 +85,11 @@ class ConversationIndexer {
   /// Conversations queued, for diagnostics and tests.
   Iterable<String> get wantedIds => _wanted.keys;
 
+  /// Conversations whose last read failed — the store could not be asked or
+  /// the transcript not opened — until a read succeeds.
+  Set<String> get unreadable => Set.unmodifiable(_unreadable);
+  final Set<String> _unreadable = {};
+
   /// Queues [conversationId] for indexing — a map entry, nothing else until
   /// [drain], which resolves what the caller could not say.
   void want(String conversationId, {String? cli, String? filePath}) {
@@ -119,6 +124,7 @@ class ConversationIndexer {
         } on Object {
           // A store we cannot read answers as an empty one. The want is
           // dropped, not kept: the next trigger queues it again.
+          _unreadable.add(entry.key);
           path = null;
         }
       }
@@ -167,9 +173,11 @@ class ConversationIndexer {
     TranscriptTurnsRead read;
     try {
       read = await _read(filePath, cli, from: from);
+      _unreadable.remove(conversationId);
     } on Object {
       // The reader swallows malformed lines itself; this catches the layer
       // below — an unopenable path, e.g. a vanished `\\wsl.localhost`.
+      _unreadable.add(conversationId);
       read = TranscriptTurnsRead.nothing;
     }
     bytesRead += read.bytesRead;
@@ -243,6 +251,7 @@ extension on ConversationIndexer {
   ) {
     final filePath = recordedConversationPath(rowId);
     final watermark = dao.recordedWatermark(rowId);
+    _unreadable.remove(conversationId);
     if (state != null &&
         state.filePath == filePath &&
         state.matches(modifiedAt: watermark.modifiedAt, size: watermark.size)) {

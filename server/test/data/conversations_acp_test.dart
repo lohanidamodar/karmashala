@@ -204,4 +204,17 @@ void main() {
       expect(found('puffin'), ['acp-c1']);
     },
   );
+
+  test('the status says how much of what is named is indexed', () async {
+    start();
+    app.handle(SessionCreate(row('s1', 'acp-c1')));
+    say('s1', SessionMessageRole.user, 'covered');
+    // A terminal agent's conversation its store does not hold.
+    app.handle(SessionCreate(row('t1', 'pty-ghost')));
+    await service.conversations.drain();
+    final status = app.handle(const ConversationsStatus()).value;
+    expect(status.named, 2);
+    expect(status.unindexed, 1);
+    expect(status.unreadable, 0);
+  });
 }
