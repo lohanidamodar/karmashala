@@ -1,5 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../application/store_groups.dart';
+
 /// The app whose detail is open, by the `StoreApp.key` of an app in it — so
 /// it stays open when that app is combined with another or separated from
 /// it. Kept outside the layout, so a resize or a rotation between the split
@@ -15,18 +17,26 @@ final storesSelectionProvider = NotifierProvider<StoresSelection, String?>(
   StoresSelection.new,
 );
 
-/// Which apps the overview shows.
+/// Which apps the list shows.
 enum StoresFilter {
-  all('All apps'),
   attention('Needs attention'),
   inProgress('In progress'),
-  newReviews('New reviews');
+  newReviews('New reviews'),
+  all('All');
 
   const StoresFilter(this.label);
   final String label;
+
+  /// Whether [group] is one this filter shows.
+  bool shows(StoreAppGroup group) => switch (this) {
+    StoresFilter.all => true,
+    StoresFilter.attention => group.needsAttention,
+    StoresFilter.inProgress => !group.needsAttention && group.inFlight,
+    StoresFilter.newReviews => group.newReviewCount > 0,
+  };
 }
 
-/// The overview's filter; outside the layout for the same reason as the
+/// The list's filter; outside the layout for the same reason as the
 /// selection.
 class StoresFilterState extends Notifier<StoresFilter> {
   @override

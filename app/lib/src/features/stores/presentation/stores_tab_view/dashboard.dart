@@ -1,13 +1,14 @@
-// The dashboard, its overview and the card grid.
+// The dashboard, its one list of apps and the card grid.
 
 part of '../stores_tab_view.dart';
 
 /// The overview and the selected app's detail: beside it at expanded width,
 /// in its place below it.
 class _Dashboard extends ConsumerWidget {
-  const _Dashboard({required this.dashboard});
+  const _Dashboard({required this.dashboard, required this.layout});
 
   final StoresState dashboard;
+  final StoresLayout layout;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,6 +59,7 @@ class _Dashboard extends ConsumerWidget {
                 ),
                 child: _Overview(
                   groups: groups,
+                  layout: layout,
                   refreshedAt: dashboard.refreshedAt,
                   selected: null,
                   // One column below expanded, whatever would fit (§6).
@@ -97,6 +99,7 @@ class _Dashboard extends ConsumerWidget {
                 ),
                 child: _Overview(
                   groups: groups,
+                  layout: layout,
                   refreshedAt: dashboard.refreshedAt,
                   selected: open.key,
                   singleColumn: true,
@@ -120,11 +123,12 @@ class _Dashboard extends ConsumerWidget {
   }
 }
 
-/// The counts that matter as filters, then the apps — sectioned by what
-/// they need when every app is shown.
+/// The filters, then every app once, in its section: as table rows, a row
+/// per store it is on, or as cards, one per app.
 class _Overview extends ConsumerWidget {
   const _Overview({
     required this.groups,
+    required this.layout,
     required this.refreshedAt,
     required this.selected,
     required this.singleColumn,
@@ -132,6 +136,7 @@ class _Overview extends ConsumerWidget {
   });
 
   final List<StoreAppGroup> groups;
+  final StoresLayout layout;
   final DateTime? refreshedAt;
   final String? selected;
   final bool singleColumn;
@@ -140,100 +145,74 @@ class _Overview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(storesFilterProvider);
-    bool inFilter(StoresFilter filter, StoreAppGroup group) => switch (filter) {
-      StoresFilter.all => true,
-      StoresFilter.attention => group.needsAttention,
-      StoresFilter.inProgress => !group.needsAttention && group.inFlight,
-      StoresFilter.newReviews => group.newReviewCount > 0,
-    };
     final counts = {
       for (final f in StoresFilter.values)
-        f: groups.where((group) => inFilter(f, group)).length,
+        f: groups.where((group) => f.shows(group)).length,
     };
-    final sections = <(String?, List<StoreAppGroup>)>[];
-    if (filter == StoresFilter.all) {
-      final attention = groups.where((g) => g.needsAttention).toList();
-      final moving = groups
-          .where((g) => !g.needsAttention && g.inFlight)
-          .toList();
-      final rest = groups
-          .where((g) => !g.needsAttention && !g.inFlight)
-          .toList();
-      final sectioned = attention.isNotEmpty || moving.isNotEmpty;
-      if (attention.isNotEmpty) sections.add(('Needs attention', attention));
-      if (moving.isNotEmpty) sections.add(('In progress', moving));
-      if (rest.isNotEmpty) {
-        sections.add((sectioned ? 'Everything else' : null, rest));
-      }
-    } else {
-      sections.add((
-        null,
-        [
-          for (final g in groups)
-            if (inFilter(filter, g)) g,
-        ],
-      ));
-    }
-    final shown = sections.fold(0, (sum, section) => sum + section.$2.length);
-    final summary = selected == null
-        ? storeSummaryRows(groups)
-        : const <StoreSummaryRow>[];
-    // How long the overview takes to fade from one state to the next; nothing
+    final sections = storeSections(groups.where(filter.shows));
+    // A heading only says something beside another.
+    final titled = sections.length > 1;
+    // How long the list takes to fade from one state to the next; nothing
     // under reduced motion.
     final swap = Motion.of(context).base;
+    final Widget list;
+    if (sections.isEmpty) {
+      list = _NothingToShow(filter: filter);
+    } else if (layout == StoresLayout.table) {
+      list = StoreSummaryTable(
+        sections: [
+          for (final (section, members) in sections)
+            (
+              title: titled ? section.title : null,
+              apps: members.length,
+              rows: [for (final group in members) ...storeSummaryRowsOf(group)],
+            ),
+        ],
+        selected: selected,
+        onOpen: onSelect,
+      );
+    } else {
+      list = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, (section, members)) in sections.indexed) ...[
+            if (titled)
+              Padding(
+                padding: EdgeInsets.only(
+                  top: i == 0 ? 0 : Insets.md,
+                  bottom: Insets.sm,
+                ),
+                child: Semantics(
+                  header: true,
+                  child: EyebrowLabel(
+                    '${section.title} · ${members.length}',
+                    key: ValueKey('stores-section:${section.name}'),
+                  ),
+                ),
+              ),
+            _CardGrid(
+              groups: members,
+              refreshedAt: refreshedAt,
+              selected: selected,
+              singleColumn: singleColumn,
+              onSelect: onSelect,
+            ),
+          ],
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Every app at a glance, what needs attention first; not beside an
-        // open detail, where the list is already narrow.
-        if (selected == null) ...[
-          Semantics(
-            header: true,
-            child: EyebrowLabel('All apps · ${summary.length}'),
-          ),
-          const SizedBox(height: Insets.sm),
-          StoreSummaryTable(rows: summary, onOpen: onSelect),
-          const SizedBox(height: Insets.lg),
-        ],
-        _SummaryStrip(
+        _FilterRow(
           counts: counts,
           filter: filter,
-          compact: singleColumn,
           onPick: ref.read(storesFilterProvider.notifier).toggle,
         ),
-        const SizedBox(height: Insets.lg),
+        const SizedBox(height: Insets.md),
         AnimatedSwitcher(
           duration: swap,
-          child: KeyedSubtree(
-            key: ValueKey(filter),
-            child: shown == 0
-                ? _NothingToShow(filter: filter)
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final (i, (title, members)) in sections.indexed) ...[
-                        if (title != null)
-                          Padding(
-                            padding: EdgeInsets.only(
-                              top: i == 0 ? 0 : Insets.md,
-                              bottom: Insets.sm,
-                            ),
-                            child: Semantics(
-                              header: true,
-                              child: EyebrowLabel('$title · ${members.length}'),
-                            ),
-                          ),
-                        _CardGrid(
-                          groups: members,
-                          refreshedAt: refreshedAt,
-                          selected: selected,
-                          singleColumn: singleColumn,
-                          onSelect: onSelect,
-                        ),
-                      ],
-                    ],
-                  ),
-          ),
+          child: KeyedSubtree(key: ValueKey((filter, layout)), child: list),
         ),
       ],
     );

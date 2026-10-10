@@ -45,6 +45,7 @@ import 'package:karmashala/src/features/settings/presentation/settings_screen.da
 import 'package:karmashala/src/features/stores/application/store_glance.dart';
 import 'package:karmashala/src/features/stores/application/store_history.dart';
 import 'package:karmashala/src/features/stores/application/stores_controller.dart';
+import 'package:karmashala/src/features/stores/application/stores_layout_prefs.dart';
 import 'package:karmashala/src/features/stores/presentation/stores_tab_state.dart';
 import 'package:karmashala/src/features/stores/presentation/stores_tab_view.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
@@ -509,6 +510,7 @@ Future<SurfaceBuilder> _stores(
   WidgetTester tester,
   Brightness brightness, {
   bool detail = false,
+  StoresLayout? layout,
 }) async {
   final c = (await tester.runAsync(() async {
     final server = FakeDataServer();
@@ -520,6 +522,11 @@ Future<SurfaceBuilder> _stores(
         ...fakeTerminalOverrides(data: await server.override()),
         clockProvider.overrideWithValue(FixedClock(_now)),
         storesProvider.overrideWith(() => _Stores(storesFixtureState())),
+        // Unpicked, the width decides: the table on a desktop, cards on a
+        // phone.
+        storesLayoutStoreProvider.overrideWithValue(
+          MemoryStoresLayoutStore(layout),
+        ),
         storeHistoryProvider.overrideWith((ref, keys) async => history),
       ],
     );
@@ -857,8 +864,16 @@ final responsiveSurfaces = <ResponsiveSurface>[
     (t, b) => _mission(t, b),
     warmUp: (t) => _tap(t, _byKey('overview-filter-button')),
   ),
-  // The summary table on a desktop, compact rows on a phone.
-  ResponsiveSurface('stores-summary', (t, b) => _stores(t, b)),
+  // The one list as a table: columns on a desktop, compact rows on a phone.
+  ResponsiveSurface(
+    'stores-table',
+    (t, b) => _stores(t, b, layout: StoresLayout.table),
+  ),
+  // And as cards, in as many columns as fit.
+  ResponsiveSurface(
+    'stores-cards',
+    (t, b) => _stores(t, b, layout: StoresLayout.cards),
+  ),
   // The release timeline, across and down.
   ResponsiveSurface('stores-detail', (t, b) => _stores(t, b, detail: true)),
   ResponsiveSurface(

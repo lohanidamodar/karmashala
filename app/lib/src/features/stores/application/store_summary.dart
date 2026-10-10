@@ -124,3 +124,42 @@ List<StoreSummaryRow> storeSummaryRows(List<StoreAppGroup> groups) {
   }
   return (min: (low - 0.05).clamp(0, 5), max: (high + 0.05).clamp(0, 5));
 }
+
+/// The sections the Stores list is in, table and cards alike, in order.
+enum StoreSection {
+  attention('Needs attention'),
+  inProgress('In progress'),
+  changed('Changed since you last looked'),
+  rest('Everything else');
+
+  const StoreSection(this.title);
+  final String title;
+}
+
+/// The one section [group] is listed in: the first that holds of it.
+StoreSection storeSectionOf(StoreAppGroup group) {
+  if (group.needsAttention) return StoreSection.attention;
+  if (group.inFlight) return StoreSection.inProgress;
+  if (group.changedUnseen) return StoreSection.changed;
+  return StoreSection.rest;
+}
+
+/// [groups] in their sections, each keeping [groups]' order; a section with
+/// no app is left out.
+List<(StoreSection, List<StoreAppGroup>)> storeSections(
+  Iterable<StoreAppGroup> groups,
+) {
+  final by = <StoreSection, List<StoreAppGroup>>{};
+  for (final group in groups) {
+    by.putIfAbsent(storeSectionOf(group), () => []).add(group);
+  }
+  return [
+    for (final section in StoreSection.values)
+      if (by[section] case final members?) (section, members),
+  ];
+}
+
+/// [group]'s rows, one per store it is on, App Store first.
+List<StoreSummaryRow> storeSummaryRowsOf(StoreAppGroup group) => [
+  for (final entry in group.entries) StoreSummaryRow(group, entry),
+];

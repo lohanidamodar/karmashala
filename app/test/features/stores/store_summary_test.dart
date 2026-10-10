@@ -196,6 +196,77 @@ void main() {
     expect(trend, [4.02, 4.04, 4.09, 4.3]);
   });
 
+  test('the sections run attention, moving, changed, the rest', () {
+    expect(
+      [
+        for (final (section, members) in storeSections(groups()))
+          '${section.name}: ${members.map((group) => group.name).join(', ')}',
+      ],
+      [
+        'attention: Zed',
+        'inProgress: Moving',
+        'changed: Changed',
+        // An unanswered review is new reviews' filter, not a section.
+        'rest: Asked, Calm',
+      ],
+    );
+  });
+
+  testWidgets('a heading row starts each section, and the open app is marked', (
+    tester,
+  ) async {
+    setStoreTestSurface(tester, const Size(1440, 900), 1);
+    final sections = [
+      for (final (section, members) in storeSections(groups()))
+        (
+          title: section.title,
+          apps: members.length,
+          rows: [for (final group in members) ...storeSummaryRowsOf(group)],
+        ),
+    ];
+    final open = sections[1].rows.single.group.key;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [clockProvider.overrideWithValue(FixedClock(now))],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StoreSummaryTable(
+                sections: sections,
+                selected: open,
+                onOpen: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final titles = [
+      'NEEDS ATTENTION · 1',
+      'IN PROGRESS · 1',
+      'CHANGED SINCE YOU LAST LOOKED · 1',
+      'EVERYTHING ELSE · 2',
+    ];
+    for (final title in titles) {
+      expect(find.text(title), findsOneWidget);
+    }
+    // Each heading sits above its section's first row.
+    expect(
+      tester.getTopLeft(find.text(titles[1])).dy,
+      lessThan(tester.getTopLeft(find.text('Moving')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Zed')).dy,
+      lessThan(tester.getTopLeft(find.text(titles[1])).dy),
+    );
+    expect(
+      tester.getSemantics(find.text('Moving')),
+      isSemantics(isSelected: true, isButton: true, hasSelectedState: true),
+    );
+  });
+
   for (final size in kStoreTestSizes) {
     for (final scale in kStoreTestTextScales) {
       testWidgets(
@@ -211,7 +282,10 @@ void main() {
                 home: Scaffold(
                   body: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
-                    child: StoreSummaryTable(rows: rows, onOpen: opened.add),
+                    child: StoreSummaryTable(
+                      sections: [(title: null, apps: rows.length, rows: rows)],
+                      onOpen: opened.add,
+                    ),
                   ),
                 ),
               ),
@@ -221,7 +295,8 @@ void main() {
           expect(tester.takeException(), isNull);
           expect(find.text('Zed'), findsOneWidget);
           expect(find.text('Crashes 0.42% · ANRs 0.12%'), findsOneWidget);
-          expect(find.text(kNotReported), findsWidgets);
+          // On a phone the stability says what is not reported.
+          expect(find.textContaining(kNotReported), findsWidgets);
           expect(
             find.byKey(const ValueKey('store-summary-changed')),
             findsOneWidget,

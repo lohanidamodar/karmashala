@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/stores/application/stores_layout_prefs.dart';
 import 'package:store_console/store_console.dart';
 
 final DateTime fixtureCheckedAt = DateTime.utc(2026, 9, 30, 8);
@@ -66,3 +67,21 @@ StoreAppSnapshot storeSnapshot(
         fixtureCheckedAt,
       ),
 );
+
+/// The Stores layout kept in memory: [kept] as if picked before, and each
+/// pick in [saved].
+class MemoryStoresLayoutStore implements StoresLayoutStore {
+  MemoryStoresLayoutStore([this.kept]);
+
+  StoresLayout? kept;
+  final saved = <StoresLayout>[];
+
+  @override
+  Future<StoresLayout?> load() async => kept;
+
+  @override
+  Future<void> save(StoresLayout layout) async {
+    kept = layout;
+    saved.add(layout);
+  }
+}

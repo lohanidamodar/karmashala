@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:store_console/store_console.dart';
 
@@ -19,23 +20,35 @@ const double kSummarySparklineHeight = 16;
 /// What a reading the store does not give says, never a zero.
 const String kNotReported = 'not reported';
 
+/// One section of the summary: its heading — none when it is the only one —
+/// and its rows.
+typedef StoreSummarySection = ({
+  String? title,
+  int apps,
+  List<StoreSummaryRow> rows,
+});
+
 /// **The summary across every app**: a row per app per store — its icon and
 /// platform, what is live, the rating with a month's trend, new and
 /// unanswered reviews, the crash and ANR rate, and whether it changed since
-/// last seen — what needs attention first. A table where it is wide, a list
-/// of compact rows on a phone. Tapping a row opens its app.
+/// last seen — in the list's sections, a heading row between them. A table
+/// where it is wide, a list of compact rows where not. Tapping a row opens
+/// its app.
 class StoreSummaryTable extends StatelessWidget {
   const StoreSummaryTable({
-    required this.rows,
+    required this.sections,
     required this.onOpen,
+    this.selected,
     super.key,
   });
 
-  /// In [storeSummaryRows]' order.
-  final List<StoreSummaryRow> rows;
+  final List<StoreSummarySection> sections;
 
   /// Called with the tapped row's group key.
   final ValueChanged<String> onOpen;
+
+  /// The group key whose detail is open.
+  final String? selected;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +60,25 @@ class StoreSummaryTable extends StatelessWidget {
           constraints.maxWidth,
           textScaler: scaler,
         ).isExpanded;
+        final children = <Widget>[if (wide) const _HeaderRow()];
+        for (final section in sections) {
+          if (section.title case final title?) {
+            if (children.isNotEmpty) children.add(const Divider(height: 1));
+            children.add(_SectionRow(title: title, apps: section.apps));
+          }
+          for (final row in section.rows) {
+            if (children.isNotEmpty) children.add(const Divider(height: 1));
+            children.add(
+              _SummaryRow(
+                key: ValueKey('store-summary-row:${row.app.key}'),
+                row: row,
+                wide: wide,
+                selected: row.group.key == selected,
+                onTap: () => onOpen(row.group.key),
+              ),
+            );
+          }
+        }
         return DecoratedBox(
           key: const ValueKey('store-summary'),
           decoration: BoxDecoration(
@@ -58,22 +90,33 @@ class StoreSummaryTable extends StatelessWidget {
             borderRadius: BorderRadius.circular(Radii.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (wide) const _HeaderRow(),
-                for (final (i, row) in rows.indexed) ...[
-                  if (i > 0 || wide) const Divider(height: 1),
-                  _SummaryRow(
-                    key: ValueKey('store-summary-row:${row.app.key}'),
-                    row: row,
-                    wide: wide,
-                    onTap: () => onOpen(row.group.key),
-                  ),
-                ],
-              ],
+              children: children,
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// A section's heading inside the table.
+class _SectionRow extends StatelessWidget {
+  const _SectionRow({required this.title, required this.apps});
+
+  final String title;
+  final int apps;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.xs,
+        ),
+        child: Semantics(header: true, child: EyebrowLabel('$title · $apps')),
+      ),
     );
   }
 }
@@ -130,28 +173,34 @@ class _SummaryRow extends StatelessWidget {
   const _SummaryRow({
     required this.row,
     required this.wide,
+    required this.selected,
     required this.onTap,
     super.key,
   });
 
   final StoreSummaryRow row;
   final bool wide;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      selected: selected,
       label: _spoken(row),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.md,
-              vertical: Insets.sm,
+          child: Ink(
+            color: selected ? SurfaceTones.of(context).selected : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.md,
+                vertical: Insets.sm,
+              ),
+              child: wide ? _WideCells(row: row) : _CompactCells(row: row),
             ),
-            child: wide ? _WideCells(row: row) : _CompactCells(row: row),
           ),
         ),
       ),
@@ -187,11 +236,16 @@ String _reviewsText(StoreSummaryRow row) {
   return unanswered == 0 ? '$count new' : '$count new · $unanswered unanswered';
 }
 
-String _stabilityText(VitalsSummary? vitals, {bool long = false}) {
+String _stabilityText(
+  VitalsSummary? vitals, {
+  bool long = false,
+  bool labelled = false,
+}) {
   final crash = vitals?.crashRate;
   final anr = vitals?.anrRate;
   if (crash == null && anr == null) {
-    return long ? 'crash and ANR rate $kNotReported' : kNotReported;
+    if (long) return 'crash and ANR rate $kNotReported';
+    return labelled ? 'Crashes · ANRs $kNotReported' : kNotReported;
   }
   String rate(double? value) =>
       value == null ? kNotReported : formatRate(value);
@@ -446,9 +500,49 @@ class _CompactCells extends StatelessWidget {
               _reviewsText(row),
               color: unanswered > 0 ? SemanticColors.of(context).unread : null,
             ),
-            _Muted(_stabilityText(row.vitals)),
+            _Muted(_stabilityText(row.vitals, labelled: true)),
           ],
         ),
+      ],
+    );
+  }
+}
+
+/// What the table says of a listing that a card's store line does not: the
+/// month's rating trend, new and unanswered reviews, and the crash and ANR
+/// rate — so switching to the cards loses nothing.
+class StoreListingFacts extends StatelessWidget {
+  const StoreListingFacts({required this.row, super.key});
+
+  final StoreSummaryRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final trend = row.ratingTrend;
+    final unanswered = row.unanswered ?? 0;
+    return Wrap(
+      key: ValueKey('store-listing-facts:${row.app.key}'),
+      spacing: Insets.md,
+      runSpacing: Insets.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (trend.length > 1)
+          Sparkline(
+            values: trend,
+            color: theme.colorScheme.primary,
+            minValue: ratingTrendScale(trend).min,
+            maxValue: ratingTrendScale(trend).max,
+            width: kSummarySparklineWidth,
+            height: kSummarySparklineHeight,
+            area: false,
+            semanticsLabel: 'Rating over the last 30 days',
+          ),
+        _Muted(
+          _reviewsText(row),
+          color: unanswered > 0 ? SemanticColors.of(context).unread : null,
+        ),
+        _Muted(_stabilityText(row.vitals, labelled: true)),
       ],
     );
   }

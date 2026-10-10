@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/stores/application/stores_controller.dart';
+import 'package:karmashala/src/features/stores/application/stores_layout_prefs.dart';
 import 'package:karmashala/src/features/stores/presentation/store_app_card.dart';
 import 'package:karmashala/src/features/stores/presentation/store_app_detail.dart';
 import 'package:karmashala/src/features/stores/presentation/stores_tab_view.dart';
@@ -41,7 +42,7 @@ class _Stores extends StoresController {
 
 const _phone = Size(390, 844);
 
-/// [finder] within the app cards: the summary above them names each app too.
+/// [finder] within the app cards: an open detail names its app too.
 Finder _inCards(Finder finder) =>
     find.descendant(of: find.byType(StoreGroupCard), matching: finder);
 const _desktop = Size(1440, 900);
@@ -114,6 +115,8 @@ void main() {
     required Size size,
     StoresState state = const StoresState(),
     bool settle = true,
+    // These are the cards' tests; stores_list_test.dart has the table's.
+    StoresLayout? layout = StoresLayout.cards,
   }) async {
     tester.view
       ..physicalSize = size
@@ -125,6 +128,9 @@ void main() {
         overrides: [
           clockProvider.overrideWithValue(FixedClock(now)),
           storesProvider.overrideWith(() => controller),
+          storesLayoutStoreProvider.overrideWithValue(
+            MemoryStoresLayoutStore(layout),
+          ),
         ],
         child: const MaterialApp(home: StoresTabView()),
       ),
