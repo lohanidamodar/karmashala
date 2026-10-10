@@ -275,7 +275,7 @@ class WebhookToolSet extends ServerToolSet {
       'permissionMode': saved.permissionMode?.canonical,
       'note':
           'Proposed, not armed: it does nothing until the owner reviews it '
-          'and turns it on in Automations.'
+          'and turns it on in Workflows.'
           '$told',
     };
   }

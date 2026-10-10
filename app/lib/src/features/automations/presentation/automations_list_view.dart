@@ -20,6 +20,7 @@ import 'automation_editor.dart';
 import 'automation_run_actions.dart';
 import 'automation_run_status.dart';
 import 'proposal_actions.dart';
+import 'scheduled_resumes_section.dart';
 import 'turn_on_confirm_dialog.dart' show turnOnAutomation;
 
 /// The narrowest an automation or template card is laid out, at 1x text.
@@ -83,6 +84,17 @@ class AutomationsListView extends ConsumerWidget {
             ),
           const _FoldedTemplates(),
         ],
+        // Resumes follow from the automations' usage limits: under them,
+        // where Workflows' three sections leave them.
+        const SizedBox(height: Insets.lg),
+        Align(
+          key: const ValueKey('workflows-resumes'),
+          alignment: AlignmentDirectional.topStart,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
+            child: const ScheduledResumesSection(),
+          ),
+        ),
       ],
     );
   }
@@ -208,9 +220,10 @@ class _FoldedTemplatesState extends State<_FoldedTemplates> {
   );
 }
 
-/// The rounded, outlined surface every card on the tab shares.
-class _CardSurface extends StatelessWidget {
-  const _CardSurface({required this.child, required this.onTap, super.key});
+/// The rounded, outlined surface every card on Workflows shares: automations,
+/// templates and pipelines.
+class WorkflowCard extends StatelessWidget {
+  const WorkflowCard({required this.child, required this.onTap, super.key});
 
   final Widget child;
   final VoidCallback onTap;
@@ -243,7 +256,7 @@ class _TemplateCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return _CardSurface(
+    return WorkflowCard(
       key: ValueKey('template-${template.title}'),
       onTap: onTap,
       child: Row(
@@ -383,7 +396,7 @@ class AutomationCard extends ConsumerWidget {
         : '${runOutcome(last, checks).label} '
               '${describeAge(last.firedAt, now: now)}';
     final small = theme.textTheme.bodySmall;
-    return _CardSurface(
+    return WorkflowCard(
       onTap: () => ref.read(automationEditorProvider.notifier).edit(automation),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

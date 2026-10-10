@@ -7,24 +7,29 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/workbench_tabs.dart' show openWorkflowRuns;
 import '../../../app/widgets/full_screen_form.dart';
 import '../../automations/application/automation_providers.dart'
     show automationCheckoutsProvider;
 import '../../git/application/changes_providers.dart'
     show selectedRepositoryIdProvider;
+import '../../workflows/application/workflows_state.dart' show WorkflowRunKind;
 import '../application/pipelines_controller.dart';
 import 'pipeline_editor.dart';
-import 'pipeline_run_detail.dart';
 
 /// **Run a pipeline**: which one, on which checkout, with what input. A
-/// person's run: its stages launch ahead of background work.
-Future<void> showRunPipeline(BuildContext context) => showFormDialog<void>(
-  context: context,
-  builder: (_) => const RunPipelineDialog(),
-);
+/// person's run: its stages launch ahead of background work. [pipelineId]
+/// picks the pipeline it opens on.
+Future<void> showRunPipeline(BuildContext context, {String? pipelineId}) =>
+    showFormDialog<void>(
+      context: context,
+      builder: (_) => RunPipelineDialog(pipelineId: pipelineId),
+    );
 
 class RunPipelineDialog extends ConsumerStatefulWidget {
-  const RunPipelineDialog({super.key});
+  const RunPipelineDialog({this.pipelineId, super.key});
+
+  final String? pipelineId;
 
   @override
   ConsumerState<RunPipelineDialog> createState() => _RunPipelineDialogState();
@@ -32,7 +37,7 @@ class RunPipelineDialog extends ConsumerStatefulWidget {
 
 class _RunPipelineDialogState extends ConsumerState<RunPipelineDialog> {
   final _input = TextEditingController();
-  String? _pipelineId;
+  late String? _pipelineId = widget.pipelineId;
   String? _repositoryId;
   String? _error;
   var _busy = false;
@@ -139,7 +144,10 @@ class _RunPipelineDialogState extends ConsumerState<RunPipelineDialog> {
             ),
             TextButton.icon(
               key: const ValueKey('pipeline-run-history'),
-              onPressed: () => unawaited(showPipelineRuns(context)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                openWorkflowRuns(ref, kind: WorkflowRunKind.pipeline);
+              },
               icon: const Icon(AppIcons.list),
               label: const Text('Runs'),
             ),

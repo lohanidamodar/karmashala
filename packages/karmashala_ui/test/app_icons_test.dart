@@ -43,6 +43,7 @@ void main() {
     'bellSimple': (AppIcons.bellSimple, 0xe0d0, regular),
     'calendarBlank': (AppIcons.calendarBlank, 0xe10a, regular),
     'usersThree': (AppIcons.usersThree, 0xe68e, regular),
+    'flowArrow': (AppIcons.flowArrow, 0xe6ec, regular),
   };
 
   expected.forEach((name, entry) {

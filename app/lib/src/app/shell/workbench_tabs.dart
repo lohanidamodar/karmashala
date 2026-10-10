@@ -8,7 +8,9 @@ import 'package:karmashala_device_pane/providers.dart' show AndroidDevice;
 import 'package:karmashala_terminal_core/geometry.dart';
 
 import '../../features/agents/presentation/usage_tab/usage_tab_state.dart';
-import '../../features/automations/presentation/automations_tab_state.dart';
+import '../../features/workflows/application/workflow_runs.dart'
+    show workflowRunsFilterProvider;
+import '../../features/workflows/application/workflows_state.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/running/application/running_providers.dart';
@@ -129,21 +131,36 @@ void openStoresTab(WidgetRef ref) {
   activateTerminalTab(ref, tabId);
 }
 
-/// Opens the Automations tab, or brings the open one forward; [section] picks
-/// which of its lists it shows.
-void openAutomationsTab(WidgetRef ref, {AutomationsSection? section}) {
+/// Opens the Workflows tab, or brings the open one forward; [section] picks
+/// which of its sections it shows. A layout saved when it was Automations
+/// opens it too: the tab's pane id is the one it always had.
+void openWorkflowsTab(WidgetRef ref, {WorkflowsSection? section}) {
   if (section != null) {
-    ref.read(automationsSectionProvider.notifier).show(section);
+    ref.read(workflowsSectionProvider.notifier).show(section);
   }
   final phone = ref.read(phoneShellRouterProvider).current;
   if (phone != null) {
-    phone.showMore(PhoneMoreEntry.automations);
+    phone.showMore(PhoneMoreEntry.workflows);
     return;
   }
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)
-      .openAutomationsTab();
+      .openWorkflowsTab();
   activateTerminalTab(ref, tabId);
+}
+
+/// Opens Workflows on its runs — [run]'s detail when one is named, and only
+/// [kind]'s runs when one is.
+void openWorkflowRuns(
+  WidgetRef ref, {
+  WorkflowRunRef? run,
+  WorkflowRunKind? kind,
+}) {
+  if (kind != null) {
+    ref.read(workflowRunsFilterProvider.notifier).setKinds({kind});
+  }
+  if (run != null) ref.read(selectedWorkflowRunProvider.notifier).select(run);
+  openWorkflowsTab(ref, section: WorkflowsSection.runs);
 }
 
 /// Opens the Logs tab, or brings it forward; [source] picks the log it shows.

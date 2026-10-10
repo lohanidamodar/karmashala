@@ -10,7 +10,7 @@ enum PhoneMoreEntry {
   sessions,
   usage,
   stores,
-  automations,
+  workflows,
   running,
   notes,
   settings,

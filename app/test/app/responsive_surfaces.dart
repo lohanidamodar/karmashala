@@ -49,6 +49,9 @@ import 'package:karmashala/src/features/stores/presentation/stores_tab_state.dar
 import 'package:karmashala/src/features/stores/presentation/stores_tab_view.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
+import 'package:karmashala/src/features/workflows/presentation/workflows_tab_view.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/pipelines.dart';
 import 'package:karmashala_core/verdicts.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -759,6 +762,119 @@ Future<SurfaceBuilder> _pipelineDialog(
 Future<void> _openDialog(WidgetTester tester) =>
     _tap(tester, find.text('open'));
 
+// ---------------------------------------------------------------- workflows
+
+/// Workflows on [section] (round 88): an automation and its runs, a saved
+/// pipeline and two runs of it — one held at a gate, started by the
+/// automation — and, with [run] or [editing], a run's detail or the
+/// pipeline editor in the page.
+Future<SurfaceBuilder> _workflows(
+  WidgetTester tester,
+  Brightness brightness, {
+  WorkflowsSection section = WorkflowsSection.automations,
+  WorkflowRunRef? run,
+  bool editing = false,
+}) async {
+  final mine = kPipelineTemplates.first.copyWith(
+    id: 'p-mine',
+    name: 'Ship a fix',
+    builtIn: false,
+  );
+  final c = (await tester.runAsync(() async {
+    final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
+    server.automationRows
+      ..insert(
+        Automation(
+          id: 'nightly',
+          repositoryId: 'r1',
+          name: 'Nightly: Implement → Test → Fix on failing tests',
+          schedule: const AutomationSchedule.cron('0 2 * * *'),
+          agentInstallationId: 'a1',
+          prompt: 'Run the tests.',
+          permissionMode: null,
+          enabled: true,
+          armedAt: _pNow,
+        ),
+      )
+      ..insertRun(
+        AutomationRun(
+          id: 'ar1',
+          automationId: 'nightly',
+          scheduledFor: _pNow.subtract(const Duration(hours: 10)),
+          firedAt: _pNow.subtract(const Duration(hours: 10)),
+          state: AutomationRunState.finished,
+          reason: 'The tests ran; 2 failed.',
+          sessionId: 's-nightly',
+          finishedAt: _pNow.subtract(const Duration(hours: 9, minutes: 52)),
+          stepResults: [
+            AutomationStepResult(
+              kind: AutomationStepKind.pipeline,
+              outcome: AutomationStepOutcome.waiting,
+              detail: '"Ship a fix" waits for your approval at Plan.',
+              at: _pNow,
+              pipelineRunId: 'pr-gate',
+            ),
+          ],
+        ),
+      );
+    server.pipelineRows.saved[mine.id] = mine;
+    server.pipelineRows
+      ..putRun(_failedRun())
+      ..putRun(
+        PipelineRun(
+          id: 'pr-gate',
+          definition: mine,
+          repositoryId: 'r1',
+          input: 'The nightly tests failed. Make them pass again.',
+          state: PipelineRunState.waiting,
+          automation: const PipelineRunAutomation(
+            automationId: 'nightly',
+            runId: 'ar1',
+            name: 'Nightly: Implement → Test → Fix on failing tests',
+          ),
+          createdAt: _pNow.subtract(const Duration(hours: 9, minutes: 52)),
+          updatedAt: _pNow,
+          records: [
+            PipelineStageRecord(
+              stageIndex: 0,
+              role: 'Plan',
+              attempt: 1,
+              state: PipelineStageState.approval,
+              sessionId: 's-plan',
+              answer: 'Plan: fix the two failing tests.',
+              startedAt: _pNow.subtract(const Duration(hours: 9)),
+              finishedAt: _pNow.subtract(const Duration(hours: 8)),
+            ),
+          ],
+        ),
+      );
+    return ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(),
+        await server.override(),
+        clockProvider.overrideWithValue(FixedClock(_pNow)),
+      ],
+    );
+  }))!;
+  addTearDown(c.dispose);
+  c.read(workflowsSectionProvider.notifier).show(section);
+  if (run != null) c.read(selectedWorkflowRunProvider.notifier).select(run);
+  if (editing) c.read(pipelineEditingProvider.notifier).open(mine);
+  return () => responsiveApp(
+    tester,
+    c,
+    brightness,
+    desktop: const WorkflowsTabView(),
+    phonePage: PhoneMoreEntry.workflows,
+  );
+}
+
 // ---------------------------------------------------------------- settings
 
 Future<SurfaceBuilder> _settings(
@@ -901,6 +1017,45 @@ final responsiveSurfaces = <ResponsiveSurface>[
     ),
     warmUp: _openDialog,
   ),
+  // Round 88: Workflows' sections, a run's detail of each kind, the pipeline
+  // editor in the page and the runs' filters.
+  ResponsiveSurface('workflows-automations', _workflows),
+  ResponsiveSurface(
+    'workflows-pipelines',
+    (t, b) => _workflows(t, b, section: WorkflowsSection.pipelines),
+  ),
+  ResponsiveSurface(
+    'workflows-pipeline-editor',
+    (t, b) =>
+        _workflows(t, b, section: WorkflowsSection.pipelines, editing: true),
+  ),
+  ResponsiveSurface(
+    'workflows-runs',
+    (t, b) => _workflows(t, b, section: WorkflowsSection.runs),
+  ),
+  ResponsiveSurface(
+    'workflows-runs-filter',
+    (t, b) => _workflows(t, b, section: WorkflowsSection.runs),
+    warmUp: (t) => _tap(t, _byKey('workflow-runs-filter')),
+  ),
+  ResponsiveSurface(
+    'workflows-run-pipeline',
+    (t, b) => _workflows(
+      t,
+      b,
+      section: WorkflowsSection.runs,
+      run: const WorkflowRunRef(WorkflowRunKind.pipeline, 'pr-gate'),
+    ),
+  ),
+  ResponsiveSurface(
+    'workflows-run-automation',
+    (t, b) => _workflows(
+      t,
+      b,
+      section: WorkflowsSection.runs,
+      run: const WorkflowRunRef(WorkflowRunKind.automation, 'ar1'),
+    ),
+  ),
   ResponsiveSurface(
     'settings-session-limits',
     (t, b) => _settings(
@@ -970,6 +1125,7 @@ final moreSurfaces = <ResponsiveSurface>[
       (t, b) => switch (entry) {
         PhoneMoreEntry.usage => _usage(t, b, many: true),
         PhoneMoreEntry.stores => _stores(t, b),
+        PhoneMoreEntry.workflows => _workflows(t, b),
         _ => _mission(t, b, phoneHome: _PushedFromMore(entry)),
       },
       phoneOnly: true,

@@ -7,6 +7,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/workbench_tabs.dart' show openWorkflowRuns;
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_state_providers.dart';
@@ -14,6 +15,7 @@ import '../../explorer/application/agent_states.dart';
 import '../../pipelines/application/pipelines_controller.dart';
 import '../../pipelines/presentation/pipeline_run_card.dart';
 import '../../pipelines/presentation/pipeline_run_detail.dart';
+import '../../workflows/application/workflows_state.dart' show WorkflowRunKind;
 import '../../pipelines/presentation/pipeline_words.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
@@ -88,15 +90,20 @@ class OverviewPipelineLane extends ConsumerWidget {
                 asking: pipelineStageAsking(run, asking.containsKey),
               ),
             ),
-          if (more > 0)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton(
-                key: const ValueKey('overview-pipelines-more'),
-                onPressed: () => unawaited(showPipelineRuns(context)),
-                child: Text(more == 1 ? '1 more run…' : '$more more runs…'),
-              ),
+          // Every run, both kinds, is in Workflows → Runs.
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              key: const ValueKey('overview-pipelines-more'),
+              onPressed: () =>
+                  openWorkflowRuns(ref, kind: WorkflowRunKind.pipeline),
+              child: Text(switch (more) {
+                0 => 'See all runs',
+                1 => '1 more run…',
+                _ => '$more more runs…',
+              }),
             ),
+          ),
         ],
       ),
     );

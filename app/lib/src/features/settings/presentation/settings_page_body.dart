@@ -10,7 +10,7 @@ import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../automations/presentation/automations_settings_link.dart';
 import '../../backup/presentation/data_backup_section.dart';
 import '../../backup/presentation/data_restore_section.dart';
-import '../../automations/presentation/automations_tab_state.dart';
+import '../../workflows/application/workflows_state.dart';
 import '../../checkpoints/presentation/checkpoint_settings_section.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../github_access/presentation/github_access_page.dart';
@@ -176,7 +176,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.github => const GithubAccessPage(),
   SettingsAnchor.automations => const AutomationsSettingsLink(
     anchor: SettingsAnchor.automations,
-    section: AutomationsSection.automations,
+    section: WorkflowsSection.automations,
   ),
 
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),

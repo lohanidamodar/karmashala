@@ -109,7 +109,7 @@ void main() {
     addTearDown(c.dispose);
     expect(
       [for (final g in c.read(dashboardGlancesProvider)) g.id],
-      ['todos', 'running', 'stores', 'usage'],
+      ['todos', 'running', 'stores', 'usage', 'workflows'],
     );
   });
 

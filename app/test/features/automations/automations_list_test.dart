@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/automations/application/automation_provi
 import 'package:karmashala/src/features/automations/application/automation_runs_page.dart';
 import 'package:karmashala/src/features/automations/application/automation_templates.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_list_view.dart';
-import 'package:karmashala/src/features/automations/presentation/automations_tab_state.dart';
+import 'package:karmashala/src/features/workflows/application/workflows_state.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 
@@ -221,8 +221,15 @@ void main() {
     expect(find.textContaining('Checks for unattended runs'), findsNothing);
     expect(find.textContaining('No check yet'), findsNothing);
     expect(find.text('Add a check'), findsNothing);
-    // One switch per automation, and none per checkout.
-    expect(find.byType(Switch), findsOneWidget);
+    // One switch per automation, and none per checkout; the resumes under
+    // them keep their own.
+    expect(
+      find.descendant(
+        of: find.byType(AutomationCard),
+        matching: find.byType(Switch),
+      ),
+      findsOneWidget,
+    );
   });
 
   group('the grid', () {
@@ -383,7 +390,7 @@ void main() {
     await tester.tap(find.text('See its runs'));
     await tester.pumpAndSettle();
     expect(container.read(runsFilterProvider).automationId, 'auto1');
-    expect(container.read(automationsSectionProvider), AutomationsSection.runs);
+    expect(container.read(workflowsSectionProvider), WorkflowsSection.runs);
 
     await tester.tap(find.byKey(const ValueKey('automation-menu-auto1')));
     await tester.pumpAndSettle();

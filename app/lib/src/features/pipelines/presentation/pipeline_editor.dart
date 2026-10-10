@@ -21,27 +21,22 @@ import '../application/pipelines_controller.dart';
 Future<PipelineDefinition?> showPipelineEditor(
   BuildContext context, {
   PipelineDefinition? initial,
-}) {
-  final base = initial ?? kPipelineTemplates.first;
-  final draft = initial == null || initial.builtIn
-      ? base.copyWith(
-          id: '',
-          name: initial == null ? 'My pipeline' : '${base.name} (copy)',
-          builtIn: false,
-        )
-      : initial;
-  return showFormDialog<PipelineDefinition>(
-    context: context,
-    builder: (_) => PipelineEditor(initial: draft),
-  );
-}
+}) => showFormDialog<PipelineDefinition>(
+  context: context,
+  builder: (_) => PipelineEditor(initial: pipelineDraftOf(initial)),
+);
 
 /// **The pipeline editor**: a list of stages, each with its role, agent,
 /// model, mode, workspace, instruction and gate. A list, not a canvas.
+///
+/// With [onDone] it is drawn in a page rather than a dialog — its name, Cancel
+/// and Save in a row over the stages — and tells [onDone] what was saved, or
+/// null for Cancel, instead of closing a route.
 class PipelineEditor extends ConsumerStatefulWidget {
-  const PipelineEditor({required this.initial, super.key});
+  const PipelineEditor({required this.initial, this.onDone, super.key});
 
   final PipelineDefinition initial;
+  final ValueChanged<PipelineDefinition?>? onDone;
 
   @override
   ConsumerState<PipelineEditor> createState() => _PipelineEditorState();
@@ -109,7 +104,12 @@ class _PipelineEditorState extends ConsumerState<PipelineEditor> {
     });
     try {
       final saved = await ref.read(pipelinesProvider.notifier).save(value);
-      if (mounted) Navigator.of(context).pop(saved);
+      if (!mounted) return;
+      if (widget.onDone case final done?) {
+        done(saved);
+      } else {
+        Navigator.of(context).pop(saved);
+      }
     } on Object catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
@@ -190,6 +190,14 @@ class _PipelineEditorState extends ConsumerState<PipelineEditor> {
       onPressed: _busy ? null : _save,
       child: const Text('Save'),
     );
+    if (widget.onDone case final done?) {
+      return _InPage(
+        title: widget.initial.id.isEmpty ? 'New pipeline' : 'Edit pipeline',
+        onCancel: () => done(null),
+        save: save,
+        body: body,
+      );
+    }
     void cancel() => Navigator.of(context).pop();
     if (opensFullScreen(context)) {
       return FullScreenForm(
@@ -213,6 +221,70 @@ class _PipelineEditorState extends ConsumerState<PipelineEditor> {
       ],
     );
   }
+}
+
+/// The editor in a page: its name, Cancel and Save on one row that wraps
+/// under a large text, over its scrolling stages.
+class _InPage extends StatelessWidget {
+  const _InPage({
+    required this.title,
+    required this.onCancel,
+    required this.save,
+    required this.body,
+  });
+
+  final String title;
+  final VoidCallback onCancel;
+  final Widget save;
+  final Widget body;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    key: const ValueKey('pipeline-editor-page'),
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          Insets.lg,
+          Insets.sm,
+          Insets.lg,
+          Insets.xs,
+        ),
+        child: OverflowBar(
+          alignment: MainAxisAlignment.spaceBetween,
+          overflowAlignment: OverflowBarAlignment.end,
+          spacing: Insets.sm,
+          overflowSpacing: Insets.xs,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Wrap(
+              spacing: Insets.sm,
+              children: [
+                TextButton(
+                  key: const ValueKey('pipeline-editor-cancel'),
+                  onPressed: onCancel,
+                  child: const Text('Cancel'),
+                ),
+                save,
+              ],
+            ),
+          ],
+        ),
+      ),
+      const Divider(height: 1),
+      Expanded(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(Insets.lg),
+          child: body,
+        ),
+      ),
+    ],
+  );
 }
 
 class _StageEditor extends ConsumerWidget {

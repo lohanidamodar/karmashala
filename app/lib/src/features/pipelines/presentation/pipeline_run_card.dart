@@ -6,10 +6,12 @@ import 'package:karmashala_automations/pipelines.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/workbench_tabs.dart' show openWorkflowRuns;
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../overview/application/overview_providers.dart';
+import '../../workflows/application/workflows_state.dart' show WorkflowRunKind;
 import '../application/pipelines_controller.dart';
 import 'pipeline_run_detail.dart';
 import 'pipeline_words.dart';
@@ -48,7 +50,8 @@ class OverviewPipelines extends ConsumerWidget {
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
                   key: const ValueKey('overview-pipelines-more'),
-                  onPressed: () => unawaited(showPipelineRuns(context)),
+                  onPressed: () =>
+                      openWorkflowRuns(ref, kind: WorkflowRunKind.pipeline),
                   child: Text('${runs.length - shown.length} more runs…'),
                 ),
               ),

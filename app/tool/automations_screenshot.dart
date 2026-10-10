@@ -18,7 +18,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_editor_state.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/automation_templates.dart';
-import 'package:karmashala/src/features/automations/presentation/automations_tab_view.dart';
+import 'package:karmashala/src/features/workflows/presentation/workflows_tab_view.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -271,7 +271,7 @@ void main() {
               ).copyWith(textScaler: TextScaler.linear(textScale)),
               child: child!,
             ),
-            home: const Scaffold(body: AutomationsTabView()),
+            home: const Scaffold(body: WorkflowsTabView()),
           ),
         ),
       ),
@@ -306,8 +306,8 @@ void main() {
   }
 
   void runs(ProviderContainer container) => container
-      .read(automationsSectionProvider.notifier)
-      .show(AutomationsSection.runs);
+      .read(workflowsSectionProvider.notifier)
+      .show(WorkflowsSection.runs);
 
   for (final brightness in Brightness.values) {
     final theme = brightness.name;

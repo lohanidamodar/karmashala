@@ -67,7 +67,7 @@ class ShellActivityStrip extends ConsumerWidget {
       storesBadge: ref.watch(storesUnseenAttentionProvider),
       storesNews: ref.watch(storesUnseenNewsProvider),
       onRunning: () => openRunningTab(ref),
-      onAutomations: () => openAutomationsTab(ref),
+      onAutomations: () => openWorkflowsTab(ref),
       // A diagnostic, not a daily tool: in the strip only while debug mode is
       // on. Quick open, Settings and a keymap reach it either way.
       onLogs: ref.watch(settingsControllerProvider.select((s) => s.debugMode))
@@ -216,8 +216,8 @@ class ActivityStrip extends StatelessWidget {
             ),
           if (automations case final automations?)
             _StripButton(
-              icon: AppIcons.lightning,
-              label: 'Automations',
+              icon: AppIcons.flowArrow,
+              label: 'Workflows',
               selected: false,
               onPressed: automations,
             ),

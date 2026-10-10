@@ -454,6 +454,7 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
   static const IconData treeStructure = IconData(
     0xe67c,
     fontFamily: 'PhosphorRegular',
@@ -894,6 +895,14 @@ abstract final class AppIcons {
   );
   static const IconData at = IconData(
     0xe0ac,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Workflows: automations and pipelines, one page.
+  static const IconData flowArrow = IconData(
+    0xe6ec,
     fontFamily: 'PhosphorRegular',
     fontPackage: 'picons',
     matchTextDirection: true,
