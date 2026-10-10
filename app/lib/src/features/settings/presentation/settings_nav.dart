@@ -332,7 +332,7 @@ class _NavRow extends StatelessWidget {
               child: ExcludeSemantics(
                 child: Text(
                   page.label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontSize: TypeSizes.field,
