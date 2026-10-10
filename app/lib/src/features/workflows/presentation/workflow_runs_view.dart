@@ -192,10 +192,13 @@ class _Cell extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: MediaQuery.textScalerOf(context).scale(width),
-    child: DefaultTextStyle.merge(
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      child: child,
+    child: Padding(
+      padding: const EdgeInsetsDirectional.only(end: Insets.sm),
+      child: DefaultTextStyle.merge(
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        child: child,
+      ),
     ),
   );
 }
@@ -526,6 +529,7 @@ class WorkflowRunDetailPane extends ConsumerWidget {
           ),
           const SizedBox(width: Insets.xxs),
           Expanded(
+            flex: 3,
             child: Text(
               row?.name ?? 'Run',
               style: theme.textTheme.titleMedium,
@@ -533,7 +537,16 @@ class WorkflowRunDetailPane extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (row != null) Flexible(child: WorkflowStatusChip(row: row)),
+          if (row != null) ...[
+            const SizedBox(width: Insets.sm),
+            Flexible(
+              flex: 2,
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: WorkflowStatusChip(row: row),
+              ),
+            ),
+          ],
         ],
       ),
     );

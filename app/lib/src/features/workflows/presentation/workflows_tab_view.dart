@@ -33,13 +33,21 @@ class WorkflowsTabView extends ConsumerWidget {
       controls: [
         CompactSegmented<WorkflowsSection>(
           key: const ValueKey('workflows-section'),
+          tight: WidthClass.of(MediaQuery.sizeOf(context).width).isCompact,
           segments: [
             for (final value in WorkflowsSection.values)
               ButtonSegment(
                 value: value,
-                label: Text(
-                  value.label,
-                  key: ValueKey('workflows-section:${value.name}'),
+                // Beside a phone's back arrow three names do not fit at
+                // their size: a label shrinks, its target does not.
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value.label,
+                    key: ValueKey('workflows-section:${value.name}'),
+                    maxLines: 1,
+                    softWrap: false,
+                  ),
                 ),
               ),
           ],
