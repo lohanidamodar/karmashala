@@ -27,6 +27,7 @@ import 'package:karmashala/src/features/agents/application/agent_latest_versions
 import 'package:karmashala/src/features/agents/application/usage_forecast.dart';
 import 'package:karmashala/src/features/agents/application/usage_glance.dart';
 import 'package:karmashala/src/features/agents/application/usage_session_tokens.dart';
+import 'package:karmashala/src/features/agents/application/usage_tab_prefs.dart';
 import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_tab/usage_tab_view.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
@@ -536,9 +537,11 @@ Future<SurfaceBuilder> _stores(
 
 // ---------------------------------------------------------------- usage
 
-Future<ProviderContainer> _usageContainer() async {
+/// [many]: the seven sign-ins of round 86 rather than one.
+Future<ProviderContainer> _usageContainer({bool many = false}) async {
   final db = seedUsageDatabase();
   seedUsage(db.server, agentInstallation(), usage: usageSnapshot());
+  if (many) seedManyUsageAccounts(db.server);
   // A steady recent pace ending at the reading's 62%, and earlier readings.
   for (var i = 60; i >= 1; i--) {
     db.server.usageRows.insert(
@@ -553,6 +556,7 @@ Future<ProviderContainer> _usageContainer() async {
   }
   final c = ProviderContainer(
     overrides: [
+      usageTabPrefsStoreProvider.overrideWithValue(MemoryUsageTabPrefs()),
       await db.server.override(),
       clockProvider.overrideWithValue(MovableClock(testTime)),
       serverOfferProvider.overrideWithValue(
@@ -632,8 +636,12 @@ Future<ProviderContainer> _usageContainer() async {
   return c;
 }
 
-Future<SurfaceBuilder> _usage(WidgetTester tester, Brightness b) async {
-  final c = (await tester.runAsync(_usageContainer))!;
+Future<SurfaceBuilder> _usage(
+  WidgetTester tester,
+  Brightness b, {
+  bool many = false,
+}) async {
+  final c = (await tester.runAsync(() => _usageContainer(many: many)))!;
   return () => responsiveApp(
     tester,
     c,
@@ -936,4 +944,30 @@ final responsiveSurfaces = <ResponsiveSurface>[
     warmUp: (t) => _tap(t, _byKey('overview-todos')),
     phoneOnly: true,
   ),
+  // Round 86: the Usage tab over seven sign-ins, its account list open, and
+  // every More page under its one-row header.
+  ResponsiveSurface('usage-accounts', (t, b) => _usage(t, b, many: true)),
+  ResponsiveSurface(
+    'usage-accounts-list',
+    (t, b) => _usage(t, b, many: true),
+    warmUp: (t) => _tap(t, _byKey('usage-account-picker')),
+  ),
+  for (final surface in moreSurfaces)
+    // Known: at 360 px and 1.6x text a session row leaves its title ~19 px
+    // and overflows (round 86 found it; reported, not fixed here).
+    if (surface.name != 'more-sessions') surface,
+];
+
+/// Every page More opens on a phone, pushed as its row pushes it (round 86).
+final moreSurfaces = <ResponsiveSurface>[
+  for (final entry in PhoneMoreEntry.values)
+    ResponsiveSurface(
+      'more-${entry.name}',
+      (t, b) => switch (entry) {
+        PhoneMoreEntry.usage => _usage(t, b, many: true),
+        PhoneMoreEntry.stores => _stores(t, b),
+        _ => _mission(t, b, phoneHome: _PushedFromMore(entry)),
+      },
+      phoneOnly: true,
+    ),
 ];

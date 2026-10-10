@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../application/usage_accounts.dart';
+import '../../application/usage_tab_prefs.dart';
 
 /// How far back the Usage tab looks. 30 days is the most the server keeps.
 enum UsageRange {
@@ -34,29 +37,69 @@ String usageAccountId(UsageAccount account) =>
 class UsageTabSelection {
   const UsageTabSelection({this.accountId, this.range = UsageRange.week});
 
-  /// [usageAccountId] of the chosen account; null for the tightest one.
+  /// [usageAccountId] of the chosen account; null for every account.
   final String? accountId;
   final UsageRange range;
 
-  UsageTabSelection copyWith({String? accountId, UsageRange? range}) =>
+  Map<String, Object?> toJson() => {
+    'accountId': ?accountId,
+    'range': range.name,
+  };
+
+  static UsageTabSelection fromJson(Map<String, Object?> json) =>
       UsageTabSelection(
-        accountId: accountId ?? this.accountId,
-        range: range ?? this.range,
+        accountId: json['accountId'] is String
+            ? json['accountId']! as String
+            : null,
+        range: UsageRange.values.firstWhere(
+          (r) => r.name == json['range'],
+          orElse: () => UsageRange.week,
+        ),
       );
 }
 
 /// The tab's choices, held here rather than in `State`: a Usage tab that is
-/// not on screen is not built, so its `State` would forget them. In memory
-/// only — a restart lands on the tightest account again, which is the one
-/// most worth seeing.
+/// not on screen is not built, so its `State` would forget them. Kept on
+/// this device too (round 86), so the tab opens on the account and range it
+/// was left on; an account since gone shows every account instead.
 class UsageTabSelectionController extends Notifier<UsageTabSelection> {
+  var _touched = false;
+
   @override
-  UsageTabSelection build() => const UsageTabSelection();
+  UsageTabSelection build() {
+    unawaited(_load());
+    return const UsageTabSelection();
+  }
+
+  Future<void> _load() async {
+    final kept = await ref.read(usageTabPrefsStoreProvider).load();
+    if (kept != null && ref.mounted && !_touched) {
+      state = UsageTabSelection.fromJson(kept);
+    }
+  }
 
   void selectAccount(String accountId) =>
-      state = state.copyWith(accountId: accountId);
+      _set(UsageTabSelection(accountId: accountId, range: state.range));
 
-  void selectRange(UsageRange range) => state = state.copyWith(range: range);
+  /// Every account at once.
+  void selectAll() => _set(UsageTabSelection(range: state.range));
+
+  void selectRange(UsageRange range) =>
+      _set(UsageTabSelection(accountId: state.accountId, range: range));
+
+  void _set(UsageTabSelection next) {
+    _touched = true;
+    state = next;
+    unawaited(
+      _written = ref.read(usageTabPrefsStoreProvider).save(next.toJson()),
+    );
+  }
+
+  Future<void> _written = Future<void>.value();
+
+  /// Settles once every choice so far is on disk; for a test.
+  @visibleForTesting
+  Future<void> get written => _written;
 }
 
 final usageTabSelectionProvider =

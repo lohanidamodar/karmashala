@@ -4,6 +4,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 
+import 'package:karmashala/src/features/agents/application/usage_tab_prefs.dart';
+
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
@@ -109,4 +111,65 @@ TestMachine seedUsageDatabase({
   db.server.installationRows.insert(agentInstallation(agentId: agentId));
   db.server.sessionRows.insert(session());
   return db;
+}
+
+/// **Seven sign-ins, six accounts, three machines** — the owner's Usage page in
+/// round 86, with example addresses only: Claude on two machines under one
+/// email (one entry), a second Claude account, Codex signed in with and
+/// without an email, and two Antigravity sign-ins that report no
+/// percentage. Registers the WSL and SSH machines on [server] too.
+void seedManyUsageAccounts(FakeDataServer server) {
+  server.environmentRows
+    ..upsert(wslEnv(id: 'wsl:archlinux', distro: 'archlinux'))
+    ..upsert(sshEnvFixture(id: 'ssh:dlo', name: 'DLO server'));
+  void put(String agentId, String environmentId, AgentUsage usage) =>
+      server.agentWork.setUsage(
+        AccountUsageState(
+          accountKey: '$agentId@$environmentId',
+          agentId: agentId,
+          environmentId: environmentId,
+          usage: usage,
+        ),
+      );
+  put(
+    AgentIds.claudeCode,
+    'windows',
+    usageSnapshot(percent: 97, email: 'owner@example.com'),
+  );
+  put(
+    AgentIds.claudeCode,
+    'ssh:dlo',
+    usageSnapshot(
+      percent: 96,
+      email: 'owner@example.com',
+      fetchedAt: testTime.subtract(const Duration(minutes: 10)),
+    ),
+  );
+  put(
+    AgentIds.codex,
+    'windows',
+    usageSnapshot(percent: 30, email: 'owner@example.com'),
+  );
+  put(
+    AgentIds.claudeCode,
+    'wsl:archlinux',
+    usageSnapshot(percent: 12, email: 'work@example.org'),
+  );
+  put(AgentIds.codex, 'ssh:dlo', usageSnapshot(percent: 8, email: null));
+  put(AgentIds.antigravity, 'wsl:archlinux', antigravitySnapshot(email: null));
+  put(AgentIds.antigravity, 'ssh:dlo', antigravitySnapshot(email: null));
+}
+
+/// The Usage tab's choices kept in memory, never on disk: a test or a render
+/// must not read or write the person's own file.
+class MemoryUsageTabPrefs implements UsageTabPrefsStore {
+  MemoryUsageTabPrefs([this.kept]);
+
+  Map<String, Object?>? kept;
+
+  @override
+  Future<Map<String, Object?>?> load() async => kept;
+
+  @override
+  Future<void> save(Map<String, Object?> json) async => kept = json;
 }
