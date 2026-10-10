@@ -30,6 +30,23 @@ void main() {
         final style = tester.widget<Text>(key('page-header-title')).style;
         final theme = Theme.of(tester.element(key('page-header-title')));
         expect(style?.fontSize, theme.textTheme.titleMedium?.fontSize);
+        // A switcher in the header keeps a thumb's target: it moves under
+        // the name rather than shrinking beside it.
+        for (final switcher
+            in find
+                .descendant(
+                  of: key('page-header'),
+                  matching: find.byWidgetPredicate((w) => w is SegmentedButton),
+                )
+                .evaluate()) {
+          expect(
+            tester
+                .getRect(find.byElementPredicate((e) => e == switcher))
+                .height,
+            greaterThanOrEqualTo(48),
+            reason: '${switcher.widget.key}',
+          );
+        }
         // Back leaves More's page.
         await tester.tap(key('page-header-back'));
         await ignoringOverflow(() => settleSurface(tester));
@@ -39,8 +56,10 @@ void main() {
     }
   }
 
-  testWidgets('the Usage range sits in the header row on a phone, and under '
-      'it, still compact, at 1.6x text', (tester) async {
+  testWidgets('the Usage range sits in the header row on a phone, and at '
+      '1.6x text beside the name or under it, never over it or shrunk', (
+    tester,
+  ) async {
     final surface = moreSurfaces.firstWhere((s) => s.name == 'more-usage');
     final build = await surface.prepare(tester, Brightness.light);
     await pumpWindow(tester, build: build, size: const Size(360, 780));
@@ -49,7 +68,8 @@ void main() {
       (tester.getCenter(key('usage-range')).dy - back.dy).abs(),
       lessThan(1),
     );
-    expect(key('page-header-controls'), findsNothing);
+    // At its own size: a thumb's target, not shrunk to fit.
+    expect(tester.getRect(key('usage-range')).height, greaterThanOrEqualTo(48));
 
     await pumpWindow(
       tester,
@@ -57,12 +77,15 @@ void main() {
       size: const Size(360, 780),
       textScale: 1.6,
     );
+    // Which, depends on the font's widths: the bundled one fits beside the
+    // name (see the round 86 renders), the test font does not.
+    final large = tester.getRect(key('usage-range'));
+    final title = tester.getRect(key('page-header-title'));
+    expect(large.overlaps(title), isFalse);
+    expect(large.height, greaterThanOrEqualTo(48));
     expect(
-      find.descendant(
-        of: key('page-header-controls'),
-        matching: key('usage-range'),
-      ),
-      findsOneWidget,
+      large.right,
+      lessThanOrEqualTo(tester.getRect(key('page-header')).right),
     );
     await tester.pump(const Duration(seconds: 30));
   });

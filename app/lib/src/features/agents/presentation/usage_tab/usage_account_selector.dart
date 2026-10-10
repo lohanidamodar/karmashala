@@ -313,8 +313,12 @@ class UsageAccountFigure extends StatelessWidget {
 
   final UsageAccount account;
 
-  /// The figure's width at 1x text.
-  static const width = 88.0;
+  /// The bar's length, which does not grow with the text: a bar is read by
+  /// its fill, and the room is the name's.
+  static const barWidth = 48.0;
+
+  /// The percentage's column at 1x text: "100%".
+  static const percentWidth = 32.0;
 
   @override
   Widget build(BuildContext context) {
@@ -345,7 +349,7 @@ class UsageAccountFigure extends StatelessWidget {
           ),
           const SizedBox(width: Insets.xs),
           SizedBox(
-            width: scaler.scale(32),
+            width: scaler.scale(percentWidth),
             child: Text(
               '${percent.round()}%',
               textAlign: TextAlign.end,
@@ -358,7 +362,15 @@ class UsageAccountFigure extends StatelessWidget {
         ],
       );
     }
-    return SizedBox(width: scaler.scale(width), child: figure);
+    final width = barWidth + Insets.xs + scaler.scale(percentWidth);
+    // The words may run wider than a bar, into the name's room, rather than
+    // be cut short; their end still lines up with the percentages'.
+    return percent == null
+        ? ConstrainedBox(
+            constraints: BoxConstraints(minWidth: width),
+            child: figure,
+          )
+        : SizedBox(width: width, child: figure);
   }
 }
 

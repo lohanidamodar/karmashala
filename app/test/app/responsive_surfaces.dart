@@ -636,6 +636,10 @@ Future<ProviderContainer> _usageContainer({bool many = false}) async {
   return c;
 }
 
+/// The Usage tab's container over round 86's seven sign-ins, for a render.
+Future<ProviderContainer> manyUsageAccountsContainer() =>
+    _usageContainer(many: true);
+
 Future<SurfaceBuilder> _usage(
   WidgetTester tester,
   Brightness b, {

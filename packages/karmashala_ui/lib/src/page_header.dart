@@ -36,8 +36,9 @@ class PageHeaderScope extends InheritedWidget {
 
 /// **A pushed page's one-row header** (round 86): back, the name at a normal
 /// size, the page's [controls] and its [actions] — the Dashboard's one row
-/// with a way back. [controls] that do not fit beside the name sit compact
-/// under it rather than squeezing it.
+/// with a way back. [controls] sit beside the name when they fit at their
+/// own size, so a thumb keeps its targets; when they do not, they sit under
+/// it instead.
 class PageHeaderBar extends StatelessWidget {
   const PageHeaderBar({
     required this.title,
@@ -68,99 +69,82 @@ class PageHeaderBar extends StatelessWidget {
   final List<Widget> controls;
   final List<Widget> actions;
 
-  /// The room the name keeps beside the controls, at 1x text.
-  static const minTitleWidth = 96.0;
-
-  /// The room the controls take in the row, at 1x text: a three-way switcher.
-  static const minControlsWidth = 200.0;
-
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scaler = MediaQuery.textScalerOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final inRow =
-            controls.isEmpty ||
-            constraints.maxWidth >=
-                (actions.length + 1) * Touch.target +
-                    Insets.lg +
-                    scaler.scale(minTitleWidth + minControlsWidth);
-        final name = Text(
+    final name = ConstrainedBox(
+      // As tall as the back button beside it, so the two share a line.
+      constraints: const BoxConstraints(minHeight: Touch.target),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        widthFactor: 1,
+        child: Text(
           title,
           key: const ValueKey('page-header-title'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.titleMedium,
-        );
-        final row = ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: Touch.target),
-          child: Row(
-            children: [
-              IconButton(
-                key: const ValueKey('page-header-back'),
-                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                icon: const Icon(AppIcons.arrowLeft),
-                onPressed: onBack,
-              ),
-              const SizedBox(width: Insets.xxs),
-              if (inRow && controls.isNotEmpty) ...[
-                Flexible(child: name),
-                const SizedBox(width: Insets.md),
-                // Never wider than the row leaves it: a control shrinks
-                // rather than overflows.
-                Expanded(
-                  child: Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: controls,
-                      ),
-                    ),
-                  ),
-                ),
-              ] else
-                Expanded(child: name),
-              ...actions,
-            ],
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ),
+    );
+    return Padding(
+      key: const ValueKey('page-header'),
+      padding: const EdgeInsets.fromLTRB(
+        Insets.xxs,
+        Insets.xxs,
+        Insets.xs,
+        Insets.xxs,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            key: const ValueKey('page-header-back'),
+            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+            icon: const Icon(AppIcons.arrowLeft),
+            onPressed: onBack,
           ),
-        );
-        return Padding(
-          key: const ValueKey('page-header'),
-          padding: const EdgeInsets.fromLTRB(
-            Insets.xxs,
-            Insets.xxs,
-            Insets.xs,
-            Insets.xxs,
-          ),
-          child: inRow
-              ? row
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    row,
-                    Padding(
-                      key: const ValueKey('page-header-controls'),
-                      padding: const EdgeInsets.fromLTRB(
-                        Insets.md,
-                        0,
-                        0,
-                        Insets.xxs,
-                      ),
-                      child: Wrap(
+          const SizedBox(width: Insets.xxs),
+          Expanded(
+            child: controls.isEmpty
+                ? name
+                : OverflowBar(
+                    alignment: MainAxisAlignment.spaceBetween,
+                    overflowAlignment: OverflowBarAlignment.start,
+                    spacing: Insets.md,
+                    overflowSpacing: Insets.xxs,
+                    children: [
+                      name,
+                      // Measured within the row: a switcher wider than it
+                      // narrows its segments, never scales its targets.
+                      Wrap(
+                        key: const ValueKey('page-header-controls'),
                         spacing: Touch.gap,
                         runSpacing: Insets.xs,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: controls,
                       ),
-                    ),
-                  ],
-                ),
-        );
-      },
+                    ],
+                  ),
+          ),
+          for (final action in actions) _onFirstLine(action),
+        ],
+      ),
     );
+  }
+
+  /// [action] centred on the back button's line, however tall the header
+  /// grows under it; a [Flexible] one keeps its flex.
+  static Widget _onFirstLine(Widget action) {
+    Widget line(Widget child) => ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: Touch.target),
+      child: Align(widthFactor: 1, heightFactor: 1, child: child),
+    );
+    return action is Flexible
+        ? Flexible(
+            flex: action.flex,
+            fit: action.fit,
+            child: line(action.child),
+          )
+        : line(action);
   }
 }

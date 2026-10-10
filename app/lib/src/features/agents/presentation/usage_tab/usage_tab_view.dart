@@ -29,6 +29,10 @@ import 'usage_windows_section.dart';
 /// long to read and rows drift apart from their numbers.
 const double kUsageTabContentMaxWidth = 960;
 
+/// The widest the account picker runs, at 1x text: an email, its machines
+/// and its figure, and no wider.
+const double kUsageAccountPickerMaxWidth = 480;
+
 /// **The Usage tab** (spec §5, Ctrl+Shift+U): pick every account or one, and a range;
 /// see its tokens, sessions, tightest window and limits hit; each window over
 /// time with its run-out forecast; where the tokens went by project and
@@ -119,7 +123,19 @@ class _UsagePage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        UsageAccountPicker(accounts: accounts, selected: account),
+        // A compact row on a desktop too, not a bar the page's width.
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: WidthClass.scaleBreakpoint(
+                kUsageAccountPickerMaxWidth,
+                MediaQuery.textScalerOf(context),
+              ),
+            ),
+            child: UsageAccountPicker(accounts: accounts, selected: account),
+          ),
+        ),
         const SizedBox(height: Insets.lg),
         _UsageBody(
           accounts: account == null ? accounts : [account],
