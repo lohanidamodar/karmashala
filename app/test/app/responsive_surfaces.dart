@@ -34,6 +34,13 @@ import 'package:karmashala/src/features/overview/application/overview_batch.dart
 import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_peek.dart'
+    show overviewPeekChatProvider;
+import 'package:karmashala/src/features/overview/presentation/overview_pipeline_peek.dart';
+import 'package:karmashala/src/features/overview/application/overview_pipeline_peek.dart';
+import 'package:karmashala/src/features/explorer/application/agent_state_providers.dart'
+    show workspaceSessionsProvider;
+import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
 import 'package:karmashala/src/features/pipelines/application/pipelines_controller.dart';
 import 'package:karmashala/src/features/pipelines/presentation/pipeline_editor.dart';
 import 'package:karmashala/src/features/pipelines/presentation/pipeline_run_detail.dart';
@@ -207,6 +214,13 @@ Future<void> _tapOnBoard(WidgetTester tester, Finder finder) async {
 Future<void> _peek(WidgetTester tester) async {
   if (_byKey('overview-peek').evaluate().isNotEmpty) return;
   await _tapOnBoard(tester, _byKey('overview-queue-title:ks-r21'));
+}
+
+/// Opens run-1's peek, unless the last window left it open: the board
+/// keeps it across a resize, and over a narrow board it covers the card.
+Future<void> _peekRun(WidgetTester tester) async {
+  if (find.byType(PipelineRunPeek).evaluate().isNotEmpty) return;
+  await _tapOnBoard(tester, _byKey('overview-pipeline-open:run-1'));
 }
 
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
@@ -384,6 +398,53 @@ Future<SurfaceBuilder> _mission(
     phoneHome:
         phoneHome ??
         const Scaffold(body: PaneTitleOverride(child: OverviewTabView())),
+  );
+}
+
+/// The run peek alone over the dashboard's run (round 88), on its stage's
+/// session with [stage]: the session's chat is a stand-in, as the board's
+/// own peek renders draw it.
+Future<SurfaceBuilder> _runPeek(
+  WidgetTester tester,
+  Brightness brightness, {
+  bool stage = false,
+}) async {
+  final c = ProviderContainer(
+    overrides: [
+      clockProvider.overrideWithValue(FixedClock(_now)),
+      pipelinesProvider.overrideWith(_Runs.new),
+      workspaceSessionsProvider.overrideWith(
+        (ref) => [
+          WorkspaceSessionEntry(
+            id: 'stage-plan',
+            title: 'Plan · Plan → Implement → Review',
+            createdAt: _now,
+          ),
+        ],
+      ),
+      overviewPeekChatProvider.overrideWithValue(
+        (entry, _) => Center(child: Text('chat:${entry.id}')),
+      ),
+    ],
+  );
+  addTearDown(c.dispose);
+  final peeks = c.read(pipelinePeekProvider.notifier);
+  stage ? peeks.openStage('run-1', 'stage-plan') : peeks.open('run-1');
+  Widget peek({required bool compact}) => Consumer(
+    builder: (context, ref, _) => switch (ref.watch(pipelinePeekProvider)) {
+      null => const SizedBox.shrink(),
+      final p => PipelineRunPeek(peek: p, compact: compact, onClose: () {}),
+    },
+  );
+  return () => responsiveApp(
+    tester,
+    c,
+    brightness,
+    desktop: Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: SizedBox(width: kOverviewPeekWidth, child: peek(compact: false)),
+    ),
+    phoneHome: Scaffold(body: SafeArea(child: peek(compact: true))),
   );
 }
 
@@ -992,6 +1053,18 @@ final responsiveSurfaces = <ResponsiveSurface>[
     'pipe-handoff',
     (t, b) => _mission(t, b),
     warmUp: (t) => _tapOnBoard(t, _byKey('overview-pipeline-edit:run-1')),
+  ),
+  // Round 88: a run's card opens its peek beside the board (a page on a
+  // phone); a stage clicked shows its session there.
+  ResponsiveSurface(
+    'pipe-run-peek',
+    (t, b) => _mission(t, b),
+    warmUp: _peekRun,
+  ),
+  ResponsiveSurface('pipe-run-peek-alone', _runPeek),
+  ResponsiveSurface(
+    'pipe-run-peek-stage',
+    (t, b) => _runPeek(t, b, stage: true),
   ),
   ResponsiveSurface(
     'pipe-run-dialog',

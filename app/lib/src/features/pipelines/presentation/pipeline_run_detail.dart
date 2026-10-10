@@ -28,9 +28,17 @@ Future<void> showPipelineRunDetail(BuildContext context, String runId) {
 }
 
 class PipelineRunDetail extends ConsumerWidget {
-  const PipelineRunDetail({required this.runId, this.header, super.key});
+  const PipelineRunDetail({
+    required this.runId,
+    this.header,
+    this.onOpenSession,
+    super.key,
+  });
 
   final String runId;
+
+  /// What a stage's "Open session" does; null opens its tab.
+  final void Function(String sessionId)? onOpenSession;
 
   /// Drawn first, scrolling with the stages: Runs' run card and facts.
   final Widget? header;
@@ -65,7 +73,7 @@ class PipelineRunDetail extends ConsumerWidget {
         const SizedBox(height: Insets.md),
         if (run.records.isEmpty) const Text('No stage has started yet.'),
         for (final record in run.records) ...[
-          _StageRecord(record: record),
+          _StageRecord(record: record, onOpenSession: onOpenSession),
           const Divider(height: Insets.lg),
         ],
       ],
@@ -74,9 +82,10 @@ class PipelineRunDetail extends ConsumerWidget {
 }
 
 class _StageRecord extends ConsumerWidget {
-  const _StageRecord({required this.record});
+  const _StageRecord({required this.record, this.onOpenSession});
 
   final PipelineStageRecord record;
+  final void Function(String sessionId)? onOpenSession;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -126,7 +135,9 @@ class _StageRecord extends ConsumerWidget {
             alignment: AlignmentDirectional.centerStart,
             child: TextButton.icon(
               key: ValueKey('pipeline-open-session:$session'),
-              onPressed: () => unawaited(_openSession(context, ref, session)),
+              onPressed: () => onOpenSession == null
+                  ? unawaited(_openSession(context, ref, session))
+                  : onOpenSession!(session),
               icon: const Icon(AppIcons.arrowUpRight),
               label: const Text('Open session'),
             ),

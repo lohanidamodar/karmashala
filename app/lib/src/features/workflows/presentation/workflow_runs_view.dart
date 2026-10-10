@@ -6,10 +6,12 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../app/widgets/fact_list.dart' show FactRow;
 import '../../../core/util/clock_provider.dart';
 import '../../automations/application/automation_providers.dart';
+import '../../explorer/application/explorer_actions.dart';
 import '../../automations/application/automation_runs_page.dart';
 import '../../automations/presentation/automation_runs_view.dart' show RunTile;
 import '../../overview/presentation/overview_filters.dart'
@@ -590,7 +592,11 @@ class WorkflowRunDetailPane extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _Facts(row: row, padded: false),
-                  PipelineRunCard(run: pipelineRun),
+                  PipelineRunCard(
+                    run: pipelineRun,
+                    showDetails: false,
+                    onOpenStage: (id) => openStageSession(context, ref, id),
+                  ),
                 ],
               ),
             );
@@ -604,6 +610,22 @@ class WorkflowRunDetailPane extends ConsumerWidget {
         Expanded(child: body),
       ],
     );
+  }
+}
+
+/// Opens stage session [id] in its tab — the run's own detail, off the
+/// dashboard, has no peek to show it in.
+Future<void> openStageSession(
+  BuildContext context,
+  WidgetRef ref,
+  String id,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final showWorkbench = phoneWorkbenchOpener(context, ref);
+  final result = await ref.read(explorerActionsProvider).openNative(id);
+  if (!result.isFailure) showWorkbench?.call();
+  if (result.message case final message?) {
+    messenger?.showSnackBar(SnackBar(content: Text(message)));
   }
 }
 

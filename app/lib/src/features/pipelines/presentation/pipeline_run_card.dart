@@ -10,7 +10,8 @@ import '../../../app/shell/workbench_tabs.dart' show openWorkflowRuns;
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../overview/application/overview_providers.dart';
+import '../../overview/application/overview_pipeline_peek.dart'
+    show pipelinePeekProvider;
 import '../../workflows/application/workflows_state.dart' show WorkflowRunKind;
 import '../application/pipelines_controller.dart';
 import 'pipeline_run_detail.dart';
@@ -66,9 +67,21 @@ class OverviewPipelines extends ConsumerWidget {
 /// the person can do about it — approve or edit the hand-off at a gate,
 /// stop it, or retry or skip a stage that failed.
 class PipelineRunCard extends ConsumerWidget {
-  const PipelineRunCard({required this.run, super.key});
+  const PipelineRunCard({
+    required this.run,
+    this.onOpenStage,
+    this.showDetails = true,
+    super.key,
+  });
 
   final PipelineRun run;
+
+  /// What a stage clicked opens: by default its session in the run's peek.
+  final void Function(String sessionId)? onOpenStage;
+
+  /// Whether the card offers the run's details, which a detail it sits in
+  /// already shows.
+  final bool showDetails;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -122,14 +135,15 @@ class PipelineRunCard extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                IconButton(
-                  key: ValueKey('pipeline-details:${run.id}'),
-                  tooltip: 'Run details',
-                  visualDensity: UiDensity.of(context).controlDensity,
-                  onPressed: () =>
-                      unawaited(showPipelineRunDetail(context, run.id)),
-                  icon: const Icon(AppIcons.list),
-                ),
+                if (showDetails)
+                  IconButton(
+                    key: ValueKey('pipeline-details:${run.id}'),
+                    tooltip: 'Run details',
+                    visualDensity: UiDensity.of(context).controlDensity,
+                    onPressed: () =>
+                        unawaited(showPipelineRunDetail(context, run.id)),
+                    icon: const Icon(AppIcons.list),
+                  ),
               ],
             ),
             Text(
@@ -152,7 +166,7 @@ class PipelineRunCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: Insets.sm),
-            PipelineStageFlow(run: run),
+            PipelineStageFlow(run: run, onOpenStage: onOpenStage),
             if (waiting)
               _HandoffPanel(
                 key: ValueKey('pipeline-handoff:${run.id}:${current!.attempt}'),
@@ -223,9 +237,13 @@ void _act(BuildContext context, Future<void> work) {
 
 /// The stages of [run] in order: across on a wide card, down on a phone.
 class PipelineStageFlow extends ConsumerWidget {
-  const PipelineStageFlow({required this.run, super.key});
+  const PipelineStageFlow({required this.run, this.onOpenStage, super.key});
 
   final PipelineRun run;
+
+  /// What a stage clicked opens; null opens its session in the run's peek
+  /// on the dashboard.
+  final void Function(String sessionId)? onOpenStage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -249,11 +267,15 @@ class PipelineStageFlow extends ConsumerWidget {
           record: run.latestOf(i),
           agent: agentOf(run.definition.stages[i]),
           current: i == currentIndex,
-          onOpen: run.latestOf(i)?.sessionId == null
-              ? null
-              : () => ref
-                    .read(overviewFocusProvider.notifier)
-                    .peek(run.latestOf(i)!.sessionId!),
+          onOpen: switch (run.latestOf(i)?.sessionId) {
+            null => null,
+            final session =>
+              () => onOpenStage == null
+                  ? ref
+                        .read(pipelinePeekProvider.notifier)
+                        .openStage(run.id, session)
+                  : onOpenStage!(session),
+          },
         ),
     ];
     return LayoutBuilder(
