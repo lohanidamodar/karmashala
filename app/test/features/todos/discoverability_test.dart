@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
 import 'package:karmashala_ui/code.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
+import 'package:karmashala/src/features/todos/presentation/todos_view.dart';
 
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
@@ -118,7 +119,15 @@ void main() {
     await settle(tester);
 
     expect(container.read(todosProvider).single.body, 'buy milk');
-    expect(find.text('buy milk'), findsOneWidget);
+    // In the panel it was typed into. The dashboard's Todos glance (round 82)
+    // lists it as well, so a bare find would see it twice.
+    expect(
+      find.descendant(
+        of: find.byType(TodosView),
+        matching: find.text('buy milk'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the word people actually use finds it too', (tester) async {
