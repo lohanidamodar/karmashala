@@ -100,3 +100,26 @@ final usageAccountsProvider = Provider.autoDispose<List<UsageAccount>>((ref) {
   ref.onDispose(listening.cancel);
   return usageAccountsOf(usage.values);
 });
+
+/// One agent's accounts, for a list grouped by agent.
+@immutable
+class UsageAccountGroup {
+  const UsageAccountGroup({required this.agentId, required this.accounts});
+
+  final String agentId;
+  final List<UsageAccount> accounts;
+}
+
+/// [accounts] grouped by agent: each group keeps [accounts]' order, and the
+/// groups come in the order of their first account — so with
+/// [usageAccountsOf]'s order, the most constrained agent leads.
+List<UsageAccountGroup> usageAccountGroupsOf(List<UsageAccount> accounts) {
+  final groups = <String, List<UsageAccount>>{};
+  for (final account in accounts) {
+    (groups[account.agentId] ??= []).add(account);
+  }
+  return [
+    for (final MapEntry(:key, :value) in groups.entries)
+      UsageAccountGroup(agentId: key, accounts: List.unmodifiable(value)),
+  ];
+}

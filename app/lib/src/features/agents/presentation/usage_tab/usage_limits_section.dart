@@ -26,15 +26,14 @@ import '../usage_window_meter.dart' show usageForecastSentence;
 /// round 79's limits, read here and changed in Settings → Session limits.
 /// Above them, when the forecast runs out before the reset while work holds
 /// the account's slots, a one-tap pause until the reset.
+///
+/// Over several [accounts] — the tab's every-account view — it is all
+/// sessions and each of their machines once, and the pause any of them
+/// suggests first.
 class UsageLimitsSection extends ConsumerWidget {
-  const UsageLimitsSection({
-    required this.account,
-    required this.forecasts,
-    super.key,
-  });
+  const UsageLimitsSection({required this.accounts, super.key});
 
-  final UsageAccount account;
-  final Map<String, UsageForecast> forecasts;
+  final List<UsageAccount> accounts;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -81,11 +80,22 @@ class UsageLimitsSection extends ConsumerWidget {
     final now = ref.watch(clockProvider).nowUtc();
     final until = ref.watch(usagePauseUntilProvider);
     final waiters = usageWaitersOf(capacity);
-    final suggestion = usagePauseSuggestion(
-      account: account,
-      forecasts: forecasts,
-      capacity: capacity,
-    );
+    UsageForecast? suggestion;
+    for (final account in accounts) {
+      final first = usagePauseSuggestion(
+        account: account,
+        forecasts: ref.watch(usageForecastsProvider(account.latest.accountKey)),
+        capacity: capacity,
+      );
+      if (first != null &&
+          (suggestion == null ||
+              first.runsOutAt!.isBefore(suggestion.runsOutAt!))) {
+        suggestion = first;
+      }
+    }
+    final lines = accounts.length == 1
+        ? usageLimitLinesOf(accounts.single, capacity)
+        : usageLimitLinesOfAll(accounts, capacity);
     String labelOf(UsageLimitLine line) => switch (line.scope) {
       CapacityScope.global => 'All sessions',
       CapacityScope.machine => ref.watch(
@@ -104,7 +114,7 @@ class UsageLimitsSection extends ConsumerWidget {
         header,
         if (suggestion != null)
           _PauseSuggestion(forecast: suggestion, now: now),
-        for (final line in usageLimitLinesOf(account, capacity))
+        for (final line in lines)
           FactRow(
             key: ValueKey('usage-limit-${line.scope.name}-${line.key}'),
             icon: switch (line.scope) {

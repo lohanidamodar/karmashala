@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'app_icons.dart';
 import 'design_tokens.dart';
 import 'eyebrow_label.dart';
+import 'page_header.dart';
 
 /// The close button every [PaneHeader] in this subtree wears. Handed *down*, so
 /// a surface that draws its own header still gets one.
@@ -79,6 +80,22 @@ class PaneHeader extends StatelessWidget {
     final ink = focused ? scheme.onSurface : scheme.onSurfaceVariant;
     final override = PaneTitleOverride.maybeOf(context);
     final close = PaneCloseAction.maybeOf(context);
+    // A page pushed with a way back: its header is the page's one row.
+    if (override != null) {
+      final page = PageHeaderBar.maybeFor(
+        context,
+        actions: [
+          ...actions,
+          if (close != null)
+            IconButton(
+              tooltip: close.tooltip,
+              icon: const Icon(AppIcons.x, size: Chrome.iconAction),
+              onPressed: close.onClose,
+            ),
+        ],
+      );
+      if (page != null) return page;
+    }
     if (override != null &&
         override.title == null &&
         actions.isEmpty &&

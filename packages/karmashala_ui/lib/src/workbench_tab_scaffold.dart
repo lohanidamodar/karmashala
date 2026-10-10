@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
+import 'page_header.dart';
 import 'pane_scaffold.dart';
 
 /// **Every workbench page tab's frame** — Stores, Usage, Logs: a
 /// [Chrome.tabAppBarOf] bar with the tab's glyph in the tertiary ink, its
 /// name, its [controls] and its [actions], over [body].
+///
+/// Under a [PageHeaderScope] (a phone's More page) it is the page's one-row
+/// [PageHeaderBar] instead: back, the name, the controls and the actions.
 ///
 /// Under a [PaneTitleOverride] (the phone's More page, which names it
 /// already) there is no bar: the controls and actions wrap in a strip above
@@ -49,6 +53,24 @@ class WorkbenchTabScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A page pushed with a way back: back, the name, the controls, one row.
+    final page = PageHeaderBar.maybeFor(
+      context,
+      controls: controls,
+      actions: actions,
+    );
+    if (page != null) {
+      return Scaffold(
+        backgroundColor: backgroundColor,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            page,
+            Expanded(child: PageHeaderScope.claimed(child: body)),
+          ],
+        ),
+      );
+    }
     if (PaneTitleOverride.maybeOf(context) != null) {
       if (oneRowStrip) {
         return Scaffold(

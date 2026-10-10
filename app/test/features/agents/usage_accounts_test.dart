@@ -100,4 +100,39 @@ void main() {
     ]);
     expect([for (final a in accounts) a.agentId], ['b', 'c']);
   });
+
+  test('grouped by agent: one account on three machines is one row naming '
+      'them, and the most constrained agent leads', () {
+    final groups = usageAccountGroupsOf(
+      usageAccountsOf([
+        state('codex', 'win', email: 'dev@example.com', percent: 40),
+        state('claude', 'win', email: 'owner@example.com', percent: 90),
+        state(
+          'claude',
+          'wsl:arch',
+          email: 'Owner@Example.com',
+          percent: 91,
+          at: t0.add(const Duration(minutes: 1)),
+        ),
+        state('claude', 'ssh:box', email: 'owner@example.com', percent: 89),
+        state('claude', 'win', email: 'work@example.org', percent: 10),
+        state('antigravity', 'wsl:arch', email: 'dev@example.com'),
+      ]),
+    );
+
+    expect(
+      [for (final g in groups) g.agentId],
+      ['claude', 'codex', 'antigravity'],
+    );
+    final claude = groups.first.accounts;
+    expect(claude, hasLength(2));
+    expect(
+      claude.first.environmentIds,
+      unorderedEquals(['win', 'wsl:arch', 'ssh:box']),
+    );
+    expect(claude.first.tightestPercent, 91);
+    expect(claude.last.email, 'work@example.org');
+    // Antigravity reads no percentage: an account with nothing to measure.
+    expect(groups.last.accounts.single.tightestPercent, isNull);
+  });
 }

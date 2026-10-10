@@ -71,6 +71,23 @@ List<UsageLimitLine> usageLimitLinesOf(
   ];
 }
 
+/// **Every account's limits at once**, for the Usage tab's every-account
+/// view: all sessions and each machine any of [accounts] is signed in from,
+/// once. An account's own slots are its own view's.
+List<UsageLimitLine> usageLimitLinesOfAll(
+  Iterable<UsageAccount> accounts,
+  CapacitySnapshot capacity,
+) {
+  final seen = <String>{};
+  return [
+    for (final account in accounts)
+      for (final line in usageLimitLinesOf(account, capacity))
+        if (line.scope != CapacityScope.account &&
+            seen.add('${line.scope.name}\u0000${line.key}'))
+          line,
+  ];
+}
+
 /// The background work waiting for a slot, and all of it.
 ({int all, int background}) usageWaitersOf(CapacitySnapshot capacity) => (
   all: capacity.waiters.length,
