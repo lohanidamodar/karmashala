@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/logs.dart' show LogFilterChip;
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -15,6 +16,7 @@ import '../application/store_attention.dart';
 import '../application/store_groups.dart';
 import '../application/store_summary.dart';
 import '../application/stores_controller.dart';
+import '../application/stores_layout_prefs.dart';
 import 'store_app_card.dart';
 import 'store_app_detail.dart';
 import 'store_summary_table.dart';
@@ -24,7 +26,7 @@ import 'stores_tab_state.dart';
 part 'stores_tab_view/dashboard.dart';
 part 'stores_tab_view/empty_states.dart';
 part 'stores_tab_view/status_row.dart';
-part 'stores_tab_view/summary_strip.dart';
+part 'stores_tab_view/filter_row.dart';
 
 /// The widest the card grid runs; past it the cards drift apart.
 const double kStoresContentMaxWidth = 1200;
@@ -38,9 +40,10 @@ const double kStoresListWidth = 360;
 void _openStoreSettings(WidgetRef ref) =>
     openSettingsTab(ref, anchor: SettingsAnchor.storeCredentials);
 
-/// **The Stores tab**: every app on the App Store and Google Play, what wants
-/// a look first — a rejection, a release in review or rolling out, new
-/// reviews, a falling rating — then the rest; and one app's detail.
+/// **The Stores tab**: every app on the App Store and Google Play in one
+/// list, as a table or as cards, what wants a look first — a rejection, a
+/// release in review or rolling out, new reviews, a falling rating — then the
+/// rest; and one app's detail.
 /// Read-only. The Karmashala server reads the stores, on open and on request;
 /// this tab shows what it holds.
 class StoresTabView extends ConsumerStatefulWidget {
@@ -75,16 +78,45 @@ class _StoresTabViewState extends ConsumerState<StoresTabView> {
         }
       },
     );
-    return const WorkbenchTabScaffold(
-      icon: AppIcons.package,
-      title: 'Stores',
-      body: _StoresBody(),
+    final hasApps = ref.watch(
+      storesProvider.select((async) => async.value?.groups.isNotEmpty ?? false),
+    );
+    final chosen = ref.watch(storesLayoutProvider);
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Unpicked, a desktop gets the table and a phone the cards.
+        final layout =
+            chosen ??
+            (WidthClass.of(constraints.maxWidth, textScaler: scaler).isExpanded
+                ? StoresLayout.table
+                : StoresLayout.cards);
+        return WorkbenchTabScaffold(
+          icon: AppIcons.package,
+          title: 'Stores',
+          controls: [
+            if (hasApps)
+              CompactSegmented<StoresLayout>(
+                key: const ValueKey('stores-layout'),
+                segments: [
+                  for (final option in StoresLayout.values)
+                    ButtonSegment(value: option, label: Text(option.label)),
+                ],
+                selected: layout,
+                onChanged: ref.read(storesLayoutProvider.notifier).pick,
+              ),
+          ],
+          body: _StoresBody(layout: layout),
+        );
+      },
     );
   }
 }
 
 class _StoresBody extends ConsumerWidget {
-  const _StoresBody();
+  const _StoresBody({required this.layout});
+
+  final StoresLayout layout;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -168,7 +200,9 @@ class _StoresBody extends ConsumerWidget {
                   )
                 : null,
           ),
-        Expanded(child: _Dashboard(dashboard: state)),
+        Expanded(
+          child: _Dashboard(dashboard: state, layout: layout),
+        ),
       ],
     );
   }

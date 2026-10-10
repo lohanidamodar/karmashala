@@ -12,6 +12,7 @@ import 'package:karmashala/src/features/settings/presentation/notifications_page
 import 'package:karmashala/src/features/stores/application/store_changes.dart';
 import 'package:karmashala/src/features/stores/application/store_credentials.dart';
 import 'package:karmashala/src/features/stores/application/stores_controller.dart';
+import 'package:karmashala/src/features/stores/application/stores_layout_prefs.dart';
 import 'package:karmashala/src/features/stores/presentation/stores_settings_section.dart';
 import 'package:karmashala/src/features/stores/presentation/stores_tab_state.dart';
 import 'package:karmashala/src/features/stores/presentation/stores_tab_view.dart';
@@ -157,6 +158,10 @@ void main() {
           clockProvider.overrideWithValue(FixedClock(now)),
           storesProvider.overrideWith(() => controller),
           storesSelectionProvider.overrideWith(() => _Selected(selected)),
+          // The marker is the cards'; the table has its own bell.
+          storesLayoutStoreProvider.overrideWithValue(
+            MemoryStoresLayoutStore(StoresLayout.cards),
+          ),
         ],
         child: MaterialApp(
           home: MediaQuery(

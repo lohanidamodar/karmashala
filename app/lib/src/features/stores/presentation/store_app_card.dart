@@ -11,12 +11,14 @@ import 'package:store_console/store_console.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/store_attention.dart';
 import '../application/store_groups.dart';
+import '../application/store_summary.dart';
 import '../application/stores_controller.dart';
 import 'store_app_icon.dart';
 import 'store_badges.dart';
 import 'store_changes_view.dart';
 import 'store_installs.dart';
 import 'store_logo.dart';
+import 'store_summary_table.dart';
 import 'stores_format.dart';
 
 /// An app read this much before the newest read is said to be older: its
@@ -104,7 +106,7 @@ class StoreGroupCard extends ConsumerWidget {
                     const SizedBox(height: Insets.md),
                     for (final (i, entry) in group.entries.indexed) ...[
                       if (i > 0) const SizedBox(height: Insets.sm),
-                      StoreEntryRow(entry: entry),
+                      StoreEntryRow(group: group, entry: entry),
                     ],
                     // While a store's row is being read, it says so itself.
                     if (readAt != null && !moving) ...[
@@ -208,12 +210,14 @@ class _Heading extends StatelessWidget {
 }
 
 /// One store's line on a card: the store, what is live, its downloads and
-/// rating; and under it what that store has to say. While the store is read
+/// rating; under it the table's other facts — the rating's month, reviews,
+/// crashes and ANRs — and what that store has to say. While the store is read
 /// for it, a spinner stands in for the numbers; a failed read says why and
 /// offers to read that app again.
 class StoreEntryRow extends ConsumerWidget {
-  const StoreEntryRow({required this.entry, super.key});
+  const StoreEntryRow({required this.group, required this.entry, super.key});
 
+  final StoreAppGroup group;
   final StoreEntry entry;
 
   /// The store's 16 px logo and a gap, so versions and the pills under
@@ -289,6 +293,14 @@ class StoreEntryRow extends ConsumerWidget {
             ],
           ],
         ),
+        if (snapshot != null && !reading)
+          Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: scaler.scale(storeColumn),
+              top: Insets.xs,
+            ),
+            child: StoreListingFacts(row: StoreSummaryRow(group, entry)),
+          ),
         if (read case StoreAppRead(
           phase: StoreAppReadPhase.failed,
           :final message?,
