@@ -4,7 +4,7 @@
 environment**: one Flutter app that runs coding-agent CLIs on your desktop,
 on a server, or both, and follows them from your phone.
 
-**Version 1.34.6.** [`CHANGELOG.md`](CHANGELOG.md) records what changed in
+**Version 1.34.7.** [`CHANGELOG.md`](CHANGELOG.md) records what changed in
 each release.
 
 ## What it does

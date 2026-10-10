@@ -17,6 +17,39 @@ installs claim the same version name.
 
 ---
 
+## 1.34.7 — 2026-10-10 (build 74)
+
+- **Limits on how many agents run at once.**
+  - Optional, per machine, per account, per project, or one global cap, in Settings → General → Session limits.
+  - Your own starts and messages go first.
+  - "Pause background work" is in Settings, the tray and Ctrl+K. Background work can also be held while an account's 5-hour window is high.
+  - A waiting session says why and where it is in line, with Start anyway and Cancel, and starts by itself when a slot frees.
+- **Pipelines.**
+  - Stages of agents, such as Plan → Implement → Review, each a real session.
+  - Hand-offs: the answer, artifacts, the worktree and checks.
+  - Gates: auto, approval (edit the hand-off) and check. A failed review loops back, twice by default.
+  - Three templates, your own saved copies, Stop, Retry and Skip.
+  - Start one from the + menu or Ctrl+K "Run pipeline…".
+- **The Agent dashboard:**
+  - **A Today strip:** needs you, finished since you last looked, stuck, and running against limits. Each part filters.
+  - **Batch actions:** Stop, End, Archive, Detach, Merge and Pin on selected cards.
+  - **Lanes** for pipelines (Approve at a gate) and for sessions waiting for a slot.
+  - **Glances:** Todos, Running, Stores and Usage, each opening its page.
+  - **Pinned on desktop,** always the first tab.
+- **Notifications open where the session is:** its tab, or the dashboard peek when it has no tab, never an empty screen.
+- **Stores:**
+  - a summary across all apps;
+  - a release timeline per app, with the usual review time;
+  - rating, reviews, crashes and installs over 30, 90 or 365 days, from daily history.
+- **Usage:**
+  - forecasts ("At this pace: runs out ~14:20, before the reset at 15:04"), with an optional warning;
+  - limits beside usage, with one-tap "Pause background work until the reset";
+  - cost by project and "Most expensive today", where it's recorded.
+- **On the phone:**
+  - Todos is one tap away;
+  - Stores and Usage work fully;
+  - buttons, fields and pickers have proper touch targets, and text no longer cuts off at large sizes.
+
 ## 1.34.6 — 2026-10-09 (build 73)
 
 - **Switching accounts from the usage card works.**
