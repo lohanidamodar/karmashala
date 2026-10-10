@@ -40,6 +40,7 @@ import '../../features/settings/application/settings_controller.dart';
 import '../../features/sessions/application/pending_live_switches.dart';
 import '../../features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import '../../features/agents/application/agent_model_catalog_providers.dart';
+import '../../features/agents/application/usage_forecast_notices.dart';
 import '../../features/sessions/application/session_launch_refusal.dart';
 import '../../features/sessions/application/session_handoff_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
@@ -294,6 +295,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(usageLimitNoticesProvider);
     // And for what a read of the stores found changed, told as Settings say.
     ref.watch(storeChangeNoticesProvider);
+    // And for a usage forecast that runs out early, told as Settings say.
+    ref.watch(usageForecastNoticesProvider);
     // And for what the server has to say of a session it delivered to.
     ref.watch(serverSessionNoticesProvider);
     // And for note tabs, which close with their note and flush on the way out.

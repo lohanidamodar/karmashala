@@ -36,6 +36,9 @@ abstract final class ChartAlphas {
 
   /// What an inferred mark keeps of its colour.
   static const double inferred = 0.45;
+
+  /// A projection's range of outcomes: fainter than any measured area.
+  static const double band = 0.12;
 }
 
 /// The ink every chart shares for its chrome, resolved once per build so a

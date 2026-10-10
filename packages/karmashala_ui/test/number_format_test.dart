@@ -50,4 +50,13 @@ void main() {
       expect(formatShare(1, 0), isNull);
     });
   });
+
+  group('formatMoney', () {
+    test('dollars, another currency, and none named', () {
+      expect(formatMoney(0.426, 'USD'), '\$0.43');
+      expect(formatMoney(1.2, 'EUR'), '1.20 EUR');
+      expect(formatMoney(3, null), '3.00');
+      expect(formatMoney(3, ' '), '3.00');
+    });
+  });
 }

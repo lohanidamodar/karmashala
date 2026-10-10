@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/usage.dart';
 
+import '../application/usage_forecast.dart';
+
 export 'package:agent_cli/usage.dart'
     show kUsageWarningPercent, kUsageCriticalPercent;
 
@@ -104,6 +106,7 @@ UsageChipView usageChipViewFor(
   AsyncValue<AgentUsage> usage,
   DateTime now, {
   AgentUsage? remembered,
+  Map<String, UsageForecast> forecasts = const {},
 }) {
   final live = usage.value;
   final value = live ?? remembered;
@@ -163,19 +166,32 @@ UsageChipView usageChipViewFor(
     mark: mark,
     reading: value,
     notes: notes,
-    short: _factOf(short, now),
-    long: long == null ? null : _factOf(long, now),
+    short: _factOf(short, now, forecasts),
+    long: long == null ? null : _factOf(long, now, forecasts),
   );
 }
 
-UsageFact _factOf(_Reading reading, DateTime now) {
+UsageFact _factOf(
+  _Reading reading,
+  DateTime now,
+  Map<String, UsageForecast> forecasts,
+) {
   final reset = reading.window.resetsAt;
-  final onCourse = onCourseToRunOut(
-    percent: reading.percent,
-    span: reading.window.span,
-    resetsAt: reset,
-    now: now,
-  );
+  final forecast = forecasts[reading.window.label];
+  // The recent pace when it says something; the average since the window
+  // opened until the history to read it from has arrived.
+  final onCourse = switch (forecast?.kind) {
+    UsageForecastKind.runsOut ||
+    UsageForecastKind.lastsUntilReset ||
+    UsageForecastKind.idle => forecast!.warns(),
+    UsageForecastKind.spent => true,
+    _ => onCourseToRunOut(
+      percent: reading.percent,
+      span: reading.window.span,
+      resetsAt: reset,
+      now: now,
+    ),
+  };
   final tone = _toneFor(reading.percent);
   return UsageFact(
     percent: reading.percent.round(),

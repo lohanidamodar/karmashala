@@ -13,11 +13,15 @@ import '../../../../core/util/clock_provider.dart';
 import '../../../environments/application/environments_controller.dart';
 import '../../application/session_token_totals.dart' show formatTokenCount;
 import '../../application/usage_accounts.dart';
+import '../../application/usage_forecast.dart';
 import '../../application/usage_history.dart';
 import '../../application/usage_session_tokens.dart';
 import '../agent_logo.dart';
 import '../usage_chip.dart' show formatUsageDuration;
 import 'usage_breakdown_section.dart';
+import 'usage_cost_section.dart';
+import 'usage_limits_section.dart';
+import 'usage_machines_section.dart';
 import 'usage_tab_state.dart';
 import 'usage_windows_section.dart';
 
@@ -213,6 +217,9 @@ class _AccountBody extends ConsumerWidget {
     );
     final usage = account.latest.usage;
     final since = now.subtract(range.span);
+    final forecasts = ref.watch(
+      usageForecastsProvider(account.latest.accountKey),
+    );
 
     // Asked of the server, from the minute — a ticking clock must not mint a
     // new query per build. The last answer stays while a newer one comes.
@@ -272,7 +279,14 @@ class _AccountBody extends ConsumerWidget {
             history: history ?? const [],
             range: range,
             now: now,
+            forecasts: forecasts,
           ),
+        if (account.states.length > 1) ...[
+          const SizedBox(height: Insets.lg),
+          UsageMachinesOverTime(account: account, range: range, now: now),
+        ],
+        const SizedBox(height: Insets.xl),
+        UsageLimitsSection(account: account, forecasts: forecasts),
         const SizedBox(height: Insets.xl),
         Row(
           children: [
@@ -298,6 +312,10 @@ class _AccountBody extends ConsumerWidget {
         ),
         const SizedBox(height: Insets.sm),
         ..._breakdownBody(context, rows, breakdown, muted),
+        if (rows.value case final value?) ...[
+          const SizedBox(height: Insets.xl),
+          UsageCostSection(rows: value, range: range, now: now),
+        ],
       ],
     );
   }

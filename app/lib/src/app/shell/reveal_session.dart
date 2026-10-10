@@ -78,6 +78,20 @@ SessionReveal revealSession(
   return SessionReveal.dashboard;
 }
 
+/// [openId] in the Agent dashboard's peek, tab or not: a summary page's row
+/// (the Usage tab's "most expensive today") asks for a look, not a tab.
+SessionReveal peekSessionOnDashboard(
+  ProviderContainer container, {
+  required String openId,
+}) {
+  final phone = container.read(phoneShellRouterProvider).current;
+  final session = container.read(sessionsDataProvider).getById(openId);
+  if (session == null || session.isArchived) return _gone(container, phone);
+  _openDashboard(container, phone);
+  peekOnDashboard(container, openId);
+  return SessionReveal.dashboard;
+}
+
 SessionReveal _gone(ProviderContainer container, PhoneShellRoutes? phone) {
   container
       .read(sessionRevealNoticeProvider.notifier)
