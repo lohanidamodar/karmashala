@@ -31,7 +31,7 @@ class PhoneMoreList extends StatelessWidget {
 
   static (String, IconData, WidgetBuilder) _entry(PhoneMoreEntry entry) =>
       switch (entry) {
-        // Under its own app bar, which names it: its header keeps the filter.
+        // Its header is the page's one row: back, the name and the filter.
         PhoneMoreEntry.todos => (
           'Todos',
           AppIcons.listChecks,
@@ -41,7 +41,7 @@ class PhoneMoreList extends StatelessWidget {
         PhoneMoreEntry.sessions => (
           'Sessions',
           ActivityStrip.iconFor(ShellArea.sessions),
-          (_) => const AgentsPage(),
+          (_) => const _HeadedPage(child: AgentsPage()),
         ),
         PhoneMoreEntry.usage => ('Usage', AppIcons.chartBar, _usage),
         PhoneMoreEntry.stores => (
@@ -59,7 +59,7 @@ class PhoneMoreList extends StatelessWidget {
           AppIcons.listMagnifyingGlass,
           (_) => const PaneTitleOverride(child: RunningTabView()),
         ),
-        // The page's app bar names it, so its own header drops the name.
+        // Its header is the page's one row: back, the name and its actions.
         PhoneMoreEntry.notes => (
           'Notes',
           AppIcons.note,
@@ -68,12 +68,14 @@ class PhoneMoreList extends StatelessWidget {
         PhoneMoreEntry.settings => (
           'Settings',
           AppIcons.gearSix,
-          (_) => const SettingsTabView(),
+          (_) => const _HeadedPage(child: SettingsTabView()),
         ),
         PhoneMoreEntry.machines => (
           'Machines',
           AppIcons.wifiHigh,
-          (_) => const _SettingsSectionPage(child: MachinesSection()),
+          (_) => const _HeadedPage(
+            child: _SettingsSectionPage(child: MachinesSection()),
+          ),
         ),
         PhoneMoreEntry.log => (
           'Log',
@@ -83,7 +85,9 @@ class PhoneMoreList extends StatelessWidget {
         PhoneMoreEntry.about => (
           'About',
           AppIcons.info,
-          (_) => const _SettingsSectionPage(child: AboutSection()),
+          (_) => const _HeadedPage(
+            child: _SettingsSectionPage(child: AboutSection()),
+          ),
         ),
       };
 
@@ -113,7 +117,7 @@ class PhoneMoreList extends StatelessWidget {
     );
   }
 
-  // Under the page's app bar, which names it: its own header drops the name.
+  // Its header is the page's one row: back, the name and the range.
   static Widget _usage(BuildContext _) =>
       const PaneTitleOverride(child: UsageTabView());
 
@@ -139,8 +143,9 @@ void Function({String? accountId})? phoneUsagePageOpener(
   };
 }
 
-/// A More entry's page: a back arrow and its name over the view the desktop
-/// shows in a tab.
+/// A More entry's page: the view the desktop shows in a tab, under one row
+/// of back, its name and its own controls (round 86). The view's header
+/// draws that row from the [PageHeaderScope], or [_HeadedPage] does.
 class _MorePage extends StatelessWidget {
   const _MorePage({required this.title, required this.child});
 
@@ -149,8 +154,30 @@ class _MorePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(title)),
-    body: SafeArea(top: false, child: child),
+    body: SafeArea(
+      bottom: false,
+      child: PageHeaderScope(
+        title: title,
+        onBack: () => Navigator.of(context).maybePop(),
+        child: child,
+      ),
+    ),
+  );
+}
+
+/// A page with no header of its own, under the More page's one row.
+class _HeadedPage extends StatelessWidget {
+  const _HeadedPage({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      ?PageHeaderBar.maybeFor(context),
+      Expanded(child: PageHeaderScope.claimed(child: child)),
+    ],
   );
 }
 

@@ -4,6 +4,7 @@
 library;
 
 export 'src/pane_notice_bar.dart';
+export 'src/page_header.dart';
 export 'src/pane_scaffold.dart';
 export 'src/workbench_tab_scaffold.dart';
 export 'src/status_dot.dart';
