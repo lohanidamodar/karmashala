@@ -295,20 +295,20 @@ class _StageEditor extends ConsumerWidget {
                 ),
                 IconButton(
                   tooltip: 'Move up',
-                  visualDensity: VisualDensity.compact,
+                  visualDensity: UiDensity.of(context).controlDensity,
                   onPressed: canMoveUp ? onMoveUp : null,
                   icon: const Icon(AppIcons.caretUp),
                 ),
                 IconButton(
                   tooltip: 'Move down',
-                  visualDensity: VisualDensity.compact,
+                  visualDensity: UiDensity.of(context).controlDensity,
                   onPressed: canMoveDown ? onMoveDown : null,
                   icon: const Icon(AppIcons.caretDown),
                 ),
                 IconButton(
                   key: ValueKey('pipeline-editor-remove:$index'),
                   tooltip: 'Remove this stage',
-                  visualDensity: VisualDensity.compact,
+                  visualDensity: UiDensity.of(context).controlDensity,
                   onPressed: onRemove,
                   icon: const Icon(AppIcons.trash),
                 ),
