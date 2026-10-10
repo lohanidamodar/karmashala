@@ -86,7 +86,8 @@ void main() {
         await settleMission(tester);
 
         expect(find.byType(TodosView), findsOneWidget);
-        expect(find.byType(BackButton), findsOneWidget);
+        // A More page's one-row header (round 86) draws its own back control.
+        expect(byKey('page-header-back'), findsOneWidget);
         // Quick add, then tick it off, on the page itself.
         await tester.enterText(
           find.descendant(
