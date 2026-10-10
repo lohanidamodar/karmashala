@@ -325,12 +325,17 @@ class _Spread extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 96),
-              child: summary,
+            // Both give: at large text on a phone the summary's words wrap
+            // rather than pushing the bars past the edge.
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 96),
+                child: summary,
+              ),
             ),
             const SizedBox(width: Insets.lg),
             Flexible(
+              flex: 2,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 320),
                 child: bars,

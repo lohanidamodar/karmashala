@@ -113,7 +113,7 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
               tooltip: _chartOpen
                   ? 'Hide the 2-hour chart'
                   : 'Show the 2-hour chart',
-              visualDensity: VisualDensity.compact,
+              visualDensity: UiDensity.of(context).controlDensity,
               iconSize: UiDensity.of(context).icon,
               onPressed: () => setState(() => _chartOpen = !_chartOpen),
               icon: Icon(_chartOpen ? AppIcons.caretUp : AppIcons.caretDown),

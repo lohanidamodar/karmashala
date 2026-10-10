@@ -203,7 +203,7 @@ class OverviewFilterPanel extends ConsumerWidget {
                     key: ValueKey('overview-show:${detail.name}'),
                     label: Text(detail.label),
                     selected: !prefs.hiddenDetails.contains(detail),
-                    visualDensity: VisualDensity.compact,
+                    visualDensity: UiDensity.of(context).controlDensity,
                     onSelected: (on) => controller.setDetailShown(detail, on),
                   ),
               ],

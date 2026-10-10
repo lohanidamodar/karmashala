@@ -79,7 +79,7 @@ class SessionLimitsSection extends ConsumerWidget {
               value: limits.global,
               onChanged: (value) => set(limits.copyWith(global: () => value)),
             ),
-            controlMaxWidth: Chrome.countField,
+            controlMaxWidth: CountField.widthOf(context),
             stackedFit: SettingsControlFit.start,
           ),
           SettingsSwitchRow(
@@ -104,7 +104,7 @@ class SessionLimitsSection extends ConsumerWidget {
               onChanged: (value) =>
                   set(limits.copyWith(holdBackgroundAbovePercent: () => value)),
             ),
-            controlMaxWidth: Chrome.countField,
+            controlMaxWidth: CountField.widthOf(context),
             stackedFit: SettingsControlFit.start,
           ),
           if (machines.isNotEmpty) group('Per machine'),
@@ -121,7 +121,7 @@ class SessionLimitsSection extends ConsumerWidget {
                   ),
                 ),
               ),
-              controlMaxWidth: Chrome.countField,
+              controlMaxWidth: CountField.widthOf(context),
               stackedFit: SettingsControlFit.start,
             ),
           if (accounts.isNotEmpty) group('Per agent account'),
@@ -138,7 +138,7 @@ class SessionLimitsSection extends ConsumerWidget {
                   ),
                 ),
               ),
-              controlMaxWidth: Chrome.countField,
+              controlMaxWidth: CountField.widthOf(context),
               stackedFit: SettingsControlFit.start,
             ),
           if (projects.isNotEmpty) group('Per project'),
@@ -155,7 +155,7 @@ class SessionLimitsSection extends ConsumerWidget {
                   ),
                 ),
               ),
-              controlMaxWidth: Chrome.countField,
+              controlMaxWidth: CountField.widthOf(context),
               stackedFit: SettingsControlFit.start,
             ),
         ],
@@ -176,6 +176,13 @@ class CountField extends StatefulWidget {
   final int? value;
   final int max;
   final ValueChanged<int?> onChanged;
+
+  /// Its width at the text size in force, so large text does not cut
+  /// "No limit" short.
+  static double widthOf(BuildContext context) => WidthClass.scaleBreakpoint(
+    Chrome.countField,
+    MediaQuery.textScalerOf(context),
+  );
 
   @override
   State<CountField> createState() => _CountFieldState();
@@ -208,7 +215,7 @@ class _CountFieldState extends State<CountField> {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: Chrome.countField,
+    width: CountField.widthOf(context),
     child: TextField(
       controller: _text,
       keyboardType: TextInputType.number,

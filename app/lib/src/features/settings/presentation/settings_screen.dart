@@ -291,6 +291,8 @@ class SettingsCategoryPicker extends ConsumerWidget {
     final theme = Theme.of(context);
     final tones = SurfaceTones.of(context);
     final radius = BorderRadius.circular(Radii.sm + 2);
+    // The board's 34 px under a pointer; a thumb's 48 on a phone.
+    final height = UiDensity.of(context).isTouch ? Touch.target : buttonHeight;
     return ColoredBox(
       color: tones.panel,
       child: Padding(
@@ -344,7 +346,7 @@ class SettingsCategoryPicker extends ConsumerWidget {
                       onSelect(SettingsSectionId.values.byName(picked));
                     },
                     child: SizedBox(
-                      height: buttonHeight,
+                      height: height,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: Insets.md,
@@ -392,7 +394,7 @@ class SettingsCategoryPicker extends ConsumerWidget {
                 child: Tooltip(
                   message: 'Search settings',
                   child: SizedBox.square(
-                    dimension: buttonHeight,
+                    dimension: height,
                     child: Icon(
                       AppIcons.magnifyingGlass,
                       size: Chrome.icon,

@@ -85,6 +85,9 @@ class SettingsControlsTheme extends StatelessWidget {
     final scheme = theme.colorScheme;
     final tones = SurfaceTones.of(context);
     final controlText = SettingsStyles.control(context);
+    // Compact under a pointer, the 48dp target under a thumb: the board's
+    // controls keep their look, a phone keeps its tap area.
+    final density = UiDensity.of(context);
     const shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
     );
@@ -105,8 +108,8 @@ class SettingsControlsTheme extends StatelessWidget {
       shape: const WidgetStatePropertyAll(shape),
       textStyle: WidgetStatePropertyAll(controlText),
       iconSize: const WidgetStatePropertyAll(Chrome.iconSmall),
-      visualDensity: VisualDensity.compact,
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: density.controlDensity,
+      tapTargetSize: density.tapTargetSize,
       side: const WidgetStatePropertyAll(BorderSide.none),
       foregroundColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.disabled)
@@ -130,6 +133,7 @@ class SettingsControlsTheme extends StatelessWidget {
         textTheme: theme.textTheme.copyWith(titleMedium: controlText),
         inputDecorationTheme: theme.inputDecorationTheme.copyWith(
           isDense: true,
+          constraints: BoxConstraints(minHeight: density.minRow),
           filled: true,
           fillColor: tones.raised,
           hoverColor: tones.hover,
@@ -150,8 +154,8 @@ class SettingsControlsTheme extends StatelessWidget {
             shape: shape,
             textStyle: controlText,
             iconSize: Chrome.iconSmall,
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: density.controlDensity,
+            tapTargetSize: density.tapTargetSize,
           ),
         ),
         textButtonTheme: TextButtonThemeData(
@@ -161,14 +165,14 @@ class SettingsControlsTheme extends StatelessWidget {
             shape: shape,
             textStyle: controlText,
             iconSize: Chrome.iconSmall,
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: density.controlDensity,
+            tapTargetSize: density.tapTargetSize,
           ),
         ),
         segmentedButtonTheme: SegmentedButtonThemeData(
           style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: density.controlDensity,
+            tapTargetSize: density.tapTargetSize,
             minimumSize: const WidgetStatePropertyAll(minSize),
             textStyle: WidgetStatePropertyAll(controlText),
             iconSize: const WidgetStatePropertyAll(Chrome.iconSmall),
@@ -185,7 +189,7 @@ class SettingsControlsTheme extends StatelessWidget {
         // thumb that is the same size on or off. The icon property is what
         // keeps Material 3 from shrinking the off thumb.
         switchTheme: SwitchThemeData(
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          materialTapTargetSize: density.tapTargetSize,
           trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
           trackColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)

@@ -184,7 +184,7 @@ class OverviewPipelineCard extends ConsumerWidget {
                 IconButton(
                   key: ValueKey('overview-pipeline-details:${run.id}'),
                   tooltip: 'Run details',
-                  visualDensity: VisualDensity.compact,
+                  visualDensity: UiDensity.of(context).controlDensity,
                   onPressed: () =>
                       unawaited(showPipelineRunDetail(context, run.id)),
                   icon: const Icon(AppIcons.list),

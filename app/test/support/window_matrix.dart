@@ -66,6 +66,24 @@ const desktopLargeText = WindowCell(
 
 const windowMatrix = [minimumWindow, desktopWindow, minimumWindowLargeText];
 
+/// Three phones, a tablet, a small and a wide desktop, each at 1x and at
+/// Android's 1.6x text: what the phone build and the desktop both have to
+/// hold (round 85). Opt in per surface.
+const phoneToDesktopMatrix = [
+  WindowCell('360x800 (phone)', Size(360, 800)),
+  WindowCell('360x800 @ 1.6x text', Size(360, 800), textScale: 1.6),
+  WindowCell('390x844 (phone)', Size(390, 844)),
+  WindowCell('390x844 @ 1.6x text', Size(390, 844), textScale: 1.6),
+  WindowCell('412x915 (phone)', Size(412, 915)),
+  WindowCell('412x915 @ 1.6x text', Size(412, 915), textScale: 1.6),
+  WindowCell('768x1024 (tablet)', Size(768, 1024)),
+  WindowCell('768x1024 @ 1.6x text', Size(768, 1024), textScale: 1.6),
+  WindowCell('1100x800', Size(1100, 800)),
+  WindowCell('1100x800 @ 1.6x text', Size(1100, 800), textScale: 1.6),
+  WindowCell('1440x900', Size(1440, 900)),
+  WindowCell('1440x900 @ 1.6x text', Size(1440, 900), textScale: 1.6),
+];
+
 /// A single thing wrong with one surface in one cell.
 class MatrixFinding {
   MatrixFinding(this.cell, this.kind, this.detail);

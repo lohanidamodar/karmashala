@@ -117,7 +117,7 @@ class OverviewSelectBox extends ConsumerWidget {
       child: Checkbox(
         key: ValueKey('overview-select:${card.id}'),
         value: picked,
-        visualDensity: VisualDensity.compact,
+        visualDensity: UiDensity.of(context).controlDensity,
         materialTapTargetSize: UiDensity.of(context).isTouch
             ? MaterialTapTargetSize.padded
             : MaterialTapTargetSize.shrinkWrap,

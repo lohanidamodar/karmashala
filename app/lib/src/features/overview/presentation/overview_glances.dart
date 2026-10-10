@@ -71,7 +71,9 @@ class OverviewGlances extends ConsumerWidget {
           Builder(
             builder: (button) => TextButton(
               key: const ValueKey('overview-glances-hidden'),
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              style: TextButton.styleFrom(
+                visualDensity: UiDensity.of(context).controlDensity,
+              ),
               onPressed: () async {
                 final picked = await showDesktopMenuUnder<String>(button, [
                   for (final glance in hidden)
@@ -250,7 +252,7 @@ class GlanceTile extends ConsumerWidget {
       builder: (button) => IconButton(
         key: ValueKey('overview-glance-menu:$id'),
         tooltip: 'Arrange ${glance.title}',
-        visualDensity: VisualDensity.compact,
+        visualDensity: UiDensity.of(context).controlDensity,
         iconSize: density.iconSmall,
         onPressed: () =>
             unawaited(_menu(button, controller, withFold: compact)),
@@ -289,7 +291,7 @@ class GlanceTile extends ConsumerWidget {
                       tooltip: collapsed
                           ? 'Show ${glance.title}'
                           : 'Fold ${glance.title}',
-                      visualDensity: VisualDensity.compact,
+                      visualDensity: UiDensity.of(context).controlDensity,
                       iconSize: density.iconSmall,
                       onPressed: () => controller.toggleCollapsed(id),
                       icon: Icon(
