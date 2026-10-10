@@ -284,9 +284,7 @@ class WorkflowRunTile extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
           );
     return Material(
-      color: selected
-          ? scheme.primary.withValues(alpha: StateLayers.selectedAlpha)
-          : Colors.transparent,
+      color: selected ? StateLayers.selected(scheme) : Colors.transparent,
       child: InkWell(
         onTap: () =>
             ref.read(selectedWorkflowRunProvider.notifier).select(row.ref),

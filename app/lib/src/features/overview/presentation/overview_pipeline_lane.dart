@@ -183,9 +183,7 @@ class OverviewPipelineCard extends ConsumerWidget {
     void open() => ref.read(pipelinePeekProvider.notifier).open(run.id);
     return Material(
       key: ValueKey('overview-pipeline:${run.id}'),
-      color: peeked
-          ? scheme.primary.withValues(alpha: StateLayers.selectedAlpha)
-          : scheme.surfaceContainerLow,
+      color: peeked ? StateLayers.selected(scheme) : scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Radii.md),
         side: BorderSide(color: edge),
