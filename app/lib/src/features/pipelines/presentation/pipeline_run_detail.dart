@@ -10,7 +10,6 @@ import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../application/pipelines_controller.dart';
-import 'pipeline_run_card.dart';
 import 'pipeline_words.dart';
 
 /// A run's detail: each stage attempt's answer, artifacts, checks and its
@@ -28,37 +27,21 @@ Future<void> showPipelineRunDetail(BuildContext context, String runId) {
   );
 }
 
-/// Every recent run, newest first, each as its card.
-Future<void> showPipelineRuns(BuildContext context) => showAdaptiveModal<void>(
-  context: context,
-  title: 'Pipeline runs',
-  width: DialogWidth.wide,
-  heightFactor: 0.85,
-  builder: (_) => const _PipelineRunList(),
-);
-
-class _PipelineRunList extends ConsumerWidget {
-  const _PipelineRunList();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final runs = ref.watch(pipelinesProvider).runsNewestFirst;
-    if (runs.isEmpty) {
-      return const Center(child: Text('No pipeline has run yet.'));
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
-      itemCount: runs.length,
-      separatorBuilder: (_, _) => const SizedBox(height: Insets.sm),
-      itemBuilder: (_, i) => PipelineRunCard(run: runs[i]),
-    );
-  }
-}
-
 class PipelineRunDetail extends ConsumerWidget {
-  const PipelineRunDetail({required this.runId, super.key});
+  const PipelineRunDetail({
+    required this.runId,
+    this.header,
+    this.onOpenSession,
+    super.key,
+  });
 
   final String runId;
+
+  /// What a stage's "Open session" does; null opens its tab.
+  final void Function(String sessionId)? onOpenSession;
+
+  /// Drawn first, scrolling with the stages: Runs' run card and facts.
+  final Widget? header;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,6 +54,10 @@ class PipelineRunDetail extends ConsumerWidget {
       key: ValueKey('pipeline-detail:$runId'),
       padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
       children: [
+        if (header case final header?) ...[
+          header,
+          const SizedBox(height: Insets.md),
+        ],
         Text(pipelineRunStateLabel(run), style: theme.textTheme.titleSmall),
         const SizedBox(height: Insets.xs),
         SelectableText(run.input, style: theme.textTheme.bodySmall),
@@ -86,7 +73,7 @@ class PipelineRunDetail extends ConsumerWidget {
         const SizedBox(height: Insets.md),
         if (run.records.isEmpty) const Text('No stage has started yet.'),
         for (final record in run.records) ...[
-          _StageRecord(record: record),
+          _StageRecord(record: record, onOpenSession: onOpenSession),
           const Divider(height: Insets.lg),
         ],
       ],
@@ -95,9 +82,10 @@ class PipelineRunDetail extends ConsumerWidget {
 }
 
 class _StageRecord extends ConsumerWidget {
-  const _StageRecord({required this.record});
+  const _StageRecord({required this.record, this.onOpenSession});
 
   final PipelineStageRecord record;
+  final void Function(String sessionId)? onOpenSession;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -128,10 +116,17 @@ class _StageRecord extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Text(
-              '${pipelineStageStateLabel(record.state)} · '
-              '${pipelineDuration(record.duration)}',
-              style: muted,
+            const SizedBox(width: Insets.xs),
+            // A long state at a phone's width gives way, not the row.
+            Flexible(
+              child: Text(
+                '${pipelineStageStateLabel(record.state)} · '
+                '${pipelineDuration(record.duration)}',
+                style: muted,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
             ),
           ],
         ),
@@ -140,7 +135,9 @@ class _StageRecord extends ConsumerWidget {
             alignment: AlignmentDirectional.centerStart,
             child: TextButton.icon(
               key: ValueKey('pipeline-open-session:$session'),
-              onPressed: () => unawaited(_openSession(context, ref, session)),
+              onPressed: () => onOpenSession == null
+                  ? unawaited(_openSession(context, ref, session))
+                  : onOpenSession!(session),
               icon: const Icon(AppIcons.arrowUpRight),
               label: const Text('Open session'),
             ),

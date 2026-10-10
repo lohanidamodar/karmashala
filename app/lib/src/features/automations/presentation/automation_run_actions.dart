@@ -6,7 +6,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import 'package:karmashala_ui/dialogs.dart';
 
-import 'automations_tab_state.dart';
+import '../../workflows/application/workflows_state.dart';
 import '../application/automation_providers.dart';
 import '../application/automation_runs_page.dart';
 
@@ -50,7 +50,7 @@ Future<AutomationRun?> runAutomationNow(
 /// The Runs list, showing only [automationId]'s.
 void showRunsOf(WidgetRef ref, String? automationId) {
   ref.read(runsFilterProvider.notifier).only(automationId);
-  ref.read(automationsSectionProvider.notifier).show(AutomationsSection.runs);
+  ref.read(workflowsSectionProvider.notifier).show(WorkflowsSection.runs);
 }
 
 /// Stops [run] once a person says so: a waiting one is let go, a running

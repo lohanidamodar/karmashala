@@ -67,7 +67,7 @@ import '../../../features/server/application/server_commands.dart';
 import '../../../features/server/application/server_files.dart';
 import '../../../features/server/application/server_overview.dart';
 import '../../../features/server/presentation/server_command_actions.dart';
-import '../../../features/automations/presentation/automations_tab_state.dart';
+import '../../../features/workflows/application/workflows_state.dart';
 import '../../../features/settings/presentation/settings_catalog.dart'
     show settingsEntries;
 import '../../../features/settings/presentation/settings_nav.dart';
@@ -103,8 +103,6 @@ import '../side_panel.dart';
 import '../side_panel_state.dart';
 import '../tab_picker.dart';
 import '../workbench.dart';
-import '../../../features/pipelines/presentation/pipeline_run_detail.dart'
-    show showPipelineRuns;
 import '../../../features/pipelines/presentation/pipeline_run_dialog.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
@@ -435,8 +433,9 @@ class QuickOpenSources {
           icon: AppIcons.clock,
           keywords: keywords,
           opensTab: true,
+          // Under the automations they follow from.
           onSelect: () =>
-              openAutomationsTab(ref, section: AutomationsSection.resumes),
+              openWorkflowsTab(ref, section: WorkflowsSection.automations),
         ),
     ];
   }

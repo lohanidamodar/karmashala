@@ -10,6 +10,7 @@ import '../../explorer/application/agent_states.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import 'overview_batch_bar.dart';
+import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_end_button.dart';
 import 'overview_resume_actions.dart';
@@ -96,39 +97,21 @@ class OverviewCardFrame extends ConsumerWidget {
 
 bool _touch(BuildContext context) => UiDensity.of(context).isTouch;
 
-/// [child], [card]'s own widget, tied to its parent's when the parent is in
-/// [among] — drawn just before it: indented, with a thin line down its side.
-/// Anything else is [child] as it is.
-Widget overviewTied(OverviewCard card, List<OverviewCard> among, Widget child) {
-  final parent = card.parentId;
-  if (parent == null || !among.any((c) => c.id == parent)) return child;
-  return OverviewChildLink(card: card, child: child);
-}
-
-/// A sub-session drawn as a card of its own, tied to its parent's just
-/// before it.
-class OverviewChildLink extends StatelessWidget {
-  const OverviewChildLink({required this.card, required this.child, super.key});
-
-  final OverviewCard card;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    key: ValueKey('overview-child-link:${card.id}'),
-    margin: const EdgeInsets.only(left: Insets.sm),
-    padding: const EdgeInsets.only(left: Insets.sm),
-    decoration: BoxDecoration(
-      border: Border(
-        left: BorderSide(
-          color: Theme.of(context).colorScheme.outlineVariant,
-          width: StateLayers.focusRingWidth,
-        ),
-      ),
-    ),
-    child: child,
-  );
-}
+/// [child], [card]'s own widget, with its ties to its parent and its
+/// sub-sessions as [among] — the list it is drawn in — has them
+/// ([OverviewLinked]): a [phone] says them in words.
+Widget overviewTied(
+  OverviewCard card,
+  List<OverviewCard> among,
+  Widget child, {
+  bool phone = false,
+}) => OverviewLinked(
+  key: ValueKey('overview-linked:${card.id}'),
+  card: card,
+  among: among,
+  phone: phone,
+  child: child,
+);
 
 /// Title, where it runs, and the state chip.
 class OverviewCardHeader extends ConsumerWidget {
@@ -183,19 +166,25 @@ class OverviewCardHeader extends ConsumerWidget {
               ),
             ),
             meta: parent != null || place.isNotEmpty
-                ? ExcludeSemantics(
-                    child: Text(
-                      parent == null
-                          ? place
-                          // Drawn after its parent, the line names it; drawn
-                          // apart from it, it says where it came from.
-                          : card.parentId != null
-                          ? '↳ $parent'
-                          : '↳ from $parent',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                ? _ParentChip(
+                    // A sub-session's card: a tap peeks its parent.
+                    parentId: card.parentId,
+                    childId: card.id,
+                    child: ExcludeSemantics(
+                      child: Text(
+                        parent == null
+                            ? place
+                            // Drawn after its parent, the line names it;
+                            // drawn apart from it, it says where it came
+                            // from.
+                            : card.parentId != null
+                            ? '↳ $parent'
+                            : '↳ from $parent',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   )
@@ -219,6 +208,35 @@ class OverviewCardHeader extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// [child], the header's "↳ parent": with a [parentId], a tap peeks it.
+class _ParentChip extends ConsumerWidget {
+  const _ParentChip({
+    required this.parentId,
+    required this.childId,
+    required this.child,
+  });
+
+  final String? parentId;
+  final String childId;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final parent = parentId;
+    if (parent == null) return child;
+    return Semantics(
+      button: true,
+      label: 'Peek the parent session',
+      child: InkWell(
+        key: ValueKey('overview-parent-chip:$childId'),
+        borderRadius: BorderRadius.circular(Radii.sm),
+        onTap: () => ref.read(overviewFocusProvider.notifier).peek(parent),
+        child: child,
+      ),
     );
   }
 }

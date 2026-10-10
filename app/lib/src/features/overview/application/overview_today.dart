@@ -67,6 +67,7 @@ class OverviewToday {
     this.running = 0,
     this.limit,
     this.gatesWaiting = 0,
+    this.pipelinesFailed = 0,
   });
 
   /// Sessions waiting on you, and pipeline gates waiting for approval.
@@ -74,6 +75,10 @@ class OverviewToday {
 
   /// Of [needsYou], the pipeline runs waiting at a gate.
   final int gatesWaiting;
+
+  /// Pipeline runs the dashboard shows that failed: stuck until retried or
+  /// skipped on.
+  final int pipelinesFailed;
   final Duration? oldestWait;
 
   /// The session whose question has waited longest.
@@ -93,7 +98,7 @@ class OverviewToday {
   /// The global concurrency limit; null when none is set.
   final int? limit;
 
-  int get stuck => failed + quiet + slotWaiting;
+  int get stuck => failed + quiet + slotWaiting + pipelinesFailed;
 
   int countOf(OverviewTodayPart part) => switch (part) {
     OverviewTodayPart.needsYou => needsYou,
@@ -113,6 +118,10 @@ class OverviewToday {
     if (quiet > 0) '$quiet quiet',
     if (failed > 0) '$failed failed',
     if (slotWaiting > 0) '$slotWaiting waiting for a slot',
+    if (pipelinesFailed > 0)
+      pipelinesFailed == 1
+          ? '1 pipeline failed'
+          : '$pipelinesFailed pipelines failed',
   ].join(' · ');
 
   @override
@@ -128,7 +137,8 @@ class OverviewToday {
       other.slotWaiting == slotWaiting &&
       other.running == running &&
       other.limit == limit &&
-      other.gatesWaiting == gatesWaiting;
+      other.gatesWaiting == gatesWaiting &&
+      other.pipelinesFailed == pipelinesFailed;
 
   @override
   int get hashCode => Object.hash(
@@ -142,6 +152,7 @@ class OverviewToday {
     running,
     limit,
     gatesWaiting,
+    pipelinesFailed,
   );
 }
 
@@ -156,6 +167,7 @@ OverviewToday overviewTodayOf(
   required DateTime startOfToday,
   String? firstWaitingId,
   int gatesWaiting = 0,
+  int pipelinesFailed = 0,
 }) {
   final since = lookedAt ?? startOfToday;
   final finished = [
@@ -170,6 +182,7 @@ OverviewToday overviewTodayOf(
     oldestWait: strip.oldestWait,
     firstWaitingId: strip.needsYou == 0 ? null : firstWaitingId,
     gatesWaiting: gatesWaiting,
+    pipelinesFailed: pipelinesFailed,
     finished: finished,
     failed: strip.failed,
     quiet: strip.quiet,

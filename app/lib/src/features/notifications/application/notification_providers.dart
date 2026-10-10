@@ -5,7 +5,7 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show ApprovalAnswerRequest, PromptAsk, SessionPromptRefusal;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show InboxChanged, storeAppKeyOfInboxId;
+    show InboxChanged, pipelineRunIdOfInboxId, storeAppKeyOfInboxId;
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/persistence.dart';
 import 'package:karmashala_notifications/policy.dart';
@@ -27,6 +27,8 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../stores/application/store_changes.dart'
     show storesOpenRequestProvider;
+import '../../workflows/application/workflows_state.dart'
+    show workflowsOpenRequestProvider;
 import '../../workspaces/data/workspace_data.dart';
 import '../data/desktop_notification_presenter.dart';
 import '../data/device_notification_store.dart';
@@ -195,6 +197,11 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
     onActivated: (payload) {
       if (storeAppKeyOfInboxId(payload.openId) case final appKey?) {
         ref.read(storesOpenRequestProvider.notifier).open(appKey);
+        ref.read(windowRaiseRequestProvider.notifier).bump();
+        return;
+      }
+      if (pipelineRunIdOfInboxId(payload.openId) case final runId?) {
+        ref.read(workflowsOpenRequestProvider.notifier).openPipelineRun(runId);
         ref.read(windowRaiseRequestProvider.notifier).bump();
         return;
       }
@@ -382,6 +389,12 @@ void openNotifiedSession(
 ) {
   if (storeAppKeyOfInboxId(payload.openId) case final appKey?) {
     container.read(storesOpenRequestProvider.notifier).open(appKey);
+    return;
+  }
+  if (pipelineRunIdOfInboxId(payload.openId) case final runId?) {
+    container
+        .read(workflowsOpenRequestProvider.notifier)
+        .openPipelineRun(runId);
     return;
   }
   void open() => _whenShellUp(

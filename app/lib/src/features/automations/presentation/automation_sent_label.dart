@@ -4,7 +4,7 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../app/shell/workbench_tabs.dart' show openAutomationsTab;
+import '../../../app/shell/workbench_tabs.dart' show openWorkflowsTab;
 import '../application/automation_editor_state.dart';
 import '../application/automation_providers.dart';
 
@@ -20,7 +20,7 @@ class AutomationSentLabel extends ConsumerWidget {
         .read(automationsProvider)
         .where((a) => a.id == by.automationId)
         .firstOrNull;
-    openAutomationsTab(ref);
+    openWorkflowsTab(ref);
     if (automation != null) {
       ref.read(automationEditorProvider.notifier).edit(automation);
     }

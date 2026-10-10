@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:karmashala_automations/automations.dart'
+    show AutomationStepOutcome;
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_core/verdicts.dart';
@@ -11,6 +13,9 @@ enum RunOutcome {
   failed('Failed'),
   checking('Checking'),
   running('Running'),
+
+  /// Its agent is done, and a pipeline it started carries on.
+  waitingOnPipeline('Waiting on pipeline'),
   queued('Waiting'),
   missed('Missed'),
   planned('Would run'),
@@ -31,6 +36,10 @@ RunOutcome runOutcome(AutomationRun run, List<AutomationCheckVerdict> checks) =>
       AutomationRunState.finished =>
         checks.any((c) => c.verdict != VerificationVerdict.pass)
             ? RunOutcome.failed
+            : run.stepResults.any(
+                (s) => s.outcome == AutomationStepOutcome.waiting,
+              )
+            ? RunOutcome.waitingOnPipeline
             : run.checksObservedAt == null && checks.isEmpty
             ? RunOutcome.checking
             : RunOutcome.succeeded,
@@ -44,7 +53,9 @@ Color runOutcomeColor(BuildContext context, RunOutcome outcome) {
   return switch (outcome) {
     RunOutcome.succeeded => semantic.idle,
     RunOutcome.failed => semantic.failure,
-    RunOutcome.running || RunOutcome.checking => semantic.working,
+    RunOutcome.running ||
+    RunOutcome.checking ||
+    RunOutcome.waitingOnPipeline => semantic.working,
     RunOutcome.missed => semantic.attention,
     RunOutcome.queued ||
     RunOutcome.unknown ||
@@ -74,6 +85,8 @@ class RunOutcomeChip extends StatelessWidget {
         ),
         child: Text(
           outcome.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
         ),
       ),

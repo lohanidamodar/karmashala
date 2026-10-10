@@ -140,8 +140,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
   /// What the server runs is one view, so, like Logs, one tab.
   String openRunningTab() => openDocumentTab(kRunningPaneId);
 
-  /// Automations are the workspace's, so, like Running, one tab.
-  String openAutomationsTab() => openDocumentTab(kAutomationsPaneId);
+  /// Workflows are the workspace's, so, like Running, one tab.
+  String openWorkflowsTab() => openDocumentTab(kAutomationsPaneId);
 
   /// Opens [hostPath] in an editor tab: one tab per file, or two buffers would
   /// disagree about the same bytes.

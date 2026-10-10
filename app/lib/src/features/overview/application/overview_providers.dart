@@ -156,6 +156,10 @@ final overviewTodayProvider = Provider.autoDispose<OverviewToday>((ref) {
       oldest = since;
     }
   }
+  final runs = dashboardPipelineRuns(
+    ref.watch(pipelinesProvider),
+    now: ref.read(clockProvider).nowUtc(),
+  );
   return overviewTodayOf(
     board,
     strip: ref.watch(overviewCountersProvider).strip,
@@ -163,13 +167,10 @@ final overviewTodayProvider = Provider.autoDispose<OverviewToday>((ref) {
     lookedAt: ref.watch(overviewLookedAtProvider),
     startOfToday: _startOfToday(ref),
     firstWaitingId: first,
-    gatesWaiting: [
-      for (final run in dashboardPipelineRuns(
-        ref.watch(pipelinesProvider),
-        now: ref.read(clockProvider).nowUtc(),
-      ))
-        if (pipelineRunAtGate(run)) run,
-    ].length,
+    gatesWaiting: runs.where(pipelineRunAtGate).length,
+    pipelinesFailed: runs
+        .where((run) => run.state == PipelineRunState.failed)
+        .length,
   );
 });
 

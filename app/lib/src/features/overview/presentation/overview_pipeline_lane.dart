@@ -7,16 +7,20 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/workbench_tabs.dart' show openWorkflowRuns;
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_state_providers.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../pipelines/application/pipelines_controller.dart';
 import '../../pipelines/presentation/pipeline_run_card.dart';
-import '../../pipelines/presentation/pipeline_run_detail.dart';
+import '../../workflows/application/workflows_state.dart' show WorkflowRunKind;
 import '../../pipelines/presentation/pipeline_words.dart';
+import '../application/overview_pipeline_peek.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
+import '../application/overview_reads.dart'
+    show overviewGlanceProvider, overviewLastAnswerProvider;
 
 /// [run] as the Board's state filters read it: a gate, or a stage asking
 /// something, needs you; a failure has failed; a finished run is ready.
@@ -88,23 +92,30 @@ class OverviewPipelineLane extends ConsumerWidget {
                 asking: pipelineStageAsking(run, asking.containsKey),
               ),
             ),
-          if (more > 0)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton(
-                key: const ValueKey('overview-pipelines-more'),
-                onPressed: () => unawaited(showPipelineRuns(context)),
-                child: Text(more == 1 ? '1 more run…' : '$more more runs…'),
-              ),
+          // Every run, both kinds, is in Workflows → Runs.
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              key: const ValueKey('overview-pipelines-more'),
+              onPressed: () =>
+                  openWorkflowRuns(ref, kind: WorkflowRunKind.pipeline),
+              child: Text(switch (more) {
+                0 => 'See all runs',
+                1 => '1 more run…',
+                _ => '$more more runs…',
+              }),
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// One run, compact: its name and state, its stages — a click peeks a
-/// stage's session — and the one thing it waits on, worded as a button.
+/// One run, compact: its name and state, where it is (stage 2 of 3 · 12m ·
+/// loop 1/2), its stages — a click shows a stage's session in the run's
+/// peek — what it waits on, its current stage's last line, and the one
+/// thing to do about it, worded as a button. A click opens the run's peek.
 class OverviewPipelineCard extends ConsumerWidget {
   const OverviewPipelineCard({required this.run, this.asking, super.key});
 
@@ -139,118 +150,184 @@ class OverviewPipelineCard extends ConsumerWidget {
     final ended =
         run.state == PipelineRunState.failed ||
         run.state == PipelineRunState.stopped;
+    final now = ref.watch(clockProvider).nowUtc();
+    final waitingOn = pipelineRunWaitingOn(run, asking: asking);
+    final current = run.current;
+    final session = current?.sessionId;
+    final working =
+        run.state.isActive &&
+        current != null &&
+        !current.state.isSettled &&
+        current.state != PipelineStageState.approval;
+    final lastLine = pipelineStageLastLine(
+      current,
+      doing: session == null || !working
+          ? null
+          : ref
+                .watch(overviewGlanceProvider(session))
+                .asData
+                ?.value
+                ?.open
+                .lastOrNull
+                ?.phrase,
+      lastAnswer: session == null || !working
+          ? null
+          : ref.watch(overviewLastAnswerProvider(session)).asData?.value.text,
+    );
+    final peeked = ref.watch(
+      pipelinePeekProvider.select((p) => p?.runId == run.id),
+    );
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    void open() => ref.read(pipelinePeekProvider.notifier).open(run.id);
     return Material(
       key: ValueKey('overview-pipeline:${run.id}'),
-      color: scheme.surfaceContainerLow,
+      color: peeked
+          ? scheme.primary.withValues(alpha: StateLayers.selectedAlpha)
+          : scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Radii.md),
         side: BorderSide(color: edge),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.sm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  AppIcons.treeStructure,
-                  size: UiDensity.of(context).icon,
-                  color: scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: run.definition.name,
-                          style: theme.textTheme.titleSmall,
-                        ),
-                        TextSpan(
-                          text: ' · ${pipelineRunStateLabel(run)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: stateColor,
+      child: InkWell(
+        key: ValueKey('overview-pipeline-open:${run.id}'),
+        onTap: open,
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    AppIcons.treeStructure,
+                    size: UiDensity.of(context).icon,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: run.definition.name,
+                            style: theme.textTheme.titleSmall,
                           ),
-                        ),
-                      ],
+                          TextSpan(
+                            text: ' · ${pipelineRunStateLabel(run)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: stateColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    key: ValueKey('overview-pipeline-details:${run.id}'),
+                    tooltip: 'Open the run',
+                    visualDensity: UiDensity.of(context).controlDensity,
+                    onPressed: open,
+                    icon: const Icon(AppIcons.list),
+                  ),
+                ],
+              ),
+              Text(
+                pipelineRunProgress(run, now: now),
+                key: ValueKey('overview-pipeline-progress:${run.id}'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: muted?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: Insets.xs),
+              PipelineStageFlow(run: run),
+              if (waitingOn != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.xs),
+                  child: Text(
+                    waitingOn,
+                    key: ValueKey(
+                      asking != null
+                          ? 'overview-pipeline-asking:${run.id}'
+                          : 'overview-pipeline-waiting:${run.id}',
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: switch (run.state) {
+                        _ when needsYou => semantic.attention,
+                        PipelineRunState.failed => semantic.failure,
+                        _ => scheme.onSurfaceVariant,
+                      },
+                    ),
                   ),
                 ),
-                IconButton(
-                  key: ValueKey('overview-pipeline-details:${run.id}'),
-                  tooltip: 'Run details',
-                  visualDensity: UiDensity.of(context).controlDensity,
-                  onPressed: () =>
-                      unawaited(showPipelineRunDetail(context, run.id)),
-                  icon: const Icon(AppIcons.list),
-                ),
-              ],
-            ),
-            const SizedBox(height: Insets.xs),
-            PipelineStageFlow(run: run),
-            if (asking != null)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.xs),
-                child: Text(
-                  '${asking.role} asks you something — click it to answer',
-                  key: ValueKey('overview-pipeline-asking:${run.id}'),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: semantic.attention,
+              if (lastLine != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.xxs),
+                  child: Text(
+                    lastLine,
+                    key: ValueKey('overview-pipeline-last-line:${run.id}'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted?.copyWith(fontStyle: FontStyle.italic),
                   ),
                 ),
-              ),
-            if (gate || run.state == PipelineRunState.running || ended)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.xs),
-                child: Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: Insets.xs,
-                  runSpacing: Insets.xs,
-                  children: [
-                    if (gate || run.state == PipelineRunState.running)
-                      TextButton(
-                        key: ValueKey('overview-pipeline-stop:${run.id}'),
-                        onPressed: () => _act(context, controller.stop(run.id)),
-                        child: const Text('Stop'),
-                      ),
-                    if (gate) ...[
-                      OutlinedButton(
-                        key: ValueKey('overview-pipeline-edit:${run.id}'),
-                        onPressed: () => unawaited(_editHandoff(context)),
-                        child: const Text('Edit hand-off…'),
-                      ),
-                      FilledButton.icon(
-                        key: ValueKey('overview-pipeline-approve:${run.id}'),
-                        onPressed: () =>
-                            _act(context, controller.approve(run.id)),
-                        icon: const Icon(AppIcons.check),
-                        label: const Text('Approve'),
-                      ),
+              if (gate || run.state == PipelineRunState.running || ended)
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.xs),
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: Insets.xs,
+                    runSpacing: Insets.xs,
+                    children: [
+                      if (gate || run.state == PipelineRunState.running)
+                        TextButton(
+                          key: ValueKey('overview-pipeline-stop:${run.id}'),
+                          onPressed: () =>
+                              _act(context, controller.stop(run.id)),
+                          child: const Text('Stop'),
+                        ),
+                      if (gate) ...[
+                        OutlinedButton(
+                          key: ValueKey('overview-pipeline-edit:${run.id}'),
+                          onPressed: () => unawaited(_editHandoff(context)),
+                          child: const Text('Edit hand-off…'),
+                        ),
+                        FilledButton.icon(
+                          key: ValueKey('overview-pipeline-approve:${run.id}'),
+                          onPressed: () =>
+                              _act(context, controller.approve(run.id)),
+                          icon: const Icon(AppIcons.check),
+                          label: const Text('Approve'),
+                        ),
+                      ],
+                      if (ended) ...[
+                        TextButton(
+                          key: ValueKey('overview-pipeline-skip:${run.id}'),
+                          onPressed: () =>
+                              _act(context, controller.skip(run.id)),
+                          child: const Text('Skip'),
+                        ),
+                        FilledButton.tonal(
+                          key: ValueKey('overview-pipeline-retry:${run.id}'),
+                          onPressed: () =>
+                              _act(context, controller.retry(run.id)),
+                          child: const Text('Retry stage'),
+                        ),
+                      ],
                     ],
-                    if (ended) ...[
-                      TextButton(
-                        key: ValueKey('overview-pipeline-skip:${run.id}'),
-                        onPressed: () => _act(context, controller.skip(run.id)),
-                        child: const Text('Skip'),
-                      ),
-                      FilledButton.tonal(
-                        key: ValueKey('overview-pipeline-retry:${run.id}'),
-                        onPressed: () =>
-                            _act(context, controller.retry(run.id)),
-                        child: const Text('Retry stage'),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

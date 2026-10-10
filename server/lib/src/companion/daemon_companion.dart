@@ -693,7 +693,9 @@ class DaemonCompanion implements CompanionHandler {
         // A phone hears these live, as `storeChangesNoticed`.
         InboxItemKind.storeAttention ||
         InboxItemKind.storeNews ||
-        InboxItemKind.waitingForSlot => null,
+        InboxItemKind.waitingForSlot ||
+        InboxItemKind.pipelineWaiting ||
+        InboxItemKind.pipelineFailed => null,
       };
       if (kind == null) continue;
       if (item.kind == InboxItemKind.usageLimit) limitFiled = true;

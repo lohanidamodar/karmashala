@@ -10,12 +10,17 @@ class CompactSegmented<T> extends StatelessWidget {
     required this.segments,
     required this.selected,
     required this.onChanged,
+    this.tight = false,
     super.key,
   });
 
   final List<ButtonSegment<T>> segments;
   final T selected;
   final ValueChanged<T> onChanged;
+
+  /// Less padding beside each label, for long names that share a phone's
+  /// row with a way back; the targets keep their height.
+  final bool tight;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +30,11 @@ class CompactSegmented<T> extends StatelessWidget {
       style: ButtonStyle(
         visualDensity: density.controlDensity,
         tapTargetSize: density.tapTargetSize,
+        padding: tight
+            ? const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: Insets.xs),
+              )
+            : null,
       ),
       segments: segments,
       selected: {selected},

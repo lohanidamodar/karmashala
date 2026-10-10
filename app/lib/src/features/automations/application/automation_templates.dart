@@ -38,7 +38,12 @@ const _notifyAlways = AutomationStep(
   text: '{{automation}} in {{project}}: {{run.status}}',
 );
 
-/// The six templates, in the order the list offers them.
+/// The template that ends in a pipeline: failing tests hand over to the
+/// built-in Implement → Test → Fix loop.
+const kNightlyPipelineTemplateTitle =
+    'Nightly: Implement → Test → Fix on failing tests';
+
+/// The seven templates, in the order the list offers them.
 final List<AutomationTemplate> kAutomationTemplates = [
   AutomationTemplate(
     title: 'Nightly tests and fixes',
@@ -54,6 +59,36 @@ final List<AutomationTemplate> kAutomationTemplates = [
           'Pull the latest, run the tests, and fix anything that broke. Keep '
           'the changes small.',
       steps: AutomationSteps(const [_check, _tellOnFailure, _notifyAlways]),
+    ),
+  ),
+  AutomationTemplate(
+    title: kNightlyPipelineTemplateTitle,
+    description:
+        'Run the tests every night; when they fail, a pipeline implements, '
+        'tests and fixes.',
+    trigger: DraftTrigger.schedule,
+    build: (repositoryId) => AutomationDraft(
+      name: kNightlyPipelineTemplateTitle,
+      repositoryId: repositoryId,
+      hour: 2,
+      days: kEveryDay,
+      worktree: true,
+      prompt:
+          'Pull the latest and run the tests. Change nothing: list what '
+          'fails, and why, briefly.',
+      steps: AutomationSteps(const [
+        _check,
+        AutomationStep(
+          kind: AutomationStepKind.pipeline,
+          when: AutomationStepWhen.failure,
+          pipelineId: 'builtin:implement-test-fix',
+          text:
+              'The nightly tests failed in {{project}}. Make them pass '
+              'again.\n\n{{steps.check.output}}\n\nWhat the agent saw:\n'
+              '{{steps.agent.output}}',
+        ),
+        _notifyAlways,
+      ]),
     ),
   ),
   AutomationTemplate(

@@ -1312,10 +1312,12 @@ void main() {
           );
           await tester.scrollUntilVisible(tied, 200, scrollable: hybridList);
           expect(tied, findsOneWidget);
-          expect(
-            find.byKey(const ValueKey('overview-child-link:ks-r29-b')),
-            findsOneWidget,
+          // Under the parent's count and fold, a row further down.
+          final second = find.byKey(
+            const ValueKey('overview-child-link:ks-r29-b'),
           );
+          await tester.scrollUntilVisible(second, 200, scrollable: hybridList);
+          expect(second, findsOneWidget);
         }
         expect(tester.takeException(), isNull);
         await unmountMission(tester);

@@ -51,8 +51,9 @@ extension _CommandSources on QuickOpenSources {
         'Pipeline runs',
         subtitle: 'Each run, its stages, answers and checks',
         icon: AppIcons.list,
-        keywords: const ['pipeline', 'runs'],
-        onSelect: () => showPipelineRuns(context),
+        keywords: const ['pipeline', 'runs', 'workflows'],
+        opensTab: true,
+        onSelect: () => openWorkflowRuns(ref, kind: WorkflowRunKind.pipeline),
       ),
       ..._resumeCommands(),
       if (ref.read(capabilitiesProvider).sessionCapacity)
@@ -345,11 +346,13 @@ extension _CommandSources on QuickOpenSources {
         onSelect: () => openStoresTab(ref),
       ),
       _command(
-        'Open Automations',
-        subtitle: 'Agent runs on a schedule, an event or a webhook',
-        icon: AppIcons.lightning,
+        'Open Workflows',
+        subtitle: 'Automations, pipelines and their runs',
+        icon: AppIcons.flowArrow,
         keywords: const [
+          'workflows',
           'automations',
+          'pipelines',
           'schedule',
           'cron',
           'webhook',
@@ -357,7 +360,7 @@ extension _CommandSources on QuickOpenSources {
           'resumes',
         ],
         opensTab: true,
-        onSelect: () => openAutomationsTab(ref),
+        onSelect: () => openWorkflowsTab(ref),
       ),
       _command(
         'Open Logs',

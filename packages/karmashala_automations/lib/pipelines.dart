@@ -5,5 +5,6 @@ library;
 
 export 'src/domain/pipeline.dart';
 export 'src/domain/pipeline_run.dart';
+export 'src/domain/pipeline_step_report.dart';
 export 'src/service/pipeline_ports.dart';
 export 'src/service/pipeline_runner.dart';

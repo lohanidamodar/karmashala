@@ -5,8 +5,6 @@ import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_core/verdicts.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_verification/verification.dart' show CodeFreshness;
 
@@ -20,203 +18,8 @@ import '../../verification/presentation/session_verdict_mark.dart'
     show SessionVerdictMark;
 import '../application/automation_providers.dart';
 import 'automation_run_actions.dart';
-import '../application/automation_runs_page.dart';
 import 'automation_run_status.dart';
 import 'automation_undo_dialog.dart';
-
-/// **Runs**: every run across every automation, newest first, filtered and
-/// paged; each opens to its steps, its checks and what can be done about it.
-class AutomationRunsView extends ConsumerWidget {
-  const AutomationRunsView({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filter = ref.watch(runsFilterProvider);
-    final all = ref.watch(shownRunsProvider);
-    final page = ref.watch(olderRunsProvider);
-    final automations = ref.watch(automationsProvider);
-    final data = ref.read(automationsDataProvider);
-    List<AutomationCheckVerdict> checksOf(AutomationRun run) =>
-        page.checks[run.id] ?? data.checksFor(run.id);
-    final failed = all
-        .where((r) => runOutcome(r, checksOf(r)) == RunOutcome.failed)
-        .length;
-    final live = all.where((r) => r.state.isLive).length;
-    final runs = [
-      for (final run in all)
-        if (switch (filter.shown) {
-          RunsShown.all => true,
-          RunsShown.failed =>
-            runOutcome(run, checksOf(run)) == RunOutcome.failed,
-          RunsShown.running => run.state.isLive,
-        })
-          run,
-    ];
-    final named = automations
-        .where((a) => a.id == filter.automationId)
-        .firstOrNull;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.lg,
-                Insets.sm,
-                Insets.sm,
-                Insets.xs,
-              ),
-              child: Wrap(
-                spacing: Touch.gap,
-                runSpacing: Insets.xs,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  CompactSegmented<RunsShown>(
-                    key: const ValueKey('runs-shown'),
-                    segments: [
-                      const ButtonSegment(
-                        value: RunsShown.all,
-                        label: Text('All'),
-                      ),
-                      ButtonSegment(
-                        value: RunsShown.failed,
-                        label: Text('Failed · $failed'),
-                      ),
-                      ButtonSegment(
-                        value: RunsShown.running,
-                        label: Text('Running · $live'),
-                      ),
-                    ],
-                    selected: filter.shown,
-                    onChanged: ref.read(runsFilterProvider.notifier).show,
-                  ),
-                  _AutomationFilter(automations: automations, selected: named),
-                  if (named != null)
-                    InputChip(
-                      key: const ValueKey('runs-automation-chip'),
-                      label: Text(named.name),
-                      onDeleted: () =>
-                          ref.read(runsFilterProvider.notifier).only(null),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-          child: runs.isEmpty
-              ? const PanePlaceholder(
-                  icon: AppIcons.lightning,
-                  message: 'No runs match.',
-                )
-              : LayoutBuilder(
-                  builder: (context, constraints) => _RunsColumns(
-                    on: WidthClass.of(
-                      constraints.maxWidth < Chrome.readableWidth
-                          ? constraints.maxWidth
-                          : Chrome.readableWidth,
-                      textScaler: MediaQuery.textScalerOf(context),
-                    ).isExpanded,
-                    child: ListView.builder(
-                      key: const ValueKey('runs-list'),
-                      padding: const EdgeInsets.only(bottom: Insets.lg),
-                      itemCount: runs.length + 2,
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return runsInColumns(context)
-                              ? Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: Chrome.readableWidth,
-                                    ),
-                                    child: const _RunsHeader(),
-                                  ),
-                                )
-                              : const SizedBox.shrink();
-                        }
-                        if (index == runs.length + 1) {
-                          return const _OlderButton();
-                        }
-                        final run = runs[index - 1];
-                        return Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              maxWidth: Chrome.readableWidth,
-                            ),
-                            child: RunTile(
-                              key: ValueKey(run.id),
-                              run: run,
-                              checks: checksOf(run),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AutomationFilter extends ConsumerWidget {
-  const _AutomationFilter({required this.automations, required this.selected});
-
-  final List<Automation> automations;
-  final Automation? selected;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => Builder(
-    builder: (context) => FilterFunnelButton(
-      key: const ValueKey('runs-automation-filter'),
-      count: selected == null ? 0 : 1,
-      onPressed: () async {
-        final box = context.findRenderObject()! as RenderBox;
-        final at = box.localToGlobal(box.size.bottomLeft(Offset.zero));
-        final picked = await showMenu<String>(
-          context: context,
-          position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
-          items: [
-            const PopupMenuItem(value: '', child: Text('Every automation')),
-            for (final a in automations)
-              PopupMenuItem(value: a.id, child: Text(a.name)),
-          ],
-        );
-        if (picked == null) return;
-        ref
-            .read(runsFilterProvider.notifier)
-            .only(picked.isEmpty ? null : picked);
-      },
-    ),
-  );
-}
-
-class _OlderButton extends ConsumerWidget {
-  const _OlderButton();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final page = ref.watch(olderRunsProvider);
-    final bool more = page.more ?? ref.watch(runsCopyTruncatedProvider);
-    if (!more) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.all(Insets.md),
-      child: Center(
-        child: page.loading
-            ? const InlineSpinner(semanticsLabel: 'Reading older runs')
-            : TextButton(
-                key: const ValueKey('runs-older'),
-                onPressed: () =>
-                    ref.read(olderRunsProvider.notifier).loadMore(),
-                child: const Text('Show older runs'),
-              ),
-      ),
-    );
-  }
-}
 
 /// Whether Runs is wide enough for its columns, as the list was measured.
 bool runsInColumns(BuildContext context) =>
@@ -255,31 +58,6 @@ class _Cell extends StatelessWidget {
   );
 }
 
-/// The column names over the rows, where there are columns.
-class _RunsHeader extends StatelessWidget {
-  const _RunsHeader();
-
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.fromLTRB(
-      Insets.lg + Touch.iconSmall + Insets.sm,
-      Insets.sm,
-      Insets.lg,
-      Insets.xs,
-    ),
-    child: Row(
-      children: [
-        Expanded(child: EyebrowLabel('Automation')),
-        SizedBox(width: Insets.sm),
-        _Cell(width: _resultWidth, child: EyebrowLabel('Result')),
-        _Cell(width: _causeWidth, child: EyebrowLabel('Started by')),
-        _Cell(width: _whenWidth, child: EyebrowLabel('When')),
-        _Cell(width: _tookWidth, child: EyebrowLabel('Took')),
-      ],
-    ),
-  );
-}
-
 /// What started [run], read off its automation when it was not recorded.
 AutomationRunCause runCause(AutomationRun run, Automation? automation) =>
     run.startedBy ??
@@ -301,17 +79,25 @@ String tookWords(AutomationRun run) {
 /// One run: its automation, result, cause, age and length; tapped, its steps
 /// and what can be done about it.
 class RunTile extends ConsumerStatefulWidget {
-  const RunTile({required this.run, required this.checks, super.key});
+  const RunTile({
+    required this.run,
+    required this.checks,
+    this.initiallyOpen = false,
+    super.key,
+  });
 
   final AutomationRun run;
   final List<AutomationCheckVerdict> checks;
+
+  /// Opened on its steps, as a run's detail pane shows it.
+  final bool initiallyOpen;
 
   @override
   ConsumerState<RunTile> createState() => _RunTileState();
 }
 
 class _RunTileState extends ConsumerState<RunTile> {
-  var _open = false;
+  late var _open = widget.initiallyOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -392,7 +178,7 @@ class _RunTileState extends ConsumerState<RunTile> {
                     child: Text(took, style: quiet),
                   ),
                 ] else
-                  RunOutcomeChip(outcome: outcome),
+                  Flexible(child: RunOutcomeChip(outcome: outcome)),
               ],
             ),
           ),
@@ -451,6 +237,7 @@ class _RunTileState extends ConsumerState<RunTile> {
             AutomationStepOutcome.done => RunOutcome.succeeded,
             AutomationStepOutcome.failed => RunOutcome.failed,
             AutomationStepOutcome.skipped => RunOutcome.unknown,
+            AutomationStepOutcome.waiting => RunOutcome.waitingOnPipeline,
           },
           skipped: step.outcome == AutomationStepOutcome.skipped,
           detail: step.detail,

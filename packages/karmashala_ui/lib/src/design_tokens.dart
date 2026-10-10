@@ -828,6 +828,10 @@ class Chrome {
   /// `860` in three places, and three copies of a measure drift apart.
   static const readableWidth = 860.0;
 
+  /// A detail pane beside a list or a grid — a run's detail, an editor — at
+  /// 1x text.
+  static const detailPaneWidth = 480.0;
+
   /// A settings field that takes a small whole number — a limit — and its
   /// "No limit" hint, at 1x text.
   static const countField = 96.0;

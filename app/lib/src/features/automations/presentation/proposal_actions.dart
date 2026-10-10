@@ -6,7 +6,7 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../app/shell/workbench_tabs.dart' show openAutomationsTab;
+import '../../../app/shell/workbench_tabs.dart' show openWorkflowsTab;
 import '../application/automation_proposals.dart';
 import '../application/automation_providers.dart';
 import 'turn_on_confirm_dialog.dart' show turnOnAutomation;
@@ -126,7 +126,7 @@ class ProposalsNotice extends ConsumerWidget {
 
 /// Opens the Automations tab on [automationId]'s proposal, in the editor.
 void reviewProposal(WidgetRef ref, String automationId) {
-  openAutomationsTab(ref);
+  openWorkflowsTab(ref);
   ref.read(automationProposalsProvider).review(automationId);
 }
 

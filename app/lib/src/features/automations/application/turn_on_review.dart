@@ -1,5 +1,6 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/pipelines.dart' show kPipelineTemplates;
 
 import 'automation_dry_run.dart';
 
@@ -136,6 +137,12 @@ List<TurnOnLine> _changes(
               '${step.when.label}, posts to ${step.url.trim()}'
               '${step.allowPrivate ? ', which may be on your network' : ''}.',
         ),
+        AutomationStepKind.pipeline => (
+          label: 'Pipeline',
+          text:
+              '${step.when.label}, starts "${pipelineNameOf(step.pipelineId)}" '
+              'as background work; the run then waits on it.',
+        ),
         AutomationStepKind.tell => (
           label: 'Message',
           text: '${step.when.label}, tells the agent what happened.',
@@ -147,6 +154,11 @@ List<TurnOnLine> _changes(
       },
   ];
 }
+
+/// A pipeline step's pipeline by name: a template's own, or a saved one's.
+String pipelineNameOf(String id) =>
+    kPipelineTemplates.where((p) => p.id == id).firstOrNull?.name ??
+    'a saved pipeline';
 
 /// The mode an agent runs under, in its own words where they are known.
 String permissionWords(

@@ -21,6 +21,8 @@ import 'package:karmashala_automations/resumes.dart'
     show ScheduledResume, ScheduledResumeState;
 import 'package:karmashala_automations/store.dart';
 import 'package:karmashala_automations/runner.dart';
+import 'package:karmashala_automations/pipelines.dart'
+    show PipelineRun, pipelineStepReport;
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/scheduler.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
@@ -113,6 +115,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     acpAuth,
     StepCommandRunner? stepCommands,
     StepWebhookPoster? stepWebhooks,
+    StepPipelineStarter? stepPipelines,
     GithubApi? Function(Automation automation)? githubApi,
     GithubClient? githubClient,
     Future<String?> Function(EnvironmentPath directory)? branchOf,
@@ -316,6 +319,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
           stepCommands ??
           ServerStepCommands(facts: facts, sessionOf: sessions.getById),
       webhooks: stepWebhooks ?? ServerStepWebhooks(),
+      pipelines: stepPipelines,
     );
     github = DaemonGithub(
       dao: AutomationDao(database),
@@ -411,6 +415,21 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   late final DateTime Function() _now;
   late final String Function() _newId;
   late final AutomationFollowUps _followUps;
+
+  /// Writes how pipeline [run] went onto the step of the automation run that
+  /// started it; nothing for a run no automation started.
+  void pipelineRunMoved(PipelineRun run) {
+    final automation = run.automation;
+    if (automation == null) return;
+    final report = pipelineStepReport(run);
+    _followUps.pipelineMoved(
+      automationRunId: automation.runId,
+      pipelineRunId: run.id,
+      outcome: report.outcome,
+      detail: report.detail,
+    );
+  }
+
   final void Function(String message) _log;
   late final SessionDao _sessions;
   late final AutomationRecords _automations;

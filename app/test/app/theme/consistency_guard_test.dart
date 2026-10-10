@@ -155,8 +155,8 @@ void main() {
         scaffold,
       ),
       'RunningTabView': ('lib/src/app/shell/running_tab_view.dart', scaffold),
-      'AutomationsTabView': (
-        'lib/src/features/automations/presentation/automations_tab_view.dart',
+      'WorkflowsTabView': (
+        'lib/src/features/workflows/presentation/workflows_tab_view.dart',
         scaffold,
       ),
       'EditorTabView': (

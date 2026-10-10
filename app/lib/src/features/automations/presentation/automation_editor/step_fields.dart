@@ -173,6 +173,7 @@ extension _AutomationStepFields on _AutomationEditorState {
         AutomationStepKind.check => _checkStep(step),
         AutomationStepKind.command => _commandStep(step, rail),
         AutomationStepKind.webhook => _webhookStep(step, rail),
+        AutomationStepKind.pipeline => _pipelineStep(step, rail),
         AutomationStepKind.tell => _messageStep(
           context,
           step,
@@ -419,6 +420,88 @@ extension _AutomationStepFields on _AutomationEditorState {
       _timeoutField(step, minutes: false),
     ],
   );
+
+  Widget _pipelineStep(AutomationStep step, Color? rail) {
+    final pipelines = ref.watch(pipelinesProvider).all;
+    final all = pipelines.isEmpty ? kPipelineTemplates : pipelines;
+    final repositories = ref.watch(automationCheckoutsProvider);
+    return EditorNode(
+      result: _resultFor(step.kind.storedName),
+      title: 'Run a pipeline',
+      icon: AppIcons.treeStructure,
+      hint: 'Stages of agents, each handed the last one\'s work.',
+      rail: rail,
+      trailing: [_removeButton(step.kind)],
+      children: [
+        _whenField(step),
+        DropdownButtonFormField<String>(
+          key: const ValueKey('automation-pipeline-pick'),
+          initialValue: all.any((p) => p.id == step.pipelineId)
+              ? step.pipelineId
+              : null,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Pipeline'),
+          hint: const Text('Pick a pipeline'),
+          items: [
+            for (final p in all)
+              DropdownMenuItem(
+                value: p.id,
+                child: Text(p.name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (id) =>
+              id == null ? null : _putStep(step.kind, pipelineId: id),
+        ),
+        DropdownButtonFormField<String?>(
+          key: const ValueKey('automation-pipeline-checkout'),
+          initialValue: repositories.any((r) => r.id == step.repositoryId)
+              ? step.repositoryId
+              : null,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Runs in'),
+          items: [
+            const DropdownMenuItem<String?>(
+              child: Text('This automation\'s checkout'),
+            ),
+            for (final r in repositories)
+              DropdownMenuItem<String?>(
+                value: r.id,
+                child: Text(r.name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (id) => id == null
+              ? _putStep(step.kind, ownCheckout: true)
+              : _putStep(step.kind, pipelineCheckout: id),
+        ),
+        TextField(
+          key: const ValueKey('automation-text-pipeline'),
+          controller: _pipelineInput,
+          minLines: 2,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            labelText: 'What should it do?',
+            alignLabelWithHint: true,
+          ),
+          onChanged: (_) => _putStep(step.kind),
+        ),
+        VariableChips(
+          names: _stepVariableNames,
+          controller: _pipelineInput,
+          onChanged: () => _putStep(step.kind),
+        ),
+        if (step.refusal case final why? when _pipelineInput.text.isNotEmpty)
+          _Problem(why)
+        else
+          const EditorNote(
+            'Every stage gets this as {{input}}. The pipeline starts as '
+            'background work in this automation\'s name, and the run ends '
+            '"Waiting on pipeline": the pipeline carries on by itself, and '
+            'how it went shows here — finished, failed, or waiting for your '
+            'approval at a gate, which also reaches your inbox.',
+          ),
+      ],
+    );
+  }
 
   Widget _addStepButton() {
     final missing = [

@@ -32,8 +32,17 @@ import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher
 import 'package:karmashala/src/features/agents/presentation/usage_tab/usage_tab_view.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
 import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_board.dart'
+    show OverviewSubSessionMode;
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_peek.dart'
+    show overviewPeekChatProvider;
+import 'package:karmashala/src/features/overview/presentation/overview_pipeline_peek.dart';
+import 'package:karmashala/src/features/overview/application/overview_pipeline_peek.dart';
+import 'package:karmashala/src/features/explorer/application/agent_state_providers.dart'
+    show workspaceSessionsProvider;
+import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
 import 'package:karmashala/src/features/pipelines/application/pipelines_controller.dart';
 import 'package:karmashala/src/features/pipelines/presentation/pipeline_editor.dart';
 import 'package:karmashala/src/features/pipelines/presentation/pipeline_run_detail.dart';
@@ -50,6 +59,9 @@ import 'package:karmashala/src/features/stores/presentation/stores_tab_state.dar
 import 'package:karmashala/src/features/stores/presentation/stores_tab_view.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
+import 'package:karmashala/src/features/workflows/presentation/workflows_tab_view.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/pipelines.dart';
 import 'package:karmashala_core/verdicts.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -193,6 +205,15 @@ Future<void> _tap(WidgetTester tester, Finder finder) async {
 
 /// Taps [finder] on the board, scrolling its lazy list until it is built: a
 /// short window at large text keeps the lanes below the fold.
+/// Scrolls the board until [finder] is drawn, tapping nothing.
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(finder, 300, scrollable: hybridList);
+  }
+  await tester.ensureVisible(finder.first);
+  await settleSurface(tester);
+}
+
 Future<void> _tapOnBoard(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isEmpty) {
     await tester.scrollUntilVisible(finder, 300, scrollable: hybridList);
@@ -205,6 +226,13 @@ Future<void> _tapOnBoard(WidgetTester tester, Finder finder) async {
 Future<void> _peek(WidgetTester tester) async {
   if (_byKey('overview-peek').evaluate().isNotEmpty) return;
   await _tapOnBoard(tester, _byKey('overview-queue-title:ks-r21'));
+}
+
+/// Opens run-1's peek, unless the last window left it open: the board
+/// keeps it across a resize, and over a narrow board it covers the card.
+Future<void> _peekRun(WidgetTester tester) async {
+  if (find.byType(PipelineRunPeek).evaluate().isNotEmpty) return;
+  await _tapOnBoard(tester, _byKey('overview-pipeline-open:run-1'));
 }
 
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
@@ -382,6 +410,53 @@ Future<SurfaceBuilder> _mission(
     phoneHome:
         phoneHome ??
         const Scaffold(body: PaneTitleOverride(child: OverviewTabView())),
+  );
+}
+
+/// The run peek alone over the dashboard's run (round 88), on its stage's
+/// session with [stage]: the session's chat is a stand-in, as the board's
+/// own peek renders draw it.
+Future<SurfaceBuilder> _runPeek(
+  WidgetTester tester,
+  Brightness brightness, {
+  bool stage = false,
+}) async {
+  final c = ProviderContainer(
+    overrides: [
+      clockProvider.overrideWithValue(FixedClock(_now)),
+      pipelinesProvider.overrideWith(_Runs.new),
+      workspaceSessionsProvider.overrideWith(
+        (ref) => [
+          WorkspaceSessionEntry(
+            id: 'stage-plan',
+            title: 'Plan · Plan → Implement → Review',
+            createdAt: _now,
+          ),
+        ],
+      ),
+      overviewPeekChatProvider.overrideWithValue(
+        (entry, _) => Center(child: Text('chat:${entry.id}')),
+      ),
+    ],
+  );
+  addTearDown(c.dispose);
+  final peeks = c.read(pipelinePeekProvider.notifier);
+  stage ? peeks.openStage('run-1', 'stage-plan') : peeks.open('run-1');
+  Widget peek({required bool compact}) => Consumer(
+    builder: (context, ref, _) => switch (ref.watch(pipelinePeekProvider)) {
+      null => const SizedBox.shrink(),
+      final p => PipelineRunPeek(peek: p, compact: compact, onClose: () {}),
+    },
+  );
+  return () => responsiveApp(
+    tester,
+    c,
+    brightness,
+    desktop: Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: SizedBox(width: kOverviewPeekWidth, child: peek(compact: false)),
+    ),
+    phoneHome: Scaffold(body: SafeArea(child: peek(compact: true))),
   );
 }
 
@@ -766,6 +841,119 @@ Future<SurfaceBuilder> _pipelineDialog(
 Future<void> _openDialog(WidgetTester tester) =>
     _tap(tester, find.text('open'));
 
+// ---------------------------------------------------------------- workflows
+
+/// Workflows on [section] (round 88): an automation and its runs, a saved
+/// pipeline and two runs of it — one held at a gate, started by the
+/// automation — and, with [run] or [editing], a run's detail or the
+/// pipeline editor in the page.
+Future<SurfaceBuilder> _workflows(
+  WidgetTester tester,
+  Brightness brightness, {
+  WorkflowsSection section = WorkflowsSection.automations,
+  WorkflowRunRef? run,
+  bool editing = false,
+}) async {
+  final mine = kPipelineTemplates.first.copyWith(
+    id: 'p-mine',
+    name: 'Ship a fix',
+    builtIn: false,
+  );
+  final c = (await tester.runAsync(() async {
+    final server = FakeDataServer();
+    server.environmentRows.upsert(windowsEnv());
+    server.projectRows.insert(project());
+    server.repositoryRows.insert(repository());
+    server.installationRows.insert(
+      agentInstallation(agentId: AgentIds.claudeCode),
+    );
+    server.automationRows
+      ..insert(
+        Automation(
+          id: 'nightly',
+          repositoryId: 'r1',
+          name: 'Nightly: Implement → Test → Fix on failing tests',
+          schedule: const AutomationSchedule.cron('0 2 * * *'),
+          agentInstallationId: 'a1',
+          prompt: 'Run the tests.',
+          permissionMode: null,
+          enabled: true,
+          armedAt: _pNow,
+        ),
+      )
+      ..insertRun(
+        AutomationRun(
+          id: 'ar1',
+          automationId: 'nightly',
+          scheduledFor: _pNow.subtract(const Duration(hours: 10)),
+          firedAt: _pNow.subtract(const Duration(hours: 10)),
+          state: AutomationRunState.finished,
+          reason: 'The tests ran; 2 failed.',
+          sessionId: 's-nightly',
+          finishedAt: _pNow.subtract(const Duration(hours: 9, minutes: 52)),
+          stepResults: [
+            AutomationStepResult(
+              kind: AutomationStepKind.pipeline,
+              outcome: AutomationStepOutcome.waiting,
+              detail: '"Ship a fix" waits for your approval at Plan.',
+              at: _pNow,
+              pipelineRunId: 'pr-gate',
+            ),
+          ],
+        ),
+      );
+    server.pipelineRows.saved[mine.id] = mine;
+    server.pipelineRows
+      ..putRun(_failedRun())
+      ..putRun(
+        PipelineRun(
+          id: 'pr-gate',
+          definition: mine,
+          repositoryId: 'r1',
+          input: 'The nightly tests failed. Make them pass again.',
+          state: PipelineRunState.waiting,
+          automation: const PipelineRunAutomation(
+            automationId: 'nightly',
+            runId: 'ar1',
+            name: 'Nightly: Implement → Test → Fix on failing tests',
+          ),
+          createdAt: _pNow.subtract(const Duration(hours: 9, minutes: 52)),
+          updatedAt: _pNow,
+          records: [
+            PipelineStageRecord(
+              stageIndex: 0,
+              role: 'Plan',
+              attempt: 1,
+              state: PipelineStageState.approval,
+              sessionId: 's-plan',
+              answer: 'Plan: fix the two failing tests.',
+              startedAt: _pNow.subtract(const Duration(hours: 9)),
+              finishedAt: _pNow.subtract(const Duration(hours: 8)),
+            ),
+          ],
+        ),
+      );
+    return ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(),
+        await server.override(),
+        clockProvider.overrideWithValue(FixedClock(_pNow)),
+      ],
+    );
+  }))!;
+  addTearDown(c.dispose);
+  c.read(workflowsSectionProvider.notifier).show(section);
+  if (run != null) c.read(selectedWorkflowRunProvider.notifier).select(run);
+  if (editing) c.read(pipelineEditingProvider.notifier).open(mine);
+  return () => responsiveApp(
+    tester,
+    c,
+    brightness,
+    desktop: const WorkflowsTabView(),
+    phonePage: PhoneMoreEntry.workflows,
+  );
+}
+
 // ---------------------------------------------------------------- settings
 
 Future<SurfaceBuilder> _settings(
@@ -892,6 +1080,32 @@ final responsiveSurfaces = <ResponsiveSurface>[
     (t, b) => _mission(t, b),
     warmUp: (t) => _tapOnBoard(t, _byKey('overview-pipeline-edit:run-1')),
   ),
+  // Round 88: sub-sessions as cards, each tied to its parent — a connector
+  // on a desktop, "child of" on a phone — and a child in another lane
+  // with its jump.
+  ResponsiveSurface(
+    'dash-subs-cards',
+    (t, b) => _mission(
+      t,
+      b,
+      seed: (c) => c
+          .read(overviewPrefsProvider.notifier)
+          .setSubSessions(OverviewSubSessionMode.cards),
+    ),
+    warmUp: (t) => _scrollTo(t, _byKey('overview-linked:ks-r32-sub0')),
+  ),
+  // Round 88: a run's card opens its peek beside the board (a page on a
+  // phone); a stage clicked shows its session there.
+  ResponsiveSurface(
+    'pipe-run-peek',
+    (t, b) => _mission(t, b),
+    warmUp: _peekRun,
+  ),
+  ResponsiveSurface('pipe-run-peek-alone', _runPeek),
+  ResponsiveSurface(
+    'pipe-run-peek-stage',
+    (t, b) => _runPeek(t, b, stage: true),
+  ),
   ResponsiveSurface(
     'pipe-run-dialog',
     (t, b) => _pipelineDialog(t, b, showRunPipeline),
@@ -915,6 +1129,45 @@ final responsiveSurfaces = <ResponsiveSurface>[
       (context) => showPipelineRunDetail(context, 'r2'),
     ),
     warmUp: _openDialog,
+  ),
+  // Round 88: Workflows' sections, a run's detail of each kind, the pipeline
+  // editor in the page and the runs' filters.
+  ResponsiveSurface('workflows-automations', _workflows),
+  ResponsiveSurface(
+    'workflows-pipelines',
+    (t, b) => _workflows(t, b, section: WorkflowsSection.pipelines),
+  ),
+  ResponsiveSurface(
+    'workflows-pipeline-editor',
+    (t, b) =>
+        _workflows(t, b, section: WorkflowsSection.pipelines, editing: true),
+  ),
+  ResponsiveSurface(
+    'workflows-runs',
+    (t, b) => _workflows(t, b, section: WorkflowsSection.runs),
+  ),
+  ResponsiveSurface(
+    'workflows-runs-filter',
+    (t, b) => _workflows(t, b, section: WorkflowsSection.runs),
+    warmUp: (t) => _tap(t, _byKey('workflow-runs-filter')),
+  ),
+  ResponsiveSurface(
+    'workflows-run-pipeline',
+    (t, b) => _workflows(
+      t,
+      b,
+      section: WorkflowsSection.runs,
+      run: const WorkflowRunRef(WorkflowRunKind.pipeline, 'pr-gate'),
+    ),
+  ),
+  ResponsiveSurface(
+    'workflows-run-automation',
+    (t, b) => _workflows(
+      t,
+      b,
+      section: WorkflowsSection.runs,
+      run: const WorkflowRunRef(WorkflowRunKind.automation, 'ar1'),
+    ),
   ),
   ResponsiveSurface(
     'settings-session-limits',
@@ -985,6 +1238,7 @@ final moreSurfaces = <ResponsiveSurface>[
       (t, b) => switch (entry) {
         PhoneMoreEntry.usage => _usage(t, b, many: true),
         PhoneMoreEntry.stores => _stores(t, b),
+        PhoneMoreEntry.workflows => _workflows(t, b),
         _ => _mission(t, b, phoneHome: _PushedFromMore(entry)),
       },
       phoneOnly: true,

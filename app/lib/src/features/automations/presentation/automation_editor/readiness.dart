@@ -210,6 +210,7 @@ extension _AutomationReadiness on _AutomationEditorState {
           AutomationStepOutcome.done => RunOutcome.succeeded,
           AutomationStepOutcome.failed => RunOutcome.failed,
           AutomationStepOutcome.skipped => RunOutcome.unknown,
+          AutomationStepOutcome.waiting => RunOutcome.waitingOnPipeline,
         },
         detail: step.detail,
       );

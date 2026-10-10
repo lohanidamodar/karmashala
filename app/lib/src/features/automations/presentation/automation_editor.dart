@@ -3,6 +3,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/pipelines.dart' show kPipelineTemplates;
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala_core/verdicts.dart';
@@ -17,6 +18,8 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_model_catalog_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/model_picker.dart';
+import '../../pipelines/application/pipelines_controller.dart'
+    show pipelinesProvider;
 import '../../settings/presentation/settings_row.dart';
 
 import '../application/automation_draft.dart';
@@ -74,6 +77,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   late final _hookUrl = TextEditingController(
     text: _draft.steps.of(AutomationStepKind.webhook)?.url ?? '',
   );
+  late final _pipelineInput = TextEditingController(
+    text: _draft.steps.of(AutomationStepKind.pipeline)?.text ?? '',
+  );
   late final _hookBody = TextEditingController(
     text:
         _draft.steps.of(AutomationStepKind.webhook)?.text ??
@@ -119,6 +125,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       _checkName,
       _hookUrl,
       _hookBody,
+      _pipelineInput,
       _ghRepo,
       _perHour,
       _queueLimit,
@@ -141,6 +148,9 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     AutomationStepWhen? when,
     bool? allowPrivate,
     int? timeoutSeconds,
+    String? pipelineId,
+    String? pipelineCheckout,
+    bool ownCheckout = false,
   }) {
     final existing = _draft.steps.of(kind);
     final text = switch (kind) {
@@ -148,6 +158,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       AutomationStepKind.notify => _notify.text,
       AutomationStepKind.command => _command.text,
       AutomationStepKind.webhook => _hookBody.text,
+      AutomationStepKind.pipeline => _pipelineInput.text,
       AutomationStepKind.check => _checkCommand.text,
     };
     _update(
@@ -163,6 +174,15 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
             url: kind == AutomationStepKind.webhook ? _hookUrl.text.trim() : '',
             allowPrivate: allowPrivate ?? existing?.allowPrivate ?? false,
             timeoutSeconds: timeoutSeconds ?? existing?.timeoutSeconds,
+            pipelineId:
+                pipelineId ??
+                existing?.pipelineId ??
+                (kind == AutomationStepKind.pipeline
+                    ? kPipelineTemplates.first.id
+                    : ''),
+            repositoryId: ownCheckout
+                ? null
+                : pipelineCheckout ?? existing?.repositoryId,
           ),
         ),
       ),
@@ -175,7 +195,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         AutomationStepKind.notify ||
         AutomationStepKind.webhook => AutomationStepWhen.always,
         AutomationStepKind.check ||
-        AutomationStepKind.command => AutomationStepWhen.success,
+        AutomationStepKind.command ||
+        AutomationStepKind.pipeline => AutomationStepWhen.success,
       };
 
   Repository? _repository(List<Repository> all) =>

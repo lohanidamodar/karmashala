@@ -16,6 +16,8 @@ import '../../stores/application/store_changes.dart'
     show storesOpenRequestProvider;
 import '../../terminal/application/terminal_sessions_controller.dart'
     show paneSessionsProvider;
+import '../../workflows/application/workflows_state.dart'
+    show workflowsOpenRequestProvider;
 import 'notification_providers.dart';
 
 final _log = AppLogger.named('notifications.inbox');
@@ -48,6 +50,11 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
           ref
               .read(storesOpenRequestProvider.notifier)
               .open(storeAppKeyOfInboxId(openId)!);
+        case InboxOpenWanted(:final openId)
+            when pipelineRunIdOfInboxId(openId) != null:
+          ref
+              .read(workflowsOpenRequestProvider.notifier)
+              .openPipelineRun(pipelineRunIdOfInboxId(openId)!);
         // The tray, the Inbox and "go to the next agent" all land here.
         case InboxOpenWanted(:final openId, :final imported):
           revealSession(ref.container, openId: openId, imported: imported);

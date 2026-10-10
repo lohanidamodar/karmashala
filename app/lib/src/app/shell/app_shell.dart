@@ -22,6 +22,7 @@ import '../../features/automations/application/scheduled_resume_observer.dart';
 import '../../features/automations/application/usage_limit_notices.dart';
 import '../../features/stores/application/store_changes.dart';
 import '../../features/stores/presentation/stores_tab_state.dart';
+import '../../features/workflows/application/workflows_state.dart';
 import '../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
@@ -333,6 +334,14 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (request == null || !mounted) return;
       ref.read(storesSelectionProvider.notifier).select(request.appKey);
       openStoresTab(ref);
+    });
+    // A pipeline run's inbox item or notification opens it in Workflows.
+    ref.listen(workflowsOpenRequestProvider, (_, request) {
+      if (request == null || !mounted) return;
+      openWorkflowRuns(
+        ref,
+        run: WorkflowRunRef(WorkflowRunKind.pipeline, request.runId),
+      );
     });
     // A notification for a session that is gone says so where it landed.
     ref.listen(sessionRevealNoticeProvider, (_, notice) {

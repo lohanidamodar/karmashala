@@ -160,3 +160,16 @@ List<PipelineRun> dashboardPipelineRuns(
             kPipelineFinishedShownFor)
       run,
 ];
+
+/// What the editor starts from for [initial]: a copy of a built-in one, the
+/// person's own as it is, or a new one from the first template.
+PipelineDefinition pipelineDraftOf(PipelineDefinition? initial) {
+  final base = initial ?? kPipelineTemplates.first;
+  return initial == null || initial.builtIn
+      ? base.copyWith(
+          id: '',
+          name: initial == null ? 'My pipeline' : '${base.name} (copy)',
+          builtIn: false,
+        )
+      : initial;
+}

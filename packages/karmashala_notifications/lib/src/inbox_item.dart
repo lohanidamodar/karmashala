@@ -70,7 +70,14 @@ enum InboxItemKind {
 
   /// A session a person started waits for a concurrency slot; it goes when
   /// the session starts or the wait is cancelled.
-  waitingForSlot;
+  waitingForSlot,
+
+  /// A pipeline run holds at an approval gate for a person; it goes when the
+  /// run moves on.
+  pipelineWaiting,
+
+  /// A pipeline run failed; it goes when the run is retried or skipped on.
+  pipelineFailed;
 
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
@@ -92,7 +99,9 @@ enum InboxItemKind {
     // at a crashed session does not deal with what it left.
     InboxItemKind.followUp ||
     InboxItemKind.automationProposed ||
-    InboxItemKind.waitingForSlot => InboxRetirement.source,
+    InboxItemKind.waitingForSlot ||
+    InboxItemKind.pipelineWaiting ||
+    InboxItemKind.pipelineFailed => InboxRetirement.source,
   };
 
   /// Whether this kind is a condition still true right now. Load-bearing: a
@@ -105,6 +114,8 @@ enum InboxItemKind {
   /// turn are left to read back.
   bool get isQuiet =>
       this != InboxItemKind.storeAttention &&
+      this != InboxItemKind.pipelineWaiting &&
+      this != InboxItemKind.pipelineFailed &&
       reason?.interruptsAt(NotifyLevel.whenNeeded) != true;
 
   /// The news reason this kind files, where it has one.
@@ -122,7 +133,9 @@ enum InboxItemKind {
     InboxItemKind.wentQuiet ||
     InboxItemKind.storeAttention ||
     InboxItemKind.storeNews ||
-    InboxItemKind.waitingForSlot => null,
+    InboxItemKind.waitingForSlot ||
+    InboxItemKind.pipelineWaiting ||
+    InboxItemKind.pipelineFailed => null,
   };
 
   String get label => switch (this) {
@@ -140,6 +153,8 @@ enum InboxItemKind {
     InboxItemKind.storeAttention => 'Store needs a look',
     InboxItemKind.storeNews => 'Store changes',
     InboxItemKind.waitingForSlot => 'Waiting for a slot',
+    InboxItemKind.pipelineWaiting => 'Pipeline waits for you',
+    InboxItemKind.pipelineFailed => 'Pipeline failed',
   };
 
   /// The kind written on the wire. A kind added after 1.31 travels as
@@ -151,7 +166,9 @@ enum InboxItemKind {
     InboxItemKind.wentQuiet ||
     InboxItemKind.storeAttention ||
     InboxItemKind.storeNews ||
-    InboxItemKind.waitingForSlot => InboxItemKind.followUp.name,
+    InboxItemKind.waitingForSlot ||
+    InboxItemKind.pipelineWaiting ||
+    InboxItemKind.pipelineFailed => InboxItemKind.followUp.name,
     _ => name,
   };
 

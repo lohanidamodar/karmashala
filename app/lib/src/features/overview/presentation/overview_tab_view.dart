@@ -27,6 +27,7 @@ import 'overview_batch_bar.dart';
 import 'overview_filters.dart';
 import 'overview_hybrid.dart';
 import 'overview_peek.dart';
+import 'overview_pipeline_peek.dart';
 import 'overview_pins.dart';
 import 'overview_queue_card.dart';
 import 'overview_resume_picker.dart';
@@ -36,6 +37,7 @@ import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../timeline/presentation/overview_timeline_view.dart';
 import '../../pipelines/presentation/pipeline_run_dialog.dart';
+import '../application/overview_pipeline_peek.dart';
 import '../../todos/application/todos_providers.dart'
     show openTodoCountProvider;
 import '../../todos/presentation/todos_page.dart';

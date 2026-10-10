@@ -320,9 +320,55 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     }),
   };
 
+  var _runPageOpen = false;
+
+  /// The phone's run peek: a page of its own, as a session's is, following
+  /// the peeked run and its stages until it is closed.
+  void _showRunPage() {
+    if (_runPageOpen) return;
+    _runPageOpen = true;
+    unawaited(
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute(
+              builder: (page) => Scaffold(
+                body: SafeArea(
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final peek = ref.watch(pipelinePeekProvider);
+                      if (peek == null) return const SizedBox.shrink();
+                      return PipelineRunPeek(
+                        peek: peek,
+                        compact: true,
+                        onClose: () => Navigator.of(page).pop(),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          )
+          .whenComplete(() {
+            _runPageOpen = false;
+            if (mounted) ref.read(pipelinePeekProvider.notifier).close();
+          }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // A run's peek and a session's take the same place: one at a time.
+    ref.listen(pipelinePeekProvider.select((p) => p?.runId), (_, next) {
+      if (next == null) return;
+      ref.read(overviewFocusProvider.notifier).closePeek();
+      if (_inSheet) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showRunPage();
+        });
+      }
+    });
     ref.listen(overviewFocusProvider.select((f) => f.peeked), (_, next) {
+      if (next != null) ref.read(pipelinePeekProvider.notifier).close();
       _followPeek(next);
       // A peek opened from outside the board — New session — hands the
       // board the keys, so N, 1–9 and Y work on it at once.
@@ -389,6 +435,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       return;
     }
     ref.read(overviewFocusProvider.notifier).closePeek();
+    ref.read(pipelinePeekProvider.notifier).close();
   }
 
   Widget _laidOut() => LayoutBuilder(
@@ -401,6 +448,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.watch(overviewBoardProvider),
               ref.watch(overviewFocusProvider.select((f) => f.peeked)),
             );
+      final runPeek = _inSheet ? null : ref.watch(pipelinePeekProvider);
       final main = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -412,7 +460,9 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
             child: GestureDetector(
               key: const ValueKey('overview-board-space'),
               behavior: HitTestBehavior.translucent,
-              onTap: peeked == null ? null : _closePeekFromBoard,
+              onTap: peeked == null && runPeek == null
+                  ? null
+                  : _closePeekFromBoard,
               child: OverviewHybrid(
                 onOpen: _open,
                 onEdit: (card) => _open(card, editing: true),
@@ -425,7 +475,13 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         ],
       );
       Widget? peek;
-      if (peeked != null) {
+      if (runPeek != null) {
+        peek = PipelineRunPeek(
+          key: ValueKey('overview-run-peek:${runPeek.runId}'),
+          peek: runPeek,
+          onClose: ref.read(pipelinePeekProvider.notifier).close,
+        );
+      } else if (peeked != null) {
         final previous = _stepFrom(peeked.id, -1);
         final next = _stepFrom(peeked.id, 1);
         peek = OverviewPeek(
@@ -449,6 +505,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       // A second peek only where two fit; narrower, the first stays alone.
       final beside =
           peek == null ||
+              runPeek != null ||
               _mode != OverviewPeekMode.docked ||
               !overviewSideBySideFits(context)
           ? null

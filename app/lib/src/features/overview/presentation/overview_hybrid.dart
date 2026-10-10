@@ -8,6 +8,7 @@ import '../../../app/shell/phone_routes.dart';
 import '../../../app/shell/phone_shell.dart' show PhoneTabsScope;
 import '../../sessions/application/session_status_providers.dart';
 import '../application/overview_board.dart';
+import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import 'overview_card_parts.dart';
@@ -147,9 +148,17 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         ref.watch(agentSessionStatusProvider(card.id));
       }
     }
-    final sections = overviewSectionsOf(
+    final folded = ref.watch(overviewFoldedParentsProvider);
+    final all = overviewSectionsOf(
       board,
       waitingSince: (id) => statusOf(id)?.waitingSince,
+    );
+    // A folded parent's sub-session cards are away until it is unfolded.
+    final sections = (
+      queue: overviewUnfolded(all.queue, folded),
+      work: overviewUnfolded(all.work, folded),
+      ready: overviewUnfolded(all.ready, folded),
+      done: overviewUnfolded(all.done, folded),
     );
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
     final pinned = watchOverviewPinned(ref).isNotEmpty;
@@ -191,15 +200,20 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             for (final card in sections.queue)
               Padding(
                 padding: const EdgeInsets.only(bottom: Insets.md),
-                child: OverviewQueueCard(
-                  key: ValueKey('overview-queue-card:${card.id}'),
-                  card: card,
-                  onOpen: onOpen,
-                  onEdit: widget.onEdit,
-                  onTerminal: widget.onTerminal,
-                  onAnswered: widget.onAnswered,
-                  questionController: widget.questionControllerOf?.call(
-                    card.id,
+                child: overviewTied(
+                  card,
+                  sections.queue,
+                  phone: phone,
+                  OverviewQueueCard(
+                    key: ValueKey('overview-queue-card:${card.id}'),
+                    card: card,
+                    onOpen: onOpen,
+                    onEdit: widget.onEdit,
+                    onTerminal: widget.onTerminal,
+                    onAnswered: widget.onAnswered,
+                    questionController: widget.questionControllerOf?.call(
+                      card.id,
+                    ),
                   ),
                 ),
               ),
@@ -223,7 +237,10 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 style: muted,
               )
             else
-              for (final (lane, cards) in overviewWorkGroupsOf(board)) ...[
+              for (final (lane, cards) in [
+                for (final (lane, cards) in overviewWorkGroupsOf(board))
+                  (lane, overviewUnfolded(cards, folded)),
+              ]) ...[
                 Padding(
                   key: ValueKey('overview-work-group:${lane.key}'),
                   // A phone's rows carry their own padding: the header sits
@@ -246,21 +263,19 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     overviewTied(
                       card,
                       cards,
+                      phone: true,
                       OverviewPhoneRow(card: card, onOpen: onOpen),
                     )
                 else
-                  ..._grid([
-                    for (final card in cards)
-                      overviewTied(
-                        card,
-                        cards,
-                        OverviewWorkCard(
-                          key: ValueKey('overview-work-card:${card.id}'),
-                          card: card,
-                          onOpen: onOpen,
-                        ),
-                      ),
-                  ], across),
+                  ..._familyGrid(
+                    cards,
+                    across,
+                    (card) => OverviewWorkCard(
+                      key: ValueKey('overview-work-card:${card.id}'),
+                      card: card,
+                      onOpen: onOpen,
+                    ),
+                  ),
               ],
             if (sections.ready.isNotEmpty) ...[
               EyebrowLabel(
@@ -276,21 +291,19 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   overviewTied(
                     card,
                     sections.ready,
+                    phone: true,
                     OverviewPhoneRow(card: card, onOpen: onOpen),
                   )
               else
-                ..._grid([
-                  for (final card in sections.ready)
-                    overviewTied(
-                      card,
-                      sections.ready,
-                      OverviewDoneCard(
-                        key: ValueKey('overview-ready-card:${card.id}'),
-                        card: card,
-                        onOpen: onOpen,
-                      ),
-                    ),
-                ], across),
+                ..._familyGrid(
+                  sections.ready,
+                  across,
+                  (card) => OverviewDoneCard(
+                    key: ValueKey('overview-ready-card:${card.id}'),
+                    card: card,
+                    onOpen: onOpen,
+                  ),
+                ),
             ],
           ],
         );
@@ -342,6 +355,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   overviewTied(
                     card,
                     done,
+                    phone: phone,
                     OverviewDoneRow(card: card, onOpen: onOpen),
                   ),
             ],
@@ -366,25 +380,64 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     );
   }
 
-  /// [cards] in rows of [across], each row as tall as its tallest.
-  static List<Widget> _grid(List<Widget> cards, int across) => [
-    for (var start = 0; start < cards.length; start += across)
-      Padding(
-        padding: const EdgeInsets.only(bottom: Insets.md),
-        child: IntrinsicHeight(
-          child: Row(
+  /// [cards] by family — a parent and its sub-session cards in one cell,
+  /// tied together — in rows of [across].
+  static List<Widget> _familyGrid(
+    List<OverviewCard> cards,
+    int across,
+    Widget Function(OverviewCard card) cell,
+  ) => _grid([
+    for (final family in overviewFamiliesOf(cards))
+      if (family.length == 1)
+        (overviewTied(family.single, cards, cell(family.single)), false)
+      else
+        (
+          Column(
+            key: ValueKey('overview-family:${family.first.id}'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              for (var i = start; i < start + across; i++) ...[
-                if (i > start) const SizedBox(width: Insets.md),
-                Expanded(
-                  child: i < cards.length ? cards[i] : const SizedBox.shrink(),
-                ),
-              ],
+              for (final card in family) overviewTied(card, cards, cell(card)),
             ],
           ),
+          true,
         ),
-      ),
+  ], across);
+
+  /// [cells] in rows of [across], each row as tall as its tallest — but a
+  /// row holding a family keeps each cell its own height, the family's
+  /// cards stacked from the top.
+  static List<Widget> _grid(List<(Widget, bool)> cells, int across) => [
+    for (var start = 0; start < cells.length; start += across)
+      if (cells.skip(start).take(across).any((c) => c.$2))
+        Padding(
+          padding: const EdgeInsets.only(bottom: Insets.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _row(cells, start, across),
+          ),
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.only(bottom: Insets.md),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: _row(cells, start, across),
+            ),
+          ),
+        ),
+  ];
+
+  static List<Widget> _row(
+    List<(Widget, bool)> cells,
+    int start,
+    int across,
+  ) => [
+    for (var i = start; i < start + across; i++) ...[
+      if (i > start) const SizedBox(width: Insets.md),
+      Expanded(child: i < cells.length ? cells[i].$1 : const SizedBox.shrink()),
+    ],
   ];
 }
 

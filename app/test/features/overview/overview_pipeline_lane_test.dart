@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/overview/application/overview_pipeline_peek.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_today.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_pipeline_lane.dart';
 import 'package:karmashala/src/features/pipelines/application/pipelines_controller.dart';
+import 'package:karmashala/src/features/workflows/application/workflow_runs.dart';
+import 'package:karmashala/src/features/workflows/application/workflows_state.dart';
 import 'package:karmashala_automations/pipelines.dart';
 
 import '../../support/fake_data_server.dart';
@@ -146,13 +149,64 @@ void main() {
     expect(server.pipelineRows.acts, ['approve r1']);
   });
 
-  testWidgets('a stage peeks its session', (tester) async {
-    final keep = container.listen(overviewFocusProvider, (_, _) {});
-    addTearDown(keep.close);
+  testWidgets("a stage opens its session inside the run's peek", (
+    tester,
+  ) async {
     await pump(tester);
     await tester.tap(find.byKey(const ValueKey('pipeline-stage:r3:0')));
     await tester.pumpAndSettle();
-    expect(container.read(overviewFocusProvider).peeked, 's-run');
+    expect(
+      container.read(pipelinePeekProvider),
+      const PipelinePeek('r3', stageSessionId: 's-run'),
+    );
+  });
+
+  testWidgets("a card clicked opens the run's peek", (tester) async {
+    await pump(tester);
+    await tester.tap(find.byKey(const ValueKey('overview-pipeline-open:r1')));
+    await tester.pumpAndSettle();
+    expect(container.read(pipelinePeekProvider), const PipelinePeek('r1'));
+    await tester.tap(
+      find.byKey(const ValueKey('overview-pipeline-details:r3')),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(pipelinePeekProvider), const PipelinePeek('r3'));
+  });
+
+  testWidgets(
+    "each card says where the run is, what it waits on and its stage's "
+    'last line',
+    (tester) async {
+      await pump(tester);
+      String textOf(String key) =>
+          tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+      expect(textOf('overview-pipeline-progress:r1'), 'Stage 1 of 3 · 5m');
+      expect(textOf('overview-pipeline-progress:r3'), 'Stage 1 of 3 · 9m');
+      expect(
+        textOf('overview-pipeline-waiting:r1'),
+        'Waiting on you: approve what Plan hands on',
+      );
+      expect(textOf('overview-pipeline-waiting:r3'), "Waiting on Plan's agent");
+      // At a gate, what the stage handed on; working, nothing said yet.
+      expect(
+        textOf('overview-pipeline-last-line:r1'),
+        'Plan: a badge, then a test.',
+      );
+      expect(
+        find.byKey(const ValueKey('overview-pipeline-last-line:r3')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('See all opens Workflows on the pipeline runs', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byKey(const ValueKey('overview-pipelines-more')));
+    await tester.pumpAndSettle();
+    expect(container.read(workflowsSectionProvider), WorkflowsSection.runs);
+    expect(container.read(workflowRunsFilterProvider).kinds, {
+      WorkflowRunKind.pipeline,
+    });
   });
 
   test('the stages\' sessions are held out of the other lanes', () async {

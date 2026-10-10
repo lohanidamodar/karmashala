@@ -188,6 +188,7 @@ String _stepWords(AutomationStep step) {
     AutomationStepKind.check => 'check the result',
     AutomationStepKind.command => 'run a command',
     AutomationStepKind.webhook => 'call a webhook',
+    AutomationStepKind.pipeline => 'run a pipeline',
     AutomationStepKind.tell => 'tell the agent',
     AutomationStepKind.notify => 'notify me',
   };
