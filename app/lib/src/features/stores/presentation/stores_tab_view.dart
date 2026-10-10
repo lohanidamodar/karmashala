@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/logs.dart' show LogFilterChip;
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
