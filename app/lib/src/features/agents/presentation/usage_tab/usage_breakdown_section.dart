@@ -41,7 +41,7 @@ class UsageWhereItWent extends StatelessWidget {
       children: [
         const EyebrowLabel('By project'),
         const SizedBox(height: Insets.xs),
-        RankedBars(bars: bars(breakdown.byProject), color: colour),
+        UsageRankedBars(bars: bars(breakdown.byProject), color: colour),
         const SizedBox(height: Insets.md),
         const EyebrowLabel('By model'),
         const SizedBox(height: Insets.xs),
@@ -52,7 +52,7 @@ class UsageWhereItWent extends StatelessWidget {
             style: muted,
           )
         else ...[
-          RankedBars(bars: bars(breakdown.byModel), color: colour),
+          UsageRankedBars(bars: bars(breakdown.byModel), color: colour),
           if (unsplit > 0)
             Padding(
               padding: const EdgeInsets.only(top: Insets.xs),
@@ -237,4 +237,25 @@ class _HeaviestRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// [RankedBars] for the Usage tab: each name over its bar when the region is
+/// compact, where a label column would cut project and model names short.
+class UsageRankedBars extends StatelessWidget {
+  const UsageRankedBars({required this.bars, required this.color, super.key});
+
+  final List<BarDatum> bars;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => RankedBars(
+      bars: bars,
+      color: color,
+      labelAbove: WidthClass.of(
+        box.maxWidth,
+        textScaler: MediaQuery.textScalerOf(context),
+      ).isCompact,
+    ),
+  );
 }

@@ -291,6 +291,7 @@ class RankedBars extends StatelessWidget {
     required this.color,
     this.maxValue,
     this.labelFlex = 2,
+    this.labelAbove = false,
     super.key,
   });
 
@@ -298,6 +299,10 @@ class RankedBars extends StatelessWidget {
   final Color color;
   final double? maxValue;
   final int labelFlex;
+
+  /// Each label on its own line over its bar, for a narrow region where a
+  /// label column would cut names short.
+  final bool labelAbove;
 
   @override
   Widget build(BuildContext context) {
@@ -308,6 +313,28 @@ class RankedBars extends StatelessWidget {
           0,
           (m, b) => b.value.isFinite ? math.max(m, b.value) : m,
         );
+    Widget label(BarDatum bar) => Text(
+      bar.label,
+      maxLines: labelAbove ? 2 : 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall,
+    );
+    Widget meter(BarDatum bar) => LinearMeter(
+      value: top <= 0 ? 0 : bar.value / top,
+      color: bar.color ?? color,
+      semanticsLabel: bar.spoken,
+    );
+    Widget value(BarDatum bar) => ExcludeSemantics(
+      child: Text(
+        bar.spoken,
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -315,42 +342,34 @@ class RankedBars extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
             child: MergeSemantics(
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: labelFlex,
-                    child: Text(
-                      bar.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    flex: 3,
-                    child: LinearMeter(
-                      value: top <= 0 ? 0 : bar.value / top,
-                      color: bar.color ?? color,
-                      semanticsLabel: bar.spoken,
-                    ),
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Flexible(
-                    child: ExcludeSemantics(
-                      child: Text(
-                        bar.spoken,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontFeatures: const [FontFeature.tabularFigures()],
+              child: labelAbove
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        label(bar),
+                        const SizedBox(height: Insets.xxs),
+                        Row(
+                          children: [
+                            Expanded(child: meter(bar)),
+                            const SizedBox(width: Insets.sm),
+                            // The meter gives way, never the number: "$1.84"
+                            // read as "$1…" is worse than a shorter bar.
+                            value(bar),
+                          ],
                         ),
-                      ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(flex: labelFlex, child: label(bar)),
+                        const SizedBox(width: Insets.sm),
+                        Expanded(flex: 3, child: meter(bar)),
+                        const SizedBox(width: Insets.sm),
+                        // Gives way only when the row is narrower than any
+                        // chart could use.
+                        Flexible(child: value(bar)),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
       ],

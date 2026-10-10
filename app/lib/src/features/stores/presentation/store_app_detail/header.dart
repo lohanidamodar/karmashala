@@ -128,38 +128,44 @@ class _StorePresence extends StatelessWidget {
       label:
           '${store.label}: ${isLive ? 'live $status' : status.toLowerCase()}',
       child: ExcludeSemantics(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        // A Wrap, not a Row: in a narrow header at large text the version
+        // goes under the store's name rather than cutting it short.
+        child: Wrap(
+          spacing: Insets.sm,
+          runSpacing: Insets.xxs,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Flexible(
-              child: StoreLogo.named(
-                store,
-                size: Chrome.iconAction,
-                color: scheme.onSurface,
-                style: style?.copyWith(fontWeight: FontWeight.w600),
-              ),
+            StoreLogo.named(
+              store,
+              size: Chrome.iconAction,
+              color: scheme.onSurface,
+              style: style?.copyWith(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(width: Insets.sm),
-            if (isLive) ...[
-              Container(
-                width: Chrome.dot,
-                height: Chrome.dot,
-                decoration: BoxDecoration(
-                  color: SemanticColors.of(context).idle,
-                  shape: BoxShape.circle,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isLive) ...[
+                  Container(
+                    width: Chrome.dot,
+                    height: Chrome.dot,
+                    decoration: BoxDecoration(
+                      color: SemanticColors.of(context).idle,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: Insets.xs),
+                ],
+                Flexible(
+                  child: Text(
+                    status,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: isLive
+                        ? style?.copyWith(fontWeight: FontWeight.w500)
+                        : style?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
                 ),
-              ),
-              const SizedBox(width: Insets.xs),
-            ],
-            Flexible(
-              child: Text(
-                status,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: isLive
-                    ? style?.copyWith(fontWeight: FontWeight.w500)
-                    : style?.copyWith(color: scheme.onSurfaceVariant),
-              ),
+              ],
             ),
           ],
         ),

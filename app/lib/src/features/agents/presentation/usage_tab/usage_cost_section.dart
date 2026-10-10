@@ -8,6 +8,7 @@ import '../../../../app/shell/reveal_session.dart' show peekSessionOnDashboard;
 import '../../application/session_token_totals.dart' show formatTokenCount;
 import '../../application/usage_session_tokens.dart';
 import '../usage_chip.dart' show formatUsageDuration;
+import 'usage_breakdown_section.dart' show UsageRankedBars;
 import 'usage_tab_state.dart';
 
 /// **Cost, where it is recorded** (round 84): what agents reported spending,
@@ -51,7 +52,7 @@ class UsageCostSection extends ConsumerWidget {
             style: muted,
           )
         else
-          RankedBars(
+          UsageRankedBars(
             bars: [
               for (final cost in byProject)
                 BarDatum(

@@ -70,7 +70,7 @@ class StatTile extends StatelessWidget {
     ].join(', ');
     final labelText = Text(
       label,
-      maxLines: 1,
+      maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: muted,
     );
@@ -104,7 +104,7 @@ class StatTile extends StatelessWidget {
             if (caption case final caption?)
               Text(
                 caption,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: muted?.copyWith(
                   fontFeatures: const [FontFeature.tabularFigures()],

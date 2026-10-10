@@ -29,6 +29,9 @@ import 'usage_windows_section.dart';
 /// long to read and rows drift apart from their numbers.
 const double kUsageTabContentMaxWidth = 960;
 
+/// The widest an account pill's name runs before it ellipsises, at 1x text.
+const double kUsageAccountPillMaxWidth = 260;
+
 /// **The Usage tab** (spec §5, Ctrl+Shift+U): pick an account and a range;
 /// see its tokens, sessions, tightest window and limits hit; each window over
 /// time with its run-out forecast; where the tokens went by project and
@@ -59,8 +62,12 @@ class UsageTabView extends ConsumerWidget {
             child: Align(
               alignment: Alignment.topLeft,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  maxWidth: kUsageTabContentMaxWidth,
+                // The cap is about line length, so it grows with the text.
+                constraints: BoxConstraints(
+                  maxWidth: WidthClass.scaleBreakpoint(
+                    kUsageTabContentMaxWidth,
+                    MediaQuery.textScalerOf(context),
+                  ),
                 ),
                 child: mayView
                     ? const _UsagePage()
@@ -187,7 +194,12 @@ class _AccountLabel extends ConsumerWidget {
     return ConstrainedBox(
       // An email longer than a phone is wide ellipsises rather than pushing
       // the pill off the page.
-      constraints: const BoxConstraints(maxWidth: 260),
+      constraints: BoxConstraints(
+        maxWidth: WidthClass.scaleBreakpoint(
+          kUsageAccountPillMaxWidth,
+          MediaQuery.textScalerOf(context),
+        ),
+      ),
       child: Text(
         '${usageAgentName(account.agentId).split(' ').first} · $who',
         maxLines: 1,

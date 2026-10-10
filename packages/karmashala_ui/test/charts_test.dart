@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/src/charts/chart_support.dart';
@@ -222,6 +223,40 @@ void main() {
           });
         }
       }
+    }
+  });
+
+  testWidgets('ranked bars with labels above keep the whole name and number '
+      'in a narrow region at large text', (tester) async {
+    tester.view
+      ..physicalSize = const Size(360, 400)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const name = 'household-budget-site';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
+          child: Scaffold(
+            body: RankedBars(
+              labelAbove: true,
+              color: Colors.teal,
+              bars: const [
+                BarDatum(label: name, value: 184, valueLabel: r'$1.84'),
+                BarDatum(label: 'karmashala', value: 42, valueLabel: r'$0.42'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    final label = tester.getRect(find.text(name));
+    final value = tester.getRect(find.text(r'$1.84'));
+    expect(label.bottom, lessThanOrEqualTo(value.top), reason: 'label above');
+    for (final text in [name, r'$1.84', r'$0.42']) {
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(text));
+      expect(paragraph.didExceedMaxLines, isFalse, reason: text);
     }
   });
 
