@@ -171,14 +171,14 @@ void main() {
     expect(server.attention.dismissed, [proposalInboxId('hook1')]);
   });
 
-  testWidgets('templates come first, six of them, outcome first', (
+  testWidgets('templates come first, seven of them, outcome first', (
     tester,
   ) async {
     await pump(tester);
     for (final template in kAutomationTemplates) {
       expect(find.text(template.title), findsOneWidget);
     }
-    expect(kAutomationTemplates, hasLength(6));
+    expect(kAutomationTemplates, hasLength(7));
     expect(find.textContaining('Nothing set up yet'), findsOneWidget);
 
     await tester.tap(find.text('Nightly tests and fixes'));
@@ -282,7 +282,22 @@ void main() {
     }
   });
 
-  test('the sixth template notifies when an agent needs you, and such a rule '
+  test('a nightly template hands failing tests to the Implement → Test → '
+      'Fix pipeline', () {
+    final template = kAutomationTemplates.firstWhere(
+      (t) => t.title == kNightlyPipelineTemplateTitle,
+    );
+    final draft = template.build('r1');
+    expect(draft.trigger, DraftTrigger.schedule);
+    final step = draft.steps.of(AutomationStepKind.pipeline)!;
+    expect(step.when, AutomationStepWhen.failure);
+    expect(step.pipelineId, 'builtin:implement-test-fix');
+    expect(step.text, contains('{{steps.check.output}}'));
+    expect(step.refusal, isNull);
+    expect(draft.steps.of(AutomationStepKind.check), isNotNull);
+  });
+
+  test('the last template notifies when an agent needs you, and such a rule '
       'cannot tell the waiting session', () {
     final template = kAutomationTemplates.last;
     expect(template.title, 'Notify me when an agent needs me');

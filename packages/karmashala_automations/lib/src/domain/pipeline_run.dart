@@ -298,6 +298,48 @@ class PipelineStageRecord {
 DateTime? _date(Object? value) =>
     value is String ? DateTime.tryParse(value)?.toUtc() : null;
 
+/// The automation run whose pipeline step started a pipeline run.
+class PipelineRunAutomation {
+  const PipelineRunAutomation({
+    required this.automationId,
+    required this.runId,
+    required this.name,
+  });
+
+  final String automationId;
+
+  /// The automation run, whose step result the pipeline reports back to.
+  final String runId;
+
+  /// The automation's name when it started the run.
+  final String name;
+
+  Map<String, Object?> toJson() => {
+    'automationId': automationId,
+    'runId': runId,
+    'name': name,
+  };
+
+  static PipelineRunAutomation? fromJson(Object? json) {
+    if (json is! Map || json['runId'] is! String) return null;
+    return PipelineRunAutomation(
+      automationId: json['automationId'] as String? ?? '',
+      runId: json['runId'] as String,
+      name: json['name'] as String? ?? '',
+    );
+  }
+}
+
+/// Who started a pipeline run.
+enum PipelineRunStarter {
+  person,
+  automation,
+  agent,
+
+  /// Over MCP with no session named, or a run from before this was kept.
+  unknown,
+}
+
 /// One run of a pipeline: a snapshot of its definition, what it was started
 /// with, and a record per stage attempt, oldest first.
 class PipelineRun {
@@ -312,9 +354,21 @@ class PipelineRun {
     this.records = const [],
     this.startedBySessionId,
     this.byPerson = false,
+    this.automation,
     this.finishedAt,
     this.reason,
   });
+
+  /// The automation that started it, through a pipeline step.
+  final PipelineRunAutomation? automation;
+
+  PipelineRunStarter get startedBy => byPerson
+      ? PipelineRunStarter.person
+      : automation != null
+      ? PipelineRunStarter.automation
+      : startedBySessionId != null
+      ? PipelineRunStarter.agent
+      : PipelineRunStarter.unknown;
 
   final String id;
 
@@ -376,6 +430,7 @@ class PipelineRun {
     records: records ?? this.records,
     startedBySessionId: startedBySessionId,
     byPerson: byPerson,
+    automation: automation,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     finishedAt: clearFinished ? null : finishedAt ?? this.finishedAt,
@@ -395,6 +450,7 @@ class PipelineRun {
     'records': [for (final r in records) r.toJson()],
     'startedBySessionId': ?startedBySessionId,
     'byPerson': byPerson,
+    if (automation != null) 'automation': automation!.toJson(),
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'finishedAt': ?finishedAt?.toUtc().toIso8601String(),
@@ -415,6 +471,7 @@ class PipelineRun {
     ],
     startedBySessionId: json['startedBySessionId'] as String?,
     byPerson: json['byPerson'] == true,
+    automation: PipelineRunAutomation.fromJson(json['automation']),
     createdAt: _date(json['createdAt']) ?? DateTime.utc(1970),
     updatedAt: _date(json['updatedAt']) ?? DateTime.utc(1970),
     finishedAt: _date(json['finishedAt']),

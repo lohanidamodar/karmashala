@@ -24,6 +24,7 @@ class AutomationFollowUps {
     void Function()? onChanged,
     this._commands,
     this._webhooks,
+    this._pipelines,
   }) : _dao = automations,
        _onChanged = onChanged ?? _nothing;
 
@@ -44,6 +45,7 @@ class AutomationFollowUps {
   final void Function() _onChanged;
   final StepCommandRunner? _commands;
   final StepWebhookPoster? _webhooks;
+  final StepPipelineStarter? _pipelines;
 
   static void _nothing() {}
 
@@ -86,6 +88,7 @@ class AutomationFollowUps {
     for (final kind in const [
       AutomationStepKind.command,
       AutomationStepKind.webhook,
+      AutomationStepKind.pipeline,
       AutomationStepKind.tell,
       AutomationStepKind.notify,
     ]) {
@@ -104,6 +107,10 @@ class AutomationFollowUps {
         continue;
       }
       try {
+        if (kind == AutomationStepKind.pipeline) {
+          results.add(await _pipeline(automation, run, step, values));
+          continue;
+        }
         final detail = switch (kind) {
           AutomationStepKind.command => await _command(
             automation,
@@ -128,7 +135,8 @@ class AutomationFollowUps {
       } on StateError catch (error) {
         results.add(_result(kind, AutomationStepOutcome.failed, error.message));
         if (kind == AutomationStepKind.command ||
-            kind == AutomationStepKind.webhook) {
+            kind == AutomationStepKind.webhook ||
+            kind == AutomationStepKind.pipeline) {
           failed = true;
           values['run.status'] = 'failed';
         }
@@ -216,6 +224,66 @@ class AutomationFollowUps {
       throw StateError('${url.host} answered ${answer.status}.');
     }
     return '${url.host} answered ${answer.status}.';
+  }
+
+  /// Starts the step's pipeline as background work attributed to [run], which
+  /// then ends waiting on it: the pipeline carries on by itself, and how it
+  /// went is written back by [pipelineMoved].
+  Future<AutomationStepResult> _pipeline(
+    Automation automation,
+    AutomationRun run,
+    AutomationStep step,
+    Map<String, String> values,
+  ) async {
+    final pipelines = _pipelines;
+    if (pipelines == null) {
+      throw StateError('This server runs no pipelines for automations.');
+    }
+    if (step.refusal case final why?) throw StateError(why);
+    final started = await pipelines.start(
+      automation,
+      run,
+      pipelineId: step.pipelineId,
+      repositoryId: step.repositoryId ?? automation.repositoryId,
+      input: fillStepText(step.text.trim(), values),
+    );
+    values['steps.pipeline.run'] = started.runId;
+    return AutomationStepResult(
+      kind: AutomationStepKind.pipeline,
+      outcome: AutomationStepOutcome.waiting,
+      detail: 'Started "${started.name}"; waiting on the pipeline.',
+      at: _now(),
+      pipelineRunId: started.runId,
+    );
+  }
+
+  /// Writes what pipeline run [pipelineRunId] came to — [outcome] and
+  /// [detail] — onto the pipeline step result of [automationRunId] that
+  /// started it. Nothing for a run or a result that is gone, or no change.
+  void pipelineMoved({
+    required String automationRunId,
+    required String pipelineRunId,
+    required AutomationStepOutcome outcome,
+    required String detail,
+  }) {
+    final run = _dao.runById(automationRunId);
+    if (run == null) return;
+    var changed = false;
+    final results = <AutomationStepResult>[];
+    for (final result in run.stepResults) {
+      if (result.pipelineRunId == pipelineRunId &&
+          (result.outcome != outcome || result.detail != detail)) {
+        changed = true;
+        results.add(
+          result.copyWith(outcome: outcome, detail: detail, at: _now()),
+        );
+      } else {
+        results.add(result);
+      }
+    }
+    if (!changed) return;
+    _dao.updateRun(run.copyWith(stepResults: results));
+    _onChanged();
   }
 
   /// A scheduled resume due now: the one path that already sends a session a

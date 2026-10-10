@@ -29,6 +29,18 @@ bool isStoreInboxItem(InboxItem item) =>
     item.kind == InboxItemKind.storeAttention ||
     item.kind == InboxItemKind.storeNews;
 
+/// Whether [item] is about a pipeline run rather than a session.
+bool isPipelineInboxItem(InboxItem item) =>
+    item.kind == InboxItemKind.pipelineWaiting ||
+    item.kind == InboxItemKind.pipelineFailed;
+
+/// What opening [item] opens, as its menu says it.
+String inboxOpenLabel(InboxItem item) => isStoreInboxItem(item)
+    ? 'Open the app'
+    : isPipelineInboxItem(item)
+    ? 'Open the run'
+    : 'Open the session';
+
 /// The glyph and colour an inbox kind is drawn with. Two failure kinds share
 /// the failure colour; nothing else carries it.
 ({IconData icon, Color color}) inboxKindAppearance(
@@ -78,6 +90,14 @@ bool isStoreInboxItem(InboxItem item) =>
   InboxItemKind.waitingForSlot => (
     icon: AppIcons.clock,
     color: semantic.attention,
+  ),
+  InboxItemKind.pipelineWaiting => (
+    icon: AppIcons.treeStructure,
+    color: semantic.attention,
+  ),
+  InboxItemKind.pipelineFailed => (
+    icon: AppIcons.treeStructure,
+    color: semantic.failure,
   ),
 };
 
@@ -131,7 +151,7 @@ class _InboxRow extends ConsumerWidget {
       itemBuilder: () => [
         DesktopMenuItem(
           value: 'open',
-          label: isStoreInboxItem(item) ? 'Open the app' : 'Open the session',
+          label: inboxOpenLabel(item),
           icon: AppIcons.arrowSquareOut,
         ),
         if (canContinue)

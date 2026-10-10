@@ -451,6 +451,7 @@ class _RunTileState extends ConsumerState<RunTile> {
             AutomationStepOutcome.done => RunOutcome.succeeded,
             AutomationStepOutcome.failed => RunOutcome.failed,
             AutomationStepOutcome.skipped => RunOutcome.unknown,
+            AutomationStepOutcome.waiting => RunOutcome.waitingOnPipeline,
           },
           skipped: step.outcome == AutomationStepOutcome.skipped,
           detail: step.detail,

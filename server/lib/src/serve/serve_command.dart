@@ -27,6 +27,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
         AnthropicSignIn,
         AutomationSave,
         DataRefused,
+        InboxDismiss,
         DecisionAppend,
         DecisionRecorded,
         OpenSessionTab,
@@ -128,6 +129,7 @@ import '../stores/store_change_inbox.dart';
 import '../agents/server_agents.dart';
 import '../automations/daemon_agents.dart';
 import '../automations/daemon_automations.dart';
+import '../pipelines/pipeline_follow_through.dart';
 import '../pipelines/pipeline_tool_set.dart';
 import '../pipelines/server_pipelines.dart';
 import '../automations/webhooks/daemon_webhooks.dart';
@@ -181,6 +183,7 @@ import '../automations/daemon_checkout_facts.dart';
 import 'package:karmashala_automations/store.dart'
     show AutomationDao, CheckoutRows, PipelineDao;
 import 'package:karmashala_automations/pipelines.dart' show PipelineArtifactRef;
+import 'package:karmashala_automations/runner.dart' show StepPipelineStarter;
 import 'package:karmashala_automations/check_runner.dart'
     show CodeIdentityReader;
 import '../domain/uuid.dart';
@@ -1158,7 +1161,10 @@ Future<int> _serve(
     ),
     checkoutsOf: sessionCheckoutsIn(database),
   );
+  // The automations' "Run a pipeline" step, given the pipelines once built.
+  final stepPipelines = ServerStepPipelines();
   final automations = await _startAutomations(
+    stepPipelines: stepPipelines,
     database: database,
     data: data,
     recording: recording,
@@ -2010,7 +2016,27 @@ Future<int> _serve(
     now: () => DateTime.now().toUtc(),
     newId: newUuid,
     log: (message) => errSink.writeln('karmashala_host: $message'),
-  )..start();
+  );
+  stepPipelines.pipelines = pipelines;
+  final pipelineInbox = PipelineInbox(
+    raise: (item) {
+      attention.attention.raise(item);
+      activity.inboxRaised(item);
+    },
+    retire: (id) {
+      if (attention.attention.snapshot.inbox.items.any((i) => i.id == id)) {
+        attention.attention.handle(InboxDismiss(id), null);
+      }
+    },
+    projectName: (id) => checkoutRows.repository(id)?.name ?? 'its checkout',
+    now: () => DateTime.now().toUtc(),
+  );
+  pipelines
+    ..onRunChanged = (run) {
+      automations?.pipelineRunMoved(run);
+      pipelineInbox.moved(run);
+    }
+    ..start();
   data.pipelinesWork = pipelines;
   // `checks_run` for a checkout on this machine or an SSH box is the
   // automations'.

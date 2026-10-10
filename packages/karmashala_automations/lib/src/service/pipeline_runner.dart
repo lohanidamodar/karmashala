@@ -64,6 +64,7 @@ class PipelineRunner {
     required String input,
     String? startedBySessionId,
     bool byPerson = false,
+    PipelineRunAutomation? automation,
   }) {
     final refusal = pipelineDefinitionRefusal(definition);
     if (refusal != null) throw ArgumentError(refusal);
@@ -79,6 +80,7 @@ class PipelineRunner {
       state: PipelineRunState.running,
       startedBySessionId: startedBySessionId,
       byPerson: byPerson,
+      automation: automation,
       createdAt: now,
       updatedAt: now,
     );

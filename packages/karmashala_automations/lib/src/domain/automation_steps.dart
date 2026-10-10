@@ -41,6 +41,10 @@ enum AutomationStepKind {
   /// POSTs JSON to a URL, its body a template of JSON-escaped values.
   webhook('webhook'),
 
+  /// Starts a pipeline run, attributed to the automation, as background work.
+  /// The run ends waiting on it; the pipeline carries on by itself.
+  pipeline('pipeline'),
+
   /// Sends the agent's session a message, as a scheduled resume due now.
   tell('tell'),
 
@@ -62,6 +66,7 @@ enum AutomationStepKind {
     AutomationStepKind.check => 'Check the result',
     AutomationStepKind.command => 'Run a command',
     AutomationStepKind.webhook => 'Call a webhook',
+    AutomationStepKind.pipeline => 'Run a pipeline',
     AutomationStepKind.tell => 'Tell the agent',
     AutomationStepKind.notify => 'Notify me',
   };
@@ -77,7 +82,7 @@ enum AutomationStepKind {
 /// One step after the agent. [text] is the message for tell and notify, with
 /// `{{…}}` variables ([fillStepText]); the command for a command step, never
 /// filled; the body template for a webhook ([fillJsonBody]); a check's
-/// commands, one a line ([checkCommands]).
+/// commands, one a line ([checkCommands]); a pipeline's input, filled.
 class AutomationStep {
   const AutomationStep({
     required this.kind,
@@ -87,6 +92,8 @@ class AutomationStep {
     this.url = '',
     this.allowPrivate = false,
     this.timeoutSeconds,
+    this.pipelineId = '',
+    this.repositoryId,
   });
 
   final AutomationStepKind kind;
@@ -105,6 +112,12 @@ class AutomationStep {
   /// Null is [AutomationStepKind.defaultTimeout].
   final int? timeoutSeconds;
 
+  /// The template or saved pipeline a pipeline step starts.
+  final String pipelineId;
+
+  /// The checkout a pipeline step runs in; null is the automation's own.
+  final String? repositoryId;
+
   Duration get timeout => timeoutSeconds == null || timeoutSeconds! <= 0
       ? kind.defaultTimeout
       : Duration(seconds: timeoutSeconds!);
@@ -122,6 +135,9 @@ class AutomationStep {
     String? url,
     bool? allowPrivate,
     int? timeoutSeconds,
+    String? pipelineId,
+    String? repositoryId,
+    bool clearRepository = false,
   }) => AutomationStep(
     kind: kind,
     when: when ?? this.when,
@@ -130,6 +146,8 @@ class AutomationStep {
     url: url ?? this.url,
     allowPrivate: allowPrivate ?? this.allowPrivate,
     timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
+    pipelineId: pipelineId ?? this.pipelineId,
+    repositoryId: clearRepository ? null : repositoryId ?? this.repositoryId,
   );
 
   Map<String, Object?> toJson() => {
@@ -140,6 +158,8 @@ class AutomationStep {
     if (url.isNotEmpty) 'url': url,
     if (allowPrivate) 'allowPrivate': true,
     'timeoutSeconds': ?timeoutSeconds,
+    if (pipelineId.isNotEmpty) 'pipelineId': pipelineId,
+    'repositoryId': ?repositoryId,
   };
 
   /// Null for a step this build does not know, which is then left out rather
@@ -159,6 +179,8 @@ class AutomationStep {
       url: json['url'] as String? ?? '',
       allowPrivate: json['allowPrivate'] == true,
       timeoutSeconds: json['timeoutSeconds'] as int?,
+      pipelineId: json['pipelineId'] as String? ?? '',
+      repositoryId: json['repositoryId'] as String?,
     );
   }
 
@@ -173,6 +195,10 @@ class AutomationStep {
           'environment instead, as "\$KARMASHALA_GITHUB_PR_BRANCH" (or '
           '\$env:KARMASHALA_GITHUB_PR_BRANCH on Windows).',
     AutomationStepKind.webhook => webhookStepRefusal(url, text),
+    AutomationStepKind.pipeline when pipelineId.trim().isEmpty =>
+      'Pick the pipeline to run.',
+    AutomationStepKind.pipeline when text.trim().isEmpty =>
+      'Say what the pipeline is to do: every stage gets it as {{input}}.',
     _ => null,
   };
 
@@ -185,11 +211,22 @@ class AutomationStep {
       other.name == name &&
       other.url == url &&
       other.allowPrivate == allowPrivate &&
-      other.timeoutSeconds == timeoutSeconds;
+      other.timeoutSeconds == timeoutSeconds &&
+      other.pipelineId == pipelineId &&
+      other.repositoryId == repositoryId;
 
   @override
-  int get hashCode =>
-      Object.hash(kind, when, text, name, url, allowPrivate, timeoutSeconds);
+  int get hashCode => Object.hash(
+    kind,
+    when,
+    text,
+    name,
+    url,
+    allowPrivate,
+    timeoutSeconds,
+    pipelineId,
+    repositoryId,
+  );
 
   @override
   String toString() => '${kind.storedName}(${when.name})';
@@ -310,6 +347,7 @@ const Map<String, String> kStepVariables = {
   'steps.command.exit_code': 'The command\'s exit code',
   'steps.webhook.status': 'The webhook\'s HTTP status',
   'steps.webhook.output': 'What the webhook answered',
+  'steps.pipeline.run': 'The pipeline run it started',
 };
 
 /// The environment variable [name] reaches a command as:
@@ -369,7 +407,10 @@ String fillStepText(String text, Map<String, String> values) =>
 enum AutomationStepOutcome {
   done,
   failed,
-  skipped;
+  skipped,
+
+  /// A pipeline step's run is under way or held at a gate.
+  waiting;
 
   static AutomationStepOutcome fromName(String? name) => values.firstWhere(
     (outcome) => outcome.name == name,
@@ -384,6 +425,7 @@ class AutomationStepResult {
     required this.outcome,
     required this.detail,
     required this.at,
+    this.pipelineRunId,
   });
 
   final AutomationStepKind kind;
@@ -391,11 +433,27 @@ class AutomationStepResult {
   final String detail;
   final DateTime at;
 
+  /// The pipeline run a pipeline step started.
+  final String? pipelineRunId;
+
+  AutomationStepResult copyWith({
+    AutomationStepOutcome? outcome,
+    String? detail,
+    DateTime? at,
+  }) => AutomationStepResult(
+    kind: kind,
+    outcome: outcome ?? this.outcome,
+    detail: detail ?? this.detail,
+    at: at ?? this.at,
+    pipelineRunId: pipelineRunId,
+  );
+
   Map<String, Object?> toJson() => {
     'kind': kind.storedName,
     'outcome': outcome.name,
     'detail': detail,
     'at': at.toUtc().toIso8601String(),
+    'pipelineRunId': ?pipelineRunId,
   };
 
   static AutomationStepResult? fromJson(Object? json) {
@@ -408,6 +466,7 @@ class AutomationStepResult {
       outcome: AutomationStepOutcome.fromName(json['outcome'] as String?),
       detail: json['detail'] as String? ?? '',
       at: at.toUtc(),
+      pipelineRunId: json['pipelineRunId'] as String?,
     );
   }
 
@@ -429,8 +488,9 @@ class AutomationStepResult {
       other.kind == kind &&
       other.outcome == outcome &&
       other.detail == detail &&
-      other.at == at;
+      other.at == at &&
+      other.pipelineRunId == pipelineRunId;
 
   @override
-  int get hashCode => Object.hash(kind, outcome, detail, at);
+  int get hashCode => Object.hash(kind, outcome, detail, at, pipelineRunId);
 }

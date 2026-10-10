@@ -632,6 +632,66 @@ void main() {
     expect(tester.widget<Switch>(tick).value, isTrue);
   });
 
+  testWidgets('"Run a pipeline" picks a pipeline, a checkout and an input '
+      'with the variables, says what happens next, and fits every size', (
+    tester,
+  ) async {
+    makeReady();
+    final draft = AutomationDraft(
+      repositoryId: 'r1',
+      name: 'N',
+      prompt: 'p',
+      steps: AutomationSteps(const []),
+    );
+    await pump(tester, draft);
+    final add = find.byKey(const ValueKey('automation-add-step'));
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Run a pipeline').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('automation-pipeline-pick')), findsOne);
+    expect(
+      find.byKey(const ValueKey('automation-pipeline-checkout')),
+      findsOne,
+    );
+    expect(find.text('This automation\'s checkout'), findsOneWidget);
+    expect(find.textContaining('Waiting on pipeline'), findsOneWidget);
+
+    final input = find.byKey(const ValueKey('automation-text-pipeline'));
+    await tester.ensureVisible(input);
+    await tester.enterText(input, 'Fix: {{steps.check.output}}');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('automation-pipeline-pick')));
+    await tester.pumpAndSettle();
+    await tester.tap(item('builtin:implement-test-fix').last);
+    await tester.pumpAndSettle();
+    await pickAgent(tester);
+    final saveButton = find.byKey(const ValueKey('automation-save'));
+    await tester.ensureVisible(saveButton);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+    final step = server.automationRows.getAll().single.steps.of(
+      AutomationStepKind.pipeline,
+    )!;
+    expect(step.pipelineId, 'builtin:implement-test-fix');
+    expect(step.text, 'Fix: {{steps.check.output}}');
+    expect(step.repositoryId, isNull);
+
+    for (final (size, scale) in const [
+      (Size(360, 2400), 1.0),
+      (Size(360, 3200), 1.6),
+    ]) {
+      await pump(
+        tester,
+        draft.copyWith(steps: AutomationSteps([step])),
+        size: size,
+        textScale: scale,
+      );
+      expect(tester.takeException(), isNull, reason: '$size $scale');
+    }
+  });
+
   testWidgets('a GitHub trigger reads its repository off the checkout, asks '
       'for a label when it needs one, and saves', (tester) async {
     makeReady();

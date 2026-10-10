@@ -10,13 +10,26 @@ void main() {
   test('only the failure kinds take the failure colour', () {
     for (final kind in InboxItemKind.values) {
       final failing =
-          kind == InboxItemKind.failed || kind == InboxItemKind.checksFailed;
+          kind == InboxItemKind.failed ||
+          kind == InboxItemKind.checksFailed ||
+          kind == InboxItemKind.pipelineFailed;
       expect(
         inboxKindAppearance(kind, semantic).color == semantic.failure,
         failing,
         reason: kind.name,
       );
     }
+  });
+
+  test('a pipeline gate waits on you; a pipeline failure failed', () {
+    expect(
+      inboxKindAppearance(InboxItemKind.pipelineWaiting, semantic).color,
+      semantic.attention,
+    );
+    expect(
+      inboxKindAppearance(InboxItemKind.pipelineFailed, semantic).color,
+      semantic.failure,
+    );
   });
 
   test('a finished session and one ready to merge read as healthy', () {

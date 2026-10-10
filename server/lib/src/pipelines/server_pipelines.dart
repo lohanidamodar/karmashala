@@ -272,10 +272,17 @@ class ServerPipelines implements PipelinesWork {
       evidence: evidence,
       now: now,
       newId: newId,
-      onChanged: (run) => tell([PipelineRunChanged(run)]),
+      onChanged: (run) {
+        tell([PipelineRunChanged(run)]);
+        onRunChanged?.call(run);
+      },
       log: log,
     );
   }
+
+  /// Told every move of every run after the clients: the automation step
+  /// that started it, and the inbox.
+  void Function(PipelineRun run)? onRunChanged;
 
   final PipelineRecords records;
   final void Function(List<DataChange> changes) tell;
@@ -313,6 +320,7 @@ class ServerPipelines implements PipelinesWork {
     required String input,
     String? startedBySessionId,
     bool byPerson = false,
+    PipelineRunAutomation? automation,
   }) {
     if (!hasRepository(repositoryId)) {
       throw ArgumentError('That checkout is not in the workspace.');
@@ -323,6 +331,7 @@ class ServerPipelines implements PipelinesWork {
       input: input,
       startedBySessionId: startedBySessionId,
       byPerson: byPerson,
+      automation: automation,
     );
   }
 

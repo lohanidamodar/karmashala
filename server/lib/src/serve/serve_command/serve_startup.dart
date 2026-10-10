@@ -130,6 +130,7 @@ Future<DaemonAutomations?> _startAutomations({
   CodeIdentityReader? identities,
   AcpStartAuth Function(AgentInstallation installation, AcpLaunchSpec spec)?
   acpAuth,
+  StepPipelineStarter? stepPipelines,
 }) async {
   if (database == null || recording == null) return null;
   final automations = DaemonAutomations(
@@ -158,6 +159,7 @@ Future<DaemonAutomations?> _startAutomations({
     githubSweepEvery: githubSweepEvery,
     githubClient: githubClient,
     identities: identities,
+    stepPipelines: stepPipelines,
     onDecision: (decision) => data.applyAsServer(
       DecisionAppend(
         DecisionRecord(

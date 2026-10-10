@@ -47,6 +47,29 @@ abstract interface class StepWebhookPoster {
   });
 }
 
+/// The pipeline run a pipeline step started.
+class StepPipelineStarted {
+  const StepPipelineStarted({required this.runId, required this.name});
+
+  final String runId;
+
+  /// The pipeline's name, as the run snapshot holds it.
+  final String name;
+}
+
+/// Starts a pipeline step's run in [repositoryId], attributed to [run] of
+/// [automation] and launched as background work. Throws [StateError] with
+/// the reason when it could not start.
+abstract interface class StepPipelineStarter {
+  Future<StepPipelineStarted> start(
+    Automation automation,
+    AutomationRun run, {
+    required String pipelineId,
+    required String repositoryId,
+    required String input,
+  });
+}
+
 /// The longest output a later step is handed from a command or a webhook.
 const int kStepOutputCap = 8 * 1024;
 
