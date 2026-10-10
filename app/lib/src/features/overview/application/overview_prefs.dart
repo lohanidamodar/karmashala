@@ -229,6 +229,16 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
     keepStates: false,
   );
 
+  /// Narrows the Board to [columns] and, within them, [states]; nulls for
+  /// every state. The Today strip's parts filter through this.
+  void setStateFilter(Set<BoardColumn>? columns, Set<AgentState>? states) =>
+      _setFilter(
+        columns: columns,
+        states: states,
+        keepColumns: false,
+        keepStates: false,
+      );
+
   void setGroupBy(OverviewGroupBy groupBy) {
     if (state.groupBy != groupBy) _set(state.copyWith(groupBy: groupBy));
   }

@@ -431,8 +431,11 @@ OverviewBoard buildOverviewBoard(
   required DateTime startOfToday,
   required BoardOrderMemo memo,
   OverviewSubSessionMode subSessions = OverviewSubSessionMode.inside,
+  Set<String> drawnElsewhere = const {},
 }) {
   bool kept(WorkspaceSessionEntry entry) {
+    // A pipeline stage's session is drawn inside its run, never loose.
+    if (drawnElsewhere.contains(entry.id)) return false;
     if (filter.projects case final projects?) {
       if (!projects.contains(facts.projectOf(entry))) return false;
     }

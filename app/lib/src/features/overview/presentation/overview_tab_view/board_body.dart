@@ -306,6 +306,18 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     OverviewResumeIntent: _Triage<OverviewResumeIntent>(
       (_) => unawaited(showOverviewResume(context, ref)),
     ),
+    OverviewSelectLaneIntent: _Triage<OverviewSelectLaneIntent>((_) {
+      final focus = ref.read(overviewFocusProvider);
+      final from =
+          focus.peeked ??
+          focus.selected ??
+          ref.read(overviewSelectionProvider).anchor;
+      ref
+          .read(overviewSelectionProvider.notifier)
+          .selectAll(
+            overviewLaneOf(_sections(), ref.read(overviewBoardProvider), from),
+          );
+    }),
   };
 
   @override
@@ -393,7 +405,6 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const OverviewBatchBar(),
-          const OverviewPipelines(),
           Expanded(
             // A click on the board's own space closes the peek, as Esc does.
             // A card, a button or a field clicked wins the tap — the

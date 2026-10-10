@@ -1,19 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../sessions/application/capacity_providers.dart';
+import '../application/overview_prefs.dart';
+import '../application/overview_today.dart';
 import '../../sessions/presentation/slot_wait_notice.dart';
 
-/// The launches waiting for a concurrency slot, in line order, each with its
-/// reason; nothing while none waits.
+/// **The Waiting for a slot lane**: the launches waiting for a concurrency
+/// slot, in line order, each with its reason, its place, Start anyway and
+/// Cancel. Nothing while none waits, or while the Board is narrowed to what
+/// a wait is not — it is stuck, and not yet running.
 class OverviewWaitingLane extends ConsumerWidget {
   const OverviewWaitingLane({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final waiters = ref.watch(capacityNowProvider.select((c) => c.waiters));
-    if (waiters.isEmpty) return const SizedBox.shrink();
+    final filter = ref.watch(overviewPrefsProvider.select((p) => p.filter));
+    final inView =
+        filter.allStates ||
+        OverviewTodayPart.stuck.selectedIn(filter) ||
+        OverviewTodayPart.running.selectedIn(filter);
+    if (waiters.isEmpty || !inView) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final muted = UiDensity.of(context).muted(theme);
     return Padding(
@@ -22,13 +32,10 @@ class OverviewWaitingLane extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Waiting for a slot',
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+          EyebrowLabel(
+            'Waiting for a slot · ${waiters.length}',
+            padding: const EdgeInsets.only(bottom: Insets.sm),
           ),
-          const SizedBox(height: Insets.xs),
           for (final waiter in waiters)
             Padding(
               key: ValueKey('overview-waiting:${waiter.ticketId}'),

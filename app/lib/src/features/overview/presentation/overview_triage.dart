@@ -60,6 +60,11 @@ class OverviewResumeIntent extends Intent {
   const OverviewResumeIntent();
 }
 
+/// Ctrl+A: pick every card in the lane of the selected one, for a batch.
+class OverviewSelectLaneIntent extends Intent {
+  const OverviewSelectLaneIntent();
+}
+
 /// The Overview board's keys. Bare letters, so they live on the board alone
 /// and never in the app-wide keymap, where a shell or a field would want them.
 final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
@@ -106,6 +111,10 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
   const SingleActivator(LogicalKeyboardKey.escape):
       const OverviewDismissIntent(),
   const SingleActivator(LogicalKeyboardKey.keyR): const OverviewResumeIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyA, control: true):
+      const OverviewSelectLaneIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyA, meta: true):
+      const OverviewSelectLaneIntent(),
   const CharacterActivator('?'): const OverviewShowKeysIntent(),
 };
 
@@ -149,6 +158,10 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
       OverviewTerminalIntent() => (
         group: 'Answer',
         does: 'Open the terminal of a terminal-only prompt',
+      ),
+      OverviewSelectLaneIntent() => (
+        group: 'Sessions',
+        does: 'Pick every card in this lane for a batch action',
       ),
       OverviewResumeIntent() => (
         group: 'Sessions',
@@ -238,12 +251,22 @@ const List<OverviewKeyRow> kOverviewOtherKeys = [
   (
     group: 'With the mouse',
     keys: ['Ctrl click'],
-    does: 'Pick a card for a batch answer, or put it back',
+    does: 'Pick a card for a batch action, or put it back',
   ),
   (
     group: 'With the mouse',
     keys: ['Shift click'],
     does: 'Pick every card up to this one',
+  ),
+  (
+    group: 'With the mouse',
+    keys: ['Long press'],
+    does: 'Start picking cards, under a thumb',
+  ),
+  (
+    group: 'With the mouse',
+    keys: ['Click a stage'],
+    does: 'Peek the session of a pipeline stage',
   ),
   (group: 'With the mouse', keys: ['Ctrl scroll'], does: 'Zoom the Timeline'),
   (group: 'With the mouse', keys: ['Shift scroll'], does: 'Pan the Timeline'),
