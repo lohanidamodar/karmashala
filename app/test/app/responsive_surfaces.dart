@@ -32,6 +32,8 @@ import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher
 import 'package:karmashala/src/features/agents/presentation/usage_tab/usage_tab_view.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
 import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_board.dart'
+    show OverviewSubSessionMode;
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_peek.dart'
@@ -202,6 +204,15 @@ Future<void> _tap(WidgetTester tester, Finder finder) async {
 
 /// Taps [finder] on the board, scrolling its lazy list until it is built: a
 /// short window at large text keeps the lanes below the fold.
+/// Scrolls the board until [finder] is drawn, tapping nothing.
+Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(finder, 300, scrollable: hybridList);
+  }
+  await tester.ensureVisible(finder.first);
+  await settleSurface(tester);
+}
+
 Future<void> _tapOnBoard(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isEmpty) {
     await tester.scrollUntilVisible(finder, 300, scrollable: hybridList);
@@ -1053,6 +1064,20 @@ final responsiveSurfaces = <ResponsiveSurface>[
     'pipe-handoff',
     (t, b) => _mission(t, b),
     warmUp: (t) => _tapOnBoard(t, _byKey('overview-pipeline-edit:run-1')),
+  ),
+  // Round 88: sub-sessions as cards, each tied to its parent — a connector
+  // on a desktop, "child of" on a phone — and a child in another lane
+  // with its jump.
+  ResponsiveSurface(
+    'dash-subs-cards',
+    (t, b) => _mission(
+      t,
+      b,
+      seed: (c) => c
+          .read(overviewPrefsProvider.notifier)
+          .setSubSessions(OverviewSubSessionMode.cards),
+    ),
+    warmUp: (t) => _scrollTo(t, _byKey('overview-linked:ks-r32-sub0')),
   ),
   // Round 88: a run's card opens its peek beside the board (a page on a
   // phone); a stage clicked shows its session there.
