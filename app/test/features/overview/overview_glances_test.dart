@@ -3,13 +3,21 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:agent_cli/usage.dart' show UsageWindow;
 import 'package:karmashala/src/app/widgets/dashboard_glance.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/application/usage_forecast.dart';
+import 'package:karmashala/src/features/agents/application/usage_glance.dart';
+import 'package:karmashala/src/features/agents/presentation/usage_glance.dart';
+import 'package:karmashala/src/features/overview/presentation/glances/usage_glance.dart';
 import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/glances/dashboard_glances.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_glances.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+
+import '../../support/fakes.dart';
 
 /// **Glances**: the registry, a tile per glance that opens its page, and
 /// hiding, ordering and folding kept per device.
@@ -101,7 +109,7 @@ void main() {
     addTearDown(c.dispose);
     expect(
       [for (final g in c.read(dashboardGlancesProvider)) g.id],
-      ['todos', 'running', 'stores'],
+      ['todos', 'running', 'stores', 'usage'],
     );
   });
 
@@ -112,7 +120,7 @@ void main() {
     prefs.setHidden('a', true);
     prefs.toggleCollapsed('b');
     prefs.setAreaCollapsed(true);
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await prefs.written;
     expect(arrangedGlanceIds(['a', 'b', 'c'], c.read(glancePrefsProvider)), [
       'a',
       'c',
@@ -120,9 +128,12 @@ void main() {
     ]);
 
     final fresh = container();
-    fresh.read(glancePrefsProvider);
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    final kept = fresh.read(glancePrefsProvider);
+    // Read back as a new window would: the file loads after the first build.
+    var kept = fresh.read(glancePrefsProvider);
+    for (var i = 0; i < 100 && kept == const GlancePrefs(); i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      kept = fresh.read(glancePrefsProvider);
+    }
     expect(kept.hidden, {'a'});
     expect(kept.collapsed, {'b'});
     expect(kept.areaCollapsed, isTrue);
@@ -204,6 +215,78 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(tester.getTopLeft(tile('b')).dy, tester.getTopLeft(tile('a')).dy);
     });
+  }
+
+  // Round 84's Usage glance in the slot: its own bars on a desktop, the
+  // account nearest its limit in one line on a phone.
+  final usage = UsageGlanceData(
+    accounts: [
+      UsageGlanceAccount(
+        accountId: 'claude@windows',
+        agentName: 'Claude Code',
+        window: const UsageWindow(label: '5-hour', percent: 72),
+        forecast: UsageForecast(
+          kind: UsageForecastKind.runsOut,
+          windowLabel: '5-hour',
+          percent: 72,
+          runsOutAt: DateTime.utc(2026, 10, 9, 14, 20),
+          resetsAt: DateTime.utc(2026, 10, 9, 17),
+        ),
+      ),
+      UsageGlanceAccount(
+        accountId: 'codex@windows',
+        agentName: 'Codex',
+        window: const UsageWindow(label: '5-hour', percent: 30),
+        forecast: const UsageForecast(
+          kind: UsageForecastKind.lastsUntilReset,
+          windowLabel: '5-hour',
+        ),
+      ),
+    ],
+    occupancy: '3/4 running · 1 waiting',
+  );
+  for (final (size, scale) in [
+    (const Size(360, 800), 1.0),
+    (const Size(360, 800), 1.6),
+    (const Size(1440, 900), 1.0),
+    (const Size(1440, 900), 1.6),
+  ]) {
+    testWidgets(
+      '${size.width}px at ${scale}x: the Usage glance fits its slot',
+      (tester) async {
+        final c = ProviderContainer(
+          overrides: [
+            dashboardGlancesProvider.overrideWithValue(const [usageGlance]),
+            usageGlanceProvider.overrideWithValue(usage),
+            clockProvider.overrideWithValue(
+              FixedClock(DateTime.utc(2026, 10, 9, 12)),
+            ),
+            overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
+          ],
+        );
+        addTearDown(c.dispose);
+        await pump(tester, size: size, scale: scale, using: c);
+        expect(tester.takeException(), isNull);
+        if (size.width < 600) {
+          final line = find.byKey(const ValueKey('usage-glance-line'));
+          expect(line, findsOneWidget);
+          expect(
+            tester.widget<Text>(line).data,
+            startsWith('Claude · 5-hour 72% · '),
+          );
+          expect(
+            tester.getSize(tile('usage')).height,
+            lessThanOrEqualTo(Touch.target * scale + Insets.xs),
+          );
+        } else {
+          expect(find.byType(UsageGlance), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('usage-glance-occupancy')),
+            findsOneWidget,
+          );
+        }
+      },
+    );
   }
 
   // The registered glances themselves — other pages' too, once added — in

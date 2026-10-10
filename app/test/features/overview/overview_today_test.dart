@@ -289,16 +289,22 @@ void main() {
       );
       addTearDown(c.dispose);
       c.read(overviewLookedAtProvider.notifier).markLooked(now);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final file = File('${dir.path}/overview_looked.json');
+      for (var i = 0; i < 100 && !file.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
       final fresh = ProviderContainer(
         overrides: [
           overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
         ],
       );
       addTearDown(fresh.dispose);
-      fresh.read(overviewLookedAtProvider);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(fresh.read(overviewLookedAtProvider), now);
+      var kept = fresh.read(overviewLookedAtProvider);
+      for (var i = 0; i < 100 && kept == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        kept = fresh.read(overviewLookedAtProvider);
+      }
+      expect(kept, now);
     });
 
     const busy = OverviewToday(

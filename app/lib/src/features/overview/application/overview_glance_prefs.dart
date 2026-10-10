@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show immutable, listEquals, setEquals;
+import 'package:flutter/foundation.dart'
+    show immutable, listEquals, setEquals, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:path/path.dart' as p;
@@ -159,15 +160,27 @@ class GlancePrefsController extends Notifier<GlancePrefs> {
     unawaited(_write());
   }
 
-  Future<void> _write() async {
+  /// The write in flight: the next waits for it, so quick changes never
+  /// write the one file at once.
+  Future<void> _writing = Future<void>.value();
+
+  /// Settles once every change so far is on disk.
+  Future<void> _write() =>
+      _writing = _writing.then((_) => _writeNow(state.toJson()));
+
+  Future<void> _writeNow(Map<String, Object?> json) async {
     try {
       final file = await _file();
       await file.parent.create(recursive: true);
-      await file.writeAsString(jsonEncode(state.toJson()), flush: true);
+      await file.writeAsString(jsonEncode(json), flush: true);
     } on Object catch (e) {
       _log.warning('Keeping the glance layout failed: $e');
     }
   }
+
+  /// Settles once every change so far is on disk; for a test.
+  @visibleForTesting
+  Future<void> get written => _writing;
 }
 
 final glancePrefsProvider =

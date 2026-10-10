@@ -13,6 +13,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:agent_cli/usage.dart' show UsageWindow;
+import 'package:karmashala/src/features/agents/application/usage_forecast.dart';
+import 'package:karmashala/src/features/agents/application/usage_glance.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
 import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
 import 'package:karmashala/src/features/overview/glances/dashboard_glances.dart';
@@ -136,6 +139,34 @@ void main() {
             rating: 4.6,
           ),
         ),
+        usageGlanceProvider.overrideWithValue(
+          UsageGlanceData(
+            accounts: [
+              UsageGlanceAccount(
+                accountId: 'claude@windows',
+                agentName: 'Claude Code',
+                window: const UsageWindow(label: '5-hour', percent: 72),
+                forecast: UsageForecast(
+                  kind: UsageForecastKind.runsOut,
+                  windowLabel: '5-hour',
+                  percent: 72,
+                  runsOutAt: _now.add(const Duration(hours: 1, minutes: 20)),
+                  resetsAt: _now.add(const Duration(hours: 4)),
+                ),
+              ),
+              const UsageGlanceAccount(
+                accountId: 'codex@windows',
+                agentName: 'Codex',
+                window: UsageWindow(label: '5-hour', percent: 31),
+                forecast: UsageForecast(
+                  kind: UsageForecastKind.lastsUntilReset,
+                  windowLabel: '5-hour',
+                ),
+              ),
+            ],
+            occupancy: '4/4 running · 1 waiting',
+          ),
+        ),
         capacityNowProvider.overrideWithValue(
           CapacitySnapshot(
             limits: const LaunchLimits(global: 4),
@@ -202,6 +233,16 @@ void main() {
       size: const Size(390, 844),
       phone: true,
       glanceFirst: 'stores',
+    ),
+  );
+  testWidgets(
+    '390, the Usage glance first',
+    (t) => shoot(
+      t,
+      'r82-390-usage',
+      size: const Size(390, 844),
+      phone: true,
+      glanceFirst: 'usage',
     ),
   );
   testWidgets(
