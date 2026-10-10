@@ -195,7 +195,18 @@ void main() {
 
   test('Keep marks are kept per session on this device', () async {
     final dir = Directory.systemTemp.createTempSync('hunk_marks');
-    addTearDown(() => dir.deleteSync(recursive: true));
+    // Windows refuses to delete a file a late save still holds open (seen on
+    // the CI runner); it is a temp folder, so try for a moment, then leave it.
+    addTearDown(() async {
+      for (var attempt = 0; attempt < 10; attempt++) {
+        try {
+          dir.deleteSync(recursive: true);
+          return;
+        } on FileSystemException {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+      }
+    });
     ProviderContainer container() => ProviderContainer(
       overrides: [
         hunkReviewMarksDirectoryProvider.overrideWithValue(() async => dir),

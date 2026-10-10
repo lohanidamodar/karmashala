@@ -283,9 +283,18 @@ void main() {
     await show(tester, views, [('page again', 'one')]);
     expect(pastedName(), findsOneWidget);
 
+    // Until the upload and the send have landed, not a fixed wait: on a slow
+    // runner the upload's spinner was still turning, and pumpAndSettle never
+    // settled (CI, 2026-10-10).
     await tester.runAsync(() async {
       await tester.tap(find.byTooltip('Send'));
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      for (var waited = 0; waited < 50; waited++) {
+        if (server.filesWork.uploaded.isNotEmpty &&
+            server.sessionWork.sent.isNotEmpty) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
     });
     await tester.pumpAndSettle();
     await tester.runAsync(
