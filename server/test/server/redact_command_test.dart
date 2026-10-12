@@ -141,6 +141,28 @@ void main() {
     );
   });
 
+  test('a private key printed across lines is found and masked', () async {
+    final log = File(p.join(data, 'logs', 'old.log'))
+      ..writeAsStringSync(
+        'INFO acp: before\n'
+        '-----BEGIN OPENSSH PRIVATE KEY-----\n'
+        'b3BlbnNzaC1rZXktdjEAAAAAFAKEkeyFORtestsONLY\n'
+        'AAAAFAKEsecondLINEofTHEkeyNOTreal0123456789\n'
+        '-----END OPENSSH PRIVATE KEY-----\n'
+        'INFO acp: after\n',
+      );
+    final (_, found) = await run([]);
+    expect(found, contains('logs/old.log: 4 line(s)'));
+
+    final (code, said) = await run(['--apply']);
+    expect(code, 0, reason: said);
+    final after = log.readAsStringSync();
+    expect(after, isNot(contains('FAKEkeyFORtests')));
+    expect(after, isNot(contains('FAKEsecondLINE')));
+    expect(after, contains('INFO acp: before\n'));
+    expect(after, contains('INFO acp: after\n'));
+  });
+
   // FTS5 keeps a term in its segment blocks after the row is masked, where
   // MATCH no longer finds it but the file's bytes still hold it. The index
   // lower-cases each term and shares a prefix with the term before it, so
