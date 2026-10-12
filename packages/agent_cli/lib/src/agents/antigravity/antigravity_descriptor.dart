@@ -363,10 +363,11 @@ const antigravityDescriptor = AgentDescriptor(
     // rather than silently doing nothing, which is the failure mode a curated
     // list has to be able to survive.
     //
-    // The slugs are `agy models` ("List available models") on 2026-09-02 — the
+    // The slugs are `agy models` ("List available models") on 2026-10-12 — the
     // one shipped agent with a first-party listing command, and the way to
-    // refresh this list. They are account-specific, so an id this list does not
-    // carry is still passed through rather than dropped.
+    // refresh this list. They are account-specific: the server reads them live
+    // (`AntigravityModelLister`) and this list stands in when it cannot. An id
+    // it does not carry is still passed through rather than dropped.
     // **The one that takes no conversation from anywhere.** `--print` carries
     // the text itself, so the turns ride in the argument — declared as
     // [AgentRecapSupport.inPrompt] rather than pretended into a stdin it does
@@ -386,16 +387,6 @@ const antigravityDescriptor = AgentDescriptor(
       flag: '--model',
       slashCommand: '/model',
       models: [
-        AgentModel(
-          id: 'gemini-3.1-pro-high',
-          label: 'Gemini 3.1 Pro (High)',
-          summary: 'The most capable Gemini listed, at the most reasoning.',
-        ),
-        AgentModel(
-          id: 'gemini-3.1-pro-low',
-          label: 'Gemini 3.1 Pro (Low)',
-          summary: 'The same model with reasoning turned down.',
-        ),
         AgentModel(
           id: 'gemini-3.8-flash-high',
           label: 'Gemini 3.8 Flash (High)',
@@ -419,36 +410,61 @@ const antigravityDescriptor = AgentDescriptor(
         AgentModel(
           id: 'gemini-3.7-flash-medium',
           label: 'Gemini 3.7 Flash (Medium)',
-          summary: 'Newest Flash, balanced.',
+          summary: 'Previous Flash, balanced.',
         ),
         AgentModel(
           id: 'gemini-3.7-flash-low',
           label: 'Gemini 3.7 Flash (Low)',
-          summary: 'Newest Flash, fastest.',
+          summary: 'Previous Flash, fastest.',
+        ),
+        AgentModel(
+          id: 'agy-demo-high',
+          label: 'Gemini 4 Argon (High)',
+          summary: 'Argon 4 preview, at the most reasoning.',
+        ),
+        AgentModel(
+          id: 'agy-demo-medium',
+          label: 'Gemini 4 Argon (Medium)',
+          summary: 'Argon 4 preview, balanced.',
+        ),
+        AgentModel(
+          id: 'agy-demo-low',
+          label: 'Gemini 4 Argon (Low)',
+          summary: 'Argon 4 preview, fastest.',
         ),
         AgentModel(
           id: 'gemini-3.6-flash-high',
           label: 'Gemini 3.6 Flash (High)',
-          summary: 'Previous Flash, at the most reasoning.',
+          summary: 'Older Flash, at the most reasoning.',
         ),
         AgentModel(
           id: 'gemini-3.6-flash-medium',
           label: 'Gemini 3.6 Flash (Medium)',
-          summary: 'Previous Flash, balanced.',
+          summary: 'Older Flash, balanced.',
         ),
         AgentModel(
           id: 'gemini-3.6-flash-low',
           label: 'Gemini 3.6 Flash (Low)',
-          summary: 'Previous Flash, fastest.',
+          summary: 'Older Flash, fastest.',
         ),
         AgentModel(
-          id: 'claude-opus-4-6-thinking',
-          label: 'Claude Opus 4.6 (Thinking)',
-          summary: 'Anthropic\'s model, served through Antigravity.',
+          id: 'gemini-3.1-pro-high',
+          label: 'Gemini 3.1 Pro (High)',
+          summary: 'Gemini Pro, at the most reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-3.1-pro-low',
+          label: 'Gemini 3.1 Pro (Low)',
+          summary: 'The same model with reasoning turned down.',
         ),
         AgentModel(
           id: 'claude-sonnet-4-6',
           label: 'Claude Sonnet 4.6 (Thinking)',
+          summary: 'Anthropic\'s model, served through Antigravity.',
+        ),
+        AgentModel(
+          id: 'claude-opus-4-6-thinking',
+          label: 'Claude Opus 4.6 (Thinking)',
           summary: 'Anthropic\'s model, served through Antigravity.',
         ),
         AgentModel(
@@ -463,7 +479,7 @@ const antigravityDescriptor = AgentDescriptor(
           '"Added a `/model <name>` argument that switches to a model by name, '
           'slug or label … `/model` on its own still opens the picker"), '
           'corroborated by commands/model.go declaring a CompleteArg; slugs '
-          'from `agy models` on 2026-09-02',
+          'from `agy models` (agy 1.3.3, WSL) on 2026-10-12',
     ),
   ),
   // Where the CLI keeps its data, confirmed against a live install on both

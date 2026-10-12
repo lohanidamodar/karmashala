@@ -12,6 +12,9 @@ class CodexModelLister implements AgentModelLister {
   const CodexModelLister();
 
   @override
+  String get source => 'Codex models_cache.json';
+
+  @override
   Future<List<AgentModel>?> list(ModelListContext context) async {
     // In a WSL distribution the cache is that distribution's own file.
     // Unquoted on purpose: the distribution's shell expands it, and a quote

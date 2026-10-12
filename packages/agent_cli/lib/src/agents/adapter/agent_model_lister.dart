@@ -44,5 +44,8 @@ class ModelListContext {
 /// curated list. Null from [list] is not an empty account: the curated list
 /// stands in for it.
 abstract interface class AgentModelLister {
+  /// Where the list is read from, worded for "Read 5 min ago from …".
+  String get source;
+
   Future<List<AgentModel>?> list(ModelListContext context);
 }

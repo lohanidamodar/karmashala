@@ -10,6 +10,9 @@ class ClaudeModelLister implements AgentModelLister {
   const ClaudeModelLister();
 
   @override
+  String get source => 'Claude Code list_models';
+
+  @override
   Future<List<AgentModel>?> list(ModelListContext context) async {
     final run = context.runLocalCli;
     if (run == null) return null;
