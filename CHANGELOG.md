@@ -17,6 +17,31 @@ installs claim the same version name.
 
 ---
 
+## 1.34.8 — 2026-10-12 (build 75)
+
+- **The Agent dashboard draws each family as a session tree.**
+  - The parent is an avatar with its card attached. Its sub-sessions branch off it, each an avatar and a pill showing the title, state and latest line. A pill opens in place with the full message and its actions.
+  - Avatars show two letters from the title, a ring for the state (on a parent it fills as the sub-sessions finish), what's waiting on you, and the agent.
+  - A whole family stays together in one cell. The "Sub-sessions: Inside their parent | As cards" option is gone.
+  - Folding keeps only the root. Hover, press and keyboard focus are all drawn, and touch screens get no hover effects.
+- **Workflows:** one page for automations and pipelines, with a Runs list covering both. Live pipeline runs also show on the dashboard.
+- **Stores:** one list of all apps, shown as a table or as cards.
+- **Usage:** accounts in one grouped picker. Every page under More has a one-row header.
+- **Model lists are read live from each agent,** so new models such as Antigravity's Argon 4 show up. The server caches them, and there's a Refresh.
+- **ACP sign-in:**
+  - shows its link and code;
+  - can be cancelled, including while it's still starting;
+  - times out instead of hanging on the loading dialog;
+  - hands terminal logins off to a terminal.
+- **Secrets stay out:**
+  - agent output is masked before it reaches logs, failure text, events or backups, and masked text is also wiped from the search index;
+  - the `redact-secrets` server command finds old secrets, including private keys printed across several log lines, and `--apply` masks them;
+  - backups no longer hold saved Claude and Codex sign-ins, and a restore on the same machine keeps the ones it had.
+- **Fixes:**
+  - Codex's model cache is read correctly on SSH machines;
+  - a question waiting over a day reads "4d 9h", and the secret request's label no longer overflows on a phone;
+  - the dashboard's batch bar follows folding.
+
 ## 1.34.7 — 2026-10-10 (build 74)
 
 - **Limits on how many agents run at once.**
