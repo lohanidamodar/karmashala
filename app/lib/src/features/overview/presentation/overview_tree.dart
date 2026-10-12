@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/widgets/truncated_text.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_board.dart';
@@ -444,12 +445,16 @@ class _TreePillState extends ConsumerState<_TreePill> {
                             OverviewSelectBox(card: card),
                             Expanded(
                               flex: 3,
-                              child: Text(
+                              // A long press picks the pill; hover names a
+                              // cut title whole.
+                              child: TruncatedText(
                                 card.entry.title,
-                                key: ValueKey('overview-card-title:${card.id}'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                textKey: ValueKey(
+                                  'overview-card-title:${card.id}',
+                                ),
+                                triggerMode: TooltipTriggerMode.manual,
                                 style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
