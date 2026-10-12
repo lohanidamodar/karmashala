@@ -9,6 +9,26 @@ library;
 /// login waits on a person choosing an account and consenting.
 const Duration kAcpAgentLoginPatience = Duration(minutes: 10);
 
+/// How long a login may go with no word from the agent — no link, no code —
+/// before the app ends it and offers Retry: an agent that says nothing in
+/// that time is most often waiting on a browser nobody can see.
+const Duration kAcpLoginQuietPatience = Duration(minutes: 2);
+
+/// The id of the terminal login a descriptor declares for an agent, offered
+/// beside the methods the agent advertises.
+const String kAcpOwnTerminalLoginId = 'karmashala-terminal-login';
+
+/// Whether [link] signs in through a loopback redirect: its sign-in returns
+/// to the machine the agent runs on, so it must be finished in a browser
+/// there, not on a phone.
+bool loginLinkReturnsLocally(Uri link) {
+  final redirect = Uri.tryParse(link.queryParameters['redirect_uri'] ?? '');
+  return switch (redirect?.host) {
+    'localhost' || '127.0.0.1' || '::1' || '[::1]' => true,
+    _ => false,
+  };
+}
+
 /// One way an agent can be logged in, as it advertised it.
 final class AcpAuthMethod {
   const AcpAuthMethod({
@@ -17,6 +37,7 @@ final class AcpAuthMethod {
     this.description,
     this.terminal = false,
     this.apiKeyVariable,
+    this.completes,
   });
 
   factory AcpAuthMethod.fromJson(Map<String, Object?> json) => AcpAuthMethod(
@@ -25,7 +46,12 @@ final class AcpAuthMethod {
     description: json['description'] as String?,
     terminal: json['terminal'] == true,
     apiKeyVariable: json['apiKeyVariable'] as String?,
+    completes: json['completes'] as String?,
   );
+
+  /// How the login completes, in words, where the agent's descriptor
+  /// records it: what the person will be asked to do.
+  final String? completes;
 
   final String id;
   final String name;
@@ -46,6 +72,7 @@ final class AcpAuthMethod {
     'description': ?description,
     'terminal': terminal,
     'apiKeyVariable': ?apiKeyVariable,
+    'completes': ?completes,
   };
 }
 

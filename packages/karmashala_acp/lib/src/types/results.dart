@@ -11,9 +11,11 @@ final class InitializeResult {
     this.agentCapabilities = const AgentCapabilities(),
     this.authMethods = const [],
     this.agentInfo,
+    this.meta,
   });
 
   factory InitializeResult.fromJson(JsonMap json) => InitializeResult(
+    meta: json.object('_meta'),
     protocolVersion: json.integer('protocolVersion'),
     agentCapabilities: AgentCapabilities.fromJson(
       json.object('agentCapabilities') ?? const {},
@@ -35,11 +37,16 @@ final class InitializeResult {
   final List<AuthMethod> authMethods;
   final AgentInfo? agentInfo;
 
+  /// The agent's own `_meta`: what an agent says beyond the protocol, such
+  /// as whether it is logged in.
+  final JsonMap? meta;
+
   JsonMap toJson() => withoutNulls({
     'protocolVersion': protocolVersion,
     'agentCapabilities': agentCapabilities.toJson(),
     'authMethods': [for (final m in authMethods) m.toJson()],
     'agentInfo': agentInfo?.toJson(),
+    '_meta': meta,
   });
 }
 

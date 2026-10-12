@@ -33,6 +33,8 @@ class FakeAcpAgent {
     this.supportsImages = false,
     this.supportsAdditionalDirectories = false,
     this.authenticateRefusal,
+    this.authenticateGate,
+    this.initializeMeta,
     this.loadReplay = const [],
     this.agentInfo = const AgentInfo(name: 'fake-acp-agent', version: '0.0.1'),
   }) : _turns = List.of(turns) {
@@ -72,6 +74,13 @@ class FakeAcpAgent {
 
   /// When set, `authenticate` fails -32603 with these words.
   final String? authenticateRefusal;
+
+  /// When set, `authenticate` answers only once this completes: a login a
+  /// person is still finishing, or one that never ends.
+  final Future<void>? authenticateGate;
+
+  /// Sent as `initialize`'s `_meta`.
+  final JsonMap? initializeMeta;
 
   /// Updates replayed, in order, before `session/load` is answered.
   final List<SessionUpdate> loadReplay;
@@ -133,8 +142,8 @@ class FakeAcpAgent {
       switch (request.method) {
         case AcpMethods.initialize:
           initializeParams = params;
-          request.respond(
-            InitializeResultJson.of(
+          request.respond({
+            ...InitializeResultJson.of(
               protocolVersion: protocolVersion,
               loadSession: supportsLoadSession,
               authMethods: authMethods,
@@ -143,8 +152,10 @@ class FakeAcpAgent {
               supportsImages: supportsImages,
               supportsAdditionalDirectories: supportsAdditionalDirectories,
             ),
-          );
+            '_meta': ?initializeMeta,
+          });
         case AcpMethods.authenticate:
+          if (authenticateGate case final gate?) await gate;
           if (authenticateRefusal case final words?) {
             request.fail(JsonRpcErrorCodes.internalError, words);
             return;

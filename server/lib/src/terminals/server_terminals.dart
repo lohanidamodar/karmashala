@@ -598,6 +598,11 @@ class ServerTerminals implements TerminalWork, PaneSource {
     );
   }
 
+  /// [sessionId]'s exit code once its terminal ends; null when no terminal
+  /// runs under it.
+  Future<int?>? whenEnded(String sessionId) =>
+      _sessionOf(sessionId)?.ended.then((end) => end.exitCode);
+
   /// Starts [request]'s terminal on this machine, or answers the one already
   /// running under its pane's id. Throws [DataRefused].
   TerminalOpened open(TerminalOpen request) {

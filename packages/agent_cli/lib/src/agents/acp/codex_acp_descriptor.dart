@@ -36,6 +36,25 @@ const codexAcpDescriptor = AgentDescriptor(
       PermissionRisk.autoRun: ['agent'],
       PermissionRisk.bypass: ['agent-full-access'],
     },
+    authCompletions: {
+      'chatgpt': AcpAuthCompletion(
+        how:
+            'Codex gives a ChatGPT sign-in link; finish it in a browser on '
+            'the machine Codex runs on, which it returns to.',
+        evidence:
+            'codex_app_server_bridge.dart: account/login/start answers an '
+            'authUrl, said on stderr, and account/login/completed ends it '
+            '(codex-cli 0.160.0, read 2026-10-12)',
+      ),
+    },
+    terminalLogin: AcpTerminalLogin(
+      name: 'Sign in with a device code',
+      arguments: ['login', '--device-auth'],
+      how:
+          'Opens a terminal running `codex login --device-auth`: a link '
+          'and a code you can use from any browser.',
+      evidence: 'codex login --help, codex-cli 0.160.0, 2026-10-12',
+    ),
   ),
   launch: AgentLaunchSpec(
     permission: AgentPermissionSupport.axes(

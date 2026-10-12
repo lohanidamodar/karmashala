@@ -1,4 +1,4 @@
-import 'dart:async' show TimeoutException;
+import 'dart:async' show Completer, TimeoutException;
 import 'dart:io' show Platform, Process, ProcessException, ProcessStartMode;
 
 import 'package:agent_cli/descriptors.dart';
@@ -51,6 +51,11 @@ class AcpLoginTerminal {
 /// with it, and the API key that method reads.
 typedef AcpStartAuth = ({AcpLaunchSpec spec, Map<String, String> variables});
 
+/// Opens [terminal] and answers its exit code once it ends (null when it
+/// ended without one); null when no terminal could be opened.
+typedef AcpLoginTerminalOpener =
+    Future<int?>? Function(AcpLoginTerminal terminal);
+
 /// **Logging in to the ACP agents on this server's machines.** ACP v1 gives
 /// `initialize.authMethods`, `authenticate` and (when advertised) `logout`,
 /// and no account identity — so what is kept per installation is the method
@@ -64,8 +69,9 @@ class ServerAcpAuth {
     required this.choices,
     required AcpAuthSpawn spawn,
     Map<String, String> Function()? vault,
-    bool Function(AcpLoginTerminal terminal)? openTerminal,
+    AcpLoginTerminalOpener? openTerminal,
     void Function(Uri link)? openLink,
+    void Function(AcpLoginProgress progress)? tell,
     DateTime Function()? now,
     this.readTimeout = kAcpVersionProbeTimeout,
     this.authenticateTimeout = kAcpAgentLoginPatience,
@@ -77,6 +83,7 @@ class ServerAcpAuth {
        _vault = vault ?? (() => const {}),
        _openTerminal = openTerminal,
        _openLink = openLink,
+       _tell = tell ?? ((_) {}),
        _now = now ?? (() => DateTime.now().toUtc());
 
   final AcpAuthChoiceDao choices;
@@ -90,16 +97,56 @@ class ServerAcpAuth {
   final AgentRegistry Function() _registry;
   final AcpAuthSpawn _spawn;
   final Map<String, String> Function() _vault;
-  final bool Function(AcpLoginTerminal terminal)? _openTerminal;
+  final AcpLoginTerminalOpener? _openTerminal;
 
   /// Opens a link in this machine's browser.
   final void Function(Uri link)? _openLink;
+
+  /// Tells every client how a login under way is going.
+  final void Function(AcpLoginProgress progress) _tell;
   final DateTime Function() _now;
+
+  /// The login under way per installation, completed to end it.
+  final Map<String, Completer<void>> _underWay = {};
+
+  /// Ends the login under way for [installationId], if there is one.
+  DataAck cancel(String installationId) {
+    final underWay = _underWay.remove(installationId);
+    if (underWay != null && !underWay.isCompleted) underWay.complete();
+    return const DataAck();
+  }
+
+  /// Runs [login] as [installationId]'s login under way: a second one ends
+  /// the first, and [cancel] ends it with a refusal saying so.
+  Future<T> _underWayAs<T>(
+    String installationId,
+    Future<T> Function(Future<Never> cancelled) login,
+  ) async {
+    cancel(installationId);
+    final ended = Completer<void>();
+    _underWay[installationId] = ended;
+    final cancelled = ended.future.then<Never>(
+      (_) => throw const DataRefused(
+        DataRefusalCode.failed,
+        'The login was cancelled.',
+      ),
+    );
+    // Nobody may be listening once the login ended on its own.
+    cancelled.ignore();
+    try {
+      return await login(cancelled);
+    } finally {
+      if (identical(_underWay[installationId], ended)) {
+        _underWay.remove(installationId);
+      }
+    }
+  }
 
   /// The methods [installationId] advertises, read over a fresh connection.
   Future<AcpAuthMethods> methods(String installationId) async {
     final target = _target(installationId);
     return _talk(target, readTimeout, (_, init) async {
+      final own = target.spec.terminalLogin;
       return AcpAuthMethods(
         installationId: installationId,
         methods: [
@@ -110,11 +157,34 @@ class ServerAcpAuth {
               description: method.description,
               terminal: method.isTerminal,
               apiKeyVariable: target.spec.apiKeyVariables[method.id],
+              completes:
+                  target.spec.authCompletions[method.id]?.how ??
+                  (method.isTerminal
+                      ? 'Opens a terminal running '
+                            '`${_commandLine(target, method)}`; finish '
+                            'signing in there.'
+                      : null),
+            ),
+          if (own != null)
+            AcpAuthMethod(
+              id: kAcpOwnTerminalLoginId,
+              name: own.name,
+              terminal: true,
+              completes: own.how,
             ),
         ],
         supportsLogout: init.agentCapabilities.supportsLogout,
       );
     });
+  }
+
+  /// What a terminal method runs, as a person would type it.
+  String _commandLine(_Target target, acp.AuthMethod method) {
+    final command = method.terminalCommand;
+    final program = (command ?? target.installation.executable.path)
+        .split(RegExp(r'[/\\]'))
+        .last;
+    return [program, ...method.terminalArguments].join(' ');
   }
 
   /// The method remembered for [installationId], or null.
@@ -137,32 +207,57 @@ class ServerAcpAuth {
         'Variables and secrets',
       );
     }
-    final name = await _talk(
-      target,
-      authenticateTimeout,
-      variables: _variablesFor(target.spec, methodId),
-      onErrorLine: _loginLinkOpener(target.environment, target.spec),
-      timedOut:
-          '${target.name} was not logged in within '
-          '${_spoken(authenticateTimeout)}, so the login was ended. Log in '
-          'again and finish signing in in the browser it opens.',
-      (peer, init) async {
-        final method = _advertised(target, init, methodId);
-        if (method.isTerminal) {
-          throw DataRefused.invalid(
-            '${method.name} is completed in a terminal, not by the agent',
-          );
-        }
-        try {
-          await peer.call(acp.AcpMethods.authenticate, {'methodId': methodId});
-        } on acp.AcpRpcError catch (error) {
-          throw DataRefused(
-            DataRefusalCode.failed,
-            '${target.name} refused ${method.name}: ${error.message}',
-          );
-        }
-        return method.name.isEmpty ? method.id : method.name;
-      },
+    final open = _loginLinkOpener(target.environment, target.spec);
+    final heard = _LoginHeard(
+      (link, code) => _tell(
+        AcpLoginProgress(
+          installationId: installationId,
+          methodId: methodId,
+          link: link?.toString(),
+          code: code,
+        ),
+      ),
+    );
+    // Raced outside as well as in: a cancel while the agent is still starting
+    // answers at once, and the body's own race then ends the process.
+    final name = await _underWayAs(
+      installationId,
+      (cancelled) => Future.any([
+        _talk(
+          target,
+          authenticateTimeout,
+          variables: _variablesFor(target.spec, methodId),
+          onErrorLine: (line) {
+            open?.call(line);
+            heard.line(line);
+          },
+          timedOut:
+              '${target.name} was not logged in within '
+              '${_spoken(authenticateTimeout)}, so the login was ended. Log in '
+              'again and finish signing in in the browser it opens.',
+          (peer, init) async {
+            final method = _advertised(target, init, methodId);
+            if (method.isTerminal) {
+              throw DataRefused.invalid(
+                '${method.name} is completed in a terminal, not by the agent',
+              );
+            }
+            try {
+              await Future.any([
+                peer.call(acp.AcpMethods.authenticate, {'methodId': methodId}),
+                cancelled,
+              ]);
+            } on acp.AcpRpcError catch (error) {
+              throw DataRefused(
+                DataRefusalCode.failed,
+                '${target.name} refused ${method.name}: ${error.message}',
+              );
+            }
+            return method.name.isEmpty ? method.id : method.name;
+          },
+        ),
+        cancelled,
+      ]),
     );
     final now = _now();
     final choice = AcpAuthChoice(
@@ -177,8 +272,11 @@ class ServerAcpAuth {
   }
 
   /// Opens a terminal on the installation's machine running the terminal
-  /// method [methodId], and remembers the method unconfirmed — the protocol
-  /// tells the client nothing of how a terminal login went.
+  /// method [methodId] — one the agent advertises, or the descriptor's own
+  /// ([kAcpOwnTerminalLoginId]) — and answers once it has ended. A clean exit
+  /// is re-checked with the agent: remembered confirmed where the agent says
+  /// it is logged in, unconfirmed where it says nothing (ACP v1 has no way to
+  /// ask), and refused where it says it is not.
   Future<AcpAuthState> terminalLogin(
     String installationId,
     String methodId,
@@ -188,6 +286,92 @@ class ServerAcpAuth {
       throw const DataRefused.unavailable('this server opens no terminals');
     }
     final target = _target(installationId);
+    final login = await _terminalFor(target, methodId);
+    return _underWayAs(installationId, (cancelled) async {
+      final ended = open(login.terminal);
+      if (ended == null) {
+        throw DataRefused.unavailable(
+          'No terminal could be opened on ${target.environment.name} for '
+          '${login.name}, so nothing was remembered.',
+        );
+      }
+      _tell(
+        AcpLoginProgress(
+          installationId: installationId,
+          methodId: methodId,
+          terminal: login.terminal.title,
+        ),
+      );
+      final int? exitCode;
+      try {
+        exitCode = await Future.any([
+          ended,
+          cancelled,
+        ]).timeout(authenticateTimeout);
+      } on TimeoutException {
+        throw DataRefused(
+          DataRefusalCode.failed,
+          'The terminal login was not finished within '
+          '${_spoken(authenticateTimeout)}, so Karmashala stopped waiting. '
+          'Its terminal tab stays open; finish there and log in again.',
+        );
+      }
+      if (exitCode != null && exitCode != 0) {
+        throw DataRefused(
+          DataRefusalCode.failed,
+          '${login.name} ended with exit code $exitCode in the terminal, so '
+          'nothing was remembered. Its output is in the terminal tab.',
+        );
+      }
+      final loggedIn = await _loggedInNow(target);
+      if (loggedIn == false) {
+        throw DataRefused(
+          DataRefusalCode.failed,
+          'The terminal ended, but ${target.name} still says it is not '
+          'logged in.',
+        );
+      }
+      final now = _now();
+      final choice = AcpAuthChoice(
+        installationId: installationId,
+        methodId: methodId,
+        methodName: login.name,
+        chosenAt: now,
+        authenticatedAt: loggedIn == true ? now : null,
+      );
+      choices.upsert(choice);
+      return _stateOf(choice);
+    });
+  }
+
+  /// The terminal [methodId] runs in, and the method's name.
+  Future<({AcpLoginTerminal terminal, String name})> _terminalFor(
+    _Target target,
+    String methodId,
+  ) async {
+    final installation = target.installation;
+    final own = target.spec.terminalLogin;
+    if (methodId == kAcpOwnTerminalLoginId) {
+      if (own == null) {
+        throw DataRefused.invalid('${target.name} has no terminal login');
+      }
+      return (
+        terminal: AcpLoginTerminal(
+          agentId: installation.agentId,
+          environment: target.environment,
+          directory: target.directory,
+          executable: installation.executable.path,
+          arguments: acpLoginArgumentsFor(
+            installation,
+            target.spec,
+            own.arguments,
+          ),
+          variables: target.spec.environment,
+          title: '${target.name}: ${own.name}',
+        ),
+        name: own.name,
+      );
+    }
     final method = await _talk(
       target,
       readTimeout,
@@ -198,10 +382,10 @@ class ServerAcpAuth {
         '${method.name} is done by the agent, not in a terminal',
       );
     }
-    final installation = target.installation;
     final command = method.terminalCommand;
-    final opened = open(
-      AcpLoginTerminal(
+    final name = method.name.isEmpty ? method.id : method.name;
+    return (
+      terminal: AcpLoginTerminal(
         agentId: installation.agentId,
         environment: target.environment,
         directory: target.directory,
@@ -221,23 +405,24 @@ class ServerAcpAuth {
                 ...method.terminalArguments,
               ],
         variables: {...target.spec.environment, ...method.env},
-        title: '${target.name}: ${method.name}',
+        title: '${target.name}: $name',
       ),
+      name: name,
     );
-    if (!opened) {
-      throw DataRefused.unavailable(
-        'No terminal could be opened on ${target.environment.name} for '
-        '${method.name}, so nothing was remembered.',
+  }
+
+  /// Whether the agent says it is logged in now, over a fresh connection;
+  /// null when it says nothing of it or could not be asked.
+  Future<bool?> _loggedInNow(_Target target) async {
+    try {
+      return await _talk(
+        target,
+        readTimeout,
+        (_, init) async => loggedInSaid(init),
       );
+    } on DataRefused {
+      return null;
     }
-    final choice = AcpAuthChoice(
-      installationId: installationId,
-      methodId: methodId,
-      methodName: method.name.isEmpty ? method.id : method.name,
-      chosenAt: _now(),
-    );
-    choices.upsert(choice);
-    return _stateOf(choice);
   }
 
   /// Forgets the remembered method; with [logout], an agent that advertises
@@ -423,6 +608,51 @@ Uri? loginLinkIn(String line) {
   final text = match[0]!.replaceFirst(RegExp(r'''[.,;:)\]'"]+$'''), '');
   final link = Uri.tryParse(text);
   return link == null || link.host.isEmpty ? null : link;
+}
+
+/// A device code in [line], or in [link]'s `user_code`: what a device login
+/// asks a person to confirm or type. Null when there is none.
+String? deviceCodeIn(String line, {Uri? link}) {
+  final inLink = link?.queryParameters['user_code'];
+  if (inLink != null && inLink.isNotEmpty) return inLink;
+  return RegExp(
+    r'\bcode\b\D{0,24}?\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b',
+    caseSensitive: false,
+  ).firstMatch(line)?[1];
+}
+
+/// What an agent's own `initialize` says of its login, where it says
+/// anything: the Claude bridge's `_meta.claudeCode.loggedIn`, the Codex
+/// bridge's `_meta.codex.accountType`. Null for an agent that says nothing.
+bool? loggedInSaid(acp.InitializeResult init) {
+  final meta = init.meta;
+  if (meta?['claudeCode'] case {'loggedIn': final bool loggedIn}) {
+    return loggedIn;
+  }
+  if (meta?['codex'] case final Map<String, Object?> codex
+      when codex.containsKey('accountType')) {
+    return codex['accountType'] != null;
+  }
+  return null;
+}
+
+/// What an agent's stderr has said of a login under way: its first link and
+/// any device code, each told once as it is heard.
+class _LoginHeard {
+  _LoginHeard(this._tell);
+
+  final void Function(Uri? link, String? code) _tell;
+  Uri? _link;
+  String? _code;
+
+  void line(String line) {
+    final link = _link ?? loginLinkIn(line);
+    final code = _code ?? deviceCodeIn(line, link: link);
+    if (link == _link && code == _code) return;
+    _link = link;
+    _code = code;
+    _tell(link, code);
+  }
 }
 
 class _Target {

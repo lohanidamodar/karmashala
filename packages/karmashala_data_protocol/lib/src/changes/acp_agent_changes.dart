@@ -11,8 +11,51 @@ DataChange? _acpAgentsChangeFromJson(String name, Map<String, Object?> json) =>
         registryId: json['registryId']! as String,
         step: AcpInstallStep.values.byName(json['step']! as String),
       ),
+      'acpLoginProgress' => AcpLoginProgress(
+        installationId: json['installationId']! as String,
+        methodId: json['methodId']! as String,
+        link: json['link'] as String?,
+        code: json['code'] as String?,
+        terminal: json['terminal'] as String?,
+      ),
       _ => null,
     };
+
+/// What a login under way (`acpAuth.authenticate`, `acpAuth.terminalLogin`)
+/// has come to: the link and code the agent gave, or the terminal it runs
+/// in. Told to every client so whichever dialog asked can show it — a phone
+/// included. Not a row: nothing copies it.
+final class AcpLoginProgress extends DataChange {
+  const AcpLoginProgress({
+    required this.installationId,
+    required this.methodId,
+    this.link,
+    this.code,
+    this.terminal,
+  });
+
+  final String installationId;
+  final String methodId;
+
+  /// The sign-in link the agent printed.
+  final String? link;
+
+  /// A device code to confirm or type at [link].
+  final String? code;
+
+  /// The title of the terminal tab the login runs in.
+  final String? terminal;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'acpLoginProgress',
+    'installationId': installationId,
+    'methodId': methodId,
+    'link': ?link,
+    'code': ?code,
+    'terminal': ?terminal,
+  };
+}
 
 /// What the server is doing for an ACP agent it is installing.
 enum AcpInstallStep { downloading, unpacking, detecting }

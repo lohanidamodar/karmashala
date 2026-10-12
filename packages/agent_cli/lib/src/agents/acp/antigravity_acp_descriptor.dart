@@ -8,6 +8,19 @@ const _evidence =
     '"Auto-approve file edit tools", yolo "Auto-approve all tools"; no plan '
     'mode';
 
+const _authEvidence =
+    'antigravity-acp 1.3.0 in archlinux, 2026-10-12: initialize offers '
+    'oauth-personal, oauth-business, gemini-api-key, agent-platform; '
+    'authenticate oauth-personal prints "Open the following link to '
+    'authenticate the ACP server: https://accounts.google.com/..." on '
+    'stderr, redirect_uri http://127.0.0.1:<port>/, opens no browser '
+    'itself, and waits on that callback; `agy --help` (1.3.3) has no '
+    'login subcommand';
+
+const _browserLogin =
+    'Gives a Google sign-in link; finish it in a browser on the machine '
+    'Antigravity runs on, which it returns to.';
+
 /// Google Antigravity's ACP server (`agy_acp_server`), spoken to over ACP.
 ///
 /// Published by the public ACP registry as `antigravity-acp` — a prebuilt
@@ -31,6 +44,21 @@ const antigravityAcpDescriptor = AgentDescriptor(
     linuxArguments: ['--uid='],
     registryId: 'antigravity-acp',
     apiKeyVariables: {'gemini-api-key': 'GEMINI_API_KEY'},
+    // agy has no login subcommand, so there is no terminal login.
+    authCompletions: {
+      'oauth-personal': AcpAuthCompletion(
+        how: _browserLogin,
+        evidence: _authEvidence,
+      ),
+      'oauth-business': AcpAuthCompletion(
+        how: _browserLogin,
+        evidence: _authEvidence,
+      ),
+      'gemini-api-key': AcpAuthCompletion(
+        how: 'Uses the GEMINI_API_KEY you give here.',
+        evidence: _authEvidence,
+      ),
+    },
     modeNames: {
       PermissionRisk.ask: ['default'],
       PermissionRisk.acceptEdits: ['auto_edit'],

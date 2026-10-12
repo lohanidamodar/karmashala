@@ -89,6 +89,17 @@ const claudeAcpDescriptor = AgentDescriptor(
       PermissionRisk.autoRun: ['bypassPermissions'],
       PermissionRisk.bypass: ['bypassPermissions'],
     },
+    authCompletions: {
+      'claude-login': AcpAuthCompletion(
+        how:
+            'Opens a terminal running `claude auth login`; it prints a '
+            'sign-in link and finishes when you have signed in.',
+        evidence:
+            'claude_stream_json_bridge.dart advertises claude-login as a '
+            'terminal method running `claude auth login`, and refuses '
+            'authenticate (read 2026-10-12)',
+      ),
+    },
   ),
   launch: AgentLaunchSpec(
     permission: AgentPermissionSupport.axes(

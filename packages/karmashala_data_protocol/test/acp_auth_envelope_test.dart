@@ -27,6 +27,7 @@ void main() {
       const AcpAuthTerminalLogin(installationId: 'a1', methodId: 'login'),
       const AcpAuthClear('a1'),
       const AcpAuthClear('a1', logout: true),
+      const AcpAuthCancel('a1'),
     ];
     for (final request in requests) {
       final read = DataEnvelope.readRequest(
@@ -56,10 +57,17 @@ void main() {
             description: 'Reads GEMINI_API_KEY.',
             apiKeyVariable: 'GEMINI_API_KEY',
           ),
-          AcpAuthMethod(id: 'login', name: 'Log in', terminal: true),
+          AcpAuthMethod(
+            id: 'login',
+            name: 'Log in',
+            terminal: true,
+            completes: 'Opens a terminal.',
+          ),
         ],
       ),
     ).value;
+    expect(back.methods[2].completes, 'Opens a terminal.');
+    expect(back.methods[0].completes, isNull);
     expect(back.supportsLogout, isTrue);
     expect(back.methods.map((m) => m.id), [
       'oauth-personal',
@@ -70,6 +78,58 @@ void main() {
     expect(back.methods[1].description, 'Reads GEMINI_API_KEY.');
     expect(back.methods[2].terminal, isTrue);
     expect(back.methods[0].terminal, isFalse);
+  });
+
+  test('a login under way is told with its link, code or terminal', () {
+    final batch = DataChanges(5, [
+      const AcpLoginProgress(
+        installationId: 'a1',
+        methodId: 'grok.com',
+        link: 'https://accounts.x.ai/oauth2/device?user_code=AB-CD',
+        code: 'AB-CD',
+      ),
+      const AcpLoginProgress(
+        installationId: 'a1',
+        methodId: 'login',
+        terminal: 'Grok: Sign in',
+      ),
+    ]);
+    final read = DataChanges.fromJson(
+      overTheWire(batch.toJson()),
+    ).changes.cast<AcpLoginProgress>();
+    expect(read.map((p) => (p.methodId, p.link, p.code, p.terminal)), [
+      (
+        'grok.com',
+        'https://accounts.x.ai/oauth2/device?user_code=AB-CD',
+        'AB-CD',
+        null,
+      ),
+      ('login', null, null, 'Grok: Sign in'),
+    ]);
+  });
+
+  test('a link whose sign-in returns to a loopback port says so', () {
+    expect(
+      loginLinkReturnsLocally(
+        Uri.parse(
+          'https://accounts.google.com/o/oauth2/v2/auth?response_type=code'
+          '&redirect_uri=http%3A%2F%2F127.0.0.1%3A45821%2F',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      loginLinkReturnsLocally(
+        Uri.parse('https://auth.example/x?redirect_uri=http://localhost:1455'),
+      ),
+      isTrue,
+    );
+    expect(
+      loginLinkReturnsLocally(
+        Uri.parse('https://accounts.x.ai/oauth2/device?user_code=AB-CD'),
+      ),
+      isFalse,
+    );
   });
 
   test('a state says whether the agent confirmed it; none reads as null', () {

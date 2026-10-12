@@ -57,6 +57,7 @@ DataRequest<Object?>? _agentWorkRequestFromJson(
     args.string('installationId'),
     logout: args.boolean('logout', orElse: false),
   ),
+  AcpAuthCancel.name => AcpAuthCancel(args.string('installationId')),
   _ => null,
 };
 
@@ -523,7 +524,9 @@ final class AcpAuthenticate extends AgentWorkRequest<AcpAuthState> {
 
 /// Opens a terminal on installation [installationId]'s machine running the
 /// login terminal method [methodId] names, shown as a tab in the window a
-/// person last used, and remembers the method unconfirmed.
+/// person last used, and answers once that terminal has ended: the method
+/// remembered when it ended well, confirmed where the agent then says it is
+/// logged in. Refused in words when it ended otherwise.
 final class AcpAuthTerminalLogin extends AgentWorkRequest<AcpAuthState> {
   const AcpAuthTerminalLogin({
     required this.installationId,
@@ -570,6 +573,29 @@ final class AcpAuthClear extends AgentWorkRequest<DataAck> {
     'installationId': installationId,
     'logout': logout,
   };
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Ends the login under way for installation [installationId] — an
+/// `authenticate` the agent is still completing, or the wait on a terminal
+/// login (the terminal itself stays open). Nothing under way is no error.
+final class AcpAuthCancel extends AgentWorkRequest<DataAck> {
+  const AcpAuthCancel(this.installationId);
+
+  static const String name = 'acpAuth.cancel';
+
+  final String installationId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'installationId': installationId};
 
   @override
   Object? resultToJson(DataAck result) => null;
