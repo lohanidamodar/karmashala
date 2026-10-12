@@ -73,7 +73,6 @@ void main() {
     }
   });
 
-
   group('the database it closes', () {
     test('a graceful quit closes the handle, not just the process', () async {
       // `exit(0)` releases the file and gives SQLite no chance to checkpoint,
@@ -106,9 +105,7 @@ void main() {
       );
       // Force the watcher to exist so the step has something to do.
       container.read(attentionPresenterProvider);
-      lifecycle.adopt(
-        hookInstallation: Future<void>(() => order.add('hooks')),
-      );
+      lifecycle.adopt(hookInstallation: Future<void>(() => order.add('hooks')));
       natives.tray.onDestroy = () => order.add('system integration');
 
       await lifecycle.shutdown();
@@ -139,7 +136,6 @@ void main() {
       expect(isDisposed(container), isTrue);
     });
   });
-
 
   group('the panes it reaps', () {
     /// A container whose panes are fakes with a reap the test controls.
@@ -292,9 +288,7 @@ void main() {
         registerOsQuit: (_) {},
         adapters: natives.adapters,
       );
-      lifecycle.adopt(
-        hookInstallation: Completer<void>().future,
-      );
+      lifecycle.adopt(hookInstallation: Completer<void>().future);
 
       await lifecycle.shutdown();
 
@@ -341,8 +335,11 @@ void main() {
       // have hung this case, not made it slow. What the number used to stand
       // in for is here instead: the hanging step was cut off at the budget,
       // the ones behind it were skipped rather than waited on, and the
-      // container was disposed anyway.
-      expect(lifecycle.abandonedSteps, ['agent hook installation']);
+      // container was disposed anyway. The hanging step is the first one cut
+      // off; when its timer fires a few ms short of the budget, the next step
+      // gets those ms and is cut off too rather than skipped, which is the
+      // deadline working, so only the first is pinned.
+      expect(lifecycle.abandonedSteps.first, 'agent hook installation');
       expect(
         lifecycle.skippedSteps,
         isNotEmpty,
@@ -475,9 +472,7 @@ void main() {
       final lifecycle = AppLifecycle(scoped);
       final gate = Completer<void>();
 
-      lifecycle.installAgentHooks(
-        afterFirstFrame: () => gate.future,
-      );
+      lifecycle.installAgentHooks(afterFirstFrame: () => gate.future);
       await pumpEventQueue();
 
       // This is the whole point: the sweep rewrites three other applications'
@@ -537,9 +532,7 @@ void main() {
       );
       addTearDown(scoped.dispose);
 
-      AppLifecycle(
-        scoped,
-      ).installAgentHooks(afterFirstFrame: () async {});
+      AppLifecycle(scoped).installAgentHooks(afterFirstFrame: () async {});
       await pumpEventQueue();
       expect(sweeps, isEmpty, reason: 'the host has not started yet');
 
@@ -559,16 +552,19 @@ void main() {
       ],
     );
 
-    test('installing them starts the endpoint healer; a quit stops it', () async {
-      final lifecycle = AppLifecycle(hooked());
-      lifecycle.installAgentHooks();
-      final healer = lifecycle.hookEndpointHealer;
-      expect(healer?.isRunning, isTrue);
+    test(
+      'installing them starts the endpoint healer; a quit stops it',
+      () async {
+        final lifecycle = AppLifecycle(hooked());
+        lifecycle.installAgentHooks();
+        final healer = lifecycle.hookEndpointHealer;
+        expect(healer?.isRunning, isTrue);
 
-      await lifecycle.shutdown();
+        await lifecycle.shutdown();
 
-      expect(healer!.isRunning, isFalse);
-    });
+        expect(healer!.isRunning, isFalse);
+      },
+    );
 
     test('leaving the session stops the healer too', () async {
       final scoped = hooked();
@@ -648,4 +644,3 @@ class _RecordingHookService extends AgentHookInstallationService {
     return Future.value(const <AgentHookInstallation>[]);
   }
 }
-
