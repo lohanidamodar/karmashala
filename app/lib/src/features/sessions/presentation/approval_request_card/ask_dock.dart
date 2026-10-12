@@ -495,7 +495,11 @@ class _WaitingForState extends State<_WaitingFor> {
     if (waited.isNegative) waited = Duration.zero;
     final seconds = waited.inSeconds % 60;
     final minutes = waited.inMinutes % 60;
-    final age = waited.inHours > 0
+    // Days past a day, so a question left for a while ("105h 12m") stays as
+    // short as "4d 9h".
+    final age = waited.inDays > 0
+        ? '${waited.inDays}d ${waited.inHours % 24}h'
+        : waited.inHours > 0
         ? '${waited.inHours}h ${minutes}m'
         : waited.inMinutes > 0
         ? '${waited.inMinutes}m ${seconds}s'

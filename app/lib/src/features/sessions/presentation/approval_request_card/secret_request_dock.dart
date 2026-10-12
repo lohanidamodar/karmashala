@@ -140,7 +140,8 @@ class _SecretAskState extends ConsumerState<_SecretAsk> {
                 ),
               ),
               const SizedBox(width: Insets.sm),
-              _WaitingFor(since: request.requestedAt),
+              // Shrinks before the row overflows, as the ask dock's does.
+              Flexible(child: _WaitingFor(since: request.requestedAt)),
             ],
           ),
           Text(request.reason, style: theme.textTheme.bodyMedium),
