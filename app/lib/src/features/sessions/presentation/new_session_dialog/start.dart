@@ -220,6 +220,7 @@ extension _NewSessionStart on _NewSessionDialogState {
         if (e is DataRefused && e.code == DataRefusalCode.loginRequired) {
           _error = e.message;
           _loginFor = installation;
+          _loginPlace = place;
         } else {
           _error = 'Could not start session: $e';
         }
@@ -236,7 +237,8 @@ extension _NewSessionStart on _NewSessionDialogState {
     }
   }
 
-  /// Opens [installation]'s login; once it is done, the refusal is stale.
+  /// Opens [installation]'s login; once it is done the refusal is stale, and
+  /// the start it stopped goes on without a second click.
   Future<void> _logIn(AgentInstallation installation) async {
     final said = await AcpLoginDialog.show(
       context,
@@ -245,12 +247,15 @@ extension _NewSessionStart on _NewSessionDialogState {
           .read(agentRegistryProvider)
           .displayNameFor(installation.agentId),
     );
-    if (said != null && mounted) {
-      setState(() {
-        _error = null;
-        _loginFor = null;
-        _loginNotice = said;
-      });
-    }
+    if (said == null || !mounted) return;
+    final place = _loginPlace;
+    setState(() {
+      _error = null;
+      _loginFor = null;
+      _loginPlace = null;
+    });
+    if (place != null) await _create(installation, place: place);
+    // Shown after the start, which clears the notice when it begins.
+    if (mounted) setState(() => _loginNotice ??= said);
   }
 }

@@ -42,9 +42,10 @@ class AcpLoginActions {
     }
     try {
       if (method.terminal) {
-        await work.acpTerminalLogin(installationId, method.id);
-        return 'A terminal tab is running ${method.name}. Finish the login '
-            'there.';
+        final state = await work.acpTerminalLogin(installationId, method.id);
+        return state.confirmed
+            ? 'Logged in via ${method.name}.'
+            : '${method.name} finished in the terminal.';
       }
       await work.acpAuthenticate(installationId, method.id);
       return 'Logged in via ${method.name}.';
@@ -52,6 +53,17 @@ class AcpLoginActions {
       _ref.invalidate(acpAuthStateProvider(installationId));
     }
   }
+
+  /// Ends the login under way for [installationId]; a terminal it runs in
+  /// stays open.
+  Future<void> cancel(String installationId) =>
+      _ref.read(agentWorkProvider).acpAuthCancel(installationId);
+
+  /// How [installationId]'s login under way is going.
+  Stream<AcpLoginProgress> progress(String installationId) => _ref
+      .read(agentWorkProvider)
+      .loginProgress
+      .where((p) => p.installationId == installationId);
 
   /// Forgets the remembered method; [logout] asks the agent to end its login
   /// too, where it offers that.

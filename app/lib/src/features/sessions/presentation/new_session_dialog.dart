@@ -222,6 +222,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   /// start, which the error then offers to log in.
   AgentInstallation? _loginFor;
 
+  /// Where the start that asked for a login was going, so it continues by
+  /// itself once the login is done.
+  _WorkPlace? _loginPlace;
+
   /// What the last login said, shown until the next start.
   String? _loginNotice;
 

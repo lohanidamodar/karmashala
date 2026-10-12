@@ -82,6 +82,18 @@ class FakeAgentWork {
   final acpTerminalLogins = <(String, String)>[];
   final acpClears = <(String, bool)>[];
 
+  /// When set, `acpAuth.authenticate` and `acpAuth.terminalLogin` answer
+  /// only once it completes: a login still under way, or one that never
+  /// ends. `acpAuth.cancel` ends it with the server's refusal.
+  Completer<void>? acpLoginGate;
+
+  /// Each `acpAuth.cancel`'s installation id.
+  final acpCancels = <String>[];
+
+  /// Tells every link how a login under way is going, as the server does.
+  void tellLoginProgress(AcpLoginProgress progress) =>
+      _server._tell(null, [progress]);
+
   /// A refusal the next `acpAuth.authenticate` gets.
   DataRefused? acpAuthRefusal;
 
@@ -173,6 +185,17 @@ class FakeAgentWork {
     AcpAuthTerminalLogin(:final installationId, :final methodId) => () {
       acpTerminalLogins.add((installationId, methodId));
       return _remember(installationId, methodId, false);
+    }(),
+    AcpAuthCancel(:final installationId) => () {
+      acpCancels.add(installationId);
+      final gate = acpLoginGate;
+      acpLoginGate = null;
+      if (gate != null && !gate.isCompleted) {
+        gate.completeError(
+          const DataRefused(DataRefusalCode.failed, 'The login was cancelled.'),
+        );
+      }
+      return const DataAck();
     }(),
     AcpAuthClear(:final installationId, :final logout) => () {
       acpClears.add((installationId, logout));

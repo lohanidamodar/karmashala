@@ -544,6 +544,13 @@ class DataClient {
   Stream<AcpInstallProgress> get acpInstallProgress =>
       _acpInstallProgress.stream;
 
+  final _acpLoginProgress = StreamController<AcpLoginProgress>.broadcast(
+    sync: true,
+  );
+
+  /// How each ACP login under way is going: its link, code or terminal.
+  Stream<AcpLoginProgress> get acpLoginProgress => _acpLoginProgress.stream;
+
   final _activityAppended = StreamController<List<ActivityEntry>>.broadcast(
     sync: true,
   );
@@ -1213,6 +1220,8 @@ class DataClient {
           if (!_storesProgress.isClosed) {
             _storesProgress.add((done: done, total: total));
           }
+        case final AcpLoginProgress progress:
+          if (!_acpLoginProgress.isClosed) _acpLoginProgress.add(progress);
         case final AcpInstallProgress progress:
           if (!_acpInstallProgress.isClosed) {
             _acpInstallProgress.add(progress);
@@ -1417,6 +1426,7 @@ class DataClient {
     unawaited(_storeChangeNotices.close());
     unawaited(_storesProgress.close());
     unawaited(_acpInstallProgress.close());
+    unawaited(_acpLoginProgress.close());
     unawaited(_activityAppended.close());
     unawaited(_gitChanges.close());
     unawaited(_runsChanges.close());
