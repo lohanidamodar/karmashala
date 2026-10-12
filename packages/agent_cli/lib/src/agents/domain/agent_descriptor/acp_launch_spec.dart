@@ -31,6 +31,32 @@ class AcpVersionedArgument {
       compareAgentVersions(version, since) >= 0;
 }
 
+/// How one of an agent's auth methods completes, in words a login dialog
+/// shows before it starts, with where that was read.
+class AcpAuthCompletion {
+  const AcpAuthCompletion({required this.how, required this.evidence});
+
+  final String how;
+  final String evidence;
+}
+
+/// A login the agent's own program runs in a terminal, offered beside the
+/// methods it advertises over ACP: [arguments] go after whatever runs the
+/// program (`-y <package>` for npx), never after its ACP mode arguments.
+class AcpTerminalLogin {
+  const AcpTerminalLogin({
+    required this.name,
+    required this.arguments,
+    required this.how,
+    required this.evidence,
+  });
+
+  final String name;
+  final List<String> arguments;
+  final String how;
+  final String evidence;
+}
+
 /// How an agent is driven over the Agent Client Protocol
 /// (https://agentclientprotocol.com): JSON-RPC over the process's own stdio,
 /// in place of a terminal. Declared on a descriptor; a consumer asks
@@ -49,7 +75,16 @@ class AcpLaunchSpec {
     this.apiKeyVariables = const {},
     this.nativeBridge,
     this.optionModes = const {},
+    this.authCompletions = const {},
+    this.terminalLogin,
   });
+
+  /// Auth method id → how it completes, read off the agent.
+  final Map<String, AcpAuthCompletion> authCompletions;
+
+  /// The agent's own terminal login, for an agent whose ACP methods cannot
+  /// show a person where to sign in (a link it opens and never prints).
+  final AcpTerminalLogin? terminalLogin;
 
   /// Set when the agent is spoken to in its own protocol, through
   /// [arguments], and translated to ACP in-process; null for an agent that
@@ -130,10 +165,13 @@ class AcpLaunchSpec {
     npxPackage: npxPackage,
     environment: environment,
     linuxArguments: linuxArguments,
+    versionedArguments: versionedArguments,
     registryId: registryId,
     apiKeyVariables: apiKeyVariables,
     nativeBridge: nativeBridge,
     optionModes: optionModes,
+    authCompletions: authCompletions,
+    terminalLogin: terminalLogin,
   );
 
   /// What `initialize` announces as `clientInfo.name`.

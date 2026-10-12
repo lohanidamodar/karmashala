@@ -665,11 +665,13 @@ Future<int> _serve(
           rows: 40,
         ),
       );
-      return data.tellIntent(
+      final shown = data.tellIntent(
         OpenTerminalTab(paneId: paneId, title: opened.title),
       );
+      return shown ? terminals.whenEnded(opened.sessionId) : null;
     },
     openLink: openInThisMachinesBrowser,
+    tell: (progress) => data.announce([progress]),
   );
   final agentWork = ServerAgentWork(
     data: data,

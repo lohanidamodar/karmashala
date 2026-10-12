@@ -267,7 +267,10 @@ void main() {
       await tester.tap(startButton());
       await tester.pumpAndSettle();
       expect(started.single.$2, isFalse);
-      expect(container.read(terminalSessionsControllerProvider).tabs, isNotEmpty);
+      expect(
+        container.read(terminalSessionsControllerProvider).tabs,
+        isNotEmpty,
+      );
       expect(container.read(selectedSessionIdProvider), started.single.$1);
       await closeAll(tester);
     });
@@ -1051,7 +1054,9 @@ void main() {
   });
 
   testWidgets('an agent that asks to be logged in first offers Log in, '
-      'which lists its methods', (tester) async {
+      'which lists its methods; once logged in, the start goes on by '
+      'itself', (tester) async {
+    late _LoginRequired launcher;
     server.agentWork.acpAuthMethods['a1'] = const AcpAuthMethods(
       installationId: 'a1',
       methods: [AcpAuthMethod(id: 'oauth', name: 'Log in with the browser')],
@@ -1059,7 +1064,9 @@ void main() {
     final container = ProviderContainer(
       parent: containerFor(selected: 'r1'),
       overrides: [
-        sessionLauncherProvider.overrideWith((ref) => _LoginRequired(ref)),
+        sessionLauncherProvider.overrideWith(
+          (ref) => launcher = _LoginRequired(ref),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -1079,6 +1086,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(server.agentWork.acpAuthenticates, [('a1', 'oauth')]);
     expect(find.textContaining('asks to be logged in first'), findsNothing);
+    expect(launcher.launches, 2, reason: 'no second click');
+    expect(find.textContaining('the second start'), findsOneWidget);
     expect(find.text('Logged in via Log in with the browser.'), findsOneWidget);
     await closeAll(tester);
   });
@@ -1385,18 +1394,25 @@ class _StartingLauncher extends SessionLauncher {
   }
 }
 
-/// A start the server refused because the agent wants a login first.
+/// A start the server refused because the agent wants a login first; the
+/// next start fails in words of its own, so a test sees it was made.
 class _LoginRequired extends SessionLauncher {
   _LoginRequired(super.ref);
+
+  var launches = 0;
 
   @override
   Future<SessionLaunchResult> launch(
     SessionLaunchRequest request, {
     SystemTerminal? externalTerminal,
-  }) async => throw const DataRefused(
-    DataRefusalCode.loginRequired,
-    'Antigravity asks to be logged in first.',
-  );
+  }) async {
+    launches++;
+    if (launches > 1) throw StateError('the second start');
+    throw const DataRefused(
+      DataRefusalCode.loginRequired,
+      'Antigravity asks to be logged in first.',
+    );
+  }
 }
 
 /// Records the terminal a launch was asked for, and launches nothing.

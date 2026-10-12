@@ -94,7 +94,7 @@ void main() {
   });
 
   testWidgets('while the agent logs itself in, the dialog says to finish '
-      'in the browser and how long the login waits', (tester) async {
+      'in the browser', (tester) async {
     final hold = Completer<String>();
     await pump(
       tester,
@@ -112,7 +112,7 @@ void main() {
     expect(
       find.text(
         'Waiting for Log in with Google. If a browser opened, finish signing '
-        'in there. The login ends after 10 minutes.',
+        'in there.',
       ),
       findsOneWidget,
     );

@@ -217,6 +217,13 @@ class AgentWorkData {
   Future<void> acpAuthClear(String installationId, {bool logout = false}) =>
       _ask(AcpAuthClear(installationId, logout: logout));
 
+  /// Ends the login under way for [installationId].
+  Future<void> acpAuthCancel(String installationId) =>
+      _ask(AcpAuthCancel(installationId));
+
+  /// How each ACP login under way is going, as the server tells it.
+  Stream<AcpLoginProgress> get loginProgress => _client.acpLoginProgress;
+
   /// Each step of an install under way, as the server tells it.
   Stream<AcpInstallProgress> get installProgress => _client.acpInstallProgress;
 

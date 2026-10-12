@@ -42,8 +42,16 @@ class AcpLoginMethodTile extends StatelessWidget {
         size: Chrome.iconAction,
       ),
       title: Text(current ? '${method.name} (now)' : method.name),
-      subtitle: method.description == null ? null : Text(method.description!),
-      trailing: Text(_how, style: theme.textTheme.bodySmall),
+      // How it is done sits under the name, not trailing: at a phone's width
+      // and a large text scale a trailing label takes the whole row.
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_how, style: theme.textTheme.labelSmall),
+          for (final line in [?method.description, ?method.completes])
+            Text(line),
+        ],
+      ),
       onTap: onPick,
     );
   }

@@ -221,6 +221,7 @@ class ServerAgentWork implements AgentWork {
       await _acpAuth.authenticate(installationId, methodId),
     AcpAuthTerminalLogin(:final installationId, :final methodId) =>
       await _acpAuth.terminalLogin(installationId, methodId),
+    AcpAuthCancel(:final installationId) => _acpAuth.cancel(installationId),
     AcpAuthClear(:final installationId, :final logout) => await _acpAuth.clear(
       installationId,
       logout: logout,

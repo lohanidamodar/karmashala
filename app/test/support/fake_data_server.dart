@@ -538,7 +538,7 @@ class FakeDataServer {
         case TodoChanged(:final todo):
           todos[todo.id] = todo;
         // Not a row: nothing of it is kept.
-        case AcpInstallProgress() || ActivityAppended():
+        case AcpInstallProgress() || AcpLoginProgress() || ActivityAppended():
           break;
         case TodoRemoved(:final id):
           todos.remove(id);
@@ -1573,6 +1573,11 @@ class FakeDataLink implements DataEndpoint {
       // Answered when done; a watch this link placed is told to it alone.
       final value = await _server.filesWork._handle(files, this);
       return DataReply(value as R, _server.revision, const []);
+    }
+    if (request case AcpAuthenticate() || AcpAuthTerminalLogin()) {
+      if (_server.agentWork.acpLoginGate case final gate?) {
+        await gate.future;
+      }
     }
     return _server._handle(this, request);
   }

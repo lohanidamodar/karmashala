@@ -33,3 +33,21 @@ List<String> acpArgumentsFor(
   if (leading.isEmpty && package != null) return ['-y', package, ...mode];
   return [...leading, ...mode];
 }
+
+/// The argv [installation] runs its agent's own terminal login [login] with:
+/// what runs the program (`-y <package>` for an npx row), then [login] — never
+/// the ACP mode arguments, which would start the agent's protocol instead.
+List<String> acpLoginArgumentsFor(
+  AgentInstallation installation,
+  AcpLaunchSpec spec,
+  List<String> login,
+) {
+  final leading = installation.leadingArguments;
+  final package = spec.npxPackage;
+  if (isNpxExecutable(installation.executable.path) &&
+      leading.isEmpty &&
+      package != null) {
+    return ['-y', package, ...login];
+  }
+  return [...leading, ...login];
+}

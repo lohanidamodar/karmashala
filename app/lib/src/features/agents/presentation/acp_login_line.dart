@@ -35,12 +35,14 @@ class AcpLoginLine extends ConsumerWidget {
 
   Future<void> _logIn(BuildContext context) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
-    final said = await AcpLoginDialog.show(
+    final outcome = await AcpLoginDialog.show(
       context,
       installationId: installationId,
       agentName: agentName,
     );
-    if (said != null) messenger?.showSnackBar(SnackBar(content: Text(said)));
+    if (outcome != null) {
+      messenger?.showSnackBar(SnackBar(content: Text(outcome.said)));
+    }
   }
 
   Future<void> _forget(BuildContext context, WidgetRef ref) async {

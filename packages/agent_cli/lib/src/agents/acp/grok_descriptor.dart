@@ -7,6 +7,14 @@ const _evidence =
     'default, acceptEdits, auto — declared from the package source '
     '2026-10-02, not yet read off a live session';
 
+const _authEvidence =
+    '@xai-official/grok 1.0.50 in archlinux, 2026-10-12: initialize '
+    'offers grok.com "Sign in with Grok"; authenticate grok.com runs '
+    r'$BROWSER, xdg-open or `cmd.exe /c start` on '
+    'https://accounts.x.ai/oauth2/device?user_code=..., prints nothing '
+    'and waits; `grok login --device-auth` prints the link and the code '
+    'in a terminal';
+
 /// Grok's coding agent in its ACP mode (`grok agent stdio`). Terminal-shaped
 /// rules are deliberately absent; the mode is set over the protocol. No store:
 /// where it keeps conversations has not been established.
@@ -23,6 +31,23 @@ const grokDescriptor = AgentDescriptor(
       PermissionRisk.autoRun: ['auto'],
       PermissionRisk.bypass: ['auto'],
     },
+    authCompletions: {
+      'grok.com': AcpAuthCompletion(
+        how:
+            "Grok opens x.ai's sign-in page in a browser on its own "
+            'machine and never prints the link. From a phone, or if no '
+            'browser opens, sign in in a terminal instead.',
+        evidence: _authEvidence,
+      ),
+    },
+    terminalLogin: AcpTerminalLogin(
+      name: 'Sign in with a device code',
+      arguments: ['login', '--device-auth'],
+      how:
+          'Opens a terminal running `grok login --device-auth`: a link '
+          'and a code you can use from any browser.',
+      evidence: _authEvidence,
+    ),
   ),
   launch: AgentLaunchSpec(
     permission: AgentPermissionSupport.axes(

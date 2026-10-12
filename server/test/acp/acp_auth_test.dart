@@ -4,7 +4,8 @@ import 'dart:io' show ProcessException;
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_acp/karmashala_acp.dart' show AuthMethod;
+import 'package:karmashala_acp/karmashala_acp.dart'
+    show AuthMethod, InitializeResult;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/store.dart';
@@ -87,32 +88,41 @@ void main() {
   late FakeAcpAgent Function() nextAgent;
   late List<String> agentStderr;
   late List<Uri> openedLinks;
+  late List<AcpLoginProgress> told;
+  late Future<int?> Function() terminalEnds;
 
-  ServerAcpAuth auth() => ServerAcpAuth(
-    installations: () => [antigravity, terminalAgent, antigravityOnWindows],
-    environments: () => [wsl, windows],
-    registry: () => AgentRegistry.builtIn,
-    choices: AcpAuthChoiceDao(database),
-    spawn: (environment, request) async {
-      expect(environment.id, isIn([wsl.id, windows.id]));
-      spawned.add(request);
-      final agent = nextAgent();
-      agents.add(agent);
-      return FakeAcpProcess(
-        agent,
-        errorLines: Stream.fromIterable(agentStderr),
-      ).spawn();
-    },
-    vault: () => vault,
-    openTerminal: (login) {
-      terminals.add(login);
-      return true;
-    },
-    openLink: openedLinks.add,
-    now: () => t0,
-    readTimeout: const Duration(seconds: 5),
-    authenticateTimeout: const Duration(seconds: 5),
-  );
+  ServerAcpAuth auth({List<AgentInstallation> more = const []}) =>
+      ServerAcpAuth(
+        installations: () => [
+          antigravity,
+          terminalAgent,
+          antigravityOnWindows,
+          ...more,
+        ],
+        environments: () => [wsl, windows],
+        registry: () => AgentRegistry.builtIn,
+        choices: AcpAuthChoiceDao(database),
+        spawn: (environment, request) async {
+          expect(environment.id, isIn([wsl.id, windows.id]));
+          spawned.add(request);
+          final agent = nextAgent();
+          agents.add(agent);
+          return FakeAcpProcess(
+            agent,
+            errorLines: Stream.fromIterable(agentStderr),
+          ).spawn();
+        },
+        vault: () => vault,
+        openTerminal: (login) {
+          terminals.add(login);
+          return terminalEnds();
+        },
+        openLink: openedLinks.add,
+        tell: told.add,
+        now: () => t0,
+        readTimeout: const Duration(seconds: 5),
+        authenticateTimeout: const Duration(seconds: 5),
+      );
 
   setUp(() {
     database = AppDatabase.memory();
@@ -129,6 +139,8 @@ void main() {
     vault = {};
     agentStderr = [];
     openedLinks = [];
+    told = [];
+    terminalEnds = () async => 0;
     nextAgent = () => FakeAcpAgent(authMethods: methods, supportsLogout: true);
   });
   tearDown(() => database.close());
@@ -391,7 +403,7 @@ void main() {
       choices: AcpAuthChoiceDao(database),
       spawn: (_, _) async => FakeAcpProcess(nextAgent()).spawn(),
       vault: () => vault,
-      openTerminal: (_) => false,
+      openTerminal: (_) => null,
       now: () => t0,
       readTimeout: const Duration(seconds: 5),
     );
@@ -469,4 +481,225 @@ void main() {
     await server.authenticate('ag1', 'oauth-personal');
     expect(server.startAuth(antigravity, spec).variables, isEmpty);
   });
+
+  group('a login under way', () {
+    final grok = AgentInstallation(
+      id: 'gk1',
+      agentId: 'grok',
+      executable: const EnvironmentPath(
+        environmentId: 'wsl:Ubuntu',
+        path: '/usr/bin/npx',
+      ),
+      createdAt: t0,
+    );
+
+    test('each method says how it completes, and an agent with a terminal '
+        'login of its own offers it beside its methods', () async {
+      final read = await auth().methods('ag1');
+      final byId = {for (final m in read.methods) m.id: m};
+      expect(byId['oauth-personal']!.completes, contains('Google sign-in'));
+      expect(byId['login']!.completes, contains('agy_acp_server.par login'));
+      expect(byId['cli-login']!.completes, contains('`copilot login`'));
+      expect(byId.containsKey(kAcpOwnTerminalLoginId), isFalse);
+
+      nextAgent = () => FakeAcpAgent(
+        authMethods: const [AuthMethod(id: 'grok.com', name: 'Grok')],
+      );
+      final grokRead = await auth(more: [grok]).methods('gk1');
+      expect(grokRead.methods.map((m) => (m.id, m.terminal)), [
+        ('grok.com', false),
+        (kAcpOwnTerminalLoginId, true),
+      ]);
+      expect(grokRead.methods.first.completes, contains('never prints'));
+      expect(grokRead.methods.last.completes, contains('--device-auth'));
+    });
+
+    test('the link and device code an agent prints are told as they are '
+        'heard, on any machine, while only WSL opens it here', () async {
+      agentStderr = [
+        'starting',
+        'To sign in, open '
+            'https://accounts.x.ai/oauth2/device?user_code=AB12-CD34.',
+        'Confirm this code in your browser: AB12-CD34',
+      ];
+      await auth().authenticate('ag-win', 'oauth-personal');
+      expect(openedLinks, isEmpty);
+      expect(told.map((p) => (p.installationId, p.methodId, p.link, p.code)), [
+        (
+          'ag-win',
+          'oauth-personal',
+          'https://accounts.x.ai/oauth2/device?user_code=AB12-CD34',
+          'AB12-CD34',
+        ),
+      ]);
+    });
+
+    test('a login that never answers ends at once when cancelled, in '
+        'words, remembering nothing', () async {
+      final never = Completer<void>();
+      nextAgent = () =>
+          FakeAcpAgent(authMethods: methods, authenticateGate: never.future);
+      final server = auth();
+      final login = server.authenticate('ag1', 'oauth-personal');
+      await pumpUntil(() => agents.isNotEmpty);
+      await pumpUntil(
+        () => agents.single.receivedMethods.contains('authenticate'),
+      );
+      server.cancel('ag1');
+      await expectLater(
+        login,
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.message,
+            'message',
+            'The login was cancelled.',
+          ),
+        ),
+      );
+      expect(server.state('ag1'), isNull);
+      expect(server.cancel('ag1'), isA<DataAck>(), reason: 'nothing to end');
+    });
+
+    test('a login answered late is remembered, confirmed', () async {
+      final later = Completer<void>();
+      nextAgent = () =>
+          FakeAcpAgent(authMethods: methods, authenticateGate: later.future);
+      final server = auth();
+      final login = server.authenticate('ag1', 'oauth-personal');
+      await pumpUntil(() => agents.isNotEmpty);
+      later.complete();
+      final state = await login;
+      expect(state.confirmed, isTrue);
+      expect(server.state('ag1')!.methodId, 'oauth-personal');
+    });
+
+    test('a terminal login answers once its terminal ends: a failing exit is '
+        'refused, a clean one re-checked with the agent', () async {
+      final server = auth();
+      terminalEnds = () async => 1;
+      await expectLater(
+        server.terminalLogin('ag1', 'login'),
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.message,
+            'message',
+            contains('exit code 1'),
+          ),
+        ),
+      );
+      expect(server.state('ag1'), isNull);
+      expect(told.single.terminal, contains('Log in'));
+
+      terminalEnds = () async => 0;
+      nextAgent = () => FakeAcpAgent(
+        authMethods: methods,
+        initializeMeta: const {
+          'claudeCode': {'loggedIn': false},
+        },
+      );
+      await expectLater(
+        server.terminalLogin('ag1', 'login'),
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.message,
+            'message',
+            contains('still says it is not logged in'),
+          ),
+        ),
+      );
+
+      nextAgent = () => FakeAcpAgent(
+        authMethods: methods,
+        initializeMeta: const {
+          'claudeCode': {'loggedIn': true},
+        },
+      );
+      final state = await server.terminalLogin('ag1', 'login');
+      expect(state.confirmed, isTrue);
+    });
+
+    test('cancel stops waiting on a terminal, which stays open', () async {
+      final never = Completer<int?>();
+      terminalEnds = () => never.future;
+      final server = auth();
+      final login = server.terminalLogin('ag1', 'login');
+      await pumpUntil(() => terminals.isNotEmpty);
+      server.cancel('ag1');
+      await expectLater(login, throwsA(isA<DataRefused>()));
+      expect(server.state('ag1'), isNull);
+    });
+
+    test("an agent's own terminal login runs its login through npx, not its "
+        'ACP mode', () async {
+      AgentInstallationDao(database).insert(grok);
+      final state = await auth(
+        more: [grok],
+      ).terminalLogin('gk1', kAcpOwnTerminalLoginId);
+      final opened = terminals.single;
+      expect(opened.executable, '/usr/bin/npx');
+      expect(opened.arguments, [
+        '-y',
+        '@xai-official/grok',
+        'login',
+        '--device-auth',
+      ]);
+      expect(opened.title, 'Grok: Sign in with a device code');
+      expect(state.methodName, 'Sign in with a device code');
+      expect(state.confirmed, isFalse);
+      await expectLater(
+        auth().terminalLogin('ag1', kAcpOwnTerminalLoginId),
+        throwsA(isA<DataRefused>()),
+      );
+    });
+  });
+
+  test("a device code is read from a link's user_code or a line naming a "
+      'code; a plain line has none', () {
+    expect(
+      deviceCodeIn(
+        'x',
+        link: Uri.parse('https://a.example/device?user_code=WX-YZ'),
+      ),
+      'WX-YZ',
+    );
+    expect(deviceCodeIn('Enter the code: ABCD-1234 at the page'), 'ABCD-1234');
+    expect(deviceCodeIn('ready in 2026-10-12'), isNull);
+  });
+
+  test('what an agent says of its login on initialize', () {
+    InitializeResult said(Map<String, Object?>? meta) =>
+        InitializeResult(protocolVersion: 1, meta: meta);
+    expect(loggedInSaid(said(null)), isNull);
+    expect(
+      loggedInSaid(
+        said({
+          'claudeCode': {'loggedIn': true},
+        }),
+      ),
+      isTrue,
+    );
+    expect(
+      loggedInSaid(
+        said({
+          'codex': {'accountType': null},
+        }),
+      ),
+      isFalse,
+    );
+    expect(
+      loggedInSaid(
+        said({
+          'codex': {'accountType': 'chatgpt'},
+        }),
+      ),
+      isTrue,
+    );
+  });
+}
+
+Future<void> pumpUntil(bool Function() done) async {
+  for (var i = 0; i < 200 && !done(); i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+  expect(done(), isTrue, reason: 'never came');
 }
