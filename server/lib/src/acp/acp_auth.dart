@@ -288,8 +288,13 @@ class ServerAcpAuth {
       throw const DataRefused.unavailable('this server opens no terminals');
     }
     final target = _target(installationId);
-    final login = await _terminalFor(target, methodId);
+    // Under way from the start, and each await raced with a cancel, so a
+    // cancel while the agent is still asked opens and remembers nothing.
     return _underWayAs(installationId, (cancelled) async {
+      final login = await Future.any([
+        _terminalFor(target, methodId),
+        cancelled,
+      ]);
       final ended = open(login.terminal);
       if (ended == null) {
         throw DataRefused.unavailable(
@@ -325,7 +330,7 @@ class ServerAcpAuth {
           'nothing was remembered. Its output is in the terminal tab.',
         );
       }
-      final loggedIn = await _loggedInNow(target);
+      final loggedIn = await Future.any([_loggedInNow(target), cancelled]);
       if (loggedIn == false) {
         throw DataRefused(
           DataRefusalCode.failed,
