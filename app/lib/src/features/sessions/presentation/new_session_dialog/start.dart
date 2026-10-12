@@ -238,16 +238,21 @@ extension _NewSessionStart on _NewSessionDialogState {
   }
 
   /// Opens [installation]'s login; once it is done the refusal is stale, and
-  /// the start it stopped goes on without a second click.
+  /// the start it stopped goes on without a second click. A login handed to
+  /// a terminal is not done yet: its words are shown, and Start stays.
   Future<void> _logIn(AgentInstallation installation) async {
-    final said = await AcpLoginDialog.show(
+    final outcome = await AcpLoginDialog.show(
       context,
       installationId: installation.id,
       agentName: ref
           .read(agentRegistryProvider)
           .displayNameFor(installation.agentId),
     );
-    if (said == null || !mounted) return;
+    if (outcome == null || !mounted) return;
+    if (!outcome.done) {
+      setState(() => _loginNotice = outcome.said);
+      return;
+    }
     final place = _loginPlace;
     setState(() {
       _error = null;
@@ -256,6 +261,6 @@ extension _NewSessionStart on _NewSessionDialogState {
     });
     if (place != null) await _create(installation, place: place);
     // Shown after the start, which clears the notice when it begins.
-    if (mounted) setState(() => _loginNotice ??= said);
+    if (mounted) setState(() => _loginNotice ??= outcome.said);
   }
 }

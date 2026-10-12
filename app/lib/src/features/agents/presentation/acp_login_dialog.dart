@@ -17,13 +17,18 @@ import '../application/acp_login_controller.dart';
 import 'acp_login_method_tile.dart';
 import 'acp_login_progress_view.dart';
 
+/// How a login dialog ended: the sentence to show, and whether the login is
+/// done — false for one handed to a terminal that is still running.
+typedef AcpLoginOutcome = ({String said, bool done});
+
 /// **Log in to an ACP agent**: the methods it advertises, read from the agent
 /// itself. A terminal method opens a terminal tab on its machine and waits
 /// for it to end, an API-key method asks for the key first, any other asks
 /// the agent to `authenticate`. While a login is under way it shows the
 /// method, the link and code the agent gave, and Cancel; a login the agent
 /// says nothing of for [kAcpLoginQuietPatience] is ended with Retry. Pops
-/// with the sentence to show once logged in, or null when cancelled.
+/// once logged in, or null when cancelled; a terminal login is handed off as
+/// soon as its tab opens, since the dialog would cover the terminal.
 class AcpLoginDialog extends ConsumerStatefulWidget {
   const AcpLoginDialog({
     required this.installationId,
@@ -47,10 +52,10 @@ class AcpLoginDialog extends ConsumerStatefulWidget {
       'Waiting for you to finish signing in. The login ends after '
       '${kAcpAgentLoginPatience.inMinutes} minutes.';
 
-  /// Said while a terminal login runs.
+  /// Said when a terminal login is handed to its tab.
   static String terminalNote(String title) =>
-      'Finish signing in in the terminal tab "$title". This continues when '
-      'it ends.';
+      'Finish signing in in the terminal tab "$title". The login is '
+      'remembered when it ends.';
 
   /// Said when an agent gave no word for [kAcpLoginQuietPatience].
   static String quietNote(String agent, String method) =>
@@ -58,11 +63,11 @@ class AcpLoginDialog extends ConsumerStatefulWidget {
       'after $method started (no link, no code), so the login was ended. If '
       'a browser opened on its machine, it may be waiting there.';
 
-  static Future<String?> show(
+  static Future<AcpLoginOutcome?> show(
     BuildContext context, {
     required String installationId,
     required String agentName,
-  }) => showDialog<String>(
+  }) => showDialog<AcpLoginOutcome>(
     context: context,
     builder: (_) =>
         AcpLoginDialog(installationId: installationId, agentName: agentName),
@@ -122,6 +127,16 @@ class _AcpLoginDialogState extends ConsumerState<AcpLoginDialog> {
     final doing = _doing;
     if (!mounted || doing == null || progress.methodId != doing.id) return;
     _quiet?.cancel();
+    if (progress.terminal case final title?) {
+      // Handed off, not cancelled: the server goes on waiting for the
+      // terminal, and the remembered login is refreshed when it ends.
+      _attempt++;
+      _doing = null;
+      Navigator.of(
+        context,
+      ).pop((said: AcpLoginDialog.terminalNote(title), done: false));
+      return;
+    }
     setState(() => _heard = progress);
   }
 
@@ -157,7 +172,9 @@ class _AcpLoginDialogState extends ConsumerState<AcpLoginDialog> {
         method,
         apiKey: apiKey,
       );
-      if (mounted && attempt == _attempt) Navigator.of(context).pop(said);
+      if (mounted && attempt == _attempt) {
+        Navigator.of(context).pop((said: said, done: true));
+      }
     } on Object catch (error) {
       if (!mounted || attempt != _attempt) return;
       setState(() {
@@ -249,11 +266,7 @@ class _AcpLoginDialogState extends ConsumerState<AcpLoginDialog> {
   }
 
   String _noteFor(AcpAuthMethod method) {
-    final heard = _heard;
-    if (heard?.terminal case final title?) {
-      return AcpLoginDialog.terminalNote(title);
-    }
-    if (heard?.link != null) return AcpLoginDialog.linkNote();
+    if (_heard?.link != null) return AcpLoginDialog.linkNote();
     return method.terminal
         ? 'Opening a terminal for ${method.name}…'
         : AcpLoginDialog.waitingNote(method.name);

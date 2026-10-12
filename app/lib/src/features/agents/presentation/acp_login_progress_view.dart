@@ -94,7 +94,7 @@ class _CopyableValue extends StatelessWidget {
       children: [
         Text(label, style: theme.textTheme.labelSmall),
         const SizedBox(height: Insets.xxs),
-        SelectableText(value, style: style, maxLines: large ? 1 : 4),
+        SelectableText(value, style: style, maxLines: large ? 1 : null),
         Wrap(
           spacing: Insets.sm,
           children: [

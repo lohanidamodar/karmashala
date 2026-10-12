@@ -50,7 +50,8 @@ void main() {
     db.server.agentWork.acpAuthMethods['ag1'] = methods;
   });
 
-  late List<String?> popped;
+  late List<AcpLoginOutcome?> popped;
+  List<String?> said() => [for (final outcome in popped) outcome?.said];
 
   Future<void> open(WidgetTester tester) async {
     popped = [];
@@ -128,7 +129,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(db.server.agentWork.acpCancels, ['ag1']);
     expect(find.text('Log in to Antigravity'), findsNothing);
-    expect(popped, [null]);
+    expect(said(), [null]);
   });
 
   testWidgets('a login the agent says nothing of for two minutes is ended '
@@ -150,7 +151,7 @@ void main() {
     expect(db.server.agentWork.acpAuthenticates, [
       ('ag1', 'oauth-personal'),
     ], reason: 'the retry was answered; the held one was cancelled first');
-    expect(popped, ['Logged in via Log in with Google.']);
+    expect(said(), ['Logged in via Log in with Google.']);
   });
 
   testWidgets('a link and a code the agent gives are shown with Copy and '
@@ -194,7 +195,7 @@ void main() {
 
     db.server.agentWork.acpLoginGate!.complete();
     await tester.pumpAndSettle();
-    expect(popped, ['Logged in via Log in with Google.']);
+    expect(said(), ['Logged in via Log in with Google.']);
   });
 
   testWidgets('a late answer closes the dialog with what was done', (
@@ -207,7 +208,7 @@ void main() {
     db.server.agentWork.acpLoginGate!.complete();
     await tester.pumpAndSettle();
     expect(find.text('Log in to Antigravity'), findsNothing);
-    expect(popped, ['Logged in via Log in with Google.']);
+    expect(said(), ['Logged in via Log in with Google.']);
   });
 
   testWidgets('an error is the agent\'s own words, with Retry', (tester) async {
@@ -226,27 +227,43 @@ void main() {
     expect(find.text('Retry'), findsOneWidget);
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
-    expect(popped, ['Logged in via Log in with Google.']);
+    expect(said(), ['Logged in via Log in with Google.']);
   });
 
-  testWidgets('a terminal sign-in names its tab and waits for it to end, '
-      'with no quiet timer', (tester) async {
+  testWidgets('a terminal sign-in is handed to its tab once it opens, so the '
+      'dialog never covers the terminal; the server goes on waiting', (
+    tester,
+  ) async {
     hold();
     await open(tester);
     await pick(tester, 'Sign in with a device code');
-    expect(db.server.agentWork.acpTerminalLogins, isEmpty, reason: 'held');
-    tell(method: kAcpOwnTerminalLoginId, terminal: 'Grok: Sign in');
-    await tester.pump();
-    expect(find.text(AcpLoginDialog.terminalNote('Grok: Sign in')), findsOne);
+    expect(
+      find.text('Opening a terminal for Sign in with a device code…'),
+      findsOneWidget,
+    );
     await tester.pump(kAcpLoginQuietPatience * 2);
-    expect(db.server.agentWork.acpCancels, isEmpty);
+    expect(db.server.agentWork.acpCancels, isEmpty, reason: 'no quiet timer');
 
+    tell(method: kAcpOwnTerminalLoginId, terminal: 'Grok: Sign in');
+    await tester.pumpAndSettle();
+    expect(find.text('Log in to Antigravity'), findsNothing);
+    expect(said(), [AcpLoginDialog.terminalNote('Grok: Sign in')]);
+    expect(popped.single!.done, isFalse);
+    expect(db.server.agentWork.acpCancels, isEmpty, reason: 'handed off');
     db.server.agentWork.acpLoginGate!.complete();
     await tester.pumpAndSettle();
     expect(db.server.agentWork.acpTerminalLogins, [
       ('ag1', kAcpOwnTerminalLoginId),
     ]);
-    expect(popped, ['Sign in with a device code finished in the terminal.']);
+  });
+
+  testWidgets('a terminal login answered before its tab is told closes with '
+      'its result, done', (tester) async {
+    await open(tester);
+    await pick(tester, 'Sign in with a device code');
+    await tester.pumpAndSettle();
+    expect(said(), ['Sign in with a device code finished in the terminal.']);
+    expect(popped.single!.done, isTrue);
   });
 
   for (final (name, size, scale) in [
