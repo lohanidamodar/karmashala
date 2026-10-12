@@ -98,6 +98,7 @@ Future<Harness> harness(
   AgentActivityStatus status = AgentActivityStatus.idle,
   String? model,
   String? defaultModel,
+  Map<String, AgentModelCatalog> catalogs = const {},
 }) async {
   final db = TestMachine();
   final server = FakeDataServer()..runsOn(db);
@@ -105,6 +106,7 @@ Future<Harness> harness(
   server.projectRows.insert(project());
   server.repositoryRows.insert(repository());
   server.installationRows.insert(agentInstallation(agentId: agentId));
+  server.agentWork.modelCatalogs.addAll(catalogs);
   final container = ProviderContainer(
     overrides: [
       await server.override(),
@@ -331,7 +333,8 @@ void main() {
         .first;
     expect(first.value, ModelChoice.followDefault);
     expect(first.value, isNotNull);
-    expect(find.byType(DesktopMenuDivider), findsOneWidget);
+    // One after the way back, one before where the list came from.
+    expect(find.byType(DesktopMenuDivider), findsNWidgets(2));
 
     await tester.tap(find.text('Follow the Settings default'));
     await tester.pumpAndSettle();
@@ -437,8 +440,8 @@ void main() {
     await tester.pumpWidget(h.app);
     await openMenu(tester);
 
-    // Four models plus the way back to the default.
-    expect(find.byType(DesktopMenuDetailItem<ModelChoice>), findsNWidgets(5));
+    // Four models, the way back to the default, and where the list came from.
+    expect(find.byType(DesktopMenuDetailItem<ModelChoice>), findsNWidgets(6));
     expect(
       find.descendant(
         of: find.byType(DesktopMenuDetailItem<ModelChoice>),
@@ -447,4 +450,136 @@ void main() {
       findsOneWidget,
     );
   });
+
+  group('a list the agent reported', () {
+    AgentModelCatalog argon() => AgentModelCatalog(
+      installationId: 'a1',
+      models: const [
+        AgentModel(id: 'argon-4', label: 'argon-4', summary: ''),
+        AgentModel(
+          id: 'agy-demo-high',
+          label: 'Gemini 4 Argon (High)',
+          summary: '',
+        ),
+      ],
+      readAt: DateTime.now().toUtc(),
+      source: 'agy models',
+    );
+
+    testWidgets('offers the new model, and keeps a chosen one it dropped, '
+        'marked no longer listed', (tester) async {
+      final h = await harness(
+        tester,
+        agentId: AgentIds.antigravity,
+        model: 'gemini-3.1-pro-high',
+        catalogs: {'a1': argon()},
+      );
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Gemini 3.1 Pro (High)'), findsOneWidget);
+      expect(find.text('· no longer listed'), findsOneWidget);
+
+      await openMenu(tester);
+      expect(find.text('Argon 4'), findsOneWidget);
+      expect(find.text('Gemini 4 Argon (High)'), findsOneWidget);
+      // A curated model the agent no longer lists is not offered.
+      expect(find.text('Gemini 3.8 Flash (Low)'), findsNothing);
+      expect(find.text(kRefreshModelsLabel), findsOneWidget);
+      expect(find.text('Read just now from agy models'), findsOneWidget);
+    });
+
+    testWidgets('"Refresh models" asks the server to read the agent now', (
+      tester,
+    ) async {
+      final h = await harness(
+        tester,
+        agentId: AgentIds.antigravity,
+        catalogs: {'a1': argon()},
+      );
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pumpAndSettle();
+      await openMenu(tester);
+
+      await tester.tap(find.text(kRefreshModelsLabel));
+      await tester.pumpAndSettle();
+
+      final reads = h.db.server.agentWork.modelReads;
+      expect(reads, contains(('a1', true)));
+      expect(
+        find.text('Models read from agy models: 2 listed.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an agent that lists none says the list is curated', (
+      tester,
+    ) async {
+      final h = await harness(
+        tester,
+        agentId: _untellable.id,
+        registry: const AgentRegistry([DataOnlyAgentAdapter(_untellable)]),
+      );
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await openMenu(tester);
+
+      final row = tester
+          .widgetList<DesktopMenuDetailItem<ModelChoice>>(
+            find.byType(DesktopMenuDetailItem<ModelChoice>),
+          )
+          .firstWhere((r) => r.value == ModelChoice.refreshModels);
+      expect(row.enabled, isFalse);
+      expect(find.text(kCuratedModelsNote), findsOneWidget);
+    });
+  });
+
+  test(
+    'the provenance line says how old the list is, or why it is curated',
+    () {
+      final now = DateTime.utc(2026, 10, 12, 12);
+      final read = AgentModelCatalog(
+        installationId: 'a1',
+        models: const [AgentModel(id: 'x', label: 'X', summary: '')],
+        readAt: now.subtract(const Duration(minutes: 5)),
+        source: 'agy models',
+      );
+      expect(
+        modelsNoteFor(read, listsModels: true, now: now),
+        'Read 5m ago from agy models',
+      );
+      expect(
+        modelsNoteFor(
+          AgentModelCatalog(
+            installationId: 'a1',
+            models: read.models,
+            readAt: read.readAt,
+            source: 'agy models',
+            failure: 'agy models named no models',
+          ),
+          listsModels: true,
+          now: now,
+        ),
+        'Read 5m ago from agy models; the last refresh failed',
+      );
+      expect(
+        modelsNoteFor(
+          const AgentModelCatalog(
+            installationId: 'a1',
+            source: 'agy models',
+            failure: 'agy models failed: offline',
+          ),
+          listsModels: true,
+          now: now,
+        ),
+        'Curated list (agy models failed: offline)',
+      );
+      expect(
+        modelsNoteFor(null, listsModels: false, now: now),
+        kCuratedModelsNote,
+      );
+    },
+  );
 }

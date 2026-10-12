@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show AgentModelCatalog;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/read.dart' show DetectedProject;
 import 'package:agent_cli/usage.dart';
@@ -155,6 +156,14 @@ class AgentWorkData {
   /// Checks the recorded executables and repairs rotted paths.
   Future<AgentPathRepairReport> repair({bool full = false}) =>
       _ask(AgentsRepair(full: full));
+
+  /// Downloads a registry entry's prebuilt archive into [environmentId]'s
+  /// The models installation [installationId]'s agent reports, from the
+  /// server's cache, or read from the agent first when [refresh] is set.
+  Future<AgentModelCatalog> models(
+    String installationId, {
+    bool refresh = false,
+  }) => _ask(AgentModelsRead(installationId, refresh: refresh));
 
   /// Downloads a registry entry's prebuilt archive into [environmentId]'s
   /// managed folder and unpacks it; with [agentId], looks for that agent

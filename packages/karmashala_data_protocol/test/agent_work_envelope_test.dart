@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:agent_cli/descriptors.dart' show AgentModel, AgentModelCatalog;
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
@@ -85,6 +86,8 @@ void main() {
       const AgentsRepair(full: true),
       const AgentsRefreshVersions(),
       const AgentsDiscoverUnprobed(),
+      const AgentModelsRead('a1'),
+      const AgentModelsRead('a1', refresh: true),
       const ImportsScan(),
       ImportsAdd([project]),
       const ImportsForRepositories(['r1', 'r2']),
@@ -102,6 +105,30 @@ void main() {
         reason: request.kind,
       );
     }
+  });
+
+  test('a model catalogue crosses with its models, age and failure', () {
+    final back = roundTrip(
+      const AgentModelsRead('a1', refresh: true),
+      AgentModelCatalog(
+        installationId: 'a1',
+        models: const [
+          AgentModel(
+            id: 'agy-demo-high',
+            label: 'Gemini 4 Argon (High)',
+            summary: '',
+          ),
+        ],
+        readAt: t0,
+        source: 'agy models',
+        failure: 'exit 1',
+        failedAt: t0,
+      ),
+    ).value;
+    expect(back.models.single.label, 'Gemini 4 Argon (High)');
+    expect(back.readAt, t0);
+    expect(back.source, 'agy models');
+    expect(back.failure, 'exit 1');
   });
 
   test('usage states carry the reading, the failure and the schedule', () {

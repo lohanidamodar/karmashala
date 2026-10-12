@@ -25,6 +25,10 @@ DataRequest<Object?>? _agentWorkRequestFromJson(
   ),
   AgentsRepair.name => AgentsRepair(full: args.boolean('full', orElse: false)),
   AgentsRefreshVersions.name => const AgentsRefreshVersions(),
+  AgentModelsRead.name => AgentModelsRead(
+    args.string('installationId'),
+    refresh: args.boolean('refresh', orElse: false),
+  ),
   AgentsDiscoverUnprobed.name => const AgentsDiscoverUnprobed(),
   AcpAgentInstall.name => AcpAgentInstall(
     environmentId: args.string('environmentId'),
@@ -576,4 +580,36 @@ final class AcpAuthClear extends AgentWorkRequest<DataAck> {
 
   @override
   DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+// Models.
+
+/// The models installation [installationId]'s agent reports, as the server
+/// keeps them: answered from its cache while that is younger than
+/// `kAgentModelsTtl`, read from the agent first when [refresh] is set or the
+/// cache is older. A failed read answers the last good list with the failure
+/// beside it; a catalogue with no models means the curated list stands.
+final class AgentModelsRead extends AgentWorkRequest<AgentModelCatalog> {
+  const AgentModelsRead(this.installationId, {this.refresh = false});
+
+  static const String name = 'agents.models';
+
+  final String installationId;
+  final bool refresh;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'installationId': installationId,
+    'refresh': refresh,
+  };
+
+  @override
+  Object? resultToJson(AgentModelCatalog result) => result.toJson();
+
+  @override
+  AgentModelCatalog resultFromJson(Object? json) =>
+      _decode(kind, () => AgentModelCatalog.fromJson(_object(json, kind)));
 }

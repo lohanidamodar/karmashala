@@ -74,6 +74,7 @@ import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:agent_cli/descriptors.dart'
     show
         AgentActivityStatus,
+        AgentModelCatalog,
         AgentStatusReport,
         AgentStatusSource,
         AgentRegistry,

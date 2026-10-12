@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_session/resume.dart' show describeAge;
+import '../../agents/application/agent_model_catalog_providers.dart';
 import '../../agents/application/session_model_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/model_picker.dart';
@@ -30,7 +34,16 @@ class ModelChipView {
     required this.defaultModelId,
     required this.defaultDetail,
     this.activeModelId,
+    this.modelsNote = kCuratedModelsNote,
+    this.canRefreshModels = false,
   });
+
+  /// Where the menu's list comes from: "Read 5m ago from agy models", or
+  /// [kCuratedModelsNote].
+  final String modelsNote;
+
+  /// Whether the agent has a list of its own to read again.
+  final bool canRefreshModels;
 
   /// The words on the chip's face: the model the agent says it runs, else
   /// the one it is set or expected to start on, else [kModelNotRecorded].
@@ -77,11 +90,38 @@ class ModelChipView {
 /// The chip's face before anything names a model: never `default`.
 const String kModelNotRecorded = 'Model not recorded yet';
 
+/// The menu's provenance line for an agent with no list of its own.
+const String kCuratedModelsNote = 'Curated list (agent lists none)';
+
+/// The menu row that reads the agent's list again.
+const String kRefreshModelsLabel = 'Refresh models';
+
+/// Where [catalog]'s list came from and how old it is, as of [now]; for an
+/// agent that lists none ([listsModels] false), [kCuratedModelsNote].
+String modelsNoteFor(
+  AgentModelCatalog? catalog, {
+  required bool listsModels,
+  required DateTime now,
+}) {
+  if (!listsModels) return kCuratedModelsNote;
+  final source = catalog?.source ?? 'the agent';
+  final readAt = catalog?.readAt;
+  if (catalog == null || !catalog.isLive || readAt == null) {
+    final failure = catalog?.failure;
+    return failure == null
+        ? 'Curated list (not read from $source yet)'
+        : 'Curated list ($failure)';
+  }
+  final read = 'Read ${describeAge(now.difference(readAt))} from $source';
+  return catalog.failure == null ? read : '$read; the last refresh failed';
+}
+
 /// What the chip should say about [state], and the model its agent last said
 /// it runs ([active]), which wins over what it was set to.
 ModelChipView modelChipViewFor(
   SessionModelState state, {
   SessionActiveModel? active,
+  DateTime? now,
 }) {
   final options = modelOptionsFor(
     state.descriptor,
@@ -153,6 +193,12 @@ ModelChipView modelChipViewFor(
     activeModelId: active == null
         ? null
         : state.support.modelFor(active.modelId)?.id ?? active.modelId,
+    modelsNote: modelsNoteFor(
+      state.catalog,
+      listsModels: state.modelsKey != null,
+      now: now ?? DateTime.now().toUtc(),
+    ),
+    canRefreshModels: state.modelsKey != null,
   );
 }
 
@@ -242,6 +288,19 @@ class ModelChip extends StatelessWidget {
                   : scheme.error,
               detail: option.summary,
             ),
+          const DesktopMenuDivider(),
+          // Last, and always there: where this list came from, and the way to
+          // read it again when the agent has one of its own.
+          DesktopMenuDetailItem<ModelChoice>(
+            value: ModelChoice.refreshModels,
+            enabled: view.canRefreshModels,
+            label: view.canRefreshModels
+                ? kRefreshModelsLabel
+                : kCuratedModelsNote,
+            detail: view.canRefreshModels
+                ? view.modelsNote
+                : "Karmashala's own list: this agent reports none to read.",
+          ),
         ];
       },
       child: Tooltip(
@@ -411,6 +470,29 @@ void _apply(
   // Into the session's own bar: every sentence below is about one session, and
   // a snackbar beside a chip would be one event told two ways.
   final notices = ref.read(sessionNoticesProvider.notifier);
+  if (choice.refreshesList) {
+    final key = state.modelsKey;
+    if (key == null) return;
+    unawaited(
+      ref.read(agentModelsRefreshProvider)(key).then((catalog) {
+        final failure = catalog?.failure;
+        notices.post(
+          state.sessionId,
+          SessionNotice(
+            message: catalog == null
+                ? 'Could not ask the server for ${state.agentName}\'s models; '
+                      'the list shown is unchanged.'
+                : failure != null
+                ? 'Models not refreshed: $failure. '
+                      '${catalog.isLive ? 'Keeping the last list.' : 'Showing the curated list.'}'
+                : 'Models read from ${catalog.source}: '
+                      '${catalog.models.length} listed.',
+          ),
+        );
+      }),
+    );
+    return;
+  }
   final outcome = launcher.setModel(state.sessionId, choice.modelId);
   String label(String id) => state.support.modelFor(id)?.label ?? id;
   final target = choice.modelId ?? state.defaultModelId;

@@ -59,6 +59,12 @@ class FakeAgentWork {
   );
   final installs = <AcpAgentInstall>[];
 
+  /// What `agents.models` answers per installation; one not here answers an
+  /// empty catalogue, which leaves the curated list standing. [modelReads]
+  /// keeps each ask as (installationId, refresh).
+  final modelCatalogs = <String, AgentModelCatalog>{};
+  final modelReads = <(String, bool)>[];
+
   /// The projects `imports.scan` finds.
   var detected = <DetectedProject>[];
 
@@ -153,6 +159,11 @@ class FakeAgentWork {
     }(),
     AgentsRefreshVersions() => const <AgentVersionChange>[],
     AgentsDiscoverUnprobed() => const <AgentInstallation>[],
+    AgentModelsRead(:final installationId, :final refresh) => () {
+      modelReads.add((installationId, refresh));
+      return modelCatalogs[installationId] ??
+          AgentModelCatalog(installationId: installationId);
+    }(),
     ImportsScan() => detected,
     ImportsAdd(:final projects) => () {
       added.add(projects);
