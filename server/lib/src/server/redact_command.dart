@@ -76,9 +76,22 @@ Map<String, int> redactStoreRows(Database db, {required bool apply}) {
     scan();
     return found;
   }
+  // FTS5 keeps a masked row's old terms in its segments until they merge, so
+  // each index is rebuilt from the masked text, and `secure_delete` zeroes
+  // the pages the old segments leave free.
+  db.execute('PRAGMA secure_delete = ON;');
   db.execute('BEGIN IMMEDIATE;');
   try {
     scan();
+    if (found.isNotEmpty) {
+      for (final row in db.select(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND sql LIKE 'CREATE VIRTUAL TABLE % USING fts5(%';",
+      )) {
+        final name = row['name']! as String;
+        db.execute('INSERT INTO "$name" ("$name") VALUES (\'rebuild\');');
+      }
+    }
     db.execute('COMMIT;');
   } catch (_) {
     db.execute('ROLLBACK;');
@@ -95,19 +108,28 @@ Map<String, int> redactLogFiles(Directory logs, {required bool apply}) {
   final files = logs.listSync().whereType<File>().toList()
     ..sort((a, b) => a.path.compareTo(b.path));
   for (final file in files) {
-    final lines = file.readAsLinesSync();
-    var changed = 0;
-    final out = [
-      for (final line in lines) AgentRedactor.text(line, limit: _whole),
-    ];
-    for (var i = 0; i < lines.length; i++) {
-      if (out[i] != lines[i]) changed++;
+    // Whole, so a private key printed across lines is one match.
+    final text = file.readAsStringSync();
+    final out = AgentRedactor.text(text, limit: _whole);
+    if (out == text) continue;
+    // A line counts when the masked file no longer holds it.
+    final kept = <String, int>{};
+    for (final line in const LineSplitter().convert(out)) {
+      kept[line] = (kept[line] ?? 0) + 1;
     }
-    if (changed == 0) continue;
+    var changed = 0;
+    for (final line in const LineSplitter().convert(text)) {
+      final left = kept[line] ?? 0;
+      if (left > 0) {
+        kept[line] = left - 1;
+      } else {
+        changed++;
+      }
+    }
     found[p.basename(file.path)] = changed;
     if (apply) {
       final partial = File('${file.path}.redacting');
-      partial.writeAsStringSync('${out.join('\n')}\n', flush: true);
+      partial.writeAsStringSync(out, flush: true);
       partial.renameSync(file.path);
     }
   }

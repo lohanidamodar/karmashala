@@ -6,6 +6,7 @@ import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_host/src/agents/server_agent_work.dart';
 import 'package:karmashala_host/src/agents/server_model_catalogs.dart';
+import 'package:karmashala_ssh/runner.dart' show buildRemoteCommandLine;
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -119,6 +120,38 @@ void main() {
     final catalog = await catalogs().read('agy-ssh');
     expect(asked(sshId).single.executable, '/home/dev/.local/bin/agy');
     expect(catalog.isLive, isTrue);
+  });
+
+  test('Codex\'s model cache on an SSH box is named for the remote shell to '
+      'expand, through the line SSH really sends', () async {
+    service.reconcileProbe(
+      environmentId: sshId,
+      readAt: start,
+      found: [
+        AgentInstallation(
+          id: 'codex-ssh',
+          agentId: AgentIds.codex,
+          executable: EnvironmentPath(
+            environmentId: sshId,
+            path: '/home/dev/.local/bin/codex',
+          ),
+          createdAt: start,
+        ),
+      ],
+      probed: const {},
+      readings: const {},
+    );
+    const cache =
+        '{"models":[{"slug":"gpt-6-astra","display_name":"GPT-6-Astra",'
+        '"visibility":"list"}]}';
+    answers[sshId] = (_) =>
+        const CommandResult(exitCode: 0, stdout: cache, stderr: '');
+    final catalog = await catalogs().read('codex-ssh');
+    expect(
+      buildRemoteCommandLine(asked(sshId).single),
+      "exec 'sh' '-c' 'cat \${CODEX_HOME:-\$HOME/.codex}/models_cache.json'",
+    );
+    expect(catalog.models.single.id, 'gpt-6-astra');
   });
 
   test('answers from the cache inside its time to live, and asks again '

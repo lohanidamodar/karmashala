@@ -90,6 +90,8 @@ void main() {
   late List<Uri> openedLinks;
   late List<AcpLoginProgress> told;
   late Future<int?> Function() terminalEnds;
+  late int spawnsAsked;
+  late Future<void> Function(int spawn) holdSpawn;
 
   ServerAcpAuth auth({List<AgentInstallation> more = const []}) =>
       ServerAcpAuth(
@@ -104,6 +106,7 @@ void main() {
         choices: AcpAuthChoiceDao(database),
         spawn: (environment, request) async {
           expect(environment.id, isIn([wsl.id, windows.id]));
+          await holdSpawn(++spawnsAsked);
           spawned.add(request);
           final agent = nextAgent();
           agents.add(agent);
@@ -141,6 +144,8 @@ void main() {
     openedLinks = [];
     told = [];
     terminalEnds = () async => 0;
+    spawnsAsked = 0;
+    holdSpawn = (_) async {};
     nextAgent = () => FakeAcpAgent(authMethods: methods, supportsLogout: true);
   });
   tearDown(() => database.close());
@@ -626,6 +631,48 @@ void main() {
       await pumpUntil(() => terminals.isNotEmpty);
       server.cancel('ag1');
       await expectLater(login, throwsA(isA<DataRefused>()));
+      expect(server.state('ag1'), isNull);
+    });
+
+    test('a cancel while the terminal login is still being prepared opens '
+        'no terminal and remembers nothing', () async {
+      final preparing = Completer<void>();
+      holdSpawn = (_) => preparing.future;
+      final server = auth();
+      final login = server.terminalLogin('ag1', 'login');
+      await pumpUntil(() => spawnsAsked == 1);
+      server.cancel('ag1');
+      preparing.complete();
+      await expectLater(
+        login,
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.message,
+            'message',
+            'The login was cancelled.',
+          ),
+        ),
+      );
+      await pumpUntil(() => agents.isNotEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(terminals, isEmpty);
+      expect(server.state('ag1'), isNull);
+    });
+
+    test('a cancel while a clean terminal exit is re-checked remembers '
+        'nothing', () async {
+      final rechecking = Completer<void>();
+      holdSpawn = (spawn) async {
+        if (spawn == 2) await rechecking.future;
+      };
+      final server = auth();
+      final login = server.terminalLogin('ag1', 'login');
+      await pumpUntil(() => spawnsAsked == 2);
+      expect(terminals, hasLength(1));
+      server.cancel('ag1');
+      rechecking.complete();
+      await expectLater(login, throwsA(isA<DataRefused>()));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(server.state('ag1'), isNull);
     });
 
