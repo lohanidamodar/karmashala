@@ -45,7 +45,12 @@ void main() {
       overrides: [
         await server.override(),
         ...fakeTerminalOverrides(machine: db),
-        discoveredModelsInProvider.overrideWith((ref, key) => listed.future),
+        discoveredModelsInProvider.overrideWith(
+          (ref, key) async => AgentModelCatalog(
+            installationId: key.agentId,
+            models: (await listed.future)!,
+          ),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -109,14 +114,17 @@ void main() {
         ...fakeTerminalOverrides(machine: db),
         discoveredModelsInProvider.overrideWith(
           (ref, key) async => key.agentId == AgentIds.claudeCode
-              ? const [
-                  AgentModel(
-                    id: 'opus',
-                    label: 'Opus 5.5',
-                    summary: 'For complex work and everyday tasks',
-                    resolvedId: 'claude-opus-5-5',
-                  ),
-                ]
+              ? const AgentModelCatalog(
+                  installationId: 'a1',
+                  models: [
+                    AgentModel(
+                      id: 'opus',
+                      label: 'Opus 5.5',
+                      summary: 'For complex work and everyday tasks',
+                      resolvedId: 'claude-opus-5-5',
+                    ),
+                  ],
+                )
               : null,
         ),
       ],

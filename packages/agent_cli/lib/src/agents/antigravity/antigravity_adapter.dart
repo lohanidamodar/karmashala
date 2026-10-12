@@ -6,6 +6,7 @@ import '../adapter/agent_adapter.dart';
 import '../adapter/agent_presentation.dart';
 import '../adapter/agent_chat_protocol.dart';
 import '../adapter/agent_directory_conversations.dart';
+import '../adapter/agent_model_lister.dart';
 import '../adapter/agent_store.dart';
 import '../adapter/agent_transcripts.dart';
 import '../adapter/agent_usage_support.dart';
@@ -14,6 +15,7 @@ import 'antigravity_active_model.dart';
 import 'antigravity_chat_protocol.dart';
 import 'antigravity_descriptor.dart';
 import 'antigravity_directory_conversations.dart';
+import 'antigravity_model_list.dart';
 import 'antigravity_one_shot.dart';
 import 'antigravity_store.dart';
 import 'antigravity_transcript.dart';
@@ -59,6 +61,9 @@ class AntigravityAdapter extends AgentAdapter {
 
   @override
   AgentActiveModel get activeModel => const AntigravityActiveModel();
+
+  @override
+  AgentModelLister get modelLister => const AntigravityModelLister();
 
   @override
   AgentUsageSupport get usage =>

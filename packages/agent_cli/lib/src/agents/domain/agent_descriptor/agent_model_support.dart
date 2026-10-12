@@ -77,7 +77,8 @@ class AgentModelSupport {
     required this.models,
     required this.evidence,
   }) : pickerCommand = '',
-       style = AgentModelStyle.liveAndAtLaunch;
+       style = AgentModelStyle.liveAndAtLaunch,
+       listedLive = false;
 
   /// The model rides on [flag] at launch. A running session cannot be moved.
   const AgentModelSupport.atLaunchOnly({
@@ -86,7 +87,8 @@ class AgentModelSupport {
     required this.evidence,
     this.pickerCommand = '',
   }) : slashCommand = '',
-       style = AgentModelStyle.atLaunchOnly;
+       style = AgentModelStyle.atLaunchOnly,
+       listedLive = false;
 
   /// The models are known; no way to ask for one is. They are listed and
   /// disabled — hiding them would leave the user wondering where the choice
@@ -97,7 +99,8 @@ class AgentModelSupport {
   }) : flag = '',
        slashCommand = '',
        pickerCommand = '',
-       style = AgentModelStyle.listedOnly;
+       style = AgentModelStyle.listedOnly,
+       listedLive = false;
 
   const AgentModelSupport._(
     this.style,
@@ -106,6 +109,7 @@ class AgentModelSupport {
     this.models,
     this.evidence,
     this.pickerCommand,
+    this.listedLive,
   );
 
   /// The same support offering [found] — the list the CLI itself reported for
@@ -118,7 +122,12 @@ class AgentModelSupport {
     List.unmodifiable(found),
     evidence,
     pickerCommand,
+    true,
   );
+
+  /// Whether [models] is the list the agent reported rather than the curated
+  /// one, so a chosen id missing from it is "no longer listed".
+  final bool listedLive;
 
   /// Nothing verified. The default, and the answer for an agent nobody has
   /// checked — which draws no control at all rather than an empty one.
@@ -128,7 +137,8 @@ class AgentModelSupport {
       models = const [],
       evidence = '',
       pickerCommand = '',
-      style = AgentModelStyle.unsupported;
+      style = AgentModelStyle.unsupported,
+      listedLive = false;
 
   final AgentModelStyle style;
 

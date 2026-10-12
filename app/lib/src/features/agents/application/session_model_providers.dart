@@ -7,6 +7,7 @@ import '../../settings/application/settings_controller.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart' show localHostEnvironmentId;
 import 'agent_model_catalog_providers.dart';
+import 'agent_providers.dart';
 
 /// The model one session will run on. A value with `==` rather than a record,
 /// because a state that never equals itself repaints on every session signal.
@@ -19,8 +20,18 @@ class SessionModelState {
     required this.defaultModelId,
     required this.inherited,
     AgentModelSupport? support,
+    this.catalog,
+    this.modelsKey,
     // ignore: prefer_initializing_formals — private field, named for callers.
   }) : _support = support;
+
+  /// The list the server last read from this session's agent, or null when
+  /// it lists none or nothing was read: what "Refresh models" talks about.
+  final AgentModelCatalog? catalog;
+
+  /// The agent and environment whose list "Refresh models" re-reads, or null
+  /// when the agent has no list to read.
+  final AgentModelsKey? modelsKey;
 
   final String sessionId;
 
@@ -59,7 +70,9 @@ class SessionModelState {
       identical(other._support, _support) &&
       other.modelId == modelId &&
       other.defaultModelId == defaultModelId &&
-      other.inherited == inherited;
+      other.inherited == inherited &&
+      identical(other.catalog, catalog) &&
+      other.modelsKey == modelsKey;
 
   @override
   int get hashCode =>
@@ -87,21 +100,31 @@ final sessionModelProvider = Provider.autoDispose
           (s) => agentId == null ? null : s.defaultModelFor(agentId),
         ),
       );
+      // The list of the installation this session runs — in a WSL
+      // distribution that is its own CLI's, not the host's.
+      final key = agentId == null
+          ? null
+          : agentModelsKeyOfSession(ref, sessionId) ??
+                (agentId: agentId, environmentId: localHostEnvironmentId);
+      final lists =
+          key != null &&
+          ref
+                  .watch(agentRegistryProvider)
+                  .adapterFor(key.agentId)
+                  ?.modelLister !=
+              null;
       return SessionModelState(
         sessionId: sessionId,
         descriptor: effective.descriptor,
         modelId: effective.modelId,
         defaultModelId: effective.defaultModelId,
         inherited: effective.inherited,
-        // The list of the installation this session runs — in a WSL
-        // distribution that is its own CLI's, not the host's.
-        support: agentId == null
+        support: key == null
             ? null
-            : ref.watch(
-                agentModelSupportInProvider(
-                  agentModelsKeyOfSession(ref, sessionId) ??
-                      (agentId: agentId, environmentId: localHostEnvironmentId),
-                ),
-              ),
+            : ref.watch(agentModelSupportInProvider(key)),
+        catalog: lists
+            ? ref.watch(discoveredModelsInProvider(key)).value
+            : null,
+        modelsKey: lists ? key : null,
       );
     });

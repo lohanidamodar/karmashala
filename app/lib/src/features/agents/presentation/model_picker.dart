@@ -10,20 +10,28 @@ import 'picker_face.dart';
 /// `PopupMenuButton` reads a null selection as a dismissal and ignores it.
 @immutable
 class ModelChoice {
-  const ModelChoice(this.modelId);
+  const ModelChoice(this.modelId) : refreshesList = false;
+
+  const ModelChoice._refresh() : modelId = null, refreshesList = true;
 
   /// Name no model here: "follow the Settings default" on a session, "let the
   /// agent choose" in Settings. One constant, because it is one value.
   static const followDefault = ModelChoice(null);
 
+  /// Not a model: read the agent's list again ("Refresh models").
+  static const refreshModels = ModelChoice._refresh();
+
   final String? modelId;
+  final bool refreshesList;
 
   @override
   bool operator ==(Object other) =>
-      other is ModelChoice && other.modelId == modelId;
+      other is ModelChoice &&
+      other.modelId == modelId &&
+      other.refreshesList == refreshesList;
 
   @override
-  int get hashCode => modelId.hashCode;
+  int get hashCode => Object.hash(modelId, refreshesList);
 }
 
 /// A menu of the models one agent can be put on. Rows come from

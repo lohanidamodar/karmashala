@@ -15,6 +15,7 @@ import 'agent_registry_holder.dart';
 import 'server_accounts.dart';
 import 'server_detection.dart';
 import 'server_imports.dart';
+import 'server_model_catalogs.dart';
 import 'server_usage.dart';
 
 /// Set to `off` in a server's environment, it does agent work only when a
@@ -97,6 +98,13 @@ class ServerAgentWork implements AgentWork {
       clock: clock,
       registry: registry,
     );
+    models = ServerModelCatalogs(
+      data: data,
+      runnerFor: runnerFor,
+      registry: registry,
+      clock: clock,
+      hostEnvironment: hostEnvironment,
+    );
     installer = AcpBinaryInstaller(
       runnerFor: runnerFor,
       hostEnvironment: hostEnvironment,
@@ -114,6 +122,7 @@ class ServerAgentWork implements AgentWork {
   late final ServerDetection detection;
   late final ServerImports imports;
   late final AcpBinaryInstaller installer;
+  late final ServerModelCatalogs models;
 
   /// Logging in to ACP agents; null refuses that work `unavailable`.
   final ServerAcpAuth? acpAuth;
@@ -190,6 +199,7 @@ class ServerAgentWork implements AgentWork {
     ),
     AccountsSwitch(:final installationId, :final accountId) => await () async {
       await accounts.switchTo(installationId, accountId);
+      models.markStale(installationId);
       return const DataAck();
     }(),
     AgentsDetect(:final environmentId) => await detection.detect(
@@ -198,6 +208,10 @@ class ServerAgentWork implements AgentWork {
     AgentsRepair(:final full) => await detection.repair(full: full),
     AgentsRefreshVersions() => await detection.refreshVersions(),
     AgentsDiscoverUnprobed() => await detection.discoverUnprobed(),
+    AgentModelsRead(:final installationId, :final refresh) => await models.read(
+      installationId,
+      refresh: refresh,
+    ),
     final AcpAgentInstall install => await _install(install),
     AcpAuthMethodsRead(:final installationId) => await _acpAuth.methods(
       installationId,

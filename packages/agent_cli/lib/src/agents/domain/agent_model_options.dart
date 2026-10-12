@@ -17,6 +17,10 @@ enum AgentModelFit {
   /// The session is on a model this build's curated list does not name.
   /// Nothing is wrong with it; it simply cannot be recommended.
   unlisted,
+
+  /// The session is on a model the agent's own list no longer names — gone
+  /// from this account, or renamed. Still passed on the next launch.
+  noLongerListed,
 }
 
 /// One row of a model control: a model, whether it can be asked for, and the
@@ -51,6 +55,10 @@ class AgentModelOption {
       'Not in Karmashala\'s list for $agentName — set by an older build or by '
           'hand. It is still passed on the next launch; pick one above to '
           'change it.',
+    AgentModelFit.noLongerListed =>
+      '$agentName no longer lists this model. It is still passed on the next '
+          'launch, where $agentName may refuse it; pick one above to change '
+          'it.',
   };
 
   /// A short qualifier for the chip and the menu row, or null when the row is
@@ -59,6 +67,7 @@ class AgentModelOption {
     AgentModelFit.selectable => null,
     AgentModelFit.notTellable => 'not settable',
     AgentModelFit.unlisted => 'unlisted',
+    AgentModelFit.noLongerListed => 'no longer listed',
   };
 }
 
@@ -94,8 +103,14 @@ List<AgentModelOption> modelOptionsFor(
         support.modelFor(current) == null &&
         support.models.isNotEmpty)
       AgentModelOption(
-        model: AgentModel(id: current, label: current, summary: ''),
-        fit: AgentModelFit.unlisted,
+        model: AgentModel(
+          id: current,
+          label: descriptor?.launch.model.modelFor(current)?.label ?? current,
+          summary: '',
+        ),
+        fit: support.listedLive
+            ? AgentModelFit.noLongerListed
+            : AgentModelFit.unlisted,
         agentName: name,
       ),
   ];
