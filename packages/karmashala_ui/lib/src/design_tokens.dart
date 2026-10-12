@@ -765,6 +765,9 @@ class Motion {
   static const statusPeriod = Duration(milliseconds: 1000);
   static const statusSteps = 12;
 
+  /// How far a pressed surface shrinks: felt, not seen.
+  static const pressScale = 0.98;
+
   static MotionDurations of(BuildContext context) =>
       MotionDurations(animate: !MediaQuery.disableAnimationsOf(context));
 }
@@ -861,6 +864,23 @@ class Chrome {
   /// The diameter of a status dot. Read at a glance and never on its own:
   /// `StatusDot` requires a label, because a colour is not a state.
   static const dot = 7.0;
+
+  /// A session's avatar on the dashboard's tree: a parent or a session on its
+  /// own, then a sub-session, each a step smaller on a phone.
+  static const sessionAvatar = 60.0;
+  static const subSessionAvatar = 44.0;
+  static const sessionAvatarCompact = 44.0;
+  static const subSessionAvatarCompact = 38.0;
+
+  /// The state ring round an avatar, and the glow a hovered one gives off.
+  static const avatarRing = 3.0;
+  static const avatarGlow = 18.0;
+
+  /// The lines of the dashboard's tree: a stem and its rounded elbows.
+  static const treeLine = 2.0;
+
+  /// The narrowest cell a family takes on the dashboard's grid, at 1x text.
+  static const familyCellMin = 560.0;
 
   /// The accent rule a turn's final answer hangs off in the transcript.
   static const answerRule = 2.0;

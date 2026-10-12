@@ -150,105 +150,35 @@ class OverviewMetaLine extends ConsumerWidget {
     if (step == null && diff.isEmpty && !checked) {
       return const SizedBox.shrink();
     }
-    return Row(
+    // A narrow card — a phone's tree — wraps the parts rather than cut one.
+    return Wrap(
       key: ValueKey('overview-meta:$id'),
+      spacing: Insets.md,
+      runSpacing: Insets.xxs,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (step != null)
-          Flexible(
-            child: Text(
-              step,
-              key: ValueKey('overview-step:$id'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: muted,
-            ),
+          Text(
+            step,
+            key: ValueKey('overview-step:$id'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: muted,
           ),
-        if (step != null && diff.isNotEmpty) const SizedBox(width: Insets.md),
         if (diff.isNotEmpty)
           Text.rich(
             TextSpan(children: diff),
             key: ValueKey('overview-diff:$id'),
             maxLines: 1,
-            style: muted,
-          ),
-        if (checked) ...[
-          if (step != null || diff.isNotEmpty) const SizedBox(width: Insets.md),
-          Flexible(
-            child: SessionVerdictMark(
-              key: ValueKey('overview-verdict:$id'),
-              sessionId: id,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// A parent's sub-sessions on its card: a summary line, the [limit] most
-/// urgent — each with its state and latest line — and "+N more", which opens
-/// the parent.
-class OverviewSubSessions extends ConsumerWidget {
-  const OverviewSubSessions({
-    required this.card,
-    required this.onOpen,
-    this.limit = 5,
-    super.key,
-  });
-
-  final OverviewCard card;
-  final ValueChanged<OverviewCard> onOpen;
-  final int limit;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final children = ref.watch(
-      overviewBoardProvider.select((b) => b.children[card.id]),
-    );
-    if (children == null || children.isEmpty) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
-    final ordered = byUrgency(children);
-    final shown = ordered.take(limit).toList();
-    final more = ordered.length - shown.length;
-    return Container(
-      key: ValueKey('overview-subs:${card.id}'),
-      padding: const EdgeInsets.only(top: Insets.xs),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: scheme.outlineVariant)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            subSessionSummary(children),
-            key: ValueKey('overview-children:${card.id}'),
-            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: muted,
           ),
-          for (final child in shown)
-            OverviewSubSessionRow(card: child, onOpen: onOpen),
-          if (more > 0)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                key: ValueKey('overview-subs-more:${card.id}'),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-                  textStyle: theme.textTheme.labelSmall,
-                ),
-                onPressed: () => onOpen(card),
-                child: Text('+$more more'),
-              ),
-            ),
-        ],
-      ),
+        if (checked)
+          SessionVerdictMark(
+            key: ValueKey('overview-verdict:$id'),
+            sessionId: id,
+          ),
+      ],
     );
   }
 }

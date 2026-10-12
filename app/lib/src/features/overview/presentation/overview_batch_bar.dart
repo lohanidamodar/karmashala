@@ -12,6 +12,7 @@ import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_batch.dart';
 import '../application/overview_batch_actions.dart';
 import '../application/overview_board.dart';
+import '../application/overview_links.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_quick_message.dart';
 import '../application/overview_tiles.dart';
@@ -36,6 +37,7 @@ List<String> overviewDrawnOrder(WidgetRef ref) {
   final sections = overviewSectionsOf(
     ref.read(overviewBoardProvider),
     waitingSince: (id) => statusOf(id)?.waitingSince,
+    folded: ref.read(overviewFoldedParentsProvider),
   );
   return [
     for (final card in [...sections.queue, ...sections.work, ...sections.ready])

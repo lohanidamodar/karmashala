@@ -236,10 +236,8 @@ void main() {
         );
       }
       expect(card('ask'), findsOneWidget);
-      // A phone lists what is at work in rows; the queue keeps its cards.
-      Finder atWork(String id) => size.width < 600
-          ? find.byKey(ValueKey('overview-phone-row:$id'))
-          : card(id);
+      // A phone draws the same trees, each root a card.
+      Finder atWork(String id) => card(id);
       expect(atWork('busy'), findsOneWidget);
       expect(atWork('idle'), findsOneWidget);
       // Done today folds under a line; what ended before today is not drawn.

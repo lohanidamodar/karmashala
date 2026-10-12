@@ -94,11 +94,11 @@ void main() {
     });
   });
 
-  test('an id names its card, a sub-session stacked on its parent too', () {
+  test('an id names its card, a sub-session its own too', () {
     final board = build({
       AgentState.working: [entry('parent'), entry('child', parent: 'parent')],
     });
-    expect(overviewCardOf(board, 'parent')?.children?.total, 1);
+    expect(overviewCardOf(board, 'child')?.parentId, 'parent');
     expect(overviewCardOf(board, 'child')?.entry.id, 'child');
     expect(board.children['parent']?.single.id, 'child');
     expect(overviewCardOf(board, 'nobody'), isNull);

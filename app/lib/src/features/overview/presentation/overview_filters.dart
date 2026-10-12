@@ -174,24 +174,6 @@ class OverviewFilterPanel extends ConsumerWidget {
             ),
           ),
           field(
-            'Sub-sessions',
-            CompactSegmented<OverviewSubSessionMode>(
-              key: const ValueKey('overview-filter-subs'),
-              segments: [
-                for (final mode in OverviewSubSessionMode.values)
-                  ButtonSegment(
-                    value: mode,
-                    label: Text(
-                      mode.label,
-                      key: ValueKey('sub-sessions:${mode.name}'),
-                    ),
-                  ),
-              ],
-              selected: ref.watch(overviewSubSessionsProvider),
-              onChanged: controller.setSubSessions,
-            ),
-          ),
-          field(
             'Show on cards',
             Wrap(
               key: const ValueKey('overview-show-on-cards'),

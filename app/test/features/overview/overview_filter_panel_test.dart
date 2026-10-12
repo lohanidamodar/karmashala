@@ -226,7 +226,6 @@ void main() {
       final view = top(find.text('VIEW'));
       final filter = top(find.text('FILTER'));
       expect(view, lessThan(top(byKey('overview-filter-group'))));
-      expect(top(byKey('overview-filter-subs')), lessThan(filter));
       expect(top(byKey('overview-show-on-cards')), lessThan(filter));
       expect(filter, lessThan(top(byKey('overview-filter-projects'))));
       await unmountMission(tester);

@@ -11,48 +11,46 @@ import '../application/overview_board.dart';
 import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
-import 'overview_card_parts.dart';
+import '../application/overview_tree.dart';
+import 'overview_card_links.dart';
 import 'overview_cards.dart';
 import 'overview_filters.dart';
-import 'overview_done_card.dart';
 import 'overview_heartbeat.dart';
 import 'overview_glances.dart';
 import 'overview_pipeline_lane.dart';
+import 'overview_tree.dart';
 import 'overview_waiting_lane.dart';
 import 'overview_pins.dart';
 import 'overview_queue_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 
-/// What the Overview draws, in reading order.
+/// What the Overview draws, in reading order: each session once, as the
+/// keys walk them.
 typedef OverviewSections = ({
   List<OverviewCard> queue,
+
+  /// The families at work, root first, lane by lane.
   List<OverviewCard> work,
 
-  /// Done with their turn, ready to close: the Done lane.
+  /// Done with their turn, ready to close: the Done lane's families.
   List<OverviewCard> ready,
   List<OverviewCard> done,
 });
 
-/// What is at work, as groups: each lane — project, machine or context — and
-/// its working cards, in the board's lane order.
-List<(OverviewLane, List<OverviewCard>)> overviewWorkGroupsOf(
-  OverviewBoard board,
-) => [
-  for (final lane in board.lanes)
-    if (lane.cards(BoardColumn.working) case final cards when cards.isNotEmpty)
-      (lane, nestUnderParents(byUrgency(cards))),
-];
-
-/// [board]'s cards as the Overview lays them out: what waits on you, asks
-/// before failures and oldest wait first; what is at work, lane by lane and
-/// most urgent first; what is ready to close, newest first; what ended
-/// today, newest first.
+/// [board]'s sessions as the Overview lays them out: what waits on you, asks
+/// before failures and oldest wait first; the families at work, lane by lane
+/// and most urgent first; the families ready to close, newest first; and what
+/// ended today on no family's tree, newest first. A sub-session that waits on
+/// you is in the queue, answerable, and on its family's tree; it is walked
+/// once, in the queue. A [folded] family's sub-sessions are not drawn.
 OverviewSections overviewSectionsOf(
   OverviewBoard board, {
   required DateTime? Function(String id) waitingSince,
+  Set<String> folded = const {},
 }) {
   final queue = [
-    for (final lane in board.lanes) ...lane.cards(BoardColumn.needsYou),
+    for (final lane in board.lanes)
+      ...lane.cards(BoardColumn.needsYou).where((c) => !c.heldBySubSessions),
   ];
   DateTime since(OverviewCard card) =>
       waitingSince(card.id) ?? card.entry.activityAt;
@@ -62,34 +60,47 @@ OverviewSections overviewSectionsOf(
     final byWait = since(a).compareTo(since(b));
     return byWait != 0 ? byWait : a.id.compareTo(b.id);
   });
-  int newestFirst(OverviewCard a, OverviewCard b) =>
-      b.entry.activityAt.compareTo(a.entry.activityAt);
+  final seen = {for (final card in queue) card.id};
+  List<OverviewCard> walk(Iterable<OverviewTreeNode> trees) => [
+    for (final tree in trees)
+      for (final card in overviewDrawnOf(tree, folded))
+        if (seen.add(card.id)) card,
+  ];
+  final forest = overviewForestOf(board);
   return (
     queue: queue,
-    work: [for (final (_, cards) in overviewWorkGroupsOf(board)) ...cards],
-    // A sub-session drawn as a card stays just after its parent.
-    ready: nestUnderParents(
-      [for (final lane in board.lanes) ...lane.cards(BoardColumn.ready)]
-        ..sort(newestFirst),
-    ),
+    work: walk([for (final (_, trees) in forest.work) ...trees]),
+    ready: walk(forest.ready),
     done: nestUnderParents(
-      [for (final lane in board.lanes) ...lane.doneToday]..sort(newestFirst),
+      [
+        for (final lane in board.lanes)
+          for (final card in lane.doneToday)
+            if (!forest.placed.contains(card.id)) card,
+      ]..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt)),
     ),
   );
 }
 
-/// The ids of the lane [id] is drawn in — waiting on you, one group at work,
-/// or ready to close — in drawn order; every drawn card when it is in none.
+/// The ids of the lane [id] is drawn in — waiting on you, one lane at work,
+/// or ready to close — in drawn order; every drawn session when it is in
+/// none.
 List<String> overviewLaneOf(
   OverviewSections sections,
   OverviewBoard board,
-  String? id,
-) {
+  String? id, {
+  Set<String> folded = const {},
+}) {
+  final queued = {for (final card in sections.queue) card.id};
+  List<String> ids(Iterable<OverviewTreeNode> trees) => [
+    for (final tree in trees)
+      for (final card in overviewDrawnOf(tree, folded))
+        if (!queued.contains(card.id)) card.id,
+  ];
+  final forest = overviewForestOf(board);
   final lanes = [
     [for (final card in sections.queue) card.id],
-    for (final (_, cards) in overviewWorkGroupsOf(board))
-      [for (final card in cards) card.id],
-    [for (final card in sections.ready) card.id],
+    for (final (_, trees) in forest.work) ids(trees),
+    ids(forest.ready),
   ];
   for (final lane in lanes) {
     if (lane.contains(id)) return lane;
@@ -97,9 +108,30 @@ List<String> overviewLaneOf(
   return [for (final lane in lanes) ...lane];
 }
 
+/// How deep each of [cards] sits under the others: 0 for one whose parent is
+/// not among them.
+Map<String, int> overviewDepthsIn(List<OverviewCard> cards) {
+  final parentOf = {for (final card in cards) card.id: card.parentId};
+  int depthOf(String id) {
+    var depth = 0;
+    final seen = {id};
+    for (
+      var parent = parentOf[id];
+      parent != null && parentOf.containsKey(parent) && seen.add(parent);
+      parent = parentOf[parent]
+    ) {
+      depth++;
+    }
+    return depth;
+  }
+
+  return {for (final card in cards) card.id: depthOf(card.id)};
+}
+
 /// **The Overview, hybrid**: the fleet's heartbeat on top, what waits on you
-/// on the left — answerable in place — and what is at work on the right, each
-/// card with its last two hours. On a phone, the queue first, then the work.
+/// on the left — answerable in place — and the families at work on the
+/// right, each a tree in a cell of its own. On a phone, the queue first,
+/// then the families.
 class OverviewHybrid extends ConsumerStatefulWidget {
   const OverviewHybrid({
     required this.onOpen,
@@ -130,8 +162,7 @@ class OverviewHybrid extends ConsumerStatefulWidget {
 class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   var _doneOpen = false;
 
-  /// The narrowest a work card is drawn at 1x text, and the most across.
-  static const _cardMin = WidthClass.mediumMin / 2;
+  /// The most families across.
   static const _maxAcross = 3;
 
   /// The queue's column beside the work, and the least room for both.
@@ -149,17 +180,12 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       }
     }
     final folded = ref.watch(overviewFoldedParentsProvider);
-    final all = overviewSectionsOf(
+    final sections = overviewSectionsOf(
       board,
       waitingSince: (id) => statusOf(id)?.waitingSince,
+      folded: folded,
     );
-    // A folded parent's sub-session cards are away until it is unfolded.
-    final sections = (
-      queue: overviewUnfolded(all.queue, folded),
-      work: overviewUnfolded(all.work, folded),
-      ready: overviewUnfolded(all.ready, folded),
-      done: overviewUnfolded(all.done, folded),
-    );
+    final forest = overviewForestOf(board);
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
     final pinned = watchOverviewPinned(ref).isNotEmpty;
     final allStates = ref.watch(
@@ -172,21 +198,26 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     return LayoutBuilder(
       builder: (context, box) {
         final scaler = MediaQuery.textScalerOf(context);
-        // A phone lists what is at work in two lines a row, the queue first.
+        // A phone draws the same trees, its avatars a step smaller.
         final phone = box.maxWidth < WidthClass.mediumMin;
-        final gutter = box.maxWidth < WidthClass.mediumMin
-            ? Insets.lg
-            : Insets.xl;
+        final gutter = phone ? Insets.lg : Insets.xl;
         final inner = box.maxWidth - gutter * 2;
         final sideBySide =
             sections.queue.isNotEmpty &&
             inner >= WidthClass.scaleBreakpoint(_sideBySide, scaler);
         final workWidth = sideBySide ? inner - _queueWidth - Insets.xl : inner;
-        final across =
-            ((workWidth + Insets.md) /
-                    (WidthClass.scaleBreakpoint(_cardMin, scaler) + Insets.md))
-                .floor()
-                .clamp(1, _maxAcross);
+        final cell = WidthClass.scaleBreakpoint(Chrome.familyCellMin, scaler);
+        final across = ((workWidth + Insets.md) / (cell + Insets.md))
+            .floor()
+            .clamp(1, _maxAcross);
+        Widget tree(OverviewTreeNode node, {bool ready = false}) =>
+            OverviewFamilyTree(
+              key: ValueKey('overview-tree:${node.card.id}'),
+              node: node,
+              onOpen: onOpen,
+              ready: ready,
+              compact: phone,
+            );
 
         final queue = Column(
           key: const ValueKey('overview-queue'),
@@ -200,21 +231,26 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             for (final card in sections.queue)
               Padding(
                 padding: const EdgeInsets.only(bottom: Insets.md),
-                child: overviewTied(
-                  card,
-                  sections.queue,
-                  phone: phone,
-                  OverviewQueueCard(
-                    key: ValueKey('overview-queue-card:${card.id}'),
-                    card: card,
-                    onOpen: onOpen,
-                    onEdit: widget.onEdit,
-                    onTerminal: widget.onTerminal,
-                    onAnswered: widget.onAnswered,
-                    questionController: widget.questionControllerOf?.call(
-                      card.id,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OverviewParentLink(card: card),
+                    OverviewFamilyHover(
+                      card: card,
+                      child: OverviewQueueCard(
+                        key: ValueKey('overview-queue-card:${card.id}'),
+                        card: card,
+                        onOpen: onOpen,
+                        onEdit: widget.onEdit,
+                        onTerminal: widget.onTerminal,
+                        onAnswered: widget.onAnswered,
+                        questionController: widget.questionControllerOf?.call(
+                          card.id,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
           ],
@@ -228,7 +264,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
               'At work · ${sections.work.length}',
               padding: const EdgeInsets.only(bottom: Insets.sm),
             ),
-            if (sections.work.isEmpty)
+            if (forest.work.isEmpty)
               Text(
                 allStates
                     ? 'Nothing is running or ready right now.'
@@ -237,20 +273,15 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 style: muted,
               )
             else
-              for (final (lane, cards) in [
-                for (final (lane, cards) in overviewWorkGroupsOf(board))
-                  (lane, overviewUnfolded(cards, folded)),
-              ]) ...[
+              for (final (lane, trees) in forest.work) ...[
                 Padding(
                   key: ValueKey('overview-work-group:${lane.key}'),
-                  // A phone's rows carry their own padding: the header sits
-                  // on them.
-                  padding: EdgeInsets.only(
+                  padding: const EdgeInsets.only(
                     top: Insets.xs,
-                    bottom: phone ? 0 : Insets.sm,
+                    bottom: Insets.sm,
                   ),
                   child: Text(
-                    '${lane.label} · ${cards.length}',
+                    '${lane.label} · ${trees.length}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleSmall?.copyWith(
@@ -258,26 +289,9 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     ),
                   ),
                 ),
-                if (phone)
-                  for (final card in cards)
-                    overviewTied(
-                      card,
-                      cards,
-                      phone: true,
-                      OverviewPhoneRow(card: card, onOpen: onOpen),
-                    )
-                else
-                  ..._familyGrid(
-                    cards,
-                    across,
-                    (card) => OverviewWorkCard(
-                      key: ValueKey('overview-work-card:${card.id}'),
-                      card: card,
-                      onOpen: onOpen,
-                    ),
-                  ),
+                ..._grid([for (final node in trees) tree(node)], across),
               ],
-            if (sections.ready.isNotEmpty) ...[
+            if (forest.ready.isNotEmpty) ...[
               EyebrowLabel(
                 'Done · ready to close · ${sections.ready.length}',
                 key: const ValueKey('overview-ready'),
@@ -286,28 +300,14 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   bottom: Insets.sm,
                 ),
               ),
-              if (phone)
-                for (final card in sections.ready)
-                  overviewTied(
-                    card,
-                    sections.ready,
-                    phone: true,
-                    OverviewPhoneRow(card: card, onOpen: onOpen),
-                  )
-              else
-                ..._familyGrid(
-                  sections.ready,
-                  across,
-                  (card) => OverviewDoneCard(
-                    key: ValueKey('overview-ready-card:${card.id}'),
-                    card: card,
-                    onOpen: onOpen,
-                  ),
-                ),
+              ..._grid([
+                for (final node in forest.ready) tree(node, ready: true),
+              ], across),
             ],
           ],
         );
         final done = sections.done;
+        final depths = overviewDepthsIn(done);
 
         return ListView(
           key: const ValueKey('overview-hybrid'),
@@ -352,11 +352,14 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
               ),
               if (_doneOpen)
                 for (final card in done)
-                  overviewTied(
-                    card,
-                    done,
-                    phone: phone,
-                    OverviewDoneRow(card: card, onOpen: onOpen),
+                  OverviewFamilyHover(
+                    card: card,
+                    radius: Radii.sm,
+                    child: OverviewDoneRow(
+                      card: card,
+                      onOpen: onOpen,
+                      depth: depths[card.id] ?? 0,
+                    ),
                   ),
             ],
             // The phone's Dashboard took Sessions' tab; the list is a tap
@@ -380,64 +383,24 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     );
   }
 
-  /// [cards] by family — a parent and its sub-session cards in one cell,
-  /// tied together — in rows of [across].
-  static List<Widget> _familyGrid(
-    List<OverviewCard> cards,
-    int across,
-    Widget Function(OverviewCard card) cell,
-  ) => _grid([
-    for (final family in overviewFamiliesOf(cards))
-      if (family.length == 1)
-        (overviewTied(family.single, cards, cell(family.single)), false)
-      else
-        (
-          Column(
-            key: ValueKey('overview-family:${family.first.id}'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final card in family) overviewTied(card, cards, cell(card)),
-            ],
-          ),
-          true,
-        ),
-  ], across);
-
-  /// [cells] in rows of [across], each row as tall as its tallest — but a
-  /// row holding a family keeps each cell its own height, the family's
-  /// cards stacked from the top.
-  static List<Widget> _grid(List<(Widget, bool)> cells, int across) => [
+  /// [cells] — whole families — in rows of [across], each family keeping its
+  /// own height, from the top.
+  static List<Widget> _grid(List<Widget> cells, int across) => [
     for (var start = 0; start < cells.length; start += across)
-      if (cells.skip(start).take(across).any((c) => c.$2))
-        Padding(
-          padding: const EdgeInsets.only(bottom: Insets.md),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _row(cells, start, across),
-          ),
-        )
-      else
-        Padding(
-          padding: const EdgeInsets.only(bottom: Insets.md),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: _row(cells, start, across),
-            ),
-          ),
+      Padding(
+        padding: const EdgeInsets.only(bottom: Insets.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = start; i < start + across; i++) ...[
+              if (i > start) const SizedBox(width: Insets.md),
+              Expanded(
+                child: i < cells.length ? cells[i] : const SizedBox.shrink(),
+              ),
+            ],
+          ],
         ),
-  ];
-
-  static List<Widget> _row(
-    List<(Widget, bool)> cells,
-    int start,
-    int across,
-  ) => [
-    for (var i = start; i < start + across; i++) ...[
-      if (i > start) const SizedBox(width: Insets.md),
-      Expanded(child: i < cells.length ? cells[i].$1 : const SizedBox.shrink()),
-    ],
+      ),
   ];
 }
 

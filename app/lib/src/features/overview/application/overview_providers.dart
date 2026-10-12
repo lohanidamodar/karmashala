@@ -120,7 +120,6 @@ final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
     groupBy: ref.watch(overviewGroupByProvider),
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewOrderProvider),
-    subSessions: prefs.subSessions,
     drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
   );
 });
@@ -294,7 +293,6 @@ final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
     groupBy: ref.watch(overviewGroupByProvider),
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewCountsOrderProvider),
-    subSessions: prefs.subSessions,
     drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
   );
 });

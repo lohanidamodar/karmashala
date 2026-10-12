@@ -75,7 +75,6 @@ void main() {
                       imported: entry.imported,
                     ),
                     state: card.state,
-                    children: card.children,
                   );
             return OverviewPeek(
               card: shown,

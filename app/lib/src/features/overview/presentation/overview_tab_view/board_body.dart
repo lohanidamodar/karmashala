@@ -52,6 +52,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     ref.read(overviewBoardProvider),
     waitingSince: (id) =>
         ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
+    folded: ref.read(overviewFoldedParentsProvider),
   );
 
   void _open(
@@ -315,7 +316,12 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       ref
           .read(overviewSelectionProvider.notifier)
           .selectAll(
-            overviewLaneOf(_sections(), ref.read(overviewBoardProvider), from),
+            overviewLaneOf(
+              _sections(),
+              ref.read(overviewBoardProvider),
+              from,
+              folded: ref.read(overviewFoldedParentsProvider),
+            ),
           );
     }),
   };
