@@ -4,6 +4,7 @@
 /// ring buffer the Logs panel reads and to a redacted file sink.
 library;
 
+export 'src/logging/agent_redactor.dart';
 export 'src/logging/app_logger.dart';
 export 'src/logging/build_identity.dart';
 export 'src/logging/diagnostics.dart';
