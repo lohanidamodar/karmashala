@@ -177,8 +177,22 @@ class ServerModelCatalogs {
       runInEnvironment: onHost
           ? null
           : (executable, arguments) async {
+              // The listers' own words, for the environment's shell to
+              // expand, as WSL's does; SSH quotes each argument, so it is
+              // handed to a shell there as one script.
               final result = await runner.run(
-                CommandRequest(executable: executable, arguments: arguments),
+                environment.kind == EnvironmentKind.ssh
+                    ? CommandRequest(
+                        executable: 'sh',
+                        arguments: [
+                          '-c',
+                          [executable, ...arguments].join(' '),
+                        ],
+                      )
+                    : CommandRequest(
+                        executable: executable,
+                        arguments: arguments,
+                      ),
               );
               return result.ok ? result.stdout : null;
             },
