@@ -70,7 +70,7 @@ void main() {
       boundary: key,
     );
     final open = phone
-        ? find.byKey(const ValueKey('overview-phone-row:ks-r32'))
+        ? find.byKey(const ValueKey('overview-work-card:ks-r32'))
         : find.text('Round 32 · Overview redesign').first;
     await tester.scrollUntilVisible(open, 200, scrollable: hybridList);
     await tester.tap(open);

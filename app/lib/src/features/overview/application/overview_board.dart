@@ -98,16 +98,6 @@ List<OverviewCard> nestUnderParents(List<OverviewCard> cards) {
   return out;
 }
 
-/// The ids among [cards] drawn tied to the card before them: a sub-session
-/// whose parent is in the same list.
-Set<String> nestedIn(List<OverviewCard> cards) {
-  final here = {for (final card in cards) card.id};
-  return {
-    for (final card in cards)
-      if (card.parentId case final parent? when here.contains(parent)) card.id,
-  };
-}
-
 /// "↳ 5 sub-sessions · 1 needs you · 2 working · 2 done", over a parent's
 /// direct sub-sessions.
 String subSessionSummary(List<OverviewCard> children) {
@@ -134,17 +124,6 @@ enum OverviewGroupBy {
   context('Context');
 
   const OverviewGroupBy(this.label);
-
-  final String label;
-}
-
-/// Where a sub-session is drawn on the Board: stacked on its parent's card,
-/// or as a card of its own just after its parent.
-enum OverviewSubSessionMode {
-  inside('Inside their parent'),
-  cards('As cards');
-
-  const OverviewSubSessionMode(this.label);
 
   final String label;
 }
@@ -278,38 +257,12 @@ enum OverviewCounter {
   }
 }
 
-/// A parent card's sub-sessions, by what they need.
-@immutable
-class ChildSummary {
-  const ChildSummary({
-    required this.total,
-    required this.needsYou,
-    required this.working,
-  });
-
-  final int total;
-
-  /// Waiting on the user or failed.
-  final int needsYou;
-  final int working;
-
-  /// "↳ 3: 1 needs you, 1 working".
-  String get label {
-    final parts = [
-      if (needsYou > 0) '$needsYou needs you',
-      if (working > 0) '$working working',
-    ];
-    return parts.isEmpty ? '↳ $total' : '↳ $total: ${parts.join(', ')}';
-  }
-}
-
 /// One session as the Board draws it.
 @immutable
 class OverviewCard {
   const OverviewCard({
     required this.entry,
     required this.state,
-    this.children,
     this.breadcrumb,
     this.parentId,
     this.waitingOn,
@@ -325,18 +278,18 @@ class OverviewCard {
   /// are why it is not ready or done — "Waiting on 2 sub-sessions".
   final int? waitingOn;
 
-  /// The sub-sessions stacked on this card; null when it has none.
-  final ChildSummary? children;
-
-  /// The parent's title, on a sub-session drawn outside its parent's card.
+  /// The parent's title, on a sub-session.
   final String? breadcrumb;
 
-  /// The parent this card is drawn after, tied to it: set on a sub-session
-  /// when the Board draws sub-sessions as cards.
+  /// The parent in view a sub-session branches off on the dashboard's tree.
   final String? parentId;
 
   String get id => entry.id;
   BoardColumn get column => columnOf(state);
+
+  /// Needs you only because a sub-session of it does: its own turn is over.
+  bool get heldBySubSessions =>
+      waitingOn != null && column == BoardColumn.needsYou;
 
   /// Quiet reads as working, drawn dimmer.
   bool get dimmed => state == AgentState.quiet;
@@ -419,10 +372,9 @@ class BoardOrderMemo {
   }
 }
 
-/// Builds the Board from the Agents lens's [groups]. Sub-sessions stack on
-/// their top-most ancestor in view; one that needs the user or failed is also
-/// drawn in Needs you with its parent's title, and a live one whose ancestor
-/// is done keeps its own card.
+/// Builds the Board from the Agents lens's [groups]. Every session is a card
+/// in its own state's column, a sub-session naming its parent in view, which
+/// the dashboard's tree draws it under.
 OverviewBoard buildOverviewBoard(
   List<AgentStateGroup> groups, {
   required OverviewFacts facts,
@@ -430,7 +382,6 @@ OverviewBoard buildOverviewBoard(
   required OverviewGroupBy groupBy,
   required DateTime startOfToday,
   required BoardOrderMemo memo,
-  OverviewSubSessionMode subSessions = OverviewSubSessionMode.inside,
   Set<String> drawnElsewhere = const {},
 }) {
   bool kept(WorkspaceSessionEntry entry) {
@@ -467,17 +418,6 @@ OverviewBoard buildOverviewBoard(
     return parent != null && byId.containsKey(parent) ? parent : null;
   }
 
-  String? anchorOf(WorkspaceSessionEntry entry) {
-    String? anchor;
-    final seen = <String>{entry.id};
-    var parent = parentIn(entry);
-    while (parent != null && seen.add(parent)) {
-      anchor = parent;
-      parent = parentIn(byId[parent]!);
-    }
-    return anchor;
-  }
-
   // **A parent is not done while its sub-sessions work** (round 56). Each
   // session's own state is gathered on every ancestor in view; one that
   // would be ready or done is drawn needing you while any of them needs you,
@@ -509,66 +449,16 @@ OverviewBoard buildOverviewBoard(
     waitingOn[id] = needs + works;
   }
 
-  final cards = <OverviewCard>[];
-  final stacked = <String, List<AgentState>>{};
-  final asCards = subSessions == OverviewSubSessionMode.cards;
-  for (final entry in byId.values) {
-    final state = stateOf[entry.id]!;
-    final anchor = anchorOf(entry);
-    if (anchor == null) continue;
-    if (asCards) {
-      // A card of its own, drawn just after its parent and naming it.
-      final parent = parentIn(entry)!;
-      cards.add(
-        OverviewCard(
-          entry: entry,
-          state: state,
-          breadcrumb: byId[parent]?.title,
-          parentId: parent,
-          waitingOn: waitingOn[entry.id],
-        ),
-      );
-      continue;
-    }
-    final ownColumn = columnOf(state);
-    final anchorDone = columnOf(stateOf[anchor]!) == BoardColumn.done;
-    final breadcrumb = byId[parentIn(entry)]?.title;
-    if (anchorDone && ownColumn != BoardColumn.done) {
-      cards.add(
-        OverviewCard(entry: entry, state: state, breadcrumb: breadcrumb),
-      );
-      continue;
-    }
-    (stacked[anchor] ??= []).add(state);
-    if (ownColumn == BoardColumn.needsYou) {
-      cards.add(
-        OverviewCard(entry: entry, state: state, breadcrumb: breadcrumb),
-      );
-    }
-  }
-  final hasCard = {for (final card in cards) card.id};
-  for (final entry in byId.values) {
-    if (hasCard.contains(entry.id) || anchorOf(entry) != null) continue;
-    final below = stacked[entry.id];
-    cards.add(
+  final cards = [
+    for (final entry in byId.values)
       OverviewCard(
         entry: entry,
         state: stateOf[entry.id]!,
+        breadcrumb: byId[parentIn(entry)]?.title,
+        parentId: parentIn(entry),
         waitingOn: waitingOn[entry.id],
-        children: below == null
-            ? null
-            : ChildSummary(
-                total: below.length,
-                needsYou: below
-                    .where((s) => columnOf(s) == BoardColumn.needsYou)
-                    .length,
-                working: below
-                    .where((s) => columnOf(s) == BoardColumn.working)
-                    .length,
-              ),
       ),
-    );
-  }
+  ];
 
   final laneOrder = switch (groupBy) {
     OverviewGroupBy.project => facts.projects,

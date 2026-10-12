@@ -669,6 +669,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('question-reply-in-words')));
       await settleMission(tester);
       final field = find.byKey(const ValueKey('overview-composer:ask-q'));
+      await tester.ensureVisible(field);
+      await settleMission(tester);
       await tester.tap(field);
       await settleMission(tester);
       c.read(overviewFocusProvider.notifier).select('ks-r21');

@@ -36,7 +36,6 @@ class OverviewPrefs {
     this.density = OverviewDensity.cards,
     this.view = OverviewView.board,
     this.launchInBackground = true,
-    this.subSessions = OverviewSubSessionMode.inside,
     this.pinned = const [],
     this.hiddenDetails = const {},
   });
@@ -60,17 +59,12 @@ class OverviewPrefs {
   /// here" starts as; a choice made there is for that launch only.
   final bool launchInBackground;
 
-  /// Whether a sub-session is drawn on its parent's card or as a card of its
-  /// own after it.
-  final OverviewSubSessionMode subSessions;
-
   OverviewPrefs copyWith({
     OverviewFilter? filter,
     OverviewGroupBy? groupBy,
     OverviewDensity? density,
     OverviewView? view,
     bool? launchInBackground,
-    OverviewSubSessionMode? subSessions,
     List<String>? pinned,
     Set<OverviewCardDetail>? hiddenDetails,
   }) => OverviewPrefs(
@@ -79,7 +73,6 @@ class OverviewPrefs {
     density: density ?? this.density,
     view: view ?? this.view,
     launchInBackground: launchInBackground ?? this.launchInBackground,
-    subSessions: subSessions ?? this.subSessions,
     pinned: pinned ?? this.pinned,
     hiddenDetails: hiddenDetails ?? this.hiddenDetails,
   );
@@ -94,7 +87,6 @@ class OverviewPrefs {
     'density': density.name,
     'view': view.name,
     'launchInBackground': launchInBackground,
-    'subSessions': subSessions.name,
     if (pinned.isNotEmpty) 'pinned': pinned,
     if (hiddenDetails.isNotEmpty)
       'hiddenDetails': [for (final detail in hiddenDetails) detail.name],
@@ -137,12 +129,9 @@ class OverviewPrefs {
         OverviewDensity.cards,
       ),
       view: named(OverviewView.values, json['view'], OverviewView.board),
+      // A file from before the session tree may still hold "subSessions":
+      // there is one layout now, so it is read past.
       launchInBackground: json['launchInBackground'] != false,
-      subSessions: named(
-        OverviewSubSessionMode.values,
-        json['subSessions'],
-        OverviewSubSessionMode.inside,
-      ),
       pinned: switch (json['pinned']) {
         final List<Object?> ids => [
           ...ids.whereType<String>().toSet().take(kOverviewPinLimit),
@@ -247,12 +236,6 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
     if (state.density != density) _set(state.copyWith(density: density));
   }
 
-  void setSubSessions(OverviewSubSessionMode subSessions) {
-    if (state.subSessions != subSessions) {
-      _set(state.copyWith(subSessions: subSessions));
-    }
-  }
-
   void setLaunchInBackground(bool background) {
     if (state.launchInBackground != background) {
       _set(state.copyWith(launchInBackground: background));
@@ -330,11 +313,6 @@ final overviewPrefsProvider =
     NotifierProvider<OverviewPrefsController, OverviewPrefs>(
       OverviewPrefsController.new,
     );
-
-/// [OverviewPrefs.subSessions], for the boards that only need it.
-final overviewSubSessionsProvider = Provider<OverviewSubSessionMode>(
-  (ref) => ref.watch(overviewPrefsProvider.select((p) => p.subSessions)),
-);
 
 /// [OverviewPrefs.launchInBackground], for the launch paths that only need it.
 final launchInBackgroundProvider = Provider<bool>(

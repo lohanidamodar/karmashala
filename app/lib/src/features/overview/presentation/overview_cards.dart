@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -10,7 +9,6 @@ import '../../explorer/application/agent_states.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import 'overview_batch_bar.dart';
-import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_end_button.dart';
 import 'overview_resume_actions.dart';
@@ -39,12 +37,16 @@ class OverviewCardFrame extends ConsumerWidget {
     required this.card,
     required this.onOpen,
     required this.child,
+    this.leading = 0,
     super.key,
   });
 
   final OverviewCard card;
   final ValueChanged<OverviewCard>? onOpen;
   final Widget child;
+
+  /// Room at the start for what sits over the card's edge: the tree's avatar.
+  final double leading;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -86,7 +88,12 @@ class OverviewCardFrame extends ConsumerWidget {
         // Hovered or holding the keys, the card shows its End.
         child: OverviewHoverScope(
           child: Padding(
-            padding: const EdgeInsets.all(Insets.md),
+            padding: EdgeInsets.fromLTRB(
+              Insets.md + leading,
+              Insets.md,
+              Insets.md,
+              Insets.md,
+            ),
             child: child,
           ),
         ),
@@ -97,30 +104,22 @@ class OverviewCardFrame extends ConsumerWidget {
 
 bool _touch(BuildContext context) => UiDensity.of(context).isTouch;
 
-/// [child], [card]'s own widget, with its ties to its parent and its
-/// sub-sessions as [among] — the list it is drawn in — has them
-/// ([OverviewLinked]): a [phone] says them in words.
-Widget overviewTied(
-  OverviewCard card,
-  List<OverviewCard> among,
-  Widget child, {
-  bool phone = false,
-}) => OverviewLinked(
-  key: ValueKey('overview-linked:${card.id}'),
-  card: card,
-  among: among,
-  phone: phone,
-  child: child,
-);
-
 /// Title, where it runs, and the state chip.
 class OverviewCardHeader extends ConsumerWidget {
-  const OverviewCardHeader({required this.card, this.chip, super.key});
+  const OverviewCardHeader({
+    required this.card,
+    this.chip,
+    this.ring = true,
+    super.key,
+  });
 
   final OverviewCard card;
 
   /// In place of the state chip with its age.
   final Widget? chip;
+
+  /// The agent's ring before the title; off where an avatar says it.
+  final bool ring;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -135,11 +134,13 @@ class OverviewCardHeader extends ConsumerWidget {
     return Row(
       children: [
         OverviewSelectBox(card: card),
-        OverviewAgentRing(
-          card: card,
-          size: density.isTouch ? Insets.xl + Insets.xs : Chrome.control,
-        ),
-        const SizedBox(width: Insets.sm),
+        if (ring) ...[
+          OverviewAgentRing(
+            card: card,
+            size: density.isTouch ? Insets.xl + Insets.xs : Chrome.control,
+          ),
+          const SizedBox(width: Insets.sm),
+        ],
         Expanded(
           child: OverviewTitleBlock(
             titleFloor: overviewTitleFloor(
@@ -172,14 +173,10 @@ class OverviewCardHeader extends ConsumerWidget {
                     childId: card.id,
                     child: ExcludeSemantics(
                       child: Text(
-                        parent == null
-                            ? place
-                            // Drawn after its parent, the line names it;
-                            // drawn apart from it, it says where it came
-                            // from.
-                            : card.parentId != null
-                            ? '↳ $parent'
-                            : '↳ from $parent',
+                        // A header is never drawn under its parent — the
+                        // tree draws a pill there — so it says where it
+                        // came from.
+                        parent == null ? place : '↳ from $parent',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -242,22 +239,34 @@ class _ParentChip extends ConsumerWidget {
 }
 
 /// **One session at work**, calm: its state, what it is doing in words, the
-/// latest thing it said, its plan step and diff, and its sub-sessions.
+/// latest thing it said, its plan step and diff, and — as a family's root on
+/// the tree — its [footer].
 class OverviewWorkCard extends ConsumerWidget {
-  const OverviewWorkCard({required this.card, required this.onOpen, super.key});
+  const OverviewWorkCard({
+    required this.card,
+    required this.onOpen,
+    this.leading = 0,
+    this.footer,
+    super.key,
+  });
 
   final OverviewCard card;
   final ValueChanged<OverviewCard> onOpen;
+
+  /// See [OverviewCardFrame.leading]; with it, the avatar names the agent.
+  final double leading;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => OverviewCardFrame(
     card: card,
     onOpen: onOpen,
+    leading: leading,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        OverviewCardHeader(card: card),
+        OverviewCardHeader(card: card, ring: leading == 0),
         const SizedBox(height: Insets.sm),
         if (card.waitingOn != null)
           OverviewWaitingOnLine(card: card)
@@ -268,9 +277,9 @@ class OverviewWorkCard extends ConsumerWidget {
         const SizedBox(height: Insets.xs),
         OverviewMetaLine(card: card),
         OverviewUsageLine(sessionId: card.id),
-        if (card.children != null) ...[
+        if (footer case final footer?) ...[
           const SizedBox(height: Insets.xs),
-          OverviewSubSessions(card: card, onOpen: onOpen),
+          footer,
         ],
       ],
     ),
@@ -279,10 +288,18 @@ class OverviewWorkCard extends ConsumerWidget {
 
 /// One session that ended today, as a line.
 class OverviewDoneRow extends ConsumerWidget {
-  const OverviewDoneRow({required this.card, required this.onOpen, super.key});
+  const OverviewDoneRow({
+    required this.card,
+    required this.onOpen,
+    this.depth = 0,
+    super.key,
+  });
 
   final OverviewCard card;
   final ValueChanged<OverviewCard> onOpen;
+
+  /// How many of its ancestors ended today too, above it.
+  final int depth;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -341,80 +358,10 @@ class OverviewDoneRow extends ConsumerWidget {
         ),
       ),
     );
-    final children = card.children;
-    if (children == null) return OverviewHoverScope(child: row);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        OverviewHoverScope(child: row),
-        _DoneRowSubSessions(card: card, total: children.total, onOpen: onOpen),
-      ],
-    );
-  }
-}
-
-/// "↳ 2 sub-sessions" under a done row, opening in place to the rows a
-/// working card shows: a done session's children seen without the peek.
-class _DoneRowSubSessions extends StatefulWidget {
-  const _DoneRowSubSessions({
-    required this.card,
-    required this.total,
-    required this.onOpen,
-  });
-
-  final OverviewCard card;
-  final int total;
-  final ValueChanged<OverviewCard> onOpen;
-
-  @override
-  State<_DoneRowSubSessions> createState() => _DoneRowSubSessionsState();
-}
-
-class _DoneRowSubSessionsState extends State<_DoneRowSubSessions> {
-  var _open = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final n = widget.total;
+    // A sub-session that ended with its parent sits under it, a step in.
     return Padding(
-      padding: const EdgeInsets.only(left: Insets.xl + Insets.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            key: ValueKey('overview-done-subs:${widget.card.id}'),
-            borderRadius: BorderRadius.circular(Radii.sm),
-            onTap: () => setState(() => _open = !_open),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Insets.xxs),
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      '↳ $n ${n == 1 ? 'sub-session' : 'sub-sessions'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _open ? AppIcons.caretUp : AppIcons.caretDown,
-                    size: UiDensity.of(context).iconSmall,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_open)
-            OverviewSubSessions(card: widget.card, onOpen: widget.onOpen),
-        ],
-      ),
+      padding: EdgeInsets.only(left: Insets.lg * depth),
+      child: OverviewHoverScope(child: row),
     );
   }
 }

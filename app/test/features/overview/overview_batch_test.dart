@@ -473,7 +473,7 @@ void main() {
       await pump(tester, size: const Size(360, 780), phone: true);
       await pick(tester, 'r21');
       expect(find.text('1 selected'), findsOneWidget);
-      final row = find.byKey(const ValueKey('overview-phone-row:ks-release'));
+      final row = find.byKey(const ValueKey('overview-card:ks-release'));
       await tester.scrollUntilVisible(row, 200, scrollable: hybridList);
       await tester.ensureVisible(row);
       await settleMission(tester);

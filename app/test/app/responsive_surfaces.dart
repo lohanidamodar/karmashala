@@ -32,8 +32,6 @@ import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher
 import 'package:karmashala/src/features/agents/presentation/usage_tab/usage_tab_view.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
 import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
-import 'package:karmashala/src/features/overview/application/overview_board.dart'
-    show OverviewSubSessionMode;
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_peek.dart'
@@ -226,6 +224,15 @@ Future<void> _tapOnBoard(WidgetTester tester, Finder finder) async {
 Future<void> _peek(WidgetTester tester) async {
   if (_byKey('overview-peek').evaluate().isNotEmpty) return;
   await _tapOnBoard(tester, _byKey('overview-queue-title:ks-r21'));
+}
+
+/// Opens a sub-session on the dashboard's tree, unless the last window left
+/// it open: the tree keeps it across a resize.
+Future<void> openDashboardTreePill(WidgetTester tester) async {
+  if (_byKey('overview-tree-detail:ks-r32-sub2').evaluate().isNotEmpty) {
+    return _scrollTo(tester, _byKey('overview-tree-detail:ks-r32-sub2'));
+  }
+  await _tapOnBoard(tester, _byKey('overview-tree-pill:ks-r32-sub2'));
 }
 
 /// Opens run-1's peek, unless the last window left it open: the board
@@ -1080,19 +1087,12 @@ final responsiveSurfaces = <ResponsiveSurface>[
     (t, b) => _mission(t, b),
     warmUp: (t) => _tapOnBoard(t, _byKey('overview-pipeline-edit:run-1')),
   ),
-  // Round 88: sub-sessions as cards, each tied to its parent — a connector
-  // on a desktop, "child of" on a phone — and a child in another lane
-  // with its jump.
+  // Round 92: the session tree — each family one tree in a cell of its own,
+  // a sub-session opened inline under its pill.
   ResponsiveSurface(
-    'dash-subs-cards',
-    (t, b) => _mission(
-      t,
-      b,
-      seed: (c) => c
-          .read(overviewPrefsProvider.notifier)
-          .setSubSessions(OverviewSubSessionMode.cards),
-    ),
-    warmUp: (t) => _scrollTo(t, _byKey('overview-linked:ks-r32-sub0')),
+    'dash-tree',
+    (t, b) => _mission(t, b),
+    warmUp: openDashboardTreePill,
   ),
   // Round 88: a run's card opens its peek beside the board (a page on a
   // phone); a stage clicked shows its session there.

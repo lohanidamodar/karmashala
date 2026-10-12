@@ -4,6 +4,7 @@ import 'package:karmashala_session/delivery.dart'
     show DeliveryAction, OfferedAction;
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/presentation/archive_session_action.dart';
@@ -28,19 +29,76 @@ String handBackMessage(String title, String? answer) => [
 ].join('\n');
 
 /// **A session done with its turn, ready to close**: its last answer and
-/// diff, then Merge through the delivery strip's own action, Hand back to
-/// the parent of a sub-session, and Archive.
-class OverviewDoneCard extends ConsumerStatefulWidget {
-  const OverviewDoneCard({required this.card, required this.onOpen, super.key});
+/// diff, then its close actions ([OverviewCloseActions]) — and, as a
+/// family's root on the tree, its [footer] and Archive family.
+class OverviewDoneCard extends StatelessWidget {
+  const OverviewDoneCard({
+    required this.card,
+    required this.onOpen,
+    this.leading = 0,
+    this.footer,
+    this.family = const [],
+    super.key,
+  });
 
   final OverviewCard card;
   final ValueChanged<OverviewCard> onOpen;
 
+  /// See [OverviewCardFrame.leading]; with it, the avatar names the agent.
+  final double leading;
+  final Widget? footer;
+
+  /// The sessions below it on the tree, archived with it by Archive family.
+  final List<OverviewCard> family;
+
   @override
-  ConsumerState<OverviewDoneCard> createState() => _OverviewDoneCardState();
+  Widget build(BuildContext context) => OverviewCardFrame(
+    card: card,
+    onOpen: onOpen,
+    leading: leading,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OverviewCardHeader(card: card, ring: leading == 0),
+        const SizedBox(height: Insets.sm),
+        OverviewLatestMessage(sessionId: card.id),
+        const SizedBox(height: Insets.xs),
+        OverviewMetaLine(card: card),
+        if (footer case final footer?) ...[
+          const SizedBox(height: Insets.xs),
+          footer,
+        ],
+        const SizedBox(height: Insets.sm),
+        OverviewCloseActions(card: card, family: family),
+      ],
+    ),
+  );
 }
 
-class _OverviewDoneCardState extends ConsumerState<OverviewDoneCard> {
+/// **Closing a session from the board**: Archive; Hand back, to the parent
+/// of a sub-session; Merge, through the delivery strip's own action, when
+/// [merge]; Archive family, with a [family] below it; then [extra].
+class OverviewCloseActions extends ConsumerStatefulWidget {
+  const OverviewCloseActions({
+    required this.card,
+    this.merge = true,
+    this.family = const [],
+    this.extra = const [],
+    super.key,
+  });
+
+  final OverviewCard card;
+  final bool merge;
+  final List<OverviewCard> family;
+  final List<Widget> extra;
+
+  @override
+  ConsumerState<OverviewCloseActions> createState() =>
+      _OverviewCloseActionsState();
+}
+
+class _OverviewCloseActionsState extends ConsumerState<OverviewCloseActions> {
   var _busy = false;
 
   Future<void> _run(String done, Future<void> Function() action) async {
@@ -64,102 +122,91 @@ class _OverviewDoneCardState extends ConsumerState<OverviewDoneCard> {
     final card = widget.card;
     final id = card.id;
     final native = card.entry.native;
-    final merge = native == null
+    final merge = native == null || !widget.merge
         ? null
         : ref
               .watch(sessionDeliveryActionsProvider(id))
               .where((o) => o.action == DeliveryAction.merge)
               .firstOrNull;
-    final base = native == null
+    final base = merge == null
         ? null
         : ref.watch(sessionDeliveryProvider(id)).value?.baseBranch;
     final parentId = native?.parentSessionId;
-    final parent = parentId == null
+    // Handed back once its turn is over, never mid-work.
+    final finished =
+        card.state == AgentState.ready || card.state == AgentState.ended;
+    final parent = parentId == null || !finished
         ? null
         : overviewCardOf(ref.watch(overviewBoardProvider), parentId);
+    final family = [
+      ?native,
+      for (final below in widget.family) ?below.entry.native,
+    ].where((s) => !s.isArchived).toList();
     final idle = !_busy;
-    return OverviewCardFrame(
-      card: card,
-      onOpen: widget.onOpen,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          OverviewCardHeader(card: card),
-          const SizedBox(height: Insets.sm),
-          OverviewLatestMessage(sessionId: id),
-          const SizedBox(height: Insets.xs),
-          OverviewMetaLine(card: card),
-          // A ready parent's sub-sessions, as a working card draws them: one
-          // an agent just started was otherwise on no card at all.
-          if (card.children != null) ...[
-            const SizedBox(height: Insets.xs),
-            OverviewSubSessions(card: card, onOpen: widget.onOpen),
-          ],
-          const SizedBox(height: Insets.sm),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: Insets.xs,
-            runSpacing: Insets.xs,
-            children: [
-              if (native != null && !native.isArchived)
-                OverviewArchiveGate(
-                  sessionId: id,
-                  builder: (resuming) => TextButton(
-                    key: ValueKey('overview-done-archive:$id'),
-                    onPressed: idle && !resuming
-                        ? () => archiveSessionsFromUi(context, ref, [native])
-                        : null,
-                    child: const Text('Archive'),
-                  ),
-                ),
-              if (parent != null)
-                Tooltip(
-                  message: 'Sends its last answer to ${parent.entry.title}',
-                  child: OutlinedButton(
-                    key: ValueKey('overview-hand-back:$id'),
-                    onPressed: !idle
-                        ? null
-                        : () => _run(
-                            'Handed back to ${parent.entry.title}',
-                            () async {
-                              final answer = await ref.read(
-                                overviewLastAnswerProvider(id).future,
-                              );
-                              await ref
-                                  .read(sessionActionsProvider)
-                                  .continueSession(
-                                    parent.id,
-                                    handBackMessage(
-                                      card.entry.title,
-                                      answer.text,
-                                    ),
-                                  );
-                            },
-                          ),
-                    child: const Text('Hand back'),
-                  ),
-                ),
-              if (native != null)
-                Tooltip(
-                  message: _mergeTip(merge, base),
-                  child: FilledButton(
-                    key: ValueKey('overview-merge:$id'),
-                    onPressed: !idle || merge == null || !merge.isEnabled
-                        ? null
-                        : () => _run(
-                            'Asked to merge',
-                            () => ref
-                                .read(sessionActionsProvider)
-                                .continueSession(id, merge.prompt!),
-                          ),
-                    child: const Text('Merge'),
-                  ),
-                ),
-            ],
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: Insets.xs,
+      runSpacing: Insets.xs,
+      children: [
+        if (widget.family.isNotEmpty && family.isNotEmpty)
+          TextButton(
+            key: ValueKey('overview-archive-family:$id'),
+            onPressed: idle
+                ? () => archiveSessionsFromUi(context, ref, family)
+                : null,
+            child: const Text('Archive family'),
+          )
+        else if (native != null && !native.isArchived)
+          OverviewArchiveGate(
+            sessionId: id,
+            builder: (resuming) => TextButton(
+              key: ValueKey('overview-done-archive:$id'),
+              onPressed: idle && !resuming
+                  ? () => archiveSessionsFromUi(context, ref, [native])
+                  : null,
+              child: const Text('Archive'),
+            ),
           ),
-        ],
-      ),
+        if (parent != null)
+          Tooltip(
+            message: 'Sends its last answer to ${parent.entry.title}',
+            child: OutlinedButton(
+              key: ValueKey('overview-hand-back:$id'),
+              onPressed: !idle
+                  ? null
+                  : () =>
+                        _run('Handed back to ${parent.entry.title}', () async {
+                          final answer = await ref.read(
+                            overviewLastAnswerProvider(id).future,
+                          );
+                          await ref
+                              .read(sessionActionsProvider)
+                              .continueSession(
+                                parent.id,
+                                handBackMessage(card.entry.title, answer.text),
+                              );
+                        }),
+              child: const Text('Hand back'),
+            ),
+          ),
+        ...widget.extra,
+        if (native != null && widget.merge)
+          Tooltip(
+            message: _mergeTip(merge, base),
+            child: FilledButton(
+              key: ValueKey('overview-merge:$id'),
+              onPressed: !idle || merge == null || !merge.isEnabled
+                  ? null
+                  : () => _run(
+                      'Asked to merge',
+                      () => ref
+                          .read(sessionActionsProvider)
+                          .continueSession(id, merge.prompt!),
+                    ),
+              child: const Text('Merge'),
+            ),
+          ),
+      ],
     );
   }
 
