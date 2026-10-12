@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
+import 'package:karmashala/src/features/overview/application/overview_batch.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_links.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
@@ -599,6 +600,25 @@ void main() {
       );
       await settleMission(tester);
       expect(pill('ks-r32-sub0'), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('the batch bar follows a fold: a picked child folded away '
+        'leaves it, and comes back with the unfold', (tester) async {
+      final c = await pump(tester);
+      final bar = find.byKey(const ValueKey('overview-batch-bar'));
+      c.read(overviewSelectionProvider.notifier).toggle('ks-r32-sub0');
+      await settleMission(tester);
+      expect(bar, findsOneWidget);
+
+      // Nothing else changes between: no status, no board.
+      c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32');
+      await settleMission(tester);
+      expect(bar, findsNothing);
+
+      c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32');
+      await settleMission(tester);
+      expect(bar, findsOneWidget);
       await unmountMission(tester);
     });
 

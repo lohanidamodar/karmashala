@@ -25,6 +25,8 @@ List<OverviewCard> overviewSelectedCards(WidgetRef ref) {
   final selection = ref.watch(overviewSelectionProvider);
   if (selection.isEmpty) return const [];
   final board = ref.watch(overviewBoardProvider);
+  // A fold hides a picked child from the board, and an unfold shows it again.
+  ref.watch(overviewFoldedParentsProvider);
   return [
     for (final id in overviewDrawnOrder(ref))
       if (selection.contains(id)) ?overviewCardOf(board, id),
