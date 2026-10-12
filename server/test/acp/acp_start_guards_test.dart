@@ -320,6 +320,54 @@ void main() {
       expect(killed, isTrue, reason: 'the hung process is not left behind');
     });
 
+    test('the stderr a failed start shows has its secrets masked', () async {
+      const fake = 'FAKE_TOKEN_123_not_real';
+      final silence = StreamController<List<int>>();
+      final exit = Completer<int>();
+      final runtime = AcpSessionRuntime(
+        id: 'karmashala_s1',
+        sessionId: 's1',
+        agentId: 'grok',
+        agentName: 'Grok',
+        spec: const AcpLaunchSpec(arguments: ['--acp']),
+        workingDirectory: temp.path,
+        spawn: () async => AcpTransport.streams(
+          output: silence.stream,
+          input: _Discarding(),
+          exitCode: exit.future,
+          errorLines: Stream.fromIterable([
+            'GRAFANA_API_KEY=$fake',
+            '{"name":"grafana","env":{"ANY":"$fake"}}',
+            'using glsa_FAKEgrafanaTOKENforTESTS01',
+          ]),
+          kill: () async {
+            if (!exit.isCompleted) exit.complete(137);
+            await silence.close();
+          },
+        ),
+        messages: SessionMessageDao(database),
+        host: RecordingHost(),
+        startPatience: const Duration(milliseconds: 150),
+        stopPatience: const Duration(milliseconds: 50),
+      );
+
+      await expectLater(
+        runtime.start(),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('GRAFANA_API_KEY=[redacted]'),
+              isNot(contains(fake)),
+              isNot(contains('glsa_FAKE')),
+            ),
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+
     test('a spawn that fails keeps the agent\'s variables out of the words '
         'the start fails with', () async {
       final runtimes = AcpRuntimes(

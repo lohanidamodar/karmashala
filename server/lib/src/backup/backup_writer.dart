@@ -10,6 +10,7 @@ import 'package:karmashala_store/database.dart' show kStoreFileName;
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
+import '../server/redact_command.dart' show redactStoreRows;
 import 'backup_manifest.dart';
 
 /// The name every backup archive gets, so the schedule can find its own and
@@ -185,6 +186,8 @@ _SnapshotRead _snapshot(String source, String target) {
     if (_tableExists(copy, 'paired_devices')) {
       copy.execute('DELETE FROM paired_devices;');
     }
+    // What agents printed into transcripts and failures leaves masked.
+    redactStoreRows(copy, apply: true);
     final tables = copy
         .select(
           "SELECT name FROM sqlite_master WHERE type = 'table' "

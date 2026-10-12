@@ -6,6 +6,7 @@ import 'package:agent_cli/descriptors.dart' hide AgentCapabilities;
 import 'package:karmashala_acp/karmashala_acp.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal, kPromptChangedRefusal;
+import 'package:karmashala_core/logging.dart' show AgentRedactor;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         SessionCommand,
@@ -1672,7 +1673,10 @@ class AcpSessionRuntime implements ScreenSession {
     );
   }
 
-  void _stderrLine(String line) {
+  void _stderrLine(String heard) {
+    // Agents print env dumps and key prompts here, and the tail becomes a
+    // failure's stored and shown evidence.
+    final line = AgentRedactor.text(heard);
     _stderr.add(line);
     _stderrLength += line.length + 1;
     while (_stderrLength > stderrKept && _stderr.length > 1) {
@@ -1692,7 +1696,7 @@ class AcpSessionRuntime implements ScreenSession {
           : tail;
       buffer.write('; its stderr ended: $shown');
     }
-    return buffer.toString();
+    return AgentRedactor.text(buffer.toString());
   }
 
   void _exited(int code) {

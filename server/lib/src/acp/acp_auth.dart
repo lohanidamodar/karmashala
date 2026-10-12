@@ -5,6 +5,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_acp/karmashala_acp.dart' as acp;
+import 'package:karmashala_core/logging.dart' show AgentRedactor;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/store.dart'
     show AcpAuthChoice, AcpAuthChoiceDao;
@@ -250,7 +251,8 @@ class ServerAcpAuth {
             } on acp.AcpRpcError catch (error) {
               throw DataRefused(
                 DataRefusalCode.failed,
-                '${target.name} refused ${method.name}: ${error.message}',
+                '${target.name} refused ${method.name}: '
+                '${AgentRedactor.text(error.message)}',
               );
             }
             return method.name.isEmpty ? method.id : method.name;

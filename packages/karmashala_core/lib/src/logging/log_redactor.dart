@@ -104,7 +104,13 @@ class LogRedactor {
         r'|gh[pousr]_[A-Za-z0-9]{16,}'
         r'|github_pat_[A-Za-z0-9_]{20,}'
         r'|xox[baprs]-[A-Za-z0-9-]{10,}'
-        r'|AIza[A-Za-z0-9_-]{20,})',
+        r'|AIza[A-Za-z0-9_-]{20,}'
+        r'|sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{16,}'
+        r'|glsa_[A-Za-z0-9_]{16,}'
+        r'|glc_[A-Za-z0-9_+/=]{16,}'
+        r'|AKIA[0-9A-Z]{16}'
+        r'|npm_[A-Za-z0-9]{20,}'
+        r'|xai-[A-Za-z0-9]{20,})',
       ),
       replacement: '[redacted:token]',
     ),
@@ -126,6 +132,20 @@ class LogRedactor {
       name: 'adb pairing invite',
       pattern: RegExp(r'(WIFI:T:ADB;S:[^;]*;P:)[^;]+', caseSensitive: false),
       replacement: r'$1[redacted]',
+    ),
+    // A JSON field or a variable that names its secret inside a longer name:
+    // `"GRAFANA_API_KEY": "…"`, `SLACK_BOT_TOKEN=…`. The value must hold a
+    // letter, so `"max_token": 4096` survives.
+    RedactionRule(
+      name: 'named secret field',
+      pattern: RegExp(
+        r'''(\b[A-Za-z0-9_.-]*(?:token|secret|password|passwd|passphrase'''
+        r'''|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credentials?)'''
+        r'''"?\s*[=:]\s*)("?)(?!\[redacted)(?=[^\s"',;}\]]*[A-Za-z])'''
+        r'''[^\s"',;}\]]{6,}''',
+        caseSensitive: false,
+      ),
+      replacement: r'$1$2[redacted]',
     ),
     // The catch-all. The keyword list stays short: a bare `auth:` would eat
     // ordinary message text.

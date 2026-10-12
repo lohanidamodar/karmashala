@@ -12,6 +12,7 @@ import 'serve/serve_command.dart';
 import 'server/admin_commands.dart';
 import 'server/init_command.dart';
 import 'server/pair_command.dart';
+import 'server/redact_command.dart';
 import 'server/transcript_command.dart';
 import 'store/store_probe.dart';
 
@@ -33,6 +34,7 @@ karmashala_host $kHostVersion — Karmashala's session host.
   karmashala_host relay         be the relay for one desktop
   karmashala_host probe-pty     prove the pty layer works on this machine
   karmashala_host probe-store   prove this machine can hold a store
+  karmashala_host redact-secrets  find (--apply: mask) secrets agents left in logs and the store
   karmashala_host version       print the host and protocol versions
 
 `karmashala_host <command> --help` says what a command takes.
@@ -315,6 +317,20 @@ karmashala_host probe-pty — prove the pty layer works on this machine.
 karmashala_host probe-store — prove this machine can hold a store.
 ''',
     run: (args, out, err, env) => runStoreProbe(out: out),
+  ),
+  'redact-secrets': _Command(
+    usage: '''
+karmashala_host redact-secrets — find secrets agents printed into the server
+logs and the store, and say where, by count: never a value.
+
+  --data-dir=<dir>        whose (default ~/.karmashala)
+  --apply                 mask them in place; the server must be stopped.
+                          Cannot be undone
+''',
+    valueFlags: {'data-dir'},
+    switches: {'apply'},
+    run: (args, out, err, env) =>
+        runRedactSecrets(args, out: out, err: err, environment: env),
   ),
   'version': _Command(
     usage: '''

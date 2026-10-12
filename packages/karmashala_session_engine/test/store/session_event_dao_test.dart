@@ -53,4 +53,24 @@ void main() {
     SessionDao(db).delete('s1');
     expect(dao.countForSession('s1'), 0);
   });
+
+  test('an error event is stored without the secrets its stderr printed', () {
+    const fake = 'FAKE_TOKEN_123_not_real';
+    final stored = dao.append(
+      event(
+        type: 'session.error',
+        payload:
+            '{"message":"exited","exitCode":1,'
+            '"stderr":"GITHUB_TOKEN=$fake\\nkey glsa_FAKEgrafanaTOKENforTESTS01"}',
+      ),
+    );
+    final read = dao.listForSession('s1').single;
+    for (final payload in [stored.payload, read.payload]) {
+      expect(payload, isNot(contains(fake)));
+      expect(payload, isNot(contains('glsa_FAKE')));
+      expect(payload, contains('"exitCode":1'));
+    }
+    final chat = dao.append(event(payload: '{"text":"token=$fake"}'));
+    expect(chat.payload, contains(fake), reason: "chat text is the user's");
+  });
 }
