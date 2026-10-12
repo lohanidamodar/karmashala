@@ -144,12 +144,26 @@ void main() {
     const vault = 'FAKE-VAULT-SECRET-7f3a';
     const pairing = 'FAKE-PAIRING-KEY-91bc';
     const env = 'FAKE-ENV-FILE-SECRET-22';
+    // The owner (2026-10-12): saved agent sign-ins stay out of backups; a
+    // restore asks to sign in again.
+    const claudeOauth = 'FAKE-CLAUDE-OAUTH-5d1e';
+    const codexAuth = 'FAKE-CODEX-AUTH-0c9b';
     final db = AppDatabase.open(Directory(data));
     db.execute(
       'INSERT INTO paired_devices (id, name, device_key, capabilities, '
       "generation, push_token, created_at) VALUES ('d1', 'Phone', ?, 1, 1, "
       "?, 'x');",
       [pairing, pairing],
+    );
+    db.execute(
+      'INSERT INTO claude_accounts (id, email, claude_ai_oauth, captured_at) '
+      "VALUES ('c1', 'owner@example.com', ?, 'x');",
+      [claudeOauth],
+    );
+    db.execute(
+      'INSERT INTO codex_accounts (id, account_id, auth_json, captured_at) '
+      "VALUES ('x1', 'acct-1', ?, 'x');",
+      [codexAuth],
     );
     db.close();
     write('secrets/stores.json', '{"key": "$vault"}');
@@ -170,10 +184,12 @@ void main() {
     final zip = unzip(written.path);
     for (final entry in zip.files.where((e) => e.isFile)) {
       final text = latin1.decode(entry.readBytes()!);
-      for (final secret in [vault, pairing, env]) {
+      for (final secret in [vault, pairing, env, claudeOauth, codexAuth]) {
         expect(text, isNot(contains(secret)), reason: entry.name);
       }
     }
+    expect(written.manifest.counts['claude_accounts'], 0);
+    expect(written.manifest.counts['codex_accounts'], 0);
     expect(zip.files.map((e) => e.name), [
       kManifestEntry,
       kSnapshotEntry,
@@ -236,6 +252,10 @@ void main() {
         'INSERT INTO paired_devices (id, name, device_key, capabilities, '
         "generation, created_at) VALUES ('d1', 'Phone', 'k', 1, 1, 'x');",
       );
+      current.execute(
+        'INSERT INTO claude_accounts (id, email, claude_ai_oauth, '
+        "captured_at) VALUES ('c1', 'owner@example.com', 'FAKE', 'x');",
+      );
       current.close();
       write('artifacts/replaced.html', 'old');
       write('secrets/stores.json', '{"stays": true}');
@@ -293,6 +313,12 @@ void main() {
         restored.query('SELECT id FROM paired_devices;').single['id'],
         'd1',
       );
+      // The backup held no sign-ins; this machine's came across.
+      expect(
+        restored.query('SELECT id FROM claude_accounts;').single['id'],
+        'c1',
+      );
+      expect(lastRestore(data)!['accountsKept'], 1);
       final last = lastRestore(data)!;
       expect(last['before'], before);
       expect(last['phonesKept'], 1);

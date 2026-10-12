@@ -75,6 +75,7 @@ const List<String> kBackupExclusions = [
   'server.json, which holds the relay token',
   'The MCP bridge handshake and per-session MCP configs',
   'Phone pairing keys and push tokens',
+  'Saved Claude and Codex sign-ins: sign in again after a restore elsewhere; a restore on the same machine keeps the ones it had',
   'SSH keys: only the paths to them are recorded',
   'Any file named .env*, key.properties, or a keystore or private key',
   'Logs and the tool-image cache',

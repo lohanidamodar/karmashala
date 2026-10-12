@@ -177,39 +177,48 @@ String? applyPendingRestore(String dataDirectory, {DateTime? now}) {
         '(${error.path})';
   }
   staged.deleteSync(recursive: true);
-  final phones = _carryPairedDevices(
-    p.join(dataDirectory, kStoreFileName),
-    p.join(before.path, kStoreFileName),
-  );
+  final store = p.join(dataDirectory, kStoreFileName);
+  final old = p.join(before.path, kStoreFileName);
+  final phones = _carryRows(store, old, 'paired_devices');
+  // A backup holds no saved sign-ins (kBackupHeldBackTables): the ones this
+  // machine already had come across, so a restore here signs nobody out.
+  final accounts = [
+    for (final table in const ['claude_accounts', 'codex_accounts'])
+      _carryRows(store, old, table),
+  ];
   File(p.join(dataDirectory, kLastRestoreFile)).writeAsStringSync(
     jsonEncode({
       ...pending,
       'restoredAt': (now ?? DateTime.now()).toUtc().toIso8601String(),
       'before': before.path,
       'phonesKept': phones,
+      'accountsKept': accounts.contains(null)
+          ? null
+          : accounts.fold<int>(0, (sum, n) => sum + n!),
     }),
   );
   return 'restored the backup of ${pending['backupCreatedAt']}; the data it '
       'replaced is in ${before.path}';
 }
 
-/// The pairings the replaced store held, so a restore does not unpair every
-/// phone; null when they could not be read.
-int? _carryPairedDevices(String store, String old) {
+/// The rows of [table] the replaced store held, for what a backup holds back
+/// (pairings, saved sign-ins), so a restore does not unpair every phone or
+/// sign every account out; null when they could not be read.
+int? _carryRows(String store, String old, String table) {
   if (!File(old).existsSync()) return 0;
   final db = sqlite3.open(store);
   try {
     db.execute('ATTACH DATABASE ? AS old;', [old]);
     Set<String> columns(String schema) => {
-      for (final row in db.select('PRAGMA $schema.table_info(paired_devices);'))
+      for (final row in db.select('PRAGMA $schema.table_info($table);'))
         row['name']! as String,
     };
     final shared = columns('main').intersection(columns('old'));
     if (shared.isEmpty) return 0;
     final list = shared.map((name) => '"$name"').join(', ');
     db.execute(
-      'INSERT OR IGNORE INTO main.paired_devices ($list) '
-      'SELECT $list FROM old.paired_devices;',
+      'INSERT OR IGNORE INTO main.$table ($list) '
+      'SELECT $list FROM old.$table;',
     );
     return db.updatedRows;
   } on SqliteException {

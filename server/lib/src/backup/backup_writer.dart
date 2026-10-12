@@ -167,6 +167,15 @@ typedef _SnapshotRead = ({
   List<BackupCheckpointRef> checkpoints,
 });
 
+/// The store tables a backup never carries: phone pairing keys and push
+/// tokens, and the saved Claude and Codex sign-ins (the owner, 2026-10-12).
+/// A restore carries them over from the store it replaces instead.
+const List<String> kBackupHeldBackTables = [
+  'paired_devices',
+  'claude_accounts',
+  'codex_accounts',
+];
+
 /// `VACUUM INTO` reads one transaction's view of the store, WAL included, so
 /// the copy is consistent however the server writes meanwhile. The copy is
 /// then made a single file and its pairing keys are deleted with
@@ -183,8 +192,8 @@ _SnapshotRead _snapshot(String source, String target) {
   try {
     copy.execute('PRAGMA journal_mode = DELETE;');
     copy.execute('PRAGMA secure_delete = ON;');
-    if (_tableExists(copy, 'paired_devices')) {
-      copy.execute('DELETE FROM paired_devices;');
+    for (final table in kBackupHeldBackTables) {
+      if (_tableExists(copy, table)) copy.execute('DELETE FROM "$table";');
     }
     // What agents printed into transcripts and failures leaves masked.
     redactStoreRows(copy, apply: true);
