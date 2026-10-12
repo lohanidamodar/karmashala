@@ -1,3 +1,4 @@
+import 'package:karmashala_core/logging.dart' show AgentRedactor;
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_session/events.dart';
 
@@ -11,6 +12,7 @@ class SessionEventDao {
   /// Appends an event, assigning the next sequence number. The input's `seq` is
   /// ignored — computed here — while `createdAt` comes from the event.
   SessionEvent append(SessionEvent event) {
+    final payload = storedPayload(event);
     return _db.transaction(() {
       final maxRows = _db.query(
         'SELECT COALESCE(MAX(seq), -1) AS max_seq FROM session_events '
@@ -26,14 +28,27 @@ class SessionEventDao {
           event.sessionId,
           nextSeq,
           event.type,
-          event.payload,
+          payload,
           isoFromDate(event.createdAt),
         ],
       );
 
-      return event.copyWith(id: _db.lastInsertRowId, seq: nextSeq);
+      return event.copyWith(
+        id: _db.lastInsertRowId,
+        seq: nextSeq,
+        payload: payload,
+      );
     });
   }
+
+  /// [event]'s payload as stored: a failure's text carries the agent's
+  /// stderr, which may print its environment or a key.
+  static String storedPayload(SessionEvent event) =>
+      _redacted.contains(event.type)
+      ? AgentRedactor.jsonText(event.payload)
+      : event.payload;
+
+  static const _redacted = {'session.error', 'session.failed'};
 
   /// All events for [sessionId], in append order.
   List<SessionEvent> listForSession(String sessionId) {

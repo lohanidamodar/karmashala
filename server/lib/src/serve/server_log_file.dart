@@ -96,22 +96,27 @@ class FiledSink implements IOSink {
   @override
   set encoding(Encoding value) => inner.encoding = value;
 
+  // The console copy is redacted too: whoever started the server may be
+  // capturing its output.
+  static final _redactor = LogRedactor();
+
   @override
   void write(Object? object) {
     _file('$object');
-    _pass(() => inner.write(object));
+    _pass(() => inner.write(_redactor.apply('$object')));
   }
 
   @override
   void writeln([Object? object = '']) {
     _file('$object\n');
-    _pass(() => inner.writeln(object));
+    _pass(() => inner.writeln(_redactor.apply('$object')));
   }
 
   @override
   void writeAll(Iterable<Object?> objects, [String separator = '']) {
-    _file(objects.join(separator));
-    _pass(() => inner.writeAll(objects, separator));
+    final text = objects.join(separator);
+    _file(text);
+    _pass(() => inner.write(_redactor.apply(text)));
   }
 
   @override
@@ -122,8 +127,10 @@ class FiledSink implements IOSink {
 
   @override
   void add(List<int> data) {
-    _file(utf8.decode(data, allowMalformed: true));
-    _pass(() => inner.add(data));
+    final text = utf8.decode(data, allowMalformed: true);
+    _file(text);
+    final said = _redactor.apply(text);
+    _pass(() => inner.add(said == text ? data : utf8.encode(said)));
   }
 
   @override

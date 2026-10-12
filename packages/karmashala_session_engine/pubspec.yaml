@@ -19,6 +19,9 @@ dependencies:
   # `EnvironmentPath`, the directories a session row records.
   agent_cli:
     path: ../agent_cli
+  # The redactor an agent's error text passes through before it is stored.
+  karmashala_core:
+    path: ../karmashala_core
   # `Session` and `SessionStatus`, the record and the words it is kept at.
   karmashala_session:
     path: ../karmashala_session
