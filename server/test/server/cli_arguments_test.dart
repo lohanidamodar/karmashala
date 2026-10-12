@@ -25,6 +25,7 @@ const _commands = [
   'relay',
   'probe-pty',
   'probe-store',
+  'redact-secrets',
   'version',
 ];
 
