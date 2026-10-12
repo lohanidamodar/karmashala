@@ -76,9 +76,22 @@ Map<String, int> redactStoreRows(Database db, {required bool apply}) {
     scan();
     return found;
   }
+  // FTS5 keeps a masked row's old terms in its segments until they merge, so
+  // each index is rebuilt from the masked text, and `secure_delete` zeroes
+  // the pages the old segments leave free.
+  db.execute('PRAGMA secure_delete = ON;');
   db.execute('BEGIN IMMEDIATE;');
   try {
     scan();
+    if (found.isNotEmpty) {
+      for (final row in db.select(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND sql LIKE 'CREATE VIRTUAL TABLE % USING fts5(%';",
+      )) {
+        final name = row['name']! as String;
+        db.execute('INSERT INTO "$name" ("$name") VALUES (\'rebuild\');');
+      }
+    }
     db.execute('COMMIT;');
   } catch (_) {
     db.execute('ROLLBACK;');

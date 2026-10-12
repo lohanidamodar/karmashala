@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
@@ -138,5 +139,40 @@ void main() {
       contains(kFake),
       reason: 'the live store is untouched',
     );
+  });
+
+  // FTS5 keeps a term in its segment blocks after the row is masked, where
+  // MATCH no longer finds it but the file's bytes still hold it. The index
+  // lower-cases each term and shares a prefix with the term before it, so
+  // the tail of the Grafana token's term is what lands in the bytes.
+  const indexedTail = 'grafanatokenfortests01';
+  bool holdsTerm(String path) {
+    final bytes = [path, '$path-wal']
+        .where((f) => File(f).existsSync())
+        .expand((f) => File(f).readAsBytesSync());
+    return latin1.decode(bytes.toList()).contains(indexedTail);
+  }
+
+  test('the indexed term really is in the store before masking', () {
+    expect(holdsTerm(p.join(data, kStoreFileName)), isTrue);
+  });
+
+  test('--apply leaves no indexed term in the store file', () async {
+    final (code, said) = await run(['--apply']);
+    expect(code, 0, reason: said);
+    expect(holdsTerm(p.join(data, kStoreFileName)), isFalse);
+  });
+
+  test('a backup leaves no indexed term in its snapshot file', () async {
+    final written = await writeBackup(
+      dataDirectory: data,
+      outputDirectory: p.join(root.path, 'backups'),
+    );
+    final entry = ZipDecoder()
+        .decodeBytes(File(written.path).readAsBytesSync())
+        .findFile(kSnapshotEntry)!;
+    final copy = File(p.join(root.path, 'copy.sqlite'))
+      ..writeAsBytesSync(entry.readBytes()!);
+    expect(holdsTerm(copy.path), isFalse);
   });
 }
