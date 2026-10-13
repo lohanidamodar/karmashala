@@ -1,8 +1,9 @@
 // Mission control with its peek, its resizer and its triage keys.
 part of '../overview_tab_view.dart';
 
-/// Mission control with the peek docked beside it, or in a sheet where it
-/// would crowd, triaged from the keyboard ([overviewTriageShortcuts]).
+/// Mission control with the peek docked beside it in a room of its own, or
+/// in a sheet where the two would not fit, triaged from the keyboard
+/// ([overviewTriageShortcuts]).
 class _BoardBody extends ConsumerStatefulWidget {
   const _BoardBody();
 
@@ -398,7 +399,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     OverviewCard second,
   ) {
     final focus = ref.read(overviewFocusProvider.notifier);
-    final double each = ((width - kOverviewBoardMinWidth) / 2).clamp(
+    final double each = ((width - Chrome.boardBesidePairWidth) / 2).clamp(
       _peekMinWidth,
       _peekMaxWidth,
     );
@@ -447,7 +448,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   Widget _laidOut() => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.maxWidth;
-      _mode = overviewPeekModeAt(width);
+      _mode = overviewPeekModeAt(
+        width,
+        textScaler: MediaQuery.textScalerOf(context),
+      );
       final peeked = _inSheet
           ? null
           : overviewCardOf(
@@ -499,15 +503,18 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           onClose: ref.read(overviewFocusProvider.notifier).closePeek,
         );
       }
-      final double peekWidth = _mode == OverviewPeekMode.docked
-          ? _peekWidth.clamp(
-              _peekMinWidth,
-              math.max(
-                _peekMinWidth,
-                math.min(_peekMaxWidth, width - kOverviewBoardMinWidth),
-              ),
-            )
-          : math.min(kOverviewPeekWidth, width);
+      // The peek takes its own room and gives way first, down to its least,
+      // so the board keeps its own least beside it.
+      final double peekMax = math.max(
+        _peekMinWidth,
+        math.min(
+          _peekMaxWidth,
+          width -
+              overviewBoardMinAt(MediaQuery.textScalerOf(context)) -
+              _resizerWidth,
+        ),
+      );
+      final double peekWidth = _peekWidth.clamp(_peekMinWidth, peekMax);
       // A second peek only where two fit; narrower, the first stays alone.
       final beside =
           peek == null ||
@@ -529,32 +536,15 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
             Expanded(child: main),
             _PeekResizer(
               onDrag: (dx) => setState(
-                () => _peekWidth = (peekWidth - dx).clamp(
-                  _peekMinWidth,
-                  _peekMaxWidth,
-                ),
+                () =>
+                    _peekWidth = (peekWidth - dx).clamp(_peekMinWidth, peekMax),
               ),
             ),
             SizedBox(width: peekWidth, child: peek),
           ],
         ),
-        (final peek?, _) => Stack(
-          children: [
-            Positioned.fill(child: main),
-            Positioned(
-              top: 0,
-              right: 0,
-              bottom: 0,
-              width: peekWidth,
-              child: Material(
-                key: const ValueKey('overview-peek-overlay'),
-                elevation: Elevations.popup,
-                shadowColor: Theme.of(context).colorScheme.shadow,
-                child: peek,
-              ),
-            ),
-          ],
-        ),
+        // A sheet's peek is a page of its own, pushed over the board.
+        (_, OverviewPeekMode.sheet) => main,
       };
       return Shortcuts(
         shortcuts: overviewTriageShortcuts,
@@ -593,8 +583,8 @@ class _PeekResizer extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
       child: const SizedBox(
-        width: Insets.xs + Insets.hair,
-        child: VerticalDivider(width: Insets.xs + Insets.hair),
+        width: _resizerWidth,
+        child: VerticalDivider(width: _resizerWidth),
       ),
     ),
   );
