@@ -137,12 +137,21 @@ OverviewForest overviewForestOf(OverviewBoard board) {
   return (work: work, ready: ready, placed: placed);
 }
 
-/// [node]'s sessions as drawn: all of them, or only the root when [folded]
-/// holds it.
+/// [node]'s sessions as drawn: a node [folded] holds keeps its sub-sessions,
+/// at any depth, out of view.
 Iterable<OverviewCard> overviewDrawnOf(
   OverviewTreeNode node,
   Set<String> folded,
-) => folded.contains(node.card.id) ? [node.card] : node.drawn;
+) sync* {
+  yield node.card;
+  if (folded.contains(node.card.id)) return;
+  for (final child in node.children) {
+    yield* overviewDrawnOf(child, folded);
+  }
+}
+
+int _needsYou(Iterable<OverviewCard> cards) =>
+    cards.where((c) => columnOf(c.state) == BoardColumn.needsYou).length;
 
 /// "4 of 5 done · 1 working": a family's sub-sessions, the whole tree below
 /// the root, by state.
@@ -150,12 +159,30 @@ String overviewFamilySummary(Iterable<OverviewCard> below) {
   final states = [for (final card in below) card.state];
   int count(bool Function(AgentState) test) => states.where(test).length;
   final done = count((s) => s == AgentState.ready || s == AgentState.ended);
-  final needs = count((s) => columnOf(s) == BoardColumn.needsYou);
+  final needs = _needsYou(below);
   final working = count((s) => columnOf(s) == BoardColumn.working);
   return [
     '$done of ${states.length} done',
     if (needs > 0) '$needs needs you',
     if (working > 0) '$working working',
+  ].join(' · ');
+}
+
+/// "7 sub-sessions".
+String overviewSubSessionCount(int n) =>
+    '$n ${n == 1 ? 'sub-session' : 'sub-sessions'}';
+
+/// "7 sub-sessions · 6 of 7 done · 1 needs you": what a folded family hides.
+String overviewFoldedSummary(List<OverviewCard> below) =>
+    '${overviewSubSessionCount(below.length)} · '
+    '${overviewFamilySummary(below)}';
+
+/// "3 sub-sessions · 1 needs you": what a folded branch hides.
+String overviewFoldedLine(List<OverviewCard> below) {
+  final needs = _needsYou(below);
+  return [
+    overviewSubSessionCount(below.length),
+    if (needs > 0) '$needs needs you',
   ].join(' · ');
 }
 

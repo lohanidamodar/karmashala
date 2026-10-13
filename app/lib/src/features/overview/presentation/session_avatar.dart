@@ -42,8 +42,12 @@ class SessionAvatar extends ConsumerWidget {
     this.waiting = 0,
     this.halo,
     this.glow = false,
+    this.plain = false,
     super.key,
   });
+
+  /// Only the ring and the face: no agent's mark, for a stack of minis.
+  final bool plain;
 
   final OverviewCard card;
   final double size;
@@ -69,7 +73,7 @@ class SessionAvatar extends ConsumerWidget {
     final ring = sessionRingColor(context, state);
     final agentId = ref.watch(overviewFactsProvider).agentOf(card.entry);
     final motion = Motion.of(context);
-    final face = size - (Chrome.avatarRing + Insets.xxs) * 2;
+    final face = faceOf(size);
     final corner = size * _cornerShare;
     final label = [
       card.entry.title,
@@ -145,7 +149,7 @@ class SessionAvatar extends ConsumerWidget {
                 ),
               ),
             ),
-            if (agentId != null)
+            if (agentId != null && !plain)
               Positioned(
                 right: 0,
                 bottom: 0,
@@ -180,6 +184,10 @@ class SessionAvatar extends ConsumerWidget {
       ),
     );
   }
+
+  /// The diameter of the face inside an avatar of [size], within its ring.
+  static double faceOf(double size) =>
+      size - (Chrome.avatarRing + Insets.xxs) * 2;
 
   /// The corner marks' share of the avatar, and the agent's mark's of its
   /// corner.

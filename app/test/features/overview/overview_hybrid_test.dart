@@ -174,15 +174,18 @@ void main() {
   });
 
   group('calm cards', () {
-    testWidgets('a work card has no message box, strip or tinted surface', (
-      tester,
-    ) async {
+    testWidgets('a work card has its own message box, and no strip or '
+        'tinted surface', (tester) async {
       await pump(tester);
       final card = workCard('ks-r32');
       await tester.scrollUntilVisible(card, 200, scrollable: hybridList);
       Finder inCard(Finder f) => find.descendant(of: card, matching: f);
 
-      expect(inCard(find.byType(TextField)), findsNothing);
+      // Round 95: a family's parent always takes a message on its card.
+      expect(
+        inCard(find.byKey(const ValueKey('overview-composer:ks-r32'))),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('overview-strip:ks-r32')), findsNothing);
       final frame = tester.widget<Material>(
         find.byKey(const ValueKey('overview-card:ks-r32')),
@@ -612,7 +615,7 @@ void main() {
       // The old peek's sections are gone: the chat is the record.
       expect(inPeek(find.text('DOING NOW')), findsNothing);
       expect(
-        find.byKey(const ValueKey('overview-composer:ks-r32')),
+        inPeek(find.byKey(const ValueKey('overview-composer:ks-r32'))),
         findsNothing,
       );
       await unmountMission(tester);

@@ -13,9 +13,12 @@ import 'package:karmashala/src/features/overview/application/overview_board.dart
 import 'package:karmashala/src/features/overview/application/overview_links.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_quick_message.dart';
 import 'package:karmashala/src/features/overview/application/overview_tree.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_end_button.dart'
     show OverviewHoverScope;
+import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart'
+    show overviewSectionsOf;
 import 'package:karmashala/src/features/overview/presentation/session_avatar.dart';
 import 'package:karmashala/src/features/pipelines/application/pipelines_controller.dart';
 import 'package:karmashala_automations/pipelines.dart';
@@ -94,6 +97,23 @@ class _Runs extends PipelinesController {
       ),
     },
   );
+}
+
+/// Keeps what the tree's composers send, and sends it at once.
+class _SpyMessage extends OverviewQuickMessage {
+  _SpyMessage(super.ref);
+
+  final sent = <(String, String)>[];
+
+  @override
+  Future<QuickMessageSent> send(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) async {
+    sent.add((sessionId, text));
+    return QuickMessageSent(requestId: requestId ?? 'key-${sent.length}');
+  }
 }
 
 OverviewCard _card(
@@ -230,6 +250,22 @@ void main() {
       ).work.single.$2.single;
       expect(overviewDrawnOf(tree, {}).map((c) => c.id), ['p', 'c', 'g']);
       expect(overviewDrawnOf(tree, {'p'}).map((c) => c.id), ['p']);
+      // Any node folds: only what is below it goes.
+      expect(overviewDrawnOf(tree, {'c'}).map((c) => c.id), ['p', 'c']);
+    });
+
+    test('a fold says what it hides, and what of it needs you', () {
+      final below = [
+        _card('a', AgentState.ready, parent: 'p'),
+        _card('b', AgentState.needsYou, parent: 'p'),
+        _card('c', AgentState.working, parent: 'p'),
+      ];
+      expect(
+        overviewFoldedSummary(below),
+        '3 sub-sessions · 1 of 3 done · 1 needs you · 1 working',
+      );
+      expect(overviewFoldedLine(below), '3 sub-sessions · 1 needs you');
+      expect(overviewFoldedLine(below.take(1).toList()), '1 sub-session');
     });
 
     test('a family is summed up, its share done and what waits counted', () {
@@ -416,15 +452,22 @@ void main() {
       Size size = const Size(1440, 1400),
       double textScale = 1,
       bool pipeline = false,
+      bool? phone,
     }) => pumpMission(
       tester,
       fixture: _fixture(),
       prefsDir: dir,
       size: size,
-      phone: size.width < 600,
+      phone: phone ?? size.width < 600,
       textScale: textScale,
-      overrides: [if (pipeline) pipelinesProvider.overrideWith(_Runs.new)],
+      overrides: [
+        if (pipeline) pipelinesProvider.overrideWith(_Runs.new),
+        overviewQuickMessageProvider.overrideWith(_SpyMessage.new),
+      ],
     );
+
+    List<(String, String)> sent(ProviderContainer c) =>
+        (c.read(overviewQuickMessageProvider) as _SpyMessage).sent;
 
     Future<void> reveal(
       WidgetTester tester,
@@ -603,6 +646,133 @@ void main() {
       await unmountMission(tester);
     });
 
+    Finder knob(String id) => find.byKey(ValueKey('overview-tree-knob:$id'));
+
+    testWidgets('a knob on the stem folds the family to one strip that '
+        'still counts what needs you, and Show unfolds it', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final c = await pump(tester);
+      await reveal(tester, knob('ks-r32'));
+      expect(
+        tester.getSemantics(knob('ks-r32')),
+        isSemantics(
+          label: 'Fold 7 sub-sessions',
+          isButton: true,
+          isExpanded: true,
+        ),
+      );
+      SessionAvatar root() => tester.widget<SessionAvatar>(
+        find.byWidgetPredicate(
+          (w) => w is SessionAvatar && w.card.id == 'ks-r32',
+        ),
+      );
+      final ring = (root().progress, root().waiting);
+      await tester.tap(knob('ks-r32'));
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), {'ks-r32'});
+      expect(pill('ks-r32-sub0'), findsNothing);
+      final strip = find.byKey(const ValueKey('overview-tree-strip:ks-r32'));
+      expect(strip, findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('overview-tree-folded-summary:ks-r32')),
+            )
+            .data,
+        '7 sub-sessions · 3 of 7 done · 1 needs you · 3 working',
+      );
+      expect(
+        find.descendant(of: strip, matching: find.text('Show')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: strip, matching: find.text('+3')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSemantics(knob('ks-r32')),
+        isSemantics(label: 'Show 7 sub-sessions', isExpanded: false),
+      );
+      // A fold hides; the ring and the count still hold what it hides.
+      expect((root().progress, root().waiting), ring);
+      expect(root().waiting, 1);
+      await tester.tap(strip);
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), isEmpty);
+      expect(pill('ks-r32-sub0'), findsOneWidget);
+      semantics.dispose();
+      await unmountMission(tester);
+    });
+
+    testWidgets('an inner node folds: its children go, and its pill says '
+        'what it hides', (tester) async {
+      final c = await pump(tester);
+      await reveal(tester, pill('ks-r32-sub0-a'));
+      await reveal(tester, knob('ks-r32-sub0'));
+      await tester.tap(knob('ks-r32-sub0'));
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), {'ks-r32-sub0'});
+      expect(pill('ks-r32-sub0-a'), findsNothing);
+      expect(pill('ks-r32-sub0'), findsOneWidget);
+      expect(pill('ks-r32-sub2'), findsOneWidget, reason: 'siblings stay');
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('overview-tree-folded-line:ks-r32-sub0'),
+              ),
+            )
+            .data,
+        '1 sub-session',
+      );
+      await tester.tap(knob('ks-r32-sub0'));
+      await settleMission(tester);
+      expect(pill('ks-r32-sub0-a'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('overview-tree-folded-line:ks-r32-sub0')),
+        findsNothing,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('a fold that hides a picked node takes it out of the batch '
+        'and of the keys\' walk', (tester) async {
+      final c = await pump(tester);
+      final bar = find.byKey(const ValueKey('overview-batch-bar'));
+      c.read(overviewSelectionProvider.notifier).toggle('ks-r32-sub0-a');
+      await settleMission(tester);
+      expect(bar, findsOneWidget);
+      List<String> walked() => [
+        for (final card in overviewSectionsOf(
+          c.read(overviewBoardProvider),
+          waitingSince: (_) => null,
+          folded: c.read(overviewFoldedParentsProvider),
+        ).work)
+          card.id,
+      ];
+      expect(walked(), contains('ks-r32-sub0-a'));
+
+      c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32-sub0');
+      await settleMission(tester);
+      expect(bar, findsNothing);
+      expect(walked(), isNot(contains('ks-r32-sub0-a')));
+      expect(walked(), contains('ks-r32-sub0'));
+
+      c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32-sub0');
+      await settleMission(tester);
+      expect(bar, findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('under a thumb a knob is a thumb\'s target', (tester) async {
+      await pump(tester, size: const Size(390, 1400));
+      await reveal(tester, knob('ks-r32-sub0'));
+      final size = tester.getSize(knob('ks-r32-sub0'));
+      expect(size.width, greaterThanOrEqualTo(Touch.target));
+      expect(size.height, greaterThanOrEqualTo(Touch.target));
+      await unmountMission(tester);
+    });
+
     testWidgets('the batch bar follows a fold: a picked child folded away '
         'leaves it, and comes back with the unfold', (tester) async {
       final c = await pump(tester);
@@ -660,6 +830,220 @@ void main() {
       await mouse.moveTo(Offset.zero);
       await settleMission(tester);
       expect(avatarOf('ks-r32-sub0').glow, isFalse);
+      await unmountMission(tester);
+    });
+
+    testWidgets('the pick box takes the avatar\'s face under a pointer and '
+        'picks; Open chat over the state opens the chat', (tester) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      final box = find.byKey(const ValueKey('overview-tree-select:$id'));
+      final chat = find.byKey(const ValueKey('overview-tree-chat:$id'));
+      expect(box, findsNothing);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(pill(id)));
+      await settleMission(tester);
+      final avatar = tester.getRect(
+        find.byKey(const ValueKey('session-avatar:$id')),
+      );
+      expect(avatar.contains(tester.getCenter(box)), isTrue);
+      expect(avatar.size, const Size.square(Chrome.subSessionAvatar));
+      // Over the box itself, the pill is still hovered.
+      await mouse.moveTo(tester.getCenter(box));
+      await settleMission(tester);
+      await tester.tap(box);
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).contains(id), isTrue);
+      expect(detail(id), findsNothing, reason: 'picking is not opening');
+      await tester.tap(box);
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
+
+      await mouse.moveTo(tester.getCenter(pill(id)));
+      await settleMission(tester);
+      await tester.tap(chat);
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, id);
+      await mouse.moveTo(Offset.zero);
+      await unmountMission(tester);
+    });
+
+    testWidgets('under a thumb the box shows only while picking, and no '
+        'hover actions', (tester) async {
+      final c = await pump(tester, size: const Size(390, 1400));
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      final box = find.byKey(const ValueKey('overview-tree-select:$id'));
+      expect(box, findsNothing);
+      expect(
+        find.byKey(const ValueKey('overview-tree-chat:$id')),
+        findsNothing,
+      );
+      await tester.longPress(pill(id));
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).contains(id), isTrue);
+      expect(box, findsOneWidget);
+      expect(tester.widget<Checkbox>(box).value, isTrue);
+      await unmountMission(tester);
+    });
+
+    Finder composerIn(Finder scope, String id) => find.descendant(
+      of: scope,
+      matching: find.byKey(ValueKey('overview-composer:$id')),
+    );
+
+    testWidgets('an opened sub-session takes a message in its detail; Enter '
+        'sends it and leaves the detail open', (tester) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      await tester.tap(pill(id));
+      await settleMission(tester);
+      final field = composerIn(detail(id), id);
+      expect(field, findsOneWidget);
+      // Above its actions.
+      expect(
+        tester.getRect(field).bottom,
+        lessThan(
+          tester
+              .getRect(find.byKey(const ValueKey('overview-tree-open:$id')))
+              .top,
+        ),
+      );
+      await tester.tap(field);
+      await tester.enterText(field, 'Commit it');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(sent(c), [(id, 'Commit it')]);
+      expect(detail(id), findsOneWidget, reason: 'Enter is the composer\'s');
+      await unmountMission(tester);
+    });
+
+    testWidgets('the hover\'s Message opens one composer under the pill; a '
+        'send closes it and the pill says it went', (tester) async {
+      final c = await pump(tester);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      Finder composer(String id) =>
+          find.byKey(ValueKey('overview-tree-composer:$id'));
+      Future<void> message(String id) async {
+        await reveal(tester, pill(id));
+        await mouse.moveTo(tester.getCenter(pill(id)));
+        await settleMission(tester);
+        await tester.tap(find.byKey(ValueKey('overview-tree-message:$id')));
+        await settleMission(tester);
+      }
+
+      await message('ks-r32-sub2');
+      expect(composer('ks-r32-sub2'), findsOneWidget);
+      expect(detail('ks-r32-sub2'), findsNothing);
+      // One composer in a family at a time.
+      await message('ks-r32-sub3');
+      expect(composer('ks-r32-sub3'), findsOneWidget);
+      expect(composer('ks-r32-sub2'), findsNothing);
+      await mouse.moveTo(Offset.zero);
+      await settleMission(tester);
+
+      // It takes the keys as it opens.
+      final field = composerIn(composer('ks-r32-sub3'), 'ks-r32-sub3');
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+      await tester.enterText(field, 'Open a draft PR');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(sent(c), [('ks-r32-sub3', 'Open a draft PR')]);
+      expect(composer('ks-r32-sub3'), findsNothing);
+      final went = find.byKey(const ValueKey('overview-tree-sent:ks-r32-sub3'));
+      expect(
+        find.descendant(of: went, matching: find.text('Sent')),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('Esc closes the pill\'s composer and sends nothing', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(pill(id)));
+      await settleMission(tester);
+      await tester.tap(find.byKey(const ValueKey('overview-tree-message:$id')));
+      await settleMission(tester);
+      final composer = find.byKey(const ValueKey('overview-tree-composer:$id'));
+      await tester.enterText(composerIn(composer, id), 'half a thought');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settleMission(tester);
+      expect(composer, findsNothing);
+      expect(sent(c), isEmpty);
+      await mouse.moveTo(Offset.zero);
+      await unmountMission(tester);
+    });
+
+    testWidgets('the parent card has its own composer, a family or alone', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      for (final id in ['ks-r32', 'ks-release']) {
+        final family = find.byKey(ValueKey('overview-family:$id'));
+        await reveal(tester, family);
+        expect(
+          composerIn(find.byKey(ValueKey('overview-card:$id')), id),
+          findsOneWidget,
+          reason: id,
+        );
+      }
+      final field = composerIn(
+        find.byKey(const ValueKey('overview-card:ks-release')),
+        'ks-release',
+      );
+      await tester.tap(field);
+      await tester.enterText(field, 'Ship it');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(sent(c), [('ks-release', 'Ship it')]);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('typing in a composer leaves J, K and Enter to it', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      String? selected() => c.read(overviewFocusProvider).selected;
+      // The board's keys work while nothing types.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await settleMission(tester);
+      final first = selected();
+      expect(first, isNotNull);
+
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      await tester.tap(pill(id));
+      await settleMission(tester);
+      final field = composerIn(detail(id), id);
+      await tester.tap(field);
+      await settleMission(tester);
+      final now = selected();
+      for (final key in [
+        LogicalKeyboardKey.keyJ,
+        LogicalKeyboardKey.keyK,
+        LogicalKeyboardKey.enter,
+      ]) {
+        await tester.sendKeyEvent(key);
+        await settleMission(tester);
+      }
+      expect(selected(), now);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(detail(id), findsOneWidget);
+      expect(sent(c), isEmpty, reason: 'nothing typed, nothing sent');
       await unmountMission(tester);
     });
 
@@ -758,6 +1142,72 @@ void main() {
 
     for (final width in const [360.0, 1440.0]) {
       for (final scale in const [1.0, 1.6]) {
+        testWidgets('${width.toInt()} px at ${scale}x: a pointer over a pill '
+            'leaves its size and its title where they were', (tester) async {
+          await pump(
+            tester,
+            size: Size(width, 900),
+            textScale: scale,
+            phone: false,
+          );
+          const id = 'ks-r32-sub0';
+          await reveal(tester, pill(id));
+          final title = find.descendant(
+            of: pill(id),
+            matching: find.byKey(const ValueKey('overview-card-title:$id')),
+          );
+          // The pill slides as a whole on hover; the title within it stays.
+          (Size, Offset) measure() => (
+            tester.getSize(pill(id)),
+            tester.getTopLeft(title) - tester.getTopLeft(pill(id)),
+          );
+          final rest = measure();
+          final mouse = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          addTearDown(mouse.removePointer);
+          await mouse.addPointer(location: Offset.zero);
+          await mouse.moveTo(tester.getCenter(pill(id)));
+          await settleMission(tester);
+          expect(measure(), rest, reason: 'hovered');
+          // No box in the title row: it takes the avatar's face.
+          expect(
+            find.descendant(of: pill(id), matching: find.byType(Checkbox)),
+            findsNothing,
+          );
+          await mouse.moveTo(Offset.zero);
+          await settleMission(tester);
+          expect(measure(), rest, reason: 'after hover');
+          expect(tester.takeException(), isNull);
+          await unmountMission(tester);
+        });
+
+        testWidgets('${width.toInt()} px at ${scale}x: folded at a branch '
+            'and at the root, the tree fits', (tester) async {
+          final c = await pump(
+            tester,
+            size: Size(width, 900),
+            textScale: scale,
+          );
+          await reveal(tester, knob('ks-r32-sub0'));
+          await tester.tap(knob('ks-r32-sub0'));
+          await settleMission(tester);
+          expect(
+            find.byKey(const ValueKey('overview-tree-folded-line:ks-r32-sub0')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32');
+          await settleMission(tester);
+          final strip = find.byKey(
+            const ValueKey('overview-tree-strip:ks-r32'),
+          );
+          await reveal(tester, strip);
+          expect(strip, findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await unmountMission(tester);
+        });
+
         testWidgets('${width.toInt()} px at ${scale}x: the tree fits, opened '
             'and nested', (tester) async {
           await pump(tester, size: Size(width, 900), textScale: scale);
@@ -765,6 +1215,10 @@ void main() {
           await tester.tap(pill('ks-r32-sub0-a'));
           await settleMission(tester);
           expect(detail('ks-r32-sub0-a'), findsOneWidget);
+          expect(
+            composerIn(detail('ks-r32-sub0-a'), 'ks-r32-sub0-a'),
+            findsOneWidget,
+          );
           expect(tester.takeException(), isNull);
           await unmountMission(tester);
         });
