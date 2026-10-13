@@ -37,11 +37,16 @@ typedef OverviewForest = ({
   Set<String> placed,
 });
 
-/// [board] as families. A tree is rooted at a session at work, ready, or
-/// waiting only on its sub-sessions; a sub-session in the same lane branches
-/// off its parent whatever its own state, so a family is never split. A
-/// sub-session whose parent is elsewhere — another lane, waiting on the
-/// owner itself, or ended — is a root of its own.
+/// [board] as families. A tree is rooted at the topmost session in view of a
+/// family: one at work, ready, or waiting on its sub-sessions starts one, and
+/// a parent in the same lane heads its sub-sessions' family whatever its own
+/// state — stopped, ended or waiting on the owner — so a family is never
+/// split. A sub-session branches off its parent whatever its own state. A
+/// family with a member at work or waiting on the owner is with its lane's
+/// work, most urgent family first; the rest are ready to close, newest root
+/// first. A session alone that has ended stays on no tree; a sub-session
+/// whose parent is in another lane, or not on the board, is a root of its
+/// own.
 OverviewForest overviewForestOf(OverviewBoard board) {
   final byId = <String, OverviewCard>{};
   final laneOf = <String, String>{};
@@ -67,15 +72,28 @@ OverviewForest overviewForestOf(OverviewBoard board) {
     for (final card in byId.values)
       if (roots(card)) card.id,
   };
-  String? parentOf(OverviewCard card) {
+  String? linkOf(OverviewCard card) {
     final parent = card.parentId;
     return parent != null &&
             parent != card.id &&
-            members.contains(parent) &&
             laneOf[parent] == laneOf[card.id]
         ? parent
         : null;
   }
+
+  // A parent heads its family whatever its own state: one stopped, ended or
+  // waiting on the owner keeps its sub-sessions under it.
+  for (final id in members.toList()) {
+    for (
+      var up = linkOf(byId[id]!);
+      up != null && members.add(up);
+      up = linkOf(byId[up]!)
+    ) {}
+  }
+  String? parentOf(OverviewCard card) => switch (linkOf(card)) {
+    final parent? when members.contains(parent) => parent,
+    _ => null,
+  };
 
   // What waits on the owner or has ended joins a family, never starts one.
   for (var grew = true; grew;) {
@@ -104,36 +122,58 @@ OverviewForest overviewForestOf(OverviewBoard board) {
     ]);
   }
 
-  bool isRoot(OverviewCard card) =>
-      members.contains(card.id) && parentOf(card) == null;
-  final work = <(OverviewLane, List<OverviewTreeNode>)>[];
+  bool atWork(OverviewTreeNode tree) => tree.drawn.any(
+    (c) => c.column == BoardColumn.needsYou || c.column == BoardColumn.working,
+  );
+  int urgencyOf(OverviewTreeNode tree) => tree.drawn
+      .map((c) => overviewUrgency(c.state))
+      .reduce((a, b) => a < b ? a : b);
+  final workIn = <String, List<OverviewTreeNode>>{};
+  final ready = <OverviewTreeNode>[];
+  void file(OverviewTreeNode tree) => atWork(tree)
+      ? (workIn[laneOf[tree.card.id]!] ??= []).add(tree)
+      : ready.add(tree);
   for (final lane in board.lanes) {
-    final trees = [
-      for (final card in byUrgency([
-        ...lane.cards(BoardColumn.needsYou).where((c) => c.heldBySubSessions),
-        ...lane.cards(BoardColumn.working),
-      ]))
-        if (isRoot(card) && laneOf[card.id] == lane.key) grow(card),
-    ];
-    if (trees.isNotEmpty) work.add((lane, trees));
-  }
-  final readyRoots = [
-    for (final lane in board.lanes)
-      for (final card in lane.cards(BoardColumn.ready))
-        if (isRoot(card) && laneOf[card.id] == lane.key) card,
-  ]..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt));
-  final ready = [for (final card in readyRoots) grow(card)];
-  // A cycle of parents leaves its sessions on no tree: each stands alone.
-  for (final card in byId.values) {
-    if (!members.contains(card.id) || placed.contains(card.id)) continue;
-    final tree = grow(card);
-    if (card.column == BoardColumn.ready) {
-      ready.add(tree);
-    } else if (work.indexWhere((g) => g.$1.key == laneOf[card.id]) case final at
-        when at >= 0) {
-      work[at].$2.add(tree);
+    for (final card in [
+      ...lane.cards(BoardColumn.needsYou),
+      ...lane.cards(BoardColumn.working),
+      ...lane.cards(BoardColumn.ready),
+      ...lane.doneToday,
+      ...lane.doneOlder,
+    ]) {
+      if (!members.contains(card.id) ||
+          parentOf(card) != null ||
+          laneOf[card.id] != lane.key ||
+          placed.contains(card.id)) {
+        continue;
+      }
+      file(grow(card));
     }
   }
+  // A cycle of parents leaves its sessions on no tree: each stands alone.
+  for (final card in byId.values) {
+    if (members.contains(card.id) && !placed.contains(card.id)) {
+      file(grow(card));
+    }
+  }
+  final work = <(OverviewLane, List<OverviewTreeNode>)>[
+    for (final lane in board.lanes)
+      if (workIn[lane.key] case final trees?)
+        (
+          lane,
+          [
+            for (final (_, tree)
+                in (trees.indexed.toList()..sort((a, b) {
+                  final rank = urgencyOf(a.$2).compareTo(urgencyOf(b.$2));
+                  return rank != 0 ? rank : a.$1.compareTo(b.$1);
+                })))
+              tree,
+          ],
+        ),
+  ];
+  ready.sort(
+    (a, b) => b.card.entry.activityAt.compareTo(a.card.entry.activityAt),
+  );
   return (work: work, ready: ready, placed: placed);
 }
 
