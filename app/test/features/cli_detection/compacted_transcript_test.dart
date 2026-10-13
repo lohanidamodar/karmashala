@@ -209,13 +209,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('COMPACTED'), findsOneWidget);
-    expect(find.textContaining('1 earlier message'), findsOneWidget);
     // The pre-compaction turn is not drawn again above it.
     expect(find.text('do the thing'), findsNothing);
-    // The summary is folded under the notice until it is opened.
-    expect(find.text('the summary of it'), findsNothing);
-    await tester.tap(find.text('Summary'));
-    await tester.pumpAndSettle();
-    expect(find.text('the summary of it'), findsOneWidget);
+    // The summary is the row's body, shown at once: not the notice's
+    // explanation, and not folded behind a toggle.
+    expect(
+      find.textContaining('the summary of it', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('earlier message', findRichText: true),
+      findsNothing,
+    );
+    expect(find.text('Summary'), findsNothing);
   });
 }

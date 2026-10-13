@@ -88,6 +88,11 @@ class _ToolMessageCardState extends State<_ToolMessageCard> {
           _ => 'Agent',
         };
     final shown = toolDisplayName(eyebrow);
+    // A compaction's summary *is* the row: what the agent kept, in its words.
+    // The notice's own explanation stands in only when no summary was kept.
+    final summary = message.role == kCompactionNoticeRole
+        ? message.detail
+        : null;
 
     return TranscriptTurnFrame(
       fill: theme.brightness == Brightness.dark
@@ -129,7 +134,7 @@ class _ToolMessageCardState extends State<_ToolMessageCard> {
                   ),
             actions: _messageActions(
               widget.onSaveNote,
-              activity?.output ?? message.text,
+              activity?.output ?? summary ?? message.text,
             ),
           ),
           const SizedBox(height: Insets.xs),
@@ -143,10 +148,18 @@ class _ToolMessageCardState extends State<_ToolMessageCard> {
               resolveHostPath: widget.resolveHostPath,
               onPathTap: widget.onPathTap,
             )
+          else if (summary != null)
+            MarkdownMessage(
+              summary,
+              onPathTap: widget.onPathTap,
+              selectable: false,
+              foldLong: true,
+            )
           else
             Text(message.text, style: MonoStyles.label.copyWith(height: 1.35)),
-          if (message.detail case final folded?)
-            _SessionNote(text: folded, label: 'Summary'),
+          if (summary == null)
+            if (message.detail case final folded?)
+              _SessionNote(text: folded, label: 'Summary'),
           ?detail,
         ],
       ),
