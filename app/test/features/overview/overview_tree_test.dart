@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/overview/application/overview_tree.dart'
 import 'package:karmashala/src/features/overview/presentation/overview_end_button.dart'
     show OverviewHoverScope;
 import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart'
-    show overviewSectionsOf;
+    show OverviewSections, overviewSectionsOf;
 import 'package:karmashala/src/features/overview/presentation/session_avatar.dart';
 import 'package:karmashala/src/features/pipelines/application/pipelines_controller.dart';
 import 'package:karmashala_automations/pipelines.dart';
@@ -238,6 +238,129 @@ void main() {
       );
     });
 
+    OverviewSections sectionsOf(OverviewBoard board) =>
+        overviewSectionsOf(board, waitingSince: (_) => null);
+
+    test('a parent that ended keeps its working children under it, drawn '
+        'once', () {
+      final board = _board({
+        'ks': [
+          _card('p', AgentState.ended),
+          _card('c', AgentState.working, parent: 'p'),
+          _card('d', AgentState.ended, parent: 'p'),
+        ],
+      });
+      final forest = overviewForestOf(board);
+      expect(forest.work.single.$2.map(_shape), ['p(c d)']);
+      expect(forest.ready, isEmpty);
+      expect(forest.placed, {'p', 'c', 'd'});
+      final sections = sectionsOf(board);
+      expect(sections.work.map((c) => c.id), ['p', 'c', 'd']);
+      expect(sections.done, isEmpty);
+    });
+
+    test('a parent in Done keeps its ready children under it, on the ready '
+        'trees', () {
+      final board = _board({
+        'ks': [
+          _card('p', AgentState.ended),
+          _card('c', AgentState.ready, parent: 'p'),
+          _card('g', AgentState.ended, parent: 'c'),
+        ],
+      });
+      final forest = overviewForestOf(board);
+      expect(forest.work, isEmpty);
+      expect(forest.ready.map(_shape), ['p(c(g))']);
+      final sections = sectionsOf(board);
+      expect(sections.ready.map((c) => c.id), ['p', 'c', 'g']);
+      expect(sections.done, isEmpty);
+      // Its ring still covers the family; it waits on nobody.
+      expect(overviewDoneShare(forest.ready.single), 1);
+      expect(overviewWaitingIn(forest.ready.single), 0);
+    });
+
+    test('a parent that needs the owner heads its working children; it waits '
+        'in the queue, and its count is its own', () {
+      final board = _board({
+        'ks': [
+          _card('p', AgentState.needsYou),
+          _card('c', AgentState.working, parent: 'p'),
+          _card('r', AgentState.ready, parent: 'p'),
+        ],
+      });
+      final forest = overviewForestOf(board);
+      final tree = forest.work.single.$2.single;
+      expect(_shape(tree), 'p(c r)');
+      expect(forest.ready, isEmpty);
+      expect(overviewWaitingIn(tree), 1);
+      expect(overviewDoneShare(tree), 0.5);
+      final sections = sectionsOf(board);
+      expect(sections.queue.map((c) => c.id), ['p']);
+      expect(sections.work.map((c) => c.id), ['c', 'r']);
+    });
+
+    test('a failed parent heads a family that is otherwise done, with the '
+        'work, most urgent family first', () {
+      final board = _board({
+        'ks': [
+          _card('w', AgentState.working),
+          _card('f', AgentState.failed),
+          _card('fc', AgentState.ready, parent: 'f'),
+        ],
+      });
+      final forest = overviewForestOf(board);
+      expect(forest.work.single.$2.map(_shape), ['f(fc)', 'w']);
+      expect(forest.ready, isEmpty);
+    });
+
+    test('a lone stopped session, and a family all ended, stay in Done', () {
+      final board = _board({
+        'ks': [
+          _card('solo', AgentState.ended),
+          _card('old', AgentState.ended),
+          _card('oldc', AgentState.ended, parent: 'old'),
+          _card('w', AgentState.working),
+        ],
+      });
+      final forest = overviewForestOf(board);
+      expect(forest.placed, {'w'});
+      expect(
+        sectionsOf(board).done.map((c) => c.id),
+        unorderedEquals(['solo', 'old', 'oldc']),
+      );
+    });
+
+    test('a stopped parent in another lane keeps today\'s rule: its child is '
+        'a root in its own lane, the parent stays in Done', () {
+      final board = _board({
+        'ks': [_card('p', AgentState.ended)],
+        'beej': [_card('c', AgentState.working, parent: 'p')],
+      });
+      final forest = overviewForestOf(board);
+      expect(
+        {for (final (lane, trees) in forest.work) lane.key: trees.map(_shape)},
+        {
+          'beej': ['c'],
+        },
+      );
+      expect(forest.placed, {'c'});
+      expect(sectionsOf(board).done.map((c) => c.id), ['p']);
+    });
+
+    test('a cycle of parents through a stopped session is drawn, once', () {
+      final board = _board({
+        'ks': [
+          _card('a', AgentState.ended, parent: 'b'),
+          _card('b', AgentState.working, parent: 'a'),
+        ],
+      });
+      final forest = overviewForestOf(board);
+      expect(forest.placed, {'a', 'b'});
+      expect([for (final (_, trees) in forest.work) ...trees].map(_shape), [
+        'b(a)',
+      ]);
+    });
+
     test('a fold keeps only the root drawn', () {
       final tree = overviewForestOf(
         _board({
@@ -453,9 +576,10 @@ void main() {
       double textScale = 1,
       bool pipeline = false,
       bool? phone,
+      MissionFixture? fixture,
     }) => pumpMission(
       tester,
-      fixture: _fixture(),
+      fixture: fixture ?? _fixture(),
       prefsDir: dir,
       size: size,
       phone: phone ?? size.width < 600,
@@ -1223,6 +1347,62 @@ void main() {
           await unmountMission(tester);
         });
       }
+    }
+
+    for (final (width, scale) in const [(360.0, 1.6), (1440.0, 1.0)]) {
+      testWidgets('${width.toInt()} px at ${scale}x: a parent that ended '
+          'heads its ready family, its chip saying Ended', (tester) async {
+        await pump(
+          tester,
+          size: Size(width, 900),
+          textScale: scale,
+          fixture: MissionFixture(
+            sessions: [
+              _s('ks-wrap', 'Wrapped up', AgentState.ended),
+              _s(
+                'ks-wrap-c',
+                'Its helper',
+                AgentState.ready,
+                parent: 'ks-wrap',
+              ),
+              _s('ks-lone', 'Lone stopped', AgentState.ended),
+            ],
+          ),
+        );
+        final card = find.byKey(const ValueKey('overview-ready-card:ks-wrap'));
+        await reveal(tester, card);
+        expect(card, findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('overview-family:ks-wrap')),
+            matching: find.byKey(
+              const ValueKey('overview-tree-pill:ks-wrap-c'),
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: card,
+            matching: find.textContaining(RegExp(r'^Ended')),
+          ),
+          findsOneWidget,
+        );
+        // Drawn once: not in Done as well. The lone one stays there.
+        await reveal(tester, find.byKey(const ValueKey('overview-done-fold')));
+        await tester.tap(find.byKey(const ValueKey('overview-done-fold')));
+        await settleMission(tester);
+        expect(
+          find.byKey(const ValueKey('overview-done:ks-wrap')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('overview-done:ks-lone')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      });
     }
   });
 }

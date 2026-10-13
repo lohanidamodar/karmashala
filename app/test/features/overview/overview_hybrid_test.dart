@@ -1139,6 +1139,16 @@ void main() {
           },
         ),
       );
+      // Its parent ended, and still heads it: it is a pill on the parent's
+      // tree, handing back from its detail.
+      final pill = find.byKey(
+        const ValueKey('overview-tree-pill:ks-r29-child'),
+      );
+      await tester.scrollUntilVisible(pill, 300, scrollable: hybridList);
+      await tester.ensureVisible(pill);
+      await settleMission(tester);
+      await tester.tap(pill);
+      await settleMission(tester);
       final button = find.byKey(
         const ValueKey('overview-hand-back:ks-r29-child'),
       );
