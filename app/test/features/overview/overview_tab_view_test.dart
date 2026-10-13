@@ -946,11 +946,12 @@ void main() {
       expect(byKey('overview-peek:busy'), findsNothing);
     });
 
-    testBoard('overlay, below 1280 px: the board beside it closes it', (
+    testBoard('docked on a laptop too: the board beside it closes it', (
       tester,
     ) async {
       final c = await peekBusy(tester, size: const Size(1100, 900));
-      expect(byKey('overview-peek-overlay'), findsOneWidget);
+      expect(byKey('overview-peek-overlay'), findsNothing);
+      expect(byKey('overview-peek-resizer'), findsOneWidget);
       await tapBoardSpace(tester);
       expect(c.read(overviewFocusProvider).peeked, isNull);
     });

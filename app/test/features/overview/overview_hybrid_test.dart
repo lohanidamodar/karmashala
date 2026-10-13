@@ -722,43 +722,43 @@ void main() {
       await unmountMission(tester);
     });
 
-    for (final (name, size, mode) in [
-      ('1440', const Size(1440, 900), 'docked'),
-      ('1100', const Size(1100, 800), 'overlay'),
+    // Docked at both: the peek takes its own room and the board reflows
+    // beside it, never covered (owner, 2026-10-13; the overlay is gone).
+    for (final (name, size) in [
+      ('1440', const Size(1440, 900)),
+      ('1100', const Size(1100, 800)),
     ]) {
-      testWidgets('$name px: the peek is $mode', (tester) async {
+      testWidgets('$name px: the peek is docked beside the board', (
+        tester,
+      ) async {
         await pump(tester, size: size);
-        final workAt = tester.getTopLeft(
-          find.byKey(const ValueKey('overview-work')),
-        );
         await peek(tester, 'Round 21 · ACP sessions');
-        final overlay = find.byKey(const ValueKey('overview-peek-overlay'));
-        if (mode == 'overlay') {
-          expect(overlay, findsOneWidget);
-          // The board keeps its columns under it.
-          expect(
-            tester.getTopLeft(find.byKey(const ValueKey('overview-work'))),
-            workAt,
-          );
-        } else {
-          expect(overlay, findsNothing);
-          expect(
-            find.byKey(const ValueKey('overview-peek-resizer')),
-            findsOneWidget,
-          );
-          final before = tester.getSize(
-            find.byKey(const ValueKey('overview-peek')),
-          );
-          await tester.drag(
-            find.byKey(const ValueKey('overview-peek-resizer')),
-            const Offset(-100, 0),
-          );
-          await settleMission(tester);
-          expect(
-            tester.getSize(find.byKey(const ValueKey('overview-peek'))).width,
-            greaterThan(before.width),
-          );
-        }
+        expect(
+          find.byKey(const ValueKey('overview-peek-overlay')),
+          findsNothing,
+        );
+        expect(
+          tester.getRect(find.byKey(const ValueKey('overview-work'))).right,
+          lessThanOrEqualTo(
+            tester.getRect(find.byKey(const ValueKey('overview-peek'))).left,
+          ),
+        );
+        expect(
+          find.byKey(const ValueKey('overview-peek-resizer')),
+          findsOneWidget,
+        );
+        final before = tester.getSize(
+          find.byKey(const ValueKey('overview-peek')),
+        );
+        await tester.drag(
+          find.byKey(const ValueKey('overview-peek-resizer')),
+          const Offset(-100, 0),
+        );
+        await settleMission(tester);
+        expect(
+          tester.getSize(find.byKey(const ValueKey('overview-peek'))).width,
+          greaterThan(before.width),
+        );
         expect(tester.takeException(), isNull);
         await unmountMission(tester);
       });

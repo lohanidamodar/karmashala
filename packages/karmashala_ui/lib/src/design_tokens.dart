@@ -892,6 +892,21 @@ class Chrome {
   /// The narrowest cell a family takes on the dashboard's grid, at 1x text.
   static const familyCellMin = 560.0;
 
+  /// The dashboard's chat beside its board: it opens [peekWidth] wide and a
+  /// drag keeps it between [peekMinWidth] and [peekMaxWidth].
+  static const peekWidth = 520.0;
+  static const peekMinWidth = 360.0;
+  static const peekMaxWidth = 820.0;
+
+  /// The least the dashboard's board keeps beside its chat, at 1x text: a
+  /// small phone's width, where its trees still read. Below this plus
+  /// [peekMinWidth] the chat opens as a full-screen page instead.
+  static const boardMinWidth = 320.0;
+
+  /// The board's room beside two chats side by side, so a pair never
+  /// squeezes it to [boardMinWidth].
+  static const boardBesidePairWidth = 720.0;
+
   /// The accent rule a turn's final answer hangs off in the transcript.
   static const answerRule = 2.0;
 

@@ -129,28 +129,38 @@ bool overviewTyping() =>
         ?.findAncestorWidgetOfExactType<EditableText>() !=
     null;
 
-/// The least width mission control keeps beside a docked peek.
-const double kOverviewBoardMinWidth = 720;
-
-/// From this width the peek docks beside the board, resizable; below it, it
-/// floats over the board so the cards keep their columns.
-const double kOverviewPeekDocksFrom = 1280;
+/// The least width the board keeps beside a peek, at 1x text.
+const double kOverviewBoardMinWidth = Chrome.boardMinWidth;
 
 /// The peek's width when it opens, and the bounds a drag keeps it in.
-const double kOverviewPeekWidth = 520;
-const double _peekMinWidth = 360;
-const double _peekMaxWidth = 820;
+const double kOverviewPeekWidth = Chrome.peekWidth;
+const double _peekMinWidth = Chrome.peekMinWidth;
+const double _peekMaxWidth = Chrome.peekMaxWidth;
+
+/// The docked peek's draggable edge.
+const double _resizerWidth = Insets.xs + Insets.hair;
 
 /// How the peek sits beside the board at a width.
-enum OverviewPeekMode { docked, overlay, sheet }
+enum OverviewPeekMode { docked, sheet }
 
-/// The peek's place at [width]: a full-screen sheet on a phone, over the
-/// board below [kOverviewPeekDocksFrom], docked from it.
-OverviewPeekMode overviewPeekModeAt(double width) =>
-    width < WidthClass.mediumMin
+/// The least board beside a peek under [textScaler]: its trees' words grow.
+double overviewBoardMinAt(TextScaler textScaler) =>
+    WidthClass.scaleBreakpoint(kOverviewBoardMinWidth, textScaler);
+
+/// The peek's place at [width]: docked beside the board in a room of its
+/// own wherever the board keeps [kOverviewBoardMinWidth] and the peek its
+/// least — the board reflowing in what is left, never covered (owner,
+/// 2026-10-13) — and a full-screen page below that, as on a phone.
+OverviewPeekMode overviewPeekModeAt(
+  double width, {
+  TextScaler textScaler = TextScaler.noScaling,
+}) =>
+    width <
+        math.max(
+          WidthClass.mediumMin,
+          overviewBoardMinAt(textScaler) + _resizerWidth + _peekMinWidth,
+        )
     ? OverviewPeekMode.sheet
-    : width < kOverviewPeekDocksFrom
-    ? OverviewPeekMode.overlay
     : OverviewPeekMode.docked;
 
 /// The Timeline, opening a bar's session as the Board does. Its log outlives
