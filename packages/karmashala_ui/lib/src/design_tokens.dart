@@ -879,6 +879,16 @@ class Chrome {
   /// The lines of the dashboard's tree: a stem and its rounded elbows.
   static const treeLine = 2.0;
 
+  /// The fold knob on a tree's stem; under a thumb its face is
+  /// [treeKnobTouch] and its tap area still `Touch.target`.
+  static const treeKnob = 22.0;
+  static const treeKnobTouch = 28.0;
+
+  /// The avatars stacked on a folded family's strip, and in a folded
+  /// branch's pill.
+  static const stackAvatar = 32.0;
+  static const miniAvatar = 22.0;
+
   /// The narrowest cell a family takes on the dashboard's grid, at 1x text.
   static const familyCellMin = 560.0;
 

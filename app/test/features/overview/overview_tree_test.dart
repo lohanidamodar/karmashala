@@ -16,6 +16,8 @@ import 'package:karmashala/src/features/overview/application/overview_providers.
 import 'package:karmashala/src/features/overview/application/overview_tree.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_end_button.dart'
     show OverviewHoverScope;
+import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart'
+    show overviewSectionsOf;
 import 'package:karmashala/src/features/overview/presentation/session_avatar.dart';
 import 'package:karmashala/src/features/pipelines/application/pipelines_controller.dart';
 import 'package:karmashala_automations/pipelines.dart';
@@ -230,6 +232,22 @@ void main() {
       ).work.single.$2.single;
       expect(overviewDrawnOf(tree, {}).map((c) => c.id), ['p', 'c', 'g']);
       expect(overviewDrawnOf(tree, {'p'}).map((c) => c.id), ['p']);
+      // Any node folds: only what is below it goes.
+      expect(overviewDrawnOf(tree, {'c'}).map((c) => c.id), ['p', 'c']);
+    });
+
+    test('a fold says what it hides, and what of it needs you', () {
+      final below = [
+        _card('a', AgentState.ready, parent: 'p'),
+        _card('b', AgentState.needsYou, parent: 'p'),
+        _card('c', AgentState.working, parent: 'p'),
+      ];
+      expect(
+        overviewFoldedSummary(below),
+        '3 sub-sessions · 1 of 3 done · 1 needs you · 1 working',
+      );
+      expect(overviewFoldedLine(below), '3 sub-sessions · 1 needs you');
+      expect(overviewFoldedLine(below.take(1).toList()), '1 sub-session');
     });
 
     test('a family is summed up, its share done and what waits counted', () {
@@ -604,6 +622,133 @@ void main() {
       await unmountMission(tester);
     });
 
+    Finder knob(String id) => find.byKey(ValueKey('overview-tree-knob:$id'));
+
+    testWidgets('a knob on the stem folds the family to one strip that '
+        'still counts what needs you, and Show unfolds it', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final c = await pump(tester);
+      await reveal(tester, knob('ks-r32'));
+      expect(
+        tester.getSemantics(knob('ks-r32')),
+        isSemantics(
+          label: 'Fold 7 sub-sessions',
+          isButton: true,
+          isExpanded: true,
+        ),
+      );
+      SessionAvatar root() => tester.widget<SessionAvatar>(
+        find.byWidgetPredicate(
+          (w) => w is SessionAvatar && w.card.id == 'ks-r32',
+        ),
+      );
+      final ring = (root().progress, root().waiting);
+      await tester.tap(knob('ks-r32'));
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), {'ks-r32'});
+      expect(pill('ks-r32-sub0'), findsNothing);
+      final strip = find.byKey(const ValueKey('overview-tree-strip:ks-r32'));
+      expect(strip, findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('overview-tree-folded-summary:ks-r32')),
+            )
+            .data,
+        '7 sub-sessions · 3 of 7 done · 1 needs you · 3 working',
+      );
+      expect(
+        find.descendant(of: strip, matching: find.text('Show')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: strip, matching: find.text('+3')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSemantics(knob('ks-r32')),
+        isSemantics(label: 'Show 7 sub-sessions', isExpanded: false),
+      );
+      // A fold hides; the ring and the count still hold what it hides.
+      expect((root().progress, root().waiting), ring);
+      expect(root().waiting, 1);
+      await tester.tap(strip);
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), isEmpty);
+      expect(pill('ks-r32-sub0'), findsOneWidget);
+      semantics.dispose();
+      await unmountMission(tester);
+    });
+
+    testWidgets('an inner node folds: its children go, and its pill says '
+        'what it hides', (tester) async {
+      final c = await pump(tester);
+      await reveal(tester, pill('ks-r32-sub0-a'));
+      await reveal(tester, knob('ks-r32-sub0'));
+      await tester.tap(knob('ks-r32-sub0'));
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), {'ks-r32-sub0'});
+      expect(pill('ks-r32-sub0-a'), findsNothing);
+      expect(pill('ks-r32-sub0'), findsOneWidget);
+      expect(pill('ks-r32-sub2'), findsOneWidget, reason: 'siblings stay');
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('overview-tree-folded-line:ks-r32-sub0'),
+              ),
+            )
+            .data,
+        '1 sub-session',
+      );
+      await tester.tap(knob('ks-r32-sub0'));
+      await settleMission(tester);
+      expect(pill('ks-r32-sub0-a'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('overview-tree-folded-line:ks-r32-sub0')),
+        findsNothing,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('a fold that hides a picked node takes it out of the batch '
+        'and of the keys\' walk', (tester) async {
+      final c = await pump(tester);
+      final bar = find.byKey(const ValueKey('overview-batch-bar'));
+      c.read(overviewSelectionProvider.notifier).toggle('ks-r32-sub0-a');
+      await settleMission(tester);
+      expect(bar, findsOneWidget);
+      List<String> walked() => [
+        for (final card in overviewSectionsOf(
+          c.read(overviewBoardProvider),
+          waitingSince: (_) => null,
+          folded: c.read(overviewFoldedParentsProvider),
+        ).work)
+          card.id,
+      ];
+      expect(walked(), contains('ks-r32-sub0-a'));
+
+      c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32-sub0');
+      await settleMission(tester);
+      expect(bar, findsNothing);
+      expect(walked(), isNot(contains('ks-r32-sub0-a')));
+      expect(walked(), contains('ks-r32-sub0'));
+
+      c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32-sub0');
+      await settleMission(tester);
+      expect(bar, findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('under a thumb a knob is a thumb\'s target', (tester) async {
+      await pump(tester, size: const Size(390, 1400));
+      await reveal(tester, knob('ks-r32-sub0'));
+      final size = tester.getSize(knob('ks-r32-sub0'));
+      expect(size.width, greaterThanOrEqualTo(Touch.target));
+      expect(size.height, greaterThanOrEqualTo(Touch.target));
+      await unmountMission(tester);
+    });
+
     testWidgets('the batch bar follows a fold: a picked child folded away '
         'leaves it, and comes back with the unfold', (tester) async {
       final c = await pump(tester);
@@ -852,6 +997,32 @@ void main() {
           await mouse.moveTo(Offset.zero);
           await settleMission(tester);
           expect(measure(), rest, reason: 'after hover');
+          expect(tester.takeException(), isNull);
+          await unmountMission(tester);
+        });
+
+        testWidgets('${width.toInt()} px at ${scale}x: folded at a branch '
+            'and at the root, the tree fits', (tester) async {
+          final c = await pump(
+            tester,
+            size: Size(width, 900),
+            textScale: scale,
+          );
+          await reveal(tester, knob('ks-r32-sub0'));
+          await tester.tap(knob('ks-r32-sub0'));
+          await settleMission(tester);
+          expect(
+            find.byKey(const ValueKey('overview-tree-folded-line:ks-r32-sub0')),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          c.read(overviewFoldedParentsProvider.notifier).toggle('ks-r32');
+          await settleMission(tester);
+          final strip = find.byKey(
+            const ValueKey('overview-tree-strip:ks-r32'),
+          );
+          await reveal(tester, strip);
+          expect(strip, findsOneWidget);
           expect(tester.takeException(), isNull);
           await unmountMission(tester);
         });

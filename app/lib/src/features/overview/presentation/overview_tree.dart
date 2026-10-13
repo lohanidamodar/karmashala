@@ -66,9 +66,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final root = widget.node.card;
-    final folded = ref.watch(
-      overviewFoldedParentsProvider.select((s) => s.contains(root.id)),
-    );
+    final folded = ref.watch(overviewFoldedParentsProvider);
     final line = sessionRingColor(
       context,
       root.state,
@@ -109,14 +107,15 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   Widget _subtree(
     OverviewTreeNode node, {
     required bool root,
-    required bool folded,
+    required Set<String> folded,
     required Color line,
     required Color surface,
   }) {
     final size = root ? _rootSize : _kidSize;
-    final kids = root && folded ? const <OverviewTreeNode>[] : node.children;
     final id = node.card.id;
-    final head = root
+    final below = node.descendants.toList();
+    final shut = below.isNotEmpty && folded.contains(id);
+    Widget head = root
         ? _rootHead(node, surface)
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,6 +128,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
                 open: _open.contains(id),
                 line: line,
                 halo: surface,
+                hidden: shut ? below : null,
                 onToggle: () => setState(
                   () => _open.contains(id) ? _open.remove(id) : _open.add(id),
                 ),
@@ -143,7 +143,33 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
                 ),
             ],
           );
-    if (kids.isEmpty) return head;
+    if (below.isNotEmpty) {
+      head = _withKnob(
+        head,
+        id: id,
+        size: size,
+        count: below.length,
+        shut: shut,
+      );
+    }
+    // A fold hides what is below; a family's root keeps a strip saying what.
+    final branches = <(Key?, Widget)>[
+      if (!shut)
+        for (final kid in node.children)
+          (
+            ValueKey('overview-tree-branch:${kid.card.id}'),
+            _subtree(
+              kid,
+              root: false,
+              folded: folded,
+              line: line,
+              surface: surface,
+            ),
+          )
+      else if (root)
+        (null, _FoldedStrip(rootId: id, below: below, height: _kidSize)),
+    ];
+    if (branches.isEmpty) return head;
     final stemAt = size / 2 - Chrome.treeLine / 2;
     final elbowAt = Insets.md + _kidSize / 2;
     return Column(
@@ -160,30 +186,55 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final (i, kid) in kids.indexed)
+              for (final (i, (key, branch)) in branches.indexed)
                 CustomPaint(
-                  key: ValueKey('overview-tree-branch:${kid.card.id}'),
+                  key: key,
                   painter: _ElbowPainter(
-                    last: i == kids.length - 1,
+                    last: i == branches.length - 1,
                     elbowAt: elbowAt,
                     reach: _elbow,
                     color: line,
                   ),
                   child: Padding(
                     padding: EdgeInsets.only(top: Insets.md, left: _elbow),
-                    child: _subtree(
-                      kid,
-                      root: false,
-                      folded: false,
-                      line: line,
-                      surface: surface,
-                    ),
+                    child: branch,
                   ),
                 ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  /// [head] with the fold knob on its stem, just under its avatar.
+  Widget _withKnob(
+    Widget head, {
+    required String id,
+    required double size,
+    required int count,
+    required bool shut,
+  }) {
+    final touch = UiDensity.of(context).isTouch;
+    final face = touch ? Chrome.treeKnobTouch : Chrome.treeKnob;
+    final box = touch ? Touch.target : face;
+    final centre = size + Insets.xxs + face / 2;
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: centre + box / 2),
+      child: Stack(
+        clipBehavior: Clip.none,
+        fit: StackFit.passthrough,
+        children: [
+          head,
+          Positioned(
+            left: size / 2 - box / 2,
+            top: centre - box / 2,
+            width: box,
+            height: box,
+            child: _FoldKnob(id: id, count: count, shut: shut, face: face),
+          ),
+        ],
+      ),
     );
   }
 
@@ -255,8 +306,7 @@ class OverviewFamilyFooter extends ConsumerWidget {
     final folded = ref.watch(
       overviewFoldedParentsProvider.select((s) => s.contains(root.id)),
     );
-    final n = below.length;
-    final count = '$n ${n == 1 ? 'sub-session' : 'sub-sessions'}';
+    final count = overviewSubSessionCount(below.length);
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: Insets.sm,
@@ -328,6 +378,7 @@ class _TreePill extends ConsumerStatefulWidget {
     required this.halo,
     required this.onToggle,
     required this.onOpenChat,
+    this.hidden,
     super.key,
   });
 
@@ -338,6 +389,9 @@ class _TreePill extends ConsumerStatefulWidget {
   final Color halo;
   final VoidCallback onToggle;
   final VoidCallback onOpenChat;
+
+  /// What its fold hides, said in place of its latest line.
+  final List<OverviewCard>? hidden;
 
   @override
   ConsumerState<_TreePill> createState() => _TreePillState();
@@ -491,7 +545,31 @@ class _TreePillState extends ConsumerState<_TreePill> {
                           ],
                         ),
                         if (narrow) chip,
-                        _LatestLine(card: card),
+                        if (widget.hidden case final hidden?)
+                          Row(
+                            children: [
+                              _AvatarStack(
+                                cards: hidden,
+                                size: Chrome.miniAvatar,
+                              ),
+                              const SizedBox(width: Insets.xs),
+                              Expanded(
+                                child: Text(
+                                  overviewFoldedLine(hidden),
+                                  key: ValueKey(
+                                    'overview-tree-folded-line:${card.id}',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          _LatestLine(card: card),
                       ],
                     );
                   },
@@ -646,6 +724,243 @@ class _HoverTail extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The round fold on a stem under an avatar: how many it hides while
+/// folded, a minus while open.
+class _FoldKnob extends ConsumerWidget {
+  const _FoldKnob({
+    required this.id,
+    required this.count,
+    required this.shut,
+    required this.face,
+  });
+
+  final String id;
+  final int count;
+  final bool shut;
+  final double face;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final what = overviewSubSessionCount(count);
+    final label = shut ? 'Show $what' : 'Fold $what';
+    return Semantics(
+      button: true,
+      expanded: !shut,
+      label: label,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        child: InkResponse(
+          key: ValueKey('overview-tree-knob:$id'),
+          onTap: () =>
+              ref.read(overviewFoldedParentsProvider.notifier).toggle(id),
+          radius: face / 2,
+          child: Center(
+            child: Container(
+              width: face,
+              height: face,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: scheme.surfaceContainerHigh,
+                border: Border.all(
+                  color: scheme.outlineVariant,
+                  width: Chrome.treeLine,
+                ),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  shut ? '$count' : '−',
+                  maxLines: 1,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A folded family's sub-sessions as one strip on the root's elbow: their
+/// avatars stacked, what they are, and Show. A pointer fans the stack out.
+class _FoldedStrip extends ConsumerStatefulWidget {
+  const _FoldedStrip({
+    required this.rootId,
+    required this.below,
+    required this.height,
+  });
+
+  final String rootId;
+  final List<OverviewCard> below;
+  final double height;
+
+  @override
+  ConsumerState<_FoldedStrip> createState() => _FoldedStripState();
+}
+
+class _FoldedStripState extends ConsumerState<_FoldedStrip> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final touch = UiDensity.of(context).isTouch;
+    final fanned = _hovered && !touch;
+    final summary = overviewFoldedSummary(widget.below);
+    return Semantics(
+      button: true,
+      expanded: false,
+      label: 'Show ${overviewSubSessionCount(widget.below.length)}',
+      value: summary,
+      excludeSemantics: true,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Material(
+          color: fanned ? scheme.surfaceContainer : scheme.surfaceContainerLow,
+          shape: StadiumBorder(
+            side: BorderSide(
+              color: fanned ? scheme.outline : scheme.outlineVariant,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            key: ValueKey('overview-tree-strip:${widget.rootId}'),
+            onTap: () => ref
+                .read(overviewFoldedParentsProvider.notifier)
+                .toggle(widget.rootId),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: touch && Touch.target > widget.height
+                    ? Touch.target
+                    : widget.height,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.xs,
+                  Insets.xs,
+                  Insets.md,
+                  Insets.xs,
+                ),
+                child: Row(
+                  children: [
+                    _AvatarStack(
+                      cards: widget.below,
+                      size: Chrome.stackAvatar,
+                      fanned: fanned,
+                    ),
+                    const SizedBox(width: Insets.sm),
+                    Expanded(
+                      child: Text(
+                        summary,
+                        key: ValueKey(
+                          'overview-tree-folded-summary:${widget.rootId}',
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Insets.sm),
+                    Text(
+                      'Show',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Up to four avatars overlapping, in their state rings, then "+N";
+/// [fanned] spreads them apart.
+class _AvatarStack extends StatelessWidget {
+  const _AvatarStack({
+    required this.cards,
+    required this.size,
+    this.fanned = false,
+  });
+
+  final List<OverviewCard> cards;
+  final double size;
+  final bool fanned;
+
+  static const _most = 4;
+
+  /// How much of each avatar the next one leaves showing, stacked.
+  static const _showing = 0.6;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final motion = Motion.of(context);
+    final shown = cards.take(_most).toList();
+    final rest = cards.length - shown.length;
+    final step = fanned ? size + Insets.xxs : size * _showing;
+    final faces = <Widget>[
+      for (final card in shown)
+        SessionAvatar(card: card, size: size, plain: true),
+      if (rest > 0)
+        Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(Insets.xxs),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: scheme.surfaceContainerHigh,
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('+$rest', style: theme.textTheme.labelSmall),
+          ),
+        ),
+    ];
+    return ExcludeSemantics(
+      child: AnimatedContainer(
+        duration: motion.fast,
+        curve: Motion.standard,
+        width: size + step * (faces.length - 1),
+        height: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (final (i, face) in faces.indexed)
+              AnimatedPositioned(
+                duration: motion.fast,
+                curve: Motion.standard,
+                left: step * i,
+                top: 0,
+                child: face,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
