@@ -31,7 +31,7 @@ void main() {
   final trees = find.byWidgetPredicate(
     (w) =>
         w.key is ValueKey<String> &&
-        (w.key! as ValueKey<String>).value.startsWith('overview-tree:'),
+        (w.key! as ValueKey<String>).value.startsWith('overview-family:'),
   );
 
   Future<void> openPeek(
