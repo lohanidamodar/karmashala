@@ -416,12 +416,13 @@ void main() {
       Size size = const Size(1440, 1400),
       double textScale = 1,
       bool pipeline = false,
+      bool? phone,
     }) => pumpMission(
       tester,
       fixture: _fixture(),
       prefsDir: dir,
       size: size,
-      phone: size.width < 600,
+      phone: phone ?? size.width < 600,
       textScale: textScale,
       overrides: [if (pipeline) pipelinesProvider.overrideWith(_Runs.new)],
     );
@@ -663,6 +664,63 @@ void main() {
       await unmountMission(tester);
     });
 
+    testWidgets('the pick box takes the avatar\'s face under a pointer and '
+        'picks; Open chat over the state opens the chat', (tester) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      final box = find.byKey(const ValueKey('overview-tree-select:$id'));
+      final chat = find.byKey(const ValueKey('overview-tree-chat:$id'));
+      expect(box, findsNothing);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(pill(id)));
+      await settleMission(tester);
+      final avatar = tester.getRect(
+        find.byKey(const ValueKey('session-avatar:$id')),
+      );
+      expect(avatar.contains(tester.getCenter(box)), isTrue);
+      expect(avatar.size, const Size.square(Chrome.subSessionAvatar));
+      // Over the box itself, the pill is still hovered.
+      await mouse.moveTo(tester.getCenter(box));
+      await settleMission(tester);
+      await tester.tap(box);
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).contains(id), isTrue);
+      expect(detail(id), findsNothing, reason: 'picking is not opening');
+      await tester.tap(box);
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
+
+      await mouse.moveTo(tester.getCenter(pill(id)));
+      await settleMission(tester);
+      await tester.tap(chat);
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, id);
+      await mouse.moveTo(Offset.zero);
+      await unmountMission(tester);
+    });
+
+    testWidgets('under a thumb the box shows only while picking, and no '
+        'hover actions', (tester) async {
+      final c = await pump(tester, size: const Size(390, 1400));
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      final box = find.byKey(const ValueKey('overview-tree-select:$id'));
+      expect(box, findsNothing);
+      expect(
+        find.byKey(const ValueKey('overview-tree-chat:$id')),
+        findsNothing,
+      );
+      await tester.longPress(pill(id));
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).contains(id), isTrue);
+      expect(box, findsOneWidget);
+      expect(tester.widget<Checkbox>(box).value, isTrue);
+      await unmountMission(tester);
+    });
+
     testWidgets('under a thumb nothing glows: hover is a pointer\'s', (
       tester,
     ) async {
@@ -758,6 +816,46 @@ void main() {
 
     for (final width in const [360.0, 1440.0]) {
       for (final scale in const [1.0, 1.6]) {
+        testWidgets('${width.toInt()} px at ${scale}x: a pointer over a pill '
+            'leaves its size and its title where they were', (tester) async {
+          await pump(
+            tester,
+            size: Size(width, 900),
+            textScale: scale,
+            phone: false,
+          );
+          const id = 'ks-r32-sub0';
+          await reveal(tester, pill(id));
+          final title = find.descendant(
+            of: pill(id),
+            matching: find.byKey(const ValueKey('overview-card-title:$id')),
+          );
+          // The pill slides as a whole on hover; the title within it stays.
+          (Size, Offset) measure() => (
+            tester.getSize(pill(id)),
+            tester.getTopLeft(title) - tester.getTopLeft(pill(id)),
+          );
+          final rest = measure();
+          final mouse = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          addTearDown(mouse.removePointer);
+          await mouse.addPointer(location: Offset.zero);
+          await mouse.moveTo(tester.getCenter(pill(id)));
+          await settleMission(tester);
+          expect(measure(), rest, reason: 'hovered');
+          // No box in the title row: it takes the avatar's face.
+          expect(
+            find.descendant(of: pill(id), matching: find.byType(Checkbox)),
+            findsNothing,
+          );
+          await mouse.moveTo(Offset.zero);
+          await settleMission(tester);
+          expect(measure(), rest, reason: 'after hover');
+          expect(tester.takeException(), isNull);
+          await unmountMission(tester);
+        });
+
         testWidgets('${width.toInt()} px at ${scale}x: the tree fits, opened '
             'and nested', (tester) async {
           await pump(tester, size: Size(width, 900), textScale: scale);

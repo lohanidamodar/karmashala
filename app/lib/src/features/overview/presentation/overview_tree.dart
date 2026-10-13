@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/widgets/truncated_text.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
+import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
 import '../application/overview_links.dart';
 import '../application/overview_providers.dart';
@@ -131,6 +132,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
                 onToggle: () => setState(
                   () => _open.contains(id) ? _open.remove(id) : _open.add(id),
                 ),
+                onOpenChat: () => widget.onOpen(node.card),
               ),
               if (_open.contains(id))
                 _TreeDetail(
@@ -313,8 +315,10 @@ class OverviewFamilyFooter extends ConsumerWidget {
 }
 
 /// **A sub-session on the tree**: its avatar and a pill with its title, its
-/// state and age, and its latest line. A pointer over it slides the pill and
-/// lights the avatar's ring; a click, Enter or Space opens it below.
+/// state and age, and its latest line. A pointer over it slides the pill,
+/// lights the avatar's ring, puts the pick box on the avatar's face and
+/// Open chat over the state; a click, Enter or Space opens it
+/// below. Nothing in it changes size.
 class _TreePill extends ConsumerStatefulWidget {
   const _TreePill({
     required this.node,
@@ -323,6 +327,7 @@ class _TreePill extends ConsumerStatefulWidget {
     required this.line,
     required this.halo,
     required this.onToggle,
+    required this.onOpenChat,
     super.key,
   });
 
@@ -332,6 +337,7 @@ class _TreePill extends ConsumerStatefulWidget {
   final Color line;
   final Color halo;
   final VoidCallback onToggle;
+  final VoidCallback onOpenChat;
 
   @override
   ConsumerState<_TreePill> createState() => _TreePillState();
@@ -342,6 +348,9 @@ class _TreePillState extends ConsumerState<_TreePill> {
   var _pressed = false;
   var _focused = false;
 
+  /// The keys are on the pill, its pick box or its hover actions.
+  var _within = false;
+
   @override
   Widget build(BuildContext context) {
     final node = widget.node;
@@ -349,11 +358,19 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final motion = Motion.of(context);
-    final touch = UiDensity.of(context).isTouch;
+    final density = UiDensity.of(context);
+    final touch = density.isTouch;
     // Hover is a pointer's: a thumb never rests on a pill.
     final hovered = _hovered && !touch;
+    final active = (_hovered || _within) && !touch;
     final selected = ref.watch(
       overviewFocusProvider.select((f) => f.selected == card.id),
+    );
+    final selecting = ref.watch(
+      overviewSelectionProvider.select((s) => !s.isEmpty),
+    );
+    final picked = ref.watch(
+      overviewSelectionProvider.select((s) => s.contains(card.id)),
     );
     final size = widget.size;
     final tuck = size / 2;
@@ -406,7 +423,6 @@ class _TreePillState extends ConsumerState<_TreePill> {
             card,
             at: details.globalPosition,
           ),
-          onHover: (on) => setState(() => _hovered = on),
           onHighlightChanged: (on) => setState(() => _pressed = on),
           onFocusChange: (on) => setState(() => _focused = on),
           child: OverviewHoverScope(
@@ -429,11 +445,19 @@ class _TreePillState extends ConsumerState<_TreePill> {
                           Chrome.familyCellMin / 2,
                           MediaQuery.textScalerOf(context),
                         );
+                    final along = narrow
+                        ? AlignmentDirectional.centerStart
+                        : AlignmentDirectional.centerEnd;
                     final chip = Align(
-                      alignment: narrow
-                          ? AlignmentDirectional.centerStart
-                          : AlignmentDirectional.centerEnd,
-                      child: OverviewStatePill(card: card),
+                      alignment: along,
+                      child: touch
+                          ? OverviewStatePill(card: card)
+                          : _HoverTail(
+                              card: card,
+                              active: active,
+                              alignment: along,
+                              onOpenChat: widget.onOpenChat,
+                            ),
                     );
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -442,7 +466,6 @@ class _TreePillState extends ConsumerState<_TreePill> {
                       children: [
                         Row(
                           children: [
-                            OverviewSelectBox(card: card),
                             Expanded(
                               flex: 3,
                               // A long press picks the pill; hover names a
@@ -480,46 +503,149 @@ class _TreePillState extends ConsumerState<_TreePill> {
       ),
     );
 
+    // Gmail's way: the box takes the avatar's face, inside its bounds.
+    final pickable = selecting || active;
     return Semantics(
       expanded: widget.open,
       child: OverviewFamilyHover(
         card: card,
-        child: Stack(
-          children: [
-            Padding(
-              padding: EdgeInsets.only(left: tuck),
-              child: AnimatedContainer(
-                duration: motion.fast,
-                curve: Motion.standard,
-                transform: Matrix4.translationValues(
-                  hovered ? Insets.tight : 0,
-                  0,
-                  0,
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onFocusChange: (on) => setState(() => _within = on),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(left: tuck),
+                  child: AnimatedContainer(
+                    duration: motion.fast,
+                    curve: Motion.standard,
+                    transform: Matrix4.translationValues(
+                      hovered ? Insets.tight : 0,
+                      0,
+                      0,
+                    ),
+                    child: AnimatedScale(
+                      scale: _pressed ? Motion.pressScale : 1,
+                      duration: motion.fast,
+                      child: pill,
+                    ),
+                  ),
                 ),
-                child: AnimatedScale(
-                  scale: _pressed ? Motion.pressScale : 1,
-                  duration: motion.fast,
-                  child: pill,
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  width: size,
+                  height: size,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      IgnorePointer(
+                        child: SessionAvatar(
+                          card: card,
+                          size: size,
+                          progress: overviewDoneShare(node),
+                          waiting: overviewWaitingIn(node),
+                          halo: widget.halo,
+                          glow: hovered,
+                        ),
+                      ),
+                      if (pickable)
+                        Container(
+                          width: SessionAvatar.faceOf(size),
+                          height: SessionAvatar.faceOf(size),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: scheme.surfaceContainerHigh,
+                          ),
+                          child: Checkbox(
+                            key: ValueKey('overview-tree-select:${card.id}'),
+                            value: picked,
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            semanticLabel: 'Select ${card.entry.title}',
+                            onChanged: (_) => ref
+                                .read(overviewSelectionProvider.notifier)
+                                .toggle(card.id),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
-            Positioned(
-              left: 0,
-              top: 0,
-              child: IgnorePointer(
-                child: SessionAvatar(
-                  card: card,
-                  size: size,
-                  progress: overviewDoneShare(node),
-                  waiting: overviewWaitingIn(node),
-                  halo: widget.halo,
-                  glow: hovered,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// A pill's tail: its state, with its hover actions laid over it while
+/// [active]. Always the size of both, so a hover moves nothing.
+class _HoverTail extends StatelessWidget {
+  const _HoverTail({
+    required this.card,
+    required this.active,
+    required this.alignment,
+    required this.onOpenChat,
+  });
+
+  final OverviewCard card;
+  final bool active;
+  final AlignmentGeometry alignment;
+  final VoidCallback onOpenChat;
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = Motion.of(context);
+    final density = UiDensity.of(context);
+    Widget action(String key, String tip, IconData icon, VoidCallback? on) =>
+        IconButton(
+          key: ValueKey('$key:${card.id}'),
+          tooltip: tip,
+          onPressed: on,
+          padding: EdgeInsets.zero,
+          iconSize: density.iconSmall,
+          constraints: const BoxConstraints.tightFor(
+            width: Chrome.control,
+            height: Chrome.control,
+          ),
+          icon: Icon(icon),
+        );
+    return Stack(
+      alignment: alignment,
+      children: [
+        AnimatedOpacity(
+          opacity: active ? 0 : 1,
+          duration: motion.fast,
+          child: ExcludeSemantics(
+            excluding: active,
+            child: OverviewStatePill(card: card),
+          ),
+        ),
+        Visibility(
+          visible: active,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              action(
+                'overview-tree-chat',
+                'Open chat',
+                AppIcons.arrowSquareOut,
+                onOpenChat,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
