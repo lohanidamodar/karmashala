@@ -1356,6 +1356,39 @@ void main() {
       await unmountMission(tester);
     });
 
+    testWidgets('360 px at 1.6x: a family five deep fits, its deepest '
+        'opened', (tester) async {
+      final chain = [
+        _card('n0', AgentState.working),
+        for (var i = 1; i <= 5; i++)
+          _card('n$i', AgentState.working, parent: 'n${i - 1}'),
+      ];
+      await pumpMission(
+        tester,
+        fixture: _fixture(),
+        prefsDir: dir,
+        size: const Size(360, 900),
+        phone: true,
+        textScale: 1.6,
+        overrides: [
+          overviewQuickMessageProvider.overrideWith(_SpyMessage.new),
+          overviewBoardProvider.overrideWith((ref) => _board({'ks': chain})),
+        ],
+      );
+      await reveal(tester, pill('n5'));
+      expect(tester.takeException(), isNull);
+      // Past the deepest step in, a sub-session lines up under its parent.
+      final x = tester.getTopLeft(pill('n3')).dx;
+      expect(tester.getTopLeft(pill('n4')).dx, x);
+      expect(tester.getTopLeft(pill('n5')).dx, x);
+      await tester.tap(pill('n5'));
+      await settleMission(tester);
+      expect(detail('n5'), findsOneWidget);
+      await reveal(tester, composerIn(detail('n5'), 'n5'));
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+
     for (final width in const [360.0, 1440.0]) {
       for (final scale in const [1.0, 1.6]) {
         testWidgets('${width.toInt()} px at ${scale}x: a pointer over a pill '

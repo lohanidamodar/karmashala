@@ -123,6 +123,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     required Set<String> folded,
     required Color line,
     required Color surface,
+    int depth = 0,
   }) {
     final size = root ? _rootSize : _kidSize;
     final id = node.card.id;
@@ -206,6 +207,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
               folded: folded,
               line: line,
               surface: surface,
+              depth: depth + 1,
             ),
           )
       else if (root)
@@ -213,6 +215,8 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     ];
     final stemAt = size / 2 - Chrome.treeLine / 2;
     final elbowAt = Insets.md + _kidSize / 2;
+    // Past the deepest step in, a sub-session hangs straight under its parent.
+    final flat = depth >= Chrome.treeIndentDepth;
     // The head keeps one ancestry folded or not, or its composers' state goes.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,7 +230,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
         ),
         if (branches.isNotEmpty)
           Padding(
-            padding: EdgeInsets.only(left: stemAt),
+            padding: EdgeInsets.only(left: flat ? 0 : stemAt),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
@@ -234,14 +238,24 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
                 for (final (i, (key, branch)) in branches.indexed)
                   CustomPaint(
                     key: key,
-                    painter: _ElbowPainter(
-                      last: i == branches.length - 1,
-                      elbowAt: elbowAt,
-                      reach: _elbow,
-                      color: line,
-                    ),
+                    painter: flat
+                        ? _RunPainter(
+                            x: size / 2,
+                            last: i == branches.length - 1,
+                            to: Insets.md,
+                            color: line,
+                          )
+                        : _ElbowPainter(
+                            last: i == branches.length - 1,
+                            elbowAt: elbowAt,
+                            reach: _elbow,
+                            color: line,
+                          ),
                     child: Padding(
-                      padding: EdgeInsets.only(top: Insets.md, left: _elbow),
+                      padding: EdgeInsets.only(
+                        top: Insets.md,
+                        left: flat ? 0 : _elbow,
+                      ),
                       child: branch,
                     ),
                   ),
@@ -1310,6 +1324,35 @@ class _ElbowPainter extends CustomPainter {
       old.elbowAt != elbowAt ||
       old.reach != reach ||
       old.color != color;
+}
+
+/// A branch hung straight under its parent: the stem down to its avatar —
+/// and on past it, unless it is the [last].
+class _RunPainter extends CustomPainter {
+  _RunPainter({
+    required this.x,
+    required this.last,
+    required this.to,
+    required this.color,
+  });
+
+  final double x;
+  final bool last;
+  final double to;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawLine(
+      Offset(x, 0),
+      Offset(x, last ? to : size.height),
+      _line(color),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RunPainter old) =>
+      old.x != x || old.last != last || old.to != to || old.color != color;
 }
 
 Paint _line(Color color) => Paint()
