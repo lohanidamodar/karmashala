@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -99,11 +100,13 @@ class _Runs extends PipelinesController {
   );
 }
 
-/// Keeps what the tree's composers send, and sends it at once.
+/// Keeps what the tree's composers send, and sends it at once — or, while
+/// [hold] is set, once it completes.
 class _SpyMessage extends OverviewQuickMessage {
   _SpyMessage(super.ref);
 
   final sent = <(String, String)>[];
+  Completer<void>? hold;
 
   @override
   Future<QuickMessageSent> send(
@@ -112,6 +115,7 @@ class _SpyMessage extends OverviewQuickMessage {
     String? requestId,
   }) async {
     sent.add((sessionId, text));
+    await hold?.future;
     return QuickMessageSent(requestId: requestId ?? 'key-${sent.length}');
   }
 }
@@ -959,6 +963,47 @@ void main() {
       final went = find.byKey(const ValueKey('overview-tree-sent:ks-r32-sub3'));
       expect(
         find.descendant(of: went, matching: find.text('Sent')),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('folding an inner node keeps its own composer: the draft, '
+        'and a send in flight', (tester) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub0';
+      await reveal(tester, pill(id));
+      await tester.tap(pill(id));
+      await settleMission(tester);
+      final field = composerIn(detail(id), id);
+      String draft() => tester.widget<TextField>(field).controller!.text;
+      await tester.enterText(field, 'half a reply');
+      final fold = c.read(overviewFoldedParentsProvider.notifier);
+      fold.toggle(id);
+      await settleMission(tester);
+      expect(pill('ks-r32-sub0-a'), findsNothing);
+      expect(draft(), 'half a reply', reason: 'folded');
+      fold.toggle(id);
+      await settleMission(tester);
+      expect(pill('ks-r32-sub0-a'), findsOneWidget);
+      expect(draft(), 'half a reply', reason: 'unfolded');
+
+      final hold = (c.read(overviewQuickMessageProvider) as _SpyMessage).hold =
+          Completer<void>();
+      await tester.showKeyboard(field);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      fold.toggle(id);
+      await settleMission(tester);
+      hold.complete();
+      await settleMission(tester);
+      expect(sent(c), [(id, 'half a reply')]);
+      expect(draft(), isEmpty);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('overview-composer-said:$id')),
+          matching: find.text('Sent'),
+        ),
         findsOneWidget,
       );
       await unmountMission(tester);

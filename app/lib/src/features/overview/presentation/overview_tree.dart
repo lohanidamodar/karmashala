@@ -197,40 +197,43 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
       else if (root)
         (null, _FoldedStrip(rootId: id, below: below, height: _kidSize)),
     ];
-    if (branches.isEmpty) return head;
     final stemAt = size / 2 - Chrome.treeLine / 2;
     final elbowAt = Insets.md + _kidSize / 2;
+    // The head keeps one ancestry folded or not, or its composers' state goes.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         CustomPaint(
-          painter: _StemPainter(x: size / 2, from: size, color: line),
+          painter: branches.isEmpty
+              ? null
+              : _StemPainter(x: size / 2, from: size, color: line),
           child: head,
         ),
-        Padding(
-          padding: EdgeInsets.only(left: stemAt),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (i, (key, branch)) in branches.indexed)
-                CustomPaint(
-                  key: key,
-                  painter: _ElbowPainter(
-                    last: i == branches.length - 1,
-                    elbowAt: elbowAt,
-                    reach: _elbow,
-                    color: line,
+        if (branches.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(left: stemAt),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (i, (key, branch)) in branches.indexed)
+                  CustomPaint(
+                    key: key,
+                    painter: _ElbowPainter(
+                      last: i == branches.length - 1,
+                      elbowAt: elbowAt,
+                      reach: _elbow,
+                      color: line,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.only(top: Insets.md, left: _elbow),
+                      child: branch,
+                    ),
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.only(top: Insets.md, left: _elbow),
-                    child: branch,
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
