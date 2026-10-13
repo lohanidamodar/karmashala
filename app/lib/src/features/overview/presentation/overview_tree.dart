@@ -62,6 +62,9 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   /// answers.
   final _sent = <String, QuickMessageSent>{};
 
+  /// The root's composer, kept as its card turns from working to done.
+  final _rootComposer = GlobalKey();
+
   double get _rootSize =>
       widget.compact ? Chrome.sessionAvatarCompact : Chrome.sessionAvatar;
   double get _kidSize =>
@@ -284,7 +287,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
           OverviewFamilyFooter(root: card, below: below),
           const SizedBox(height: Insets.xs),
         ],
-        OverviewQuickComposer(card: card),
+        OverviewQuickComposer(key: _rootComposer, card: card),
       ],
     );
     final Widget body = widget.ready

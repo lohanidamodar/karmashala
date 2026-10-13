@@ -120,6 +120,18 @@ class _SpyMessage extends OverviewQuickMessage {
   }
 }
 
+/// The board the Overview draws, swapped mid-test.
+class _Boards extends Notifier<OverviewBoard> {
+  _Boards(this._first);
+
+  final OverviewBoard _first;
+
+  @override
+  OverviewBoard build() => _first;
+
+  void show(OverviewBoard board) => state = board;
+}
+
 OverviewCard _card(
   String id,
   AgentState state, {
@@ -1006,6 +1018,48 @@ void main() {
         ),
         findsOneWidget,
       );
+      await unmountMission(tester);
+    });
+
+    testWidgets('a root composer keeps its draft and its keys as the '
+        'families reorder, across rows, and as it turns ready', (tester) async {
+      OverviewBoard board(List<OverviewCard> cards) => _board({'ks': cards});
+      final a = _card('a', AgentState.working);
+      final b = _card('b', AgentState.working);
+      final cc = _card('c', AgentState.working);
+      final d = _card('d', AgentState.working);
+      final boards = NotifierProvider<_Boards, OverviewBoard>(
+        () => _Boards(board([a, b, cc, d])),
+      );
+      final c = await pumpMission(
+        tester,
+        fixture: _fixture(),
+        prefsDir: dir,
+        size: const Size(1440, 1400),
+        overrides: [
+          overviewQuickMessageProvider.overrideWith(_SpyMessage.new),
+          overviewBoardProvider.overrideWith((ref) => ref.watch(boards)),
+        ],
+      );
+      final field = find.byKey(const ValueKey('overview-composer:b'));
+      await reveal(tester, field);
+      await tester.enterText(field, 'half a thought');
+      TextField box() => tester.widget<TextField>(field);
+      final top = tester.getTopLeft(field);
+
+      Future<void> show(List<OverviewCard> cards, String why) async {
+        c.read(boards.notifier).show(board(cards));
+        await settleMission(tester);
+        expect(box().controller!.text, 'half a thought', reason: why);
+      }
+
+      await show([b, a, cc, d], 'a slot along');
+      expect(tester.getTopLeft(field).dx, lessThan(top.dx));
+      expect(box().focusNode!.hasFocus, isTrue);
+      await show([a, cc, d, b], 'a row down');
+      expect(tester.getTopLeft(field).dy, greaterThan(top.dy));
+      expect(box().focusNode!.hasFocus, isTrue);
+      await show([a, _card('b', AgentState.ready), cc, d], 'ready');
       await unmountMission(tester);
     });
 
