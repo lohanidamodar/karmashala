@@ -678,6 +678,8 @@ class _TreePillState extends ConsumerState<_TreePill> {
 
     // Gmail's way: the box takes the avatar's face, inside its bounds.
     final pickable = selecting || active;
+    void toggle() =>
+        ref.read(overviewSelectionProvider.notifier).toggle(card.id);
     return Semantics(
       expanded: widget.open,
       child: OverviewFamilyHover(
@@ -713,42 +715,59 @@ class _TreePillState extends ConsumerState<_TreePill> {
                   top: 0,
                   width: size,
                   height: size,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      IgnorePointer(
-                        child: SessionAvatar(
-                          card: card,
-                          size: size,
-                          progress: overviewDoneShare(node),
-                          waiting: overviewWaitingIn(node),
-                          halo: widget.halo,
-                          glow: hovered,
-                        ),
-                      ),
-                      if (pickable)
-                        Container(
-                          width: SessionAvatar.faceOf(size),
-                          height: SessionAvatar.faceOf(size),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: scheme.surfaceContainerHigh,
-                          ),
-                          child: Checkbox(
-                            key: ValueKey('overview-tree-select:${card.id}'),
-                            value: picked,
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            semanticLabel: 'Select ${card.entry.title}',
-                            onChanged: (_) => ref
-                                .read(overviewSelectionProvider.notifier)
-                                .toggle(card.id),
-                          ),
-                        ),
-                    ],
+                  child: IgnorePointer(
+                    child: SessionAvatar(
+                      card: card,
+                      size: size,
+                      progress: overviewDoneShare(node),
+                      waiting: overviewWaitingIn(node),
+                      halo: widget.halo,
+                      glow: hovered,
+                    ),
                   ),
                 ),
+                if (pickable)
+                  // A thumb's target from the avatar's corner, inside the
+                  // pill's bounds; the knob, drawn later, keeps its own.
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    width: minHeight,
+                    height: minHeight,
+                    child: GestureDetector(
+                      key: ValueKey('overview-tree-select-hit:${card.id}'),
+                      behavior: HitTestBehavior.opaque,
+                      excludeFromSemantics: true,
+                      onTap: toggle,
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: SizedBox.square(
+                          dimension: size,
+                          child: Center(
+                            child: Container(
+                              width: SessionAvatar.faceOf(size),
+                              height: SessionAvatar.faceOf(size),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: scheme.surfaceContainerHigh,
+                              ),
+                              child: Checkbox(
+                                key: ValueKey(
+                                  'overview-tree-select:${card.id}',
+                                ),
+                                value: picked,
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                semanticLabel: 'Select ${card.entry.title}',
+                                onChanged: (_) => toggle(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

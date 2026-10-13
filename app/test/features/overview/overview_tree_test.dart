@@ -907,6 +907,54 @@ void main() {
       await unmountMission(tester);
     });
 
+    testWidgets('under a thumb the pick box is a thumb\'s target, its face '
+        'on the avatar, and the pill and the knob still take theirs', (
+      tester,
+    ) async {
+      final c = await pump(tester, size: const Size(390, 1400));
+      bool picked(String id) => c.read(overviewSelectionProvider).contains(id);
+      const leaf = 'ks-r32-sub2';
+      await reveal(tester, pill(leaf));
+      await tester.longPress(pill(leaf));
+      await settleMission(tester);
+      expect(picked(leaf), isTrue);
+
+      final avatar = tester.getRect(
+        find.byKey(const ValueKey('session-avatar:$leaf')),
+      );
+      final face = tester.getRect(
+        find.byKey(const ValueKey('overview-tree-select:$leaf')),
+      );
+      expect(avatar.contains(face.center), isTrue);
+      expect(face.width, lessThan(Touch.target));
+      final hit = find.byKey(const ValueKey('overview-tree-select-hit:$leaf'));
+      final target = tester.getRect(hit);
+      expect(target.width, greaterThanOrEqualTo(Touch.target));
+      expect(target.height, greaterThanOrEqualTo(Touch.target));
+      // Its far corner, outside the face, is the box's.
+      await tester.tapAt(target.bottomRight - const Offset(2, 2));
+      await settleMission(tester);
+      expect(picked(leaf), isFalse);
+
+      // The pill's own long press still picks, and its tap still unpicks.
+      await tester.longPress(pill(leaf));
+      await settleMission(tester);
+      expect(picked(leaf), isTrue);
+      await tester.tap(pill(leaf));
+      await settleMission(tester);
+      expect(picked(leaf), isFalse);
+
+      // And the knob still folds, its box showing over a parent's avatar.
+      const parent = 'ks-r32-sub0';
+      c.read(overviewSelectionProvider.notifier).toggle(parent);
+      await reveal(tester, knob(parent));
+      await tester.tap(knob(parent));
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), {parent});
+      expect(picked(parent), isTrue);
+      await unmountMission(tester);
+    });
+
     Finder composerIn(Finder scope, String id) => find.descendant(
       of: scope,
       matching: find.byKey(ValueKey('overview-composer:$id')),
