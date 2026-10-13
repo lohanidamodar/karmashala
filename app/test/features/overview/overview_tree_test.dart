@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/overview/application/overview_board.dart
 import 'package:karmashala/src/features/overview/application/overview_links.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_quick_message.dart';
 import 'package:karmashala/src/features/overview/application/overview_tree.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_end_button.dart'
     show OverviewHoverScope;
@@ -96,6 +97,23 @@ class _Runs extends PipelinesController {
       ),
     },
   );
+}
+
+/// Keeps what the tree's composers send, and sends it at once.
+class _SpyMessage extends OverviewQuickMessage {
+  _SpyMessage(super.ref);
+
+  final sent = <(String, String)>[];
+
+  @override
+  Future<QuickMessageSent> send(
+    String sessionId,
+    String text, {
+    String? requestId,
+  }) async {
+    sent.add((sessionId, text));
+    return QuickMessageSent(requestId: requestId ?? 'key-${sent.length}');
+  }
 }
 
 OverviewCard _card(
@@ -442,8 +460,14 @@ void main() {
       size: size,
       phone: phone ?? size.width < 600,
       textScale: textScale,
-      overrides: [if (pipeline) pipelinesProvider.overrideWith(_Runs.new)],
+      overrides: [
+        if (pipeline) pipelinesProvider.overrideWith(_Runs.new),
+        overviewQuickMessageProvider.overrideWith(_SpyMessage.new),
+      ],
     );
+
+    List<(String, String)> sent(ProviderContainer c) =>
+        (c.read(overviewQuickMessageProvider) as _SpyMessage).sent;
 
     Future<void> reveal(
       WidgetTester tester,
@@ -866,6 +890,163 @@ void main() {
       await unmountMission(tester);
     });
 
+    Finder composerIn(Finder scope, String id) => find.descendant(
+      of: scope,
+      matching: find.byKey(ValueKey('overview-composer:$id')),
+    );
+
+    testWidgets('an opened sub-session takes a message in its detail; Enter '
+        'sends it and leaves the detail open', (tester) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      await tester.tap(pill(id));
+      await settleMission(tester);
+      final field = composerIn(detail(id), id);
+      expect(field, findsOneWidget);
+      // Above its actions.
+      expect(
+        tester.getRect(field).bottom,
+        lessThan(
+          tester
+              .getRect(find.byKey(const ValueKey('overview-tree-open:$id')))
+              .top,
+        ),
+      );
+      await tester.tap(field);
+      await tester.enterText(field, 'Commit it');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(sent(c), [(id, 'Commit it')]);
+      expect(detail(id), findsOneWidget, reason: 'Enter is the composer\'s');
+      await unmountMission(tester);
+    });
+
+    testWidgets('the hover\'s Message opens one composer under the pill; a '
+        'send closes it and the pill says it went', (tester) async {
+      final c = await pump(tester);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      Finder composer(String id) =>
+          find.byKey(ValueKey('overview-tree-composer:$id'));
+      Future<void> message(String id) async {
+        await reveal(tester, pill(id));
+        await mouse.moveTo(tester.getCenter(pill(id)));
+        await settleMission(tester);
+        await tester.tap(find.byKey(ValueKey('overview-tree-message:$id')));
+        await settleMission(tester);
+      }
+
+      await message('ks-r32-sub2');
+      expect(composer('ks-r32-sub2'), findsOneWidget);
+      expect(detail('ks-r32-sub2'), findsNothing);
+      // One composer in a family at a time.
+      await message('ks-r32-sub3');
+      expect(composer('ks-r32-sub3'), findsOneWidget);
+      expect(composer('ks-r32-sub2'), findsNothing);
+      await mouse.moveTo(Offset.zero);
+      await settleMission(tester);
+
+      // It takes the keys as it opens.
+      final field = composerIn(composer('ks-r32-sub3'), 'ks-r32-sub3');
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+      await tester.enterText(field, 'Open a draft PR');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(sent(c), [('ks-r32-sub3', 'Open a draft PR')]);
+      expect(composer('ks-r32-sub3'), findsNothing);
+      final went = find.byKey(const ValueKey('overview-tree-sent:ks-r32-sub3'));
+      expect(
+        find.descendant(of: went, matching: find.text('Sent')),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('Esc closes the pill\'s composer and sends nothing', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(pill(id)));
+      await settleMission(tester);
+      await tester.tap(find.byKey(const ValueKey('overview-tree-message:$id')));
+      await settleMission(tester);
+      final composer = find.byKey(const ValueKey('overview-tree-composer:$id'));
+      await tester.enterText(composerIn(composer, id), 'half a thought');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settleMission(tester);
+      expect(composer, findsNothing);
+      expect(sent(c), isEmpty);
+      await mouse.moveTo(Offset.zero);
+      await unmountMission(tester);
+    });
+
+    testWidgets('the parent card has its own composer, a family or alone', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      for (final id in ['ks-r32', 'ks-release']) {
+        final family = find.byKey(ValueKey('overview-family:$id'));
+        await reveal(tester, family);
+        expect(
+          composerIn(find.byKey(ValueKey('overview-card:$id')), id),
+          findsOneWidget,
+          reason: id,
+        );
+      }
+      final field = composerIn(
+        find.byKey(const ValueKey('overview-card:ks-release')),
+        'ks-release',
+      );
+      await tester.tap(field);
+      await tester.enterText(field, 'Ship it');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(sent(c), [('ks-release', 'Ship it')]);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('typing in a composer leaves J, K and Enter to it', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      String? selected() => c.read(overviewFocusProvider).selected;
+      // The board's keys work while nothing types.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await settleMission(tester);
+      final first = selected();
+      expect(first, isNotNull);
+
+      const id = 'ks-r32-sub2';
+      await reveal(tester, pill(id));
+      await tester.tap(pill(id));
+      await settleMission(tester);
+      final field = composerIn(detail(id), id);
+      await tester.tap(field);
+      await settleMission(tester);
+      final now = selected();
+      for (final key in [
+        LogicalKeyboardKey.keyJ,
+        LogicalKeyboardKey.keyK,
+        LogicalKeyboardKey.enter,
+      ]) {
+        await tester.sendKeyEvent(key);
+        await settleMission(tester);
+      }
+      expect(selected(), now);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(detail(id), findsOneWidget);
+      expect(sent(c), isEmpty, reason: 'nothing typed, nothing sent');
+      await unmountMission(tester);
+    });
+
     testWidgets('under a thumb nothing glows: hover is a pointer\'s', (
       tester,
     ) async {
@@ -1034,6 +1215,10 @@ void main() {
           await tester.tap(pill('ks-r32-sub0-a'));
           await settleMission(tester);
           expect(detail('ks-r32-sub0-a'), findsOneWidget);
+          expect(
+            composerIn(detail('ks-r32-sub0-a'), 'ks-r32-sub0-a'),
+            findsOneWidget,
+          );
           expect(tester.takeException(), isNull);
           await unmountMission(tester);
         });

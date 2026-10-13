@@ -91,6 +91,9 @@ void main() {
         400,
         scrollable: hybridList,
       );
+      // Built is not on screen: it can stop under the tab bar.
+      await tester.ensureVisible(byKey('overview-all-sessions'));
+      await settleMission(tester);
       await tester.tap(byKey('overview-all-sessions'));
       await settleMission(tester);
       expect(c.read(phoneTabProvider), PhoneTab.more);

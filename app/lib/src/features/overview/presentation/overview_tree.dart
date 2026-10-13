@@ -11,6 +11,7 @@ import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
 import '../application/overview_links.dart';
 import '../application/overview_providers.dart';
+import '../application/overview_quick_message.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_tree.dart';
 import 'overview_batch_bar.dart';
@@ -21,6 +22,7 @@ import 'overview_done_card.dart';
 import 'overview_end_button.dart';
 import 'overview_queue_card.dart' show overviewAskKind, OverviewAskKind;
 import 'overview_queue_card.dart' show overviewMachineAndBranch;
+import 'overview_quick_composer.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 import 'session_avatar.dart';
@@ -52,6 +54,13 @@ class OverviewFamilyTree extends ConsumerStatefulWidget {
 class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   /// The sub-sessions opened inline.
   final _open = <String>{};
+
+  /// The one sub-session with a composer under its pill, from its hover.
+  String? _composing;
+
+  /// What became of the last message sent from under a pill, until it
+  /// answers.
+  final _sent = <String, QuickMessageSent>{};
 
   double get _rootSize =>
       widget.compact ? Chrome.sessionAvatarCompact : Chrome.sessionAvatar;
@@ -129,11 +138,30 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
                 line: line,
                 halo: surface,
                 hidden: shut ? below : null,
-                onToggle: () => setState(
-                  () => _open.contains(id) ? _open.remove(id) : _open.add(id),
-                ),
+                sent: _sent[id],
+                onSentSeen: () => setState(() => _sent.remove(id)),
+                onToggle: () => setState(() {
+                  if (!_open.remove(id)) _open.add(id);
+                  if (_composing == id) _composing = null;
+                }),
                 onOpenChat: () => widget.onOpen(node.card),
+                onMessage: () => setState(() {
+                  _composing = _composing == id ? null : id;
+                  _open.remove(id);
+                  _sent.remove(id);
+                }),
               ),
+              if (_composing == id)
+                _TreeComposer(
+                  card: node.card,
+                  tuck: size / 2,
+                  line: line,
+                  onClose: () => setState(() => _composing = null),
+                  onSent: (sent) => setState(() {
+                    _composing = null;
+                    _sent[id] = sent;
+                  }),
+                ),
               if (_open.contains(id))
                 _TreeDetail(
                   card: node.card,
@@ -244,9 +272,18 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     final size = _rootSize;
     final tuck = size / 2;
     final below = node.descendants.toList();
-    final footer = below.isEmpty
-        ? null
-        : OverviewFamilyFooter(root: card, below: below);
+    // The parent always takes a message of its own, a family or not.
+    final footer = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (below.isNotEmpty) ...[
+          OverviewFamilyFooter(root: card, below: below),
+          const SizedBox(height: Insets.xs),
+        ],
+        OverviewQuickComposer(card: card),
+      ],
+    );
     final Widget body = widget.ready
         ? OverviewDoneCard(
             key: ValueKey('overview-ready-card:${card.id}'),
@@ -367,7 +404,7 @@ class OverviewFamilyFooter extends ConsumerWidget {
 /// **A sub-session on the tree**: its avatar and a pill with its title, its
 /// state and age, and its latest line. A pointer over it slides the pill,
 /// lights the avatar's ring, puts the pick box on the avatar's face and
-/// Open chat over the state; a click, Enter or Space opens it
+/// Message and Open chat over the state; a click, Enter or Space opens it
 /// below. Nothing in it changes size.
 class _TreePill extends ConsumerStatefulWidget {
   const _TreePill({
@@ -378,7 +415,10 @@ class _TreePill extends ConsumerStatefulWidget {
     required this.halo,
     required this.onToggle,
     required this.onOpenChat,
+    required this.onMessage,
+    required this.onSentSeen,
     this.hidden,
+    this.sent,
     super.key,
   });
 
@@ -390,8 +430,16 @@ class _TreePill extends ConsumerStatefulWidget {
   final VoidCallback onToggle;
   final VoidCallback onOpenChat;
 
+  /// The hover's Message: a composer under the pill.
+  final VoidCallback onMessage;
+
   /// What its fold hides, said in place of its latest line.
   final List<OverviewCard>? hidden;
+
+  /// A message sent from under the pill, said in place of its latest line
+  /// until the session answers; then [onSentSeen].
+  final QuickMessageSent? sent;
+  final VoidCallback onSentSeen;
 
   @override
   ConsumerState<_TreePill> createState() => _TreePillState();
@@ -426,6 +474,11 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final picked = ref.watch(
       overviewSelectionProvider.select((s) => s.contains(card.id)),
     );
+    if (widget.sent != null) {
+      ref.listen(overviewLastAnswerProvider(card.id), (was, now) {
+        if (was?.value?.text != now.value?.text) widget.onSentSeen();
+      });
+    }
     final size = widget.size;
     final tuck = size / 2;
     final edge = _focused || selected
@@ -510,6 +563,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
                               card: card,
                               active: active,
                               alignment: along,
+                              onMessage: widget.onMessage,
                               onOpenChat: widget.onOpenChat,
                             ),
                     );
@@ -567,6 +621,12 @@ class _TreePillState extends ConsumerState<_TreePill> {
                                 ),
                               ),
                             ],
+                          )
+                        else if (widget.sent case final sent?)
+                          OverviewSentStatus(
+                            key: ValueKey('overview-tree-sent:${card.id}'),
+                            sessionId: card.id,
+                            sent: sent,
                           )
                         else
                           _LatestLine(card: card),
@@ -670,12 +730,14 @@ class _HoverTail extends StatelessWidget {
     required this.card,
     required this.active,
     required this.alignment,
+    required this.onMessage,
     required this.onOpenChat,
   });
 
   final OverviewCard card;
   final bool active;
   final AlignmentGeometry alignment;
+  final VoidCallback onMessage;
   final VoidCallback onOpenChat;
 
   @override
@@ -714,6 +776,12 @@ class _HoverTail extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              action(
+                'overview-tree-message',
+                'Message',
+                AppIcons.chatCircle,
+                onMessage,
+              ),
               action(
                 'overview-tree-chat',
                 'Open chat',
@@ -991,9 +1059,68 @@ class _LatestLine extends ConsumerWidget {
   }
 }
 
+/// The hover's Message: a composer for one sub-session, attached under its
+/// pill. Esc closes it, and so does a send.
+class _TreeComposer extends StatelessWidget {
+  const _TreeComposer({
+    required this.card,
+    required this.tuck,
+    required this.line,
+    required this.onClose,
+    required this.onSent,
+  });
+
+  final OverviewCard card;
+  final double tuck;
+  final Color line;
+  final VoidCallback onClose;
+  final ValueChanged<QuickMessageSent> onSent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(left: tuck + Insets.sm),
+      child: Container(
+        key: ValueKey('overview-tree-composer:${card.id}'),
+        padding: const EdgeInsets.all(Insets.sm),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          border: Border.all(color: line),
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(Radii.lg),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            OverviewQuickComposer(
+              card: card,
+              autofocus: true,
+              onEscape: onClose,
+              onSent: onSent,
+            ),
+            const SizedBox(height: Insets.xs),
+            Text(
+              'Enter sends · Shift+Enter new line · Esc closes',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A sub-session opened on the tree: all it last said, its step and diff, a
-/// waiting question answered in place, and its actions — Archive, Hand back,
-/// Open chat, End and the session menu.
+/// waiting question answered in place, a message to it, and its actions —
+/// Archive, Hand back, Open chat, End and the session menu.
 class _TreeDetail extends ConsumerWidget {
   const _TreeDetail({
     required this.card,
@@ -1043,6 +1170,8 @@ class _TreeDetail extends ConsumerWidget {
                   where: overviewMachineAndBranch(ref, card),
                 ),
               ],
+              const SizedBox(height: Insets.sm),
+              OverviewQuickComposer(card: card),
               const SizedBox(height: Insets.sm),
               OverviewCloseActions(
                 card: card,

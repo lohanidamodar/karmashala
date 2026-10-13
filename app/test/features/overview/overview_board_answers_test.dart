@@ -312,7 +312,10 @@ void main() {
         ),
       );
       expect(tester.widget<TextField>(field).enabled, isFalse);
-      expect(find.text(kPromptNotGranted), findsOneWidget);
+      expect(
+        find.descendant(of: field, matching: find.text(kPromptNotGranted)),
+        findsOneWidget,
+      );
       expect(sent, isEmpty);
       await unmountMission(tester);
     });

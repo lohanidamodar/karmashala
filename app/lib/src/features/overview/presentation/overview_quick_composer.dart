@@ -17,12 +17,25 @@ import '../application/overview_board.dart';
 import '../application/overview_quick_message.dart';
 
 /// **A quick message to one session**: one line, Enter sends, Shift+Enter
-/// starts a new line, Esc clears. Says whether it went now or waits for the
-/// turn running.
+/// starts a new line, Esc clears — or, given [onEscape], closes. Says whether
+/// it went now or waits for the turn running.
 class OverviewQuickComposer extends ConsumerStatefulWidget {
-  const OverviewQuickComposer({required this.card, super.key});
+  const OverviewQuickComposer({
+    required this.card,
+    this.autofocus = false,
+    this.onEscape,
+    this.onSent,
+    super.key,
+  });
 
   final OverviewCard card;
+
+  /// Takes the keys as it opens.
+  final bool autofocus;
+  final VoidCallback? onEscape;
+
+  /// A message went: what became of it, for whoever closes the composer.
+  final ValueChanged<QuickMessageSent>? onSent;
 
   @override
   ConsumerState<OverviewQuickComposer> createState() =>
@@ -48,6 +61,17 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
   String? _keyedText;
 
   @override
+  void initState() {
+    super.initState();
+    // Taken, not asked for: the board holds the keys, so autofocus would yield.
+    if (widget.autofocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _text.dispose();
     _focus.dispose();
@@ -58,6 +82,10 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.escape) {
+      if (widget.onEscape case final close?) {
+        close();
+        return KeyEventResult.handled;
+      }
       if (_text.text.isEmpty && _said == null && _sent == null) {
         return KeyEventResult.ignored;
       }
@@ -103,6 +131,7 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
         _said = null;
         _sent = sent;
       });
+      widget.onSent?.call(sent);
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
