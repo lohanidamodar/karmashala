@@ -17,6 +17,18 @@ installs claim the same version name.
 
 ---
 
+## 1.34.9 — 2026-10-13 (build 76)
+
+- **The session tree on the Agent dashboard:**
+  - Hovering a sub-session no longer makes it grow. The pick box sits on the avatar, and Message and Open chat take the state's place.
+  - Any session with sub-sessions folds, at every level, from a knob on its stem. A folded family is one strip of stacked avatars saying what it hides and what needs you.
+  - Reply without leaving the dashboard: an opened sub-session has a message box, and on desktop the hover Message opens one under it. A parent and a session on its own always have one.
+  - A parent that stopped, ended or waits on you still heads its family, so sub-sessions no longer scatter.
+  - A deep tree stops indenting after the third level, so it fits on a phone.
+  - A half-written reply survives folding and families moving around. "Sent" clears on the session's next answer.
+- **The dashboard's chat takes its own room** beside the board on a laptop too, instead of covering it, and the board fits itself into what is left.
+- **Chat:** a compacted session shows the agent's summary itself, not a note about how much was compacted.
+
 ## 1.34.8 — 2026-10-12 (build 75)
 
 - **The Agent dashboard draws each family as a session tree.**
