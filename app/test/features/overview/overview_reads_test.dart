@@ -41,21 +41,61 @@ class _Transcripts implements ServerTranscripts {
 TranscriptMessage _say(String role, String text) =>
     TranscriptMessage(role: role, text: text);
 
-TranscriptPage _page(List<TranscriptMessage> rows, {ChatViewEvidence? absence}) =>
-    TranscriptPage(
-      sessionId: 's1',
-      generation: absence == null ? 'g' : '',
-      revision: 1,
-      total: rows.length,
-      from: 0,
-      messages: rows,
-      absence: absence,
-    );
+TranscriptPage _page(
+  List<TranscriptMessage> rows, {
+  ChatViewEvidence? absence,
+}) => TranscriptPage(
+  sessionId: 's1',
+  generation: absence == null ? 'g' : '',
+  revision: 1,
+  total: rows.length,
+  from: 0,
+  messages: rows,
+  absence: absence,
+);
 
 /// **The peek's last answer**, read once rather than through the chat's feed,
 /// which reads only while a chat is on screen — the cause of a "Reading…"
 /// that never ended on the Overview.
 void main() {
+  group('an answer to a message sent', () {
+    final sentAt = DateTime.utc(2026, 10, 13, 12);
+    final old = LastAnswer.of(
+      'Done',
+      at: sentAt.subtract(const Duration(hours: 1)),
+    );
+    final fresh = LastAnswer.of(
+      'Done',
+      at: sentAt.add(const Duration(minutes: 1)),
+    );
+
+    test('is one written after the answer read when it went, words or '
+        'not', () {
+      expect(fresh.answers(sentAt: sentAt, before: old), isTrue);
+      expect(old.answers(sentAt: sentAt, before: old), isFalse);
+      expect(fresh.answers(sentAt: sentAt, before: LastAnswer.none), isTrue);
+    });
+
+    test('with nothing read when it went, is one written after it', () {
+      expect(old.answers(sentAt: sentAt), isFalse);
+      expect(fresh.answers(sentAt: sentAt), isTrue);
+      expect(const LastAnswer.of('Done').answers(sentAt: sentAt), isFalse);
+    });
+
+    test('with no times to go on, is one in other words', () {
+      const was = LastAnswer.of('Done');
+      expect(
+        const LastAnswer.of('Done').answers(sentAt: sentAt, before: was),
+        isFalse,
+      );
+      expect(
+        const LastAnswer.of('Next').answers(sentAt: sentAt, before: was),
+        isTrue,
+      );
+      expect(LastAnswer.none.answers(sentAt: sentAt, before: was), isFalse);
+    });
+  });
+
   late _Transcripts transcripts;
 
   ProviderContainer container(Set<String> features) {
@@ -99,11 +139,8 @@ void main() {
   });
 
   test('says why when the server has no record to read', () async {
-    transcripts.onTurns = (_) async => const ServerTurns(
-      [],
-      total: 0,
-      absence: ChatViewEvidence.notLocated,
-    );
+    transcripts.onTurns = (_) async =>
+        const ServerTurns([], total: 0, absence: ChatViewEvidence.notLocated);
     final answer = await container(
       both,
     ).read(overviewReaderProvider).lastAnswer('s1');
@@ -160,6 +197,9 @@ void main() {
     transcripts.onTurns = (_) async =>
         ServerTurns([_say('agent', 'Hello')], total: 1);
     final c = container(both);
-    expect(await c.read(overviewLastAnswerProvider('s1').future), const LastAnswer.of('Hello'));
+    expect(
+      await c.read(overviewLastAnswerProvider('s1').future),
+      const LastAnswer.of('Hello'),
+    );
   });
 }

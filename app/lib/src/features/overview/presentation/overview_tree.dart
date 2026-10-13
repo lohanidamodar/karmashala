@@ -5,6 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/truncated_text.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_batch.dart';
@@ -60,7 +61,10 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
 
   /// What became of the last message sent from under a pill, until it
   /// answers.
-  final _sent = <String, QuickMessageSent>{};
+  final _sent = <String, _Awaiting>{};
+
+  /// The root's composer, kept as its card turns from working to done.
+  final _rootComposer = GlobalKey();
 
   double get _rootSize =>
       widget.compact ? Chrome.sessionAvatarCompact : Chrome.sessionAvatar;
@@ -119,6 +123,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     required Set<String> folded,
     required Color line,
     required Color surface,
+    int depth = 0,
   }) {
     final size = root ? _rootSize : _kidSize;
     final id = node.card.id;
@@ -157,10 +162,20 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
                   tuck: size / 2,
                   line: line,
                   onClose: () => setState(() => _composing = null),
-                  onSent: (sent) => setState(() {
-                    _composing = null;
-                    _sent[id] = sent;
-                  }),
+                  onSent: (sent) {
+                    final read = ref.read(overviewLastAnswerProvider(id));
+                    final now = ref.read(clockProvider).nowUtc();
+                    setState(() {
+                      _composing = null;
+                      _sent[id] = _Awaiting(
+                        sent,
+                        at: now,
+                        before: read.isLoading || read.hasError
+                            ? null
+                            : read.value,
+                      );
+                    });
+                  },
                 ),
               if (_open.contains(id))
                 _TreeDetail(
@@ -192,45 +207,61 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
               folded: folded,
               line: line,
               surface: surface,
+              depth: depth + 1,
             ),
           )
       else if (root)
         (null, _FoldedStrip(rootId: id, below: below, height: _kidSize)),
     ];
-    if (branches.isEmpty) return head;
     final stemAt = size / 2 - Chrome.treeLine / 2;
     final elbowAt = Insets.md + _kidSize / 2;
+    // Past the deepest step in, a sub-session hangs straight under its parent.
+    final flat = depth >= Chrome.treeIndentDepth;
+    // The head keeps one ancestry folded or not, or its composers' state goes.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         CustomPaint(
-          painter: _StemPainter(x: size / 2, from: size, color: line),
+          painter: branches.isEmpty
+              ? null
+              : _StemPainter(x: size / 2, from: size, color: line),
           child: head,
         ),
-        Padding(
-          padding: EdgeInsets.only(left: stemAt),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (i, (key, branch)) in branches.indexed)
-                CustomPaint(
-                  key: key,
-                  painter: _ElbowPainter(
-                    last: i == branches.length - 1,
-                    elbowAt: elbowAt,
-                    reach: _elbow,
-                    color: line,
+        if (branches.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(left: flat ? 0 : stemAt),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (i, (key, branch)) in branches.indexed)
+                  CustomPaint(
+                    key: key,
+                    painter: flat
+                        ? _RunPainter(
+                            x: size / 2,
+                            last: i == branches.length - 1,
+                            to: Insets.md,
+                            color: line,
+                          )
+                        : _ElbowPainter(
+                            last: i == branches.length - 1,
+                            elbowAt: elbowAt,
+                            reach: _elbow,
+                            color: line,
+                          ),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        top: Insets.md,
+                        left: flat ? 0 : _elbow,
+                      ),
+                      child: branch,
+                    ),
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.only(top: Insets.md, left: _elbow),
-                    child: branch,
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -281,7 +312,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
           OverviewFamilyFooter(root: card, below: below),
           const SizedBox(height: Insets.xs),
         ],
-        OverviewQuickComposer(card: card),
+        OverviewQuickComposer(key: _rootComposer, card: card),
       ],
     );
     final Widget body = widget.ready
@@ -322,6 +353,17 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
       ],
     );
   }
+}
+
+/// A message sent from under a pill, and the answer read when it went.
+class _Awaiting {
+  _Awaiting(this.sent, {required this.at, this.before});
+
+  final QuickMessageSent sent;
+  final DateTime at;
+
+  /// Null while no read had settled; the first one since is taken instead.
+  LastAnswer? before;
 }
 
 /// "4 of 5 done · 1 working" and the fold under a family's root card:
@@ -438,7 +480,7 @@ class _TreePill extends ConsumerStatefulWidget {
 
   /// A message sent from under the pill, said in place of its latest line
   /// until the session answers; then [onSentSeen].
-  final QuickMessageSent? sent;
+  final _Awaiting? sent;
   final VoidCallback onSentSeen;
 
   @override
@@ -474,9 +516,16 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final picked = ref.watch(
       overviewSelectionProvider.select((s) => s.contains(card.id)),
     );
-    if (widget.sent != null) {
-      ref.listen(overviewLastAnswerProvider(card.id), (was, now) {
-        if (was?.value?.text != now.value?.text) widget.onSentSeen();
+    if (widget.sent case final awaiting?) {
+      ref.listen(overviewLastAnswerProvider(card.id), (_, now) {
+        if (now.isLoading || now.hasError || !now.hasValue) return;
+        final said = now.requireValue;
+        if (said.answers(sentAt: awaiting.at, before: awaiting.before)) {
+          widget.onSentSeen();
+        } else {
+          // The first read since it went, when none had been read before.
+          awaiting.before ??= said;
+        }
       });
     }
     final size = widget.size;
@@ -626,7 +675,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
                           OverviewSentStatus(
                             key: ValueKey('overview-tree-sent:${card.id}'),
                             sessionId: card.id,
-                            sent: sent,
+                            sent: sent.sent,
                           )
                         else
                           _LatestLine(card: card),
@@ -643,6 +692,8 @@ class _TreePillState extends ConsumerState<_TreePill> {
 
     // Gmail's way: the box takes the avatar's face, inside its bounds.
     final pickable = selecting || active;
+    void toggle() =>
+        ref.read(overviewSelectionProvider.notifier).toggle(card.id);
     return Semantics(
       expanded: widget.open,
       child: OverviewFamilyHover(
@@ -678,42 +729,59 @@ class _TreePillState extends ConsumerState<_TreePill> {
                   top: 0,
                   width: size,
                   height: size,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      IgnorePointer(
-                        child: SessionAvatar(
-                          card: card,
-                          size: size,
-                          progress: overviewDoneShare(node),
-                          waiting: overviewWaitingIn(node),
-                          halo: widget.halo,
-                          glow: hovered,
-                        ),
-                      ),
-                      if (pickable)
-                        Container(
-                          width: SessionAvatar.faceOf(size),
-                          height: SessionAvatar.faceOf(size),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: scheme.surfaceContainerHigh,
-                          ),
-                          child: Checkbox(
-                            key: ValueKey('overview-tree-select:${card.id}'),
-                            value: picked,
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            semanticLabel: 'Select ${card.entry.title}',
-                            onChanged: (_) => ref
-                                .read(overviewSelectionProvider.notifier)
-                                .toggle(card.id),
-                          ),
-                        ),
-                    ],
+                  child: IgnorePointer(
+                    child: SessionAvatar(
+                      card: card,
+                      size: size,
+                      progress: overviewDoneShare(node),
+                      waiting: overviewWaitingIn(node),
+                      halo: widget.halo,
+                      glow: hovered,
+                    ),
                   ),
                 ),
+                if (pickable)
+                  // A thumb's target from the avatar's corner, inside the
+                  // pill's bounds; the knob, drawn later, keeps its own.
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    width: minHeight,
+                    height: minHeight,
+                    child: GestureDetector(
+                      key: ValueKey('overview-tree-select-hit:${card.id}'),
+                      behavior: HitTestBehavior.opaque,
+                      excludeFromSemantics: true,
+                      onTap: toggle,
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: SizedBox.square(
+                          dimension: size,
+                          child: Center(
+                            child: Container(
+                              width: SessionAvatar.faceOf(size),
+                              height: SessionAvatar.faceOf(size),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: scheme.surfaceContainerHigh,
+                              ),
+                              child: Checkbox(
+                                key: ValueKey(
+                                  'overview-tree-select:${card.id}',
+                                ),
+                                value: picked,
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                semanticLabel: 'Select ${card.entry.title}',
+                                onChanged: (_) => toggle(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1256,6 +1324,35 @@ class _ElbowPainter extends CustomPainter {
       old.elbowAt != elbowAt ||
       old.reach != reach ||
       old.color != color;
+}
+
+/// A branch hung straight under its parent: the stem down to its avatar —
+/// and on past it, unless it is the [last].
+class _RunPainter extends CustomPainter {
+  _RunPainter({
+    required this.x,
+    required this.last,
+    required this.to,
+    required this.color,
+  });
+
+  final double x;
+  final bool last;
+  final double to;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawLine(
+      Offset(x, 0),
+      Offset(x, last ? to : size.height),
+      _line(color),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RunPainter old) =>
+      old.x != x || old.last != last || old.to != to || old.color != color;
 }
 
 Paint _line(Color color) => Paint()

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -14,6 +15,7 @@ import 'package:karmashala/src/features/overview/application/overview_links.dart
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_quick_message.dart';
+import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/application/overview_tree.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_end_button.dart'
     show OverviewHoverScope;
@@ -99,11 +101,13 @@ class _Runs extends PipelinesController {
   );
 }
 
-/// Keeps what the tree's composers send, and sends it at once.
+/// Keeps what the tree's composers send, and sends it at once — or, while
+/// [hold] is set, once it completes.
 class _SpyMessage extends OverviewQuickMessage {
   _SpyMessage(super.ref);
 
   final sent = <(String, String)>[];
+  Completer<void>? hold;
 
   @override
   Future<QuickMessageSent> send(
@@ -112,8 +116,21 @@ class _SpyMessage extends OverviewQuickMessage {
     String? requestId,
   }) async {
     sent.add((sessionId, text));
+    await hold?.future;
     return QuickMessageSent(requestId: requestId ?? 'key-${sent.length}');
   }
+}
+
+/// The board the Overview draws, swapped mid-test.
+class _Boards extends Notifier<OverviewBoard> {
+  _Boards(this._first);
+
+  final OverviewBoard _first;
+
+  @override
+  OverviewBoard build() => _first;
+
+  void show(OverviewBoard board) => state = board;
 }
 
 OverviewCard _card(
@@ -1042,6 +1059,54 @@ void main() {
       await unmountMission(tester);
     });
 
+    testWidgets('under a thumb the pick box is a thumb\'s target, its face '
+        'on the avatar, and the pill and the knob still take theirs', (
+      tester,
+    ) async {
+      final c = await pump(tester, size: const Size(390, 1400));
+      bool picked(String id) => c.read(overviewSelectionProvider).contains(id);
+      const leaf = 'ks-r32-sub2';
+      await reveal(tester, pill(leaf));
+      await tester.longPress(pill(leaf));
+      await settleMission(tester);
+      expect(picked(leaf), isTrue);
+
+      final avatar = tester.getRect(
+        find.byKey(const ValueKey('session-avatar:$leaf')),
+      );
+      final face = tester.getRect(
+        find.byKey(const ValueKey('overview-tree-select:$leaf')),
+      );
+      expect(avatar.contains(face.center), isTrue);
+      expect(face.width, lessThan(Touch.target));
+      final hit = find.byKey(const ValueKey('overview-tree-select-hit:$leaf'));
+      final target = tester.getRect(hit);
+      expect(target.width, greaterThanOrEqualTo(Touch.target));
+      expect(target.height, greaterThanOrEqualTo(Touch.target));
+      // Its far corner, outside the face, is the box's.
+      await tester.tapAt(target.bottomRight - const Offset(2, 2));
+      await settleMission(tester);
+      expect(picked(leaf), isFalse);
+
+      // The pill's own long press still picks, and its tap still unpicks.
+      await tester.longPress(pill(leaf));
+      await settleMission(tester);
+      expect(picked(leaf), isTrue);
+      await tester.tap(pill(leaf));
+      await settleMission(tester);
+      expect(picked(leaf), isFalse);
+
+      // And the knob still folds, its box showing over a parent's avatar.
+      const parent = 'ks-r32-sub0';
+      c.read(overviewSelectionProvider.notifier).toggle(parent);
+      await reveal(tester, knob(parent));
+      await tester.tap(knob(parent));
+      await settleMission(tester);
+      expect(c.read(overviewFoldedParentsProvider), {parent});
+      expect(picked(parent), isTrue);
+      await unmountMission(tester);
+    });
+
     Finder composerIn(Finder scope, String id) => find.descendant(
       of: scope,
       matching: find.byKey(ValueKey('overview-composer:$id')),
@@ -1115,6 +1180,157 @@ void main() {
       );
       await unmountMission(tester);
     });
+
+    testWidgets('folding an inner node keeps its own composer: the draft, '
+        'and a send in flight', (tester) async {
+      final c = await pump(tester);
+      const id = 'ks-r32-sub0';
+      await reveal(tester, pill(id));
+      await tester.tap(pill(id));
+      await settleMission(tester);
+      final field = composerIn(detail(id), id);
+      String draft() => tester.widget<TextField>(field).controller!.text;
+      await tester.enterText(field, 'half a reply');
+      final fold = c.read(overviewFoldedParentsProvider.notifier);
+      fold.toggle(id);
+      await settleMission(tester);
+      expect(pill('ks-r32-sub0-a'), findsNothing);
+      expect(draft(), 'half a reply', reason: 'folded');
+      fold.toggle(id);
+      await settleMission(tester);
+      expect(pill('ks-r32-sub0-a'), findsOneWidget);
+      expect(draft(), 'half a reply', reason: 'unfolded');
+
+      final hold = (c.read(overviewQuickMessageProvider) as _SpyMessage).hold =
+          Completer<void>();
+      await tester.showKeyboard(field);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      fold.toggle(id);
+      await settleMission(tester);
+      hold.complete();
+      await settleMission(tester);
+      expect(sent(c), [(id, 'half a reply')]);
+      expect(draft(), isEmpty);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('overview-composer-said:$id')),
+          matching: find.text('Sent'),
+        ),
+        findsOneWidget,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('a root composer keeps its draft and its keys as the '
+        'families reorder, across rows, and as it turns ready', (tester) async {
+      OverviewBoard board(List<OverviewCard> cards) => _board({'ks': cards});
+      final a = _card('a', AgentState.working);
+      final b = _card('b', AgentState.working);
+      final cc = _card('c', AgentState.working);
+      final d = _card('d', AgentState.working);
+      final boards = NotifierProvider<_Boards, OverviewBoard>(
+        () => _Boards(board([a, b, cc, d])),
+      );
+      final c = await pumpMission(
+        tester,
+        fixture: _fixture(),
+        prefsDir: dir,
+        size: const Size(1440, 1400),
+        overrides: [
+          overviewQuickMessageProvider.overrideWith(_SpyMessage.new),
+          overviewBoardProvider.overrideWith((ref) => ref.watch(boards)),
+        ],
+      );
+      final field = find.byKey(const ValueKey('overview-composer:b'));
+      await reveal(tester, field);
+      await tester.enterText(field, 'half a thought');
+      TextField box() => tester.widget<TextField>(field);
+      final top = tester.getTopLeft(field);
+
+      Future<void> show(List<OverviewCard> cards, String why) async {
+        c.read(boards.notifier).show(board(cards));
+        await settleMission(tester);
+        expect(box().controller!.text, 'half a thought', reason: why);
+      }
+
+      await show([b, a, cc, d], 'a slot along');
+      expect(tester.getTopLeft(field).dx, lessThan(top.dx));
+      expect(box().focusNode!.hasFocus, isTrue);
+      await show([a, cc, d, b], 'a row down');
+      expect(tester.getTopLeft(field).dy, greaterThan(top.dy));
+      expect(box().focusNode!.hasFocus, isTrue);
+      await show([a, _card('b', AgentState.ready), cc, d], 'ready');
+      await unmountMission(tester);
+    });
+
+    for (final late in const [false, true]) {
+      testWidgets(
+        late
+            ? 'Sent survives a late read of an answer older than the send'
+            : 'Sent clears on a new answer in the same words as the last',
+        (tester) async {
+          final c = await pump(tester);
+          final reader = c.read(overviewReaderProvider) as FakeOverviewReader;
+          final mouse = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          addTearDown(mouse.removePointer);
+          await mouse.addPointer(location: Offset.zero);
+          final now = MissionFixture.now;
+          const id = 'ks-r32-sub3';
+          final went = find.byKey(const ValueKey('overview-tree-sent:$id'));
+          Future<void> answer(LastAnswer said) async {
+            reader.answers[id] = said;
+            c.invalidate(overviewLastAnswerProvider(id));
+            await settleMission(tester);
+          }
+
+          final before = now.subtract(const Duration(hours: 1));
+          final after = now.add(const Duration(minutes: 1));
+          Completer<void>? gate;
+          if (late) {
+            // Still being read when the message goes, and old when it lands.
+            gate = reader.held[id] = Completer<void>();
+            reader.answers[id] = LastAnswer.of('Old news', at: before);
+            c.invalidate(overviewLastAnswerProvider(id));
+          } else {
+            await answer(LastAnswer.of('Done', at: before));
+          }
+
+          await reveal(tester, pill(id));
+          await mouse.moveTo(tester.getCenter(pill(id)));
+          await settleMission(tester);
+          await tester.tap(
+            find.byKey(const ValueKey('overview-tree-message:$id')),
+          );
+          await settleMission(tester);
+          await tester.enterText(
+            composerIn(
+              find.byKey(const ValueKey('overview-tree-composer:$id')),
+              id,
+            ),
+            'Open a draft PR',
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await settleMission(tester);
+          await mouse.moveTo(Offset.zero);
+          await settleMission(tester);
+          expect(went, findsOneWidget);
+
+          if (late) {
+            gate!.complete();
+            await settleMission(tester);
+            expect(went, findsOneWidget, reason: 'an old answer, read late');
+            await answer(LastAnswer.of('PR is up', at: after));
+          } else {
+            await answer(LastAnswer.of('Done', at: after));
+          }
+          expect(went, findsNothing, reason: 'a new answer');
+          await unmountMission(tester);
+        },
+      );
+    }
 
     testWidgets('Esc closes the pill\'s composer and sends nothing', (
       tester,
@@ -1289,6 +1505,39 @@ void main() {
       expect(ids, contains('ks-r32-sub0'));
       await reveal(tester, pill('ks-r32-sub0'));
       expect(pill('ks-r32-sub1'), findsNothing);
+      await unmountMission(tester);
+    });
+
+    testWidgets('360 px at 1.6x: a family five deep fits, its deepest '
+        'opened', (tester) async {
+      final chain = [
+        _card('n0', AgentState.working),
+        for (var i = 1; i <= 5; i++)
+          _card('n$i', AgentState.working, parent: 'n${i - 1}'),
+      ];
+      await pumpMission(
+        tester,
+        fixture: _fixture(),
+        prefsDir: dir,
+        size: const Size(360, 900),
+        phone: true,
+        textScale: 1.6,
+        overrides: [
+          overviewQuickMessageProvider.overrideWith(_SpyMessage.new),
+          overviewBoardProvider.overrideWith((ref) => _board({'ks': chain})),
+        ],
+      );
+      await reveal(tester, pill('n5'));
+      expect(tester.takeException(), isNull);
+      // Past the deepest step in, a sub-session lines up under its parent.
+      final x = tester.getTopLeft(pill('n3')).dx;
+      expect(tester.getTopLeft(pill('n4')).dx, x);
+      expect(tester.getTopLeft(pill('n5')).dx, x);
+      await tester.tap(pill('n5'));
+      await settleMission(tester);
+      expect(detail('n5'), findsOneWidget);
+      await reveal(tester, composerIn(detail('n5'), 'n5'));
+      expect(tester.takeException(), isNull);
       await unmountMission(tester);
     });
 

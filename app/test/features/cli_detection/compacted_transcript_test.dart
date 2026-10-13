@@ -6,7 +6,9 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/transcript.dart' show MarkdownMessage;
 import 'package:path/path.dart' as p;
 
 import '../../support/temp_directory.dart';
@@ -222,5 +224,55 @@ void main() {
       findsNothing,
     );
     expect(find.text('Summary'), findsNothing);
+  });
+
+  testWidgets('a whitespace-only summary is no summary: the notice stands in '
+      'and is what Copy takes', (tester) async {
+    const messages = [
+      TranscriptMessage(role: 'user', text: 'do the thing'),
+      TranscriptMessage(
+        role: 'user',
+        text: '  \n ',
+        compaction: CompactionBoundary(trigger: 'auto'),
+      ),
+    ];
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChatTranscriptView(
+            messages: chatMessagesFromTranscript(messages),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('COMPACTED'), findsOneWidget);
+    expect(find.byType(MarkdownMessage), findsNothing);
+    expect(
+      find.textContaining('earlier message', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.text('Summary'), findsNothing);
+    await tester.tap(find.byTooltip('Copy message'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(copied, contains('earlier message'));
   });
 }

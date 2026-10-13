@@ -162,6 +162,10 @@ class OverviewHybrid extends ConsumerStatefulWidget {
 class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   var _doneOpen = false;
 
+  /// Each family's key: a re-sort that moves it to another slot, row or
+  /// lane keeps its state, a draft in its composer among it.
+  final _treeKeys = <String, GlobalKey>{};
+
   /// The most families across.
   static const _maxAcross = 3;
 
@@ -210,14 +214,20 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         final across = ((workWidth + Insets.md) / (cell + Insets.md))
             .floor()
             .clamp(1, _maxAcross);
-        Widget tree(OverviewTreeNode node, {bool ready = false}) =>
-            OverviewFamilyTree(
-              key: ValueKey('overview-tree:${node.card.id}'),
-              node: node,
-              onOpen: onOpen,
-              ready: ready,
-              compact: phone,
-            );
+        final drawn = <String>{};
+        Widget tree(OverviewTreeNode node, {bool ready = false}) {
+          final id = node.card.id;
+          return OverviewFamilyTree(
+            // A global key twice in a frame throws; a second draw goes without.
+            key: drawn.add(id)
+                ? _treeKeys.putIfAbsent(id, GlobalKey.new)
+                : ValueKey('overview-tree:$id'),
+            node: node,
+            onOpen: onOpen,
+            ready: ready,
+            compact: phone,
+          );
+        }
 
         final queue = Column(
           key: const ValueKey('overview-queue'),
@@ -308,6 +318,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         );
         final done = sections.done;
         final depths = overviewDepthsIn(done);
+        _treeKeys.removeWhere((id, _) => !drawn.contains(id));
 
         return ListView(
           key: const ValueKey('overview-hybrid'),

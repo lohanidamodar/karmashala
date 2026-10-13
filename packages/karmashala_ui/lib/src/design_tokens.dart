@@ -879,6 +879,10 @@ class Chrome {
   /// The lines of the dashboard's tree: a stem and its rounded elbows.
   static const treeLine = 2.0;
 
+  /// The deepest a sub-session steps in on the tree; one deeper lines up
+  /// under its parent, so a deep family keeps its width.
+  static const treeIndentDepth = 3;
+
   /// The fold knob on a tree's stem; under a thumb its face is
   /// [treeKnobTouch] and its tap area still `Touch.target`.
   static const treeKnob = 22.0;

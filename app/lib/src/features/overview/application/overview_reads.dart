@@ -30,12 +30,15 @@ const Duration kOverviewReadTimeout = Duration(seconds: 15);
 /// A session's last answer, or why there is none to show.
 @immutable
 class LastAnswer {
-  const LastAnswer.of(String this.text) : why = null;
-  const LastAnswer.missing(String this.why) : text = null;
+  const LastAnswer.of(String this.text, {this.at}) : why = null;
+  const LastAnswer.missing(String this.why) : text = null, at = null;
 
   static const none = LastAnswer.missing('No answer recorded yet.');
 
   final String? text;
+
+  /// When the agent wrote it, where its record says.
+  final DateTime? at;
 
   /// Said in place of [text]: that there is none, or why it cannot be read.
   final String? why;
@@ -44,18 +47,33 @@ class LastAnswer {
   static LastAnswer from(List<TranscriptMessage> rows) {
     for (final row in rows.reversed) {
       if (row.role == 'agent' && row.text.trim().isNotEmpty) {
-        return LastAnswer.of(row.text.trim());
+        return LastAnswer.of(row.text.trim(), at: row.at);
       }
     }
     return none;
   }
 
-  @override
-  bool operator ==(Object other) =>
-      other is LastAnswer && other.text == text && other.why == why;
+  /// Whether this answers a message sent at [sentAt], [before] being the
+  /// answer read when it went — null when none had been read.
+  bool answers({required DateTime sentAt, LastAnswer? before}) {
+    if (text == null) return false;
+    final at = this.at;
+    if (before == null) return at != null && at.isAfter(sentAt);
+    final was = before.at;
+    if (at != null && was != null) return at.isAfter(was);
+    // With no times to go on, only other words tell it is new.
+    return text != before.text;
+  }
 
   @override
-  int get hashCode => Object.hash(text, why);
+  bool operator ==(Object other) =>
+      other is LastAnswer &&
+      other.text == text &&
+      other.at == at &&
+      other.why == why;
+
+  @override
+  int get hashCode => Object.hash(text, at, why);
 }
 
 /// One call or background run a session has open, as the Overview words it.
