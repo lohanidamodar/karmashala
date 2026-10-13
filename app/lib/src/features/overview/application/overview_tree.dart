@@ -150,11 +150,20 @@ OverviewForest overviewForestOf(OverviewBoard board) {
       file(grow(card));
     }
   }
-  // A cycle of parents leaves its sessions on no tree: each stands alone.
+  // A cycle of parents has no top, so none of it was grown above. It is
+  // rooted where the walk up from one of its sessions comes back round, and
+  // grown whole from there: a sub-session hanging off the cycle stays in
+  // its family, and the family is filed by all of it.
   for (final card in byId.values) {
-    if (members.contains(card.id) && !placed.contains(card.id)) {
-      file(grow(card));
+    if (!members.contains(card.id) || placed.contains(card.id)) continue;
+    final seen = <String>{};
+    var top = card;
+    while (seen.add(top.id)) {
+      final up = parentOf(top);
+      if (up == null) break;
+      top = byId[up]!;
     }
+    file(grow(placed.contains(top.id) ? card : top));
   }
   final work = <(OverviewLane, List<OverviewTreeNode>)>[
     for (final lane in board.lanes)

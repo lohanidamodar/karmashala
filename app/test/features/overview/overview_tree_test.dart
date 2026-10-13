@@ -361,6 +361,34 @@ void main() {
       ]);
     });
 
+    test('a cycle of stopped parents keeps its working sub-session in one '
+        'family, at work, whatever the order', () {
+      final waits = AgentState.values.firstWhere(
+        (s) => columnOf(s) == BoardColumn.needsYou,
+      );
+      // With and without a sub-session of its own that waits on the owner.
+      for (final kid in [null, waits]) {
+        final cards = [
+          _card('c', AgentState.working, parent: 'a'),
+          if (kid != null) _card('d', kid, parent: 'c'),
+          _card('a', AgentState.ended, parent: 'b'),
+          _card('b', AgentState.ended, parent: 'a'),
+        ];
+        final ids = {for (final card in cards) card.id};
+        for (final order in [cards, cards.reversed.toList()]) {
+          final forest = overviewForestOf(_board({'ks': order}));
+          final trees = [for (final (_, trees) in forest.work) ...trees];
+          expect(trees, hasLength(1), reason: '$kid, ${order.first.id}');
+          expect(
+            trees.single.drawn.map((c) => c.id).toSet(),
+            ids,
+            reason: '$kid, ${order.first.id}',
+          );
+          expect(forest.ready, isEmpty, reason: '$kid, ${order.first.id}');
+        }
+      }
+    });
+
     test('a fold keeps only the root drawn', () {
       final tree = overviewForestOf(
         _board({
