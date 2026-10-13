@@ -5,6 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/truncated_text.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_batch.dart';
@@ -60,7 +61,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
 
   /// What became of the last message sent from under a pill, until it
   /// answers.
-  final _sent = <String, QuickMessageSent>{};
+  final _sent = <String, _Awaiting>{};
 
   /// The root's composer, kept as its card turns from working to done.
   final _rootComposer = GlobalKey();
@@ -160,10 +161,20 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
                   tuck: size / 2,
                   line: line,
                   onClose: () => setState(() => _composing = null),
-                  onSent: (sent) => setState(() {
-                    _composing = null;
-                    _sent[id] = sent;
-                  }),
+                  onSent: (sent) {
+                    final read = ref.read(overviewLastAnswerProvider(id));
+                    final now = ref.read(clockProvider).nowUtc();
+                    setState(() {
+                      _composing = null;
+                      _sent[id] = _Awaiting(
+                        sent,
+                        at: now,
+                        before: read.isLoading || read.hasError
+                            ? null
+                            : read.value,
+                      );
+                    });
+                  },
                 ),
               if (_open.contains(id))
                 _TreeDetail(
@@ -330,6 +341,17 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   }
 }
 
+/// A message sent from under a pill, and the answer read when it went.
+class _Awaiting {
+  _Awaiting(this.sent, {required this.at, this.before});
+
+  final QuickMessageSent sent;
+  final DateTime at;
+
+  /// Null while no read had settled; the first one since is taken instead.
+  LastAnswer? before;
+}
+
 /// "4 of 5 done · 1 working" and the fold under a family's root card:
 /// folded, only the root stays, saying how many are away.
 class OverviewFamilyFooter extends ConsumerWidget {
@@ -444,7 +466,7 @@ class _TreePill extends ConsumerStatefulWidget {
 
   /// A message sent from under the pill, said in place of its latest line
   /// until the session answers; then [onSentSeen].
-  final QuickMessageSent? sent;
+  final _Awaiting? sent;
   final VoidCallback onSentSeen;
 
   @override
@@ -480,9 +502,16 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final picked = ref.watch(
       overviewSelectionProvider.select((s) => s.contains(card.id)),
     );
-    if (widget.sent != null) {
-      ref.listen(overviewLastAnswerProvider(card.id), (was, now) {
-        if (was?.value?.text != now.value?.text) widget.onSentSeen();
+    if (widget.sent case final awaiting?) {
+      ref.listen(overviewLastAnswerProvider(card.id), (_, now) {
+        if (now.isLoading || now.hasError || !now.hasValue) return;
+        final said = now.requireValue;
+        if (said.answers(sentAt: awaiting.at, before: awaiting.before)) {
+          widget.onSentSeen();
+        } else {
+          // The first read since it went, when none had been read before.
+          awaiting.before ??= said;
+        }
       });
     }
     final size = widget.size;
@@ -632,7 +661,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
                           OverviewSentStatus(
                             key: ValueKey('overview-tree-sent:${card.id}'),
                             sessionId: card.id,
-                            sent: sent,
+                            sent: sent.sent,
                           )
                         else
                           _LatestLine(card: card),

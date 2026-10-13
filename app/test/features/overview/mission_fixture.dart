@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -724,9 +725,13 @@ class FakeOverviewReader implements OverviewReader {
   final Map<String, List<String>> files;
   final asked = <String>[];
 
+  /// A read of a session's last answer waits on its gate here, if any.
+  final held = <String, Completer<void>>{};
+
   @override
   Future<LastAnswer> lastAnswer(String sessionId) async {
     asked.add(sessionId);
+    await held[sessionId]?.future;
     return answers[sessionId] ?? LastAnswer.none;
   }
 

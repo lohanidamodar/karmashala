@@ -15,6 +15,7 @@ import 'package:karmashala/src/features/overview/application/overview_links.dart
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_quick_message.dart';
+import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/application/overview_tree.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_end_button.dart'
     show OverviewHoverScope;
@@ -1062,6 +1063,74 @@ void main() {
       await show([a, _card('b', AgentState.ready), cc, d], 'ready');
       await unmountMission(tester);
     });
+
+    for (final late in const [false, true]) {
+      testWidgets(
+        late
+            ? 'Sent survives a late read of an answer older than the send'
+            : 'Sent clears on a new answer in the same words as the last',
+        (tester) async {
+          final c = await pump(tester);
+          final reader = c.read(overviewReaderProvider) as FakeOverviewReader;
+          final mouse = await tester.createGesture(
+            kind: PointerDeviceKind.mouse,
+          );
+          addTearDown(mouse.removePointer);
+          await mouse.addPointer(location: Offset.zero);
+          final now = MissionFixture.now;
+          const id = 'ks-r32-sub3';
+          final went = find.byKey(const ValueKey('overview-tree-sent:$id'));
+          Future<void> answer(LastAnswer said) async {
+            reader.answers[id] = said;
+            c.invalidate(overviewLastAnswerProvider(id));
+            await settleMission(tester);
+          }
+
+          final before = now.subtract(const Duration(hours: 1));
+          final after = now.add(const Duration(minutes: 1));
+          Completer<void>? gate;
+          if (late) {
+            // Still being read when the message goes, and old when it lands.
+            gate = reader.held[id] = Completer<void>();
+            reader.answers[id] = LastAnswer.of('Old news', at: before);
+            c.invalidate(overviewLastAnswerProvider(id));
+          } else {
+            await answer(LastAnswer.of('Done', at: before));
+          }
+
+          await reveal(tester, pill(id));
+          await mouse.moveTo(tester.getCenter(pill(id)));
+          await settleMission(tester);
+          await tester.tap(
+            find.byKey(const ValueKey('overview-tree-message:$id')),
+          );
+          await settleMission(tester);
+          await tester.enterText(
+            composerIn(
+              find.byKey(const ValueKey('overview-tree-composer:$id')),
+              id,
+            ),
+            'Open a draft PR',
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          await settleMission(tester);
+          await mouse.moveTo(Offset.zero);
+          await settleMission(tester);
+          expect(went, findsOneWidget);
+
+          if (late) {
+            gate!.complete();
+            await settleMission(tester);
+            expect(went, findsOneWidget, reason: 'an old answer, read late');
+            await answer(LastAnswer.of('PR is up', at: after));
+          } else {
+            await answer(LastAnswer.of('Done', at: after));
+          }
+          expect(went, findsNothing, reason: 'a new answer');
+          await unmountMission(tester);
+        },
+      );
+    }
 
     testWidgets('Esc closes the pill\'s composer and sends nothing', (
       tester,
