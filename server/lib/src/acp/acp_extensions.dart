@@ -20,6 +20,10 @@ abstract final class AcpExtensions {
   /// option holds an alias such as `default`.
   static const activeModel = '_karmashala/active_model';
 
+  /// The modes the agent offers now (`currentModeId`, `availableModes`, as
+  /// `session/new` answers them), where they moved with the model.
+  static const availableModes = '_karmashala/available_modes';
+
   /// The `messageId` of the row a compaction writes, followed by
   /// `:<trigger>` when there is one.
   static const compactionMessageId = '_karmashala/compaction';

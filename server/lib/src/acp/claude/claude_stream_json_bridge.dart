@@ -389,7 +389,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _announceModel();
     return {
       'sessionId': id,
-      'modes': _modes(),
+      'modes': _toldModesOf(_modes()),
       'configOptions': _configOptions(),
     };
   }
@@ -416,7 +416,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _resumeAt = resumeAt;
     _announceCommands();
     _announceModel();
-    return {'modes': _modes(), 'configOptions': _configOptions()};
+    return {'modes': _toldModesOf(_modes()), 'configOptions': _configOptions()};
   }
 
   /// A rewind's cut, kept until a prompt lands on it: a cut with nothing
@@ -562,6 +562,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       'sessionUpdate': 'config_option_update',
       'configOptions': _configOptions(),
     });
+    _retellModes();
   }
 
   /// Puts a reopened conversation back in the mode and model it was in. One
@@ -620,6 +621,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     }
     _model = value;
     _reportModel(_resolvedOf(value) ?? (value == 'default' ? null : value));
+    _retellModes();
     return {'configOptions': _configOptions()};
   }
 
@@ -639,10 +641,51 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     'availableModes': [
       for (final MapEntry(key: id, value: (name, description))
           in _modeNames.entries)
-        {'id': id, 'name': name, 'description': description},
+        if (id != 'auto' || _mode == 'auto' || _offersAuto())
+          {'id': id, 'name': name, 'description': description},
       if (!_modeNames.containsKey(_mode)) {'id': _mode, 'name': _mode},
     ],
   };
+
+  /// The `models` row of the conversation's model, by its value.
+  JsonMap? _modelRow() {
+    for (final model in _models) {
+      if (model['value'] == _model) return model;
+    }
+    return null;
+  }
+
+  /// Whether the model offers auto mode, by its row's `supportsAutoMode`
+  /// (2.1.296; absent on a model without it, such as Haiku 4.5). A Claude
+  /// whose rows never carry the field, or a model with no row, is not
+  /// judged: auto stays offered, and a refusal is still met.
+  bool _offersAuto() {
+    if (!_models.any((m) => m.containsKey('supportsAutoMode'))) return true;
+    final row = _modelRow();
+    return row == null || row['supportsAutoMode'] == true;
+  }
+
+  /// The mode ids last told, so a model change retells them only when
+  /// they moved.
+  List<String> _toldModes = const [];
+
+  JsonMap _toldModesOf(JsonMap modes) {
+    _toldModes = [
+      for (final mode in jsonObjects(modes['availableModes'])) '${mode['id']}',
+    ];
+    return modes;
+  }
+
+  /// After a model change: the modes again, where the model offers others.
+  void _retellModes() {
+    final modes = _modes();
+    final ids = [
+      for (final mode in jsonObjects(modes['availableModes'])) '${mode['id']}',
+    ];
+    if (ids.join(',') == _toldModes.join(',')) return;
+    _toldModesOf(modes);
+    _update({'sessionUpdate': AcpExtensions.availableModes, ...modes});
+  }
 
   List<JsonMap> _configOptions() => [
     {
@@ -723,6 +766,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           'sessionUpdate': 'config_option_update',
           'configOptions': _configOptions(),
         });
+        _retellModes();
         return;
       }
     }

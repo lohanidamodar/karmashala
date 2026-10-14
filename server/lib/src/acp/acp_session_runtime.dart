@@ -1051,6 +1051,13 @@ class AcpSessionRuntime implements ScreenSession {
       _announceConfigOptions();
       return;
     }
+    if (update is UnknownUpdate &&
+        update.kind == AcpExtensions.availableModes &&
+        update.raw['currentModeId'] is String) {
+      _modes = SessionModeState.fromJson(update.raw);
+      _announceModes();
+      return;
+    }
     // A load replays the conversation the rows already hold.
     if (_loading) return;
     if (update is UsageUpdate) {

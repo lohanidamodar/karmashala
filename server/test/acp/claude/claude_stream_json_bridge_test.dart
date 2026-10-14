@@ -1678,6 +1678,45 @@ void main() {
       await rt.stop();
     });
 
+    // 2.1.296's initialize models rows carry supportsAutoMode on the models
+    // that have it; Haiku 4.5's row has no such key.
+    test('Automatic is offered only on a model whose row supports it, and '
+        'comes and goes as the model changes', () async {
+      final machine = FakeClaudeMachine(
+        models: const [
+          {
+            'value': 'default',
+            'resolvedModel': 'claude-opus-5-5',
+            'displayName': 'Default (recommended)',
+            'supportsAutoMode': true,
+          },
+          {
+            'value': 'claude-haiku-4-5-20251001',
+            'resolvedModel': 'claude-haiku-4-5-20251001',
+            'displayName': 'Haiku 4.5',
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      List<String> offered() => [
+        for (final mode in rt.modes!.availableModes) mode.id,
+      ];
+      expect(offered(), contains('auto'));
+      await rt.setConfigOption('model', 'claude-haiku-4-5-20251001');
+      await until(() => !offered().contains('auto'));
+      expect(offered(), [
+        'plan',
+        'dontAsk',
+        'default',
+        'acceptEdits',
+        'bypassPermissions',
+      ]);
+      await rt.setConfigOption('model', 'default');
+      await until(() => offered().contains('auto'));
+      await rt.stop();
+    });
+
     test('in auto mode what Claude still asks reaches the person: its '
         'reviewer screened it, the rung does not allow it', () async {
       final answered = Completer<Json>();
