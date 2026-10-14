@@ -243,7 +243,8 @@ void main() {
     });
 
     test('attached checkouts are Claude\'s --add-dir, and one attached later '
-        'is told with a resume before the next prompt', () async {
+        'is told with a resume before the next prompt, in the mode and model '
+        'the session was in', () async {
       final far = Directory('${temp.path}-far')..createSync();
       final later = Directory('${temp.path}-later')..createSync();
       addTearDown(() {
@@ -273,6 +274,8 @@ void main() {
         isEmpty,
       );
 
+      await rt.setMode('acceptEdits');
+      await rt.setConfigOption('model', 'sonnet');
       attached = [
         ...attached,
         EnvironmentPath(environmentId: 'local', path: later.path),
@@ -285,6 +288,15 @@ void main() {
         '--add-dir=${far.path}',
         '--add-dir=${later.path}',
       ]);
+      // The new process is put back in the mode and model picked, and the
+      // lists it answered with are the ones held.
+      expect(
+        machine.current.controls('set_permission_mode').single['mode'],
+        'acceptEdits',
+      );
+      expect(machine.current.controls('set_model').single['model'], 'sonnet');
+      expect(rt.modes!.currentModeId, 'acceptEdits');
+      expect(rt.configOptions!.options.single.currentValue, 'sonnet');
       expect(
         rows()
             .where((r) => r.role == SessionMessageRole.user)
@@ -505,8 +517,9 @@ void main() {
         // The paths an edit touches reach the checkpoint.
         expect(host.touched, containsAll(['/w/a.txt', '/w/b.txt']));
         // What ACP has no field for rides in _meta.
-        final opened = updates('tool_call')
-            .firstWhere((u) => u['toolCallId'] == 't7');
+        final opened = updates(
+          'tool_call',
+        ).firstWhere((u) => u['toolCallId'] == 't7');
         expect((opened['_meta'] as Json)['claudeCode'], {
           'toolName': 'mcp__karmashala__list_sessions',
         });
@@ -699,14 +712,16 @@ void main() {
       expect(calls['ag'], containsPair('status', 'completed'));
       expect(jsonEncode(calls['ag']!['content']), contains('One file.'));
       expect(calls['sb'], containsPair('kind', 'execute'));
-      final sub = updates('tool_call')
-          .firstWhere((u) => u['toolCallId'] == 'sb');
+      final sub = updates(
+        'tool_call',
+      ).firstWhere((u) => u['toolCallId'] == 'sb');
       expect(
         (sub['_meta'] as Json)['claudeCode'],
         containsPair('parentToolUseId', 'ag'),
       );
-      final started = updates('tool_call_update')
-          .firstWhere((u) => u['toolCallId'] == 'ag' && u['_meta'] != null);
+      final started = updates(
+        'tool_call_update',
+      ).firstWhere((u) => u['toolCallId'] == 'ag' && u['_meta'] != null);
       expect(
         ((started['_meta'] as Json)['claudeCode'] as Json)['task'],
         containsPair('subagentType', 'Explore'),
@@ -1352,8 +1367,11 @@ void main() {
   group('control', () {
     test('a Claude that does not end the turn after the interrupt is ended; '
         'the turn ends cancelled, and the next prompt resumes the '
-        'conversation in a new process with its mode and model', () async {
+        'conversation in a new process with its mode and model, and the '
+        'models it lists now', () async {
+      final models = [...FakeClaudeMachine.defaultModels];
       final machine = FakeClaudeMachine(
+        models: models,
         ignoreInterrupt: true,
         turns: [
           (c, user) async => c.streamText('m1', ['stuck ']),
@@ -1378,6 +1396,11 @@ void main() {
       rt.cancel();
       expect(await rt.awaitTurn(), StopReason.cancelled);
       expect(first.killed, isTrue);
+      models.add({
+        'value': 'fable',
+        'resolvedModel': 'claude-fable-5-1',
+        'displayName': 'Fable 5.1',
+      });
       expect(rt.lifecycle.hasEnded, isFalse, reason: 'the session lives on');
       expect(host.statuses.last.status, AgentActivityStatus.idle);
 
@@ -1388,6 +1411,14 @@ void main() {
       expect(second.args, ['--resume', rt.agentSessionId]);
       expect(second.controls('set_permission_mode').single['mode'], 'plan');
       expect(second.controls('set_model').single['model'], 'sonnet');
+      expect(rt.configOptions!.options.single.choices.map((c) => c.value), [
+        'default',
+        'sonnet',
+        'haiku',
+        'fable',
+      ]);
+      expect(rt.configOptions!.options.single.currentValue, 'sonnet');
+      expect(rt.modes!.currentModeId, 'plan');
       expect(rows().any((r) => r.text == 'Back.'), isTrue);
       await rt.stop();
     });

@@ -224,8 +224,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     }
     // The turn's error goes out before the exit, so it is read as the turn's.
     unawaited(
-      Future<void>.delayed(const Duration(milliseconds: 20))
-          .then((_) => _finish(code)),
+      Future<void>.delayed(
+        const Duration(milliseconds: 20),
+      ).then((_) => _finish(code)),
     );
   }
 
@@ -403,7 +404,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     }
     final at = jsonObject(params['_meta'])?[AcpExtensions.resumeAt];
     final resumeAt = at is String && at.isNotEmpty ? at : null;
-    await _open(_resumeArguments(id, resumeAt), params);
+    // A load of the conversation already open (checkouts attached since)
+    // keeps the mode and model the person had it in.
+    final reopening = id == _sessionId;
+    final mode = _mode;
+    final model = _model;
+    final claude = await _open(_resumeArguments(id, resumeAt), params);
+    if (reopening) await _restore(claude, mode, model);
     _openParams = params;
     _sessionId = id;
     _resumeAt = resumeAt;
@@ -548,13 +555,33 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       _openParams,
     );
     _abandoned = false;
+    await _restore(claude, mode, model);
+    // The new process lists its models afresh; the client is told.
+    _update({'sessionUpdate': 'current_mode_update', 'currentModeId': _mode});
+    _update({
+      'sessionUpdate': 'config_option_update',
+      'configOptions': _configOptions(),
+    });
+  }
+
+  /// Puts a reopened conversation back in the mode and model it was in. One
+  /// the new process refuses stays as it started, which is then what is told.
+  Future<void> _restore(ClaudeProcess claude, String mode, String model) async {
     if (_mode != mode) {
-      await claude.control('set_permission_mode', {'mode': mode});
-      _mode = mode;
+      try {
+        await claude.control('set_permission_mode', {'mode': mode});
+        _mode = mode;
+      } on ClaudeControlError {
+        // Kept as Claude answered it.
+      }
     }
     if (_model != model) {
-      await claude.control('set_model', {'model': model});
-      _model = model;
+      try {
+        await claude.control('set_model', {'model': model});
+        _model = model;
+      } on ClaudeControlError {
+        // Kept as Claude answered it.
+      }
     }
   }
 
