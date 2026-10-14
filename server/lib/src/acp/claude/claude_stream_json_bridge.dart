@@ -1357,7 +1357,11 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
             ],
             '_meta': {
               'claudeCode': {'toolName': 'AskUserQuestion'},
-              'karmashala': {'questions': questions},
+              'karmashala': {
+                'questions': [
+                  for (final q in questions) {...q, 'ownWords': _drawsOther(q)},
+                ],
+              },
             },
           },
           'options': [
@@ -1410,6 +1414,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           'Unanswered: ${[for (final q in questions) q['question']].join('; ')}',
     };
   }
+
+  /// Whether Claude draws its Other row under [question]: 2.1.296 draws it
+  /// under every question but a single-choice one whose options carry a
+  /// `preview` key, which it lays out side by side instead.
+  static bool _drawsOther(JsonMap question) =>
+      question['multiSelect'] == true ||
+      !jsonObjects(question['options']).any((o) => o.containsKey('preview'));
 
   static String _questionWords(JsonMap question) => [
     '${question['question'] ?? ''}',

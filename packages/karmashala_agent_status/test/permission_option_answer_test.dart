@@ -46,8 +46,7 @@ void main() {
     expect(AgentToolAsk.fromJson(wire(ask.toJson()))!.options, isEmpty);
   });
 
-  test('an approval names the option chosen, and keeps it without its ask',
-      () {
+  test('an approval names the option chosen, and keeps it without its ask', () {
     const request = ApprovalAnswerRequest(
       sessionId: 's1',
       approve: true,
@@ -61,5 +60,24 @@ void main() {
     expect(read.withoutAsk().optionId, 'allow-always');
     const plain = ApprovalAnswerRequest(sessionId: 's1', approve: false);
     expect(plain.toJson().containsKey('optionId'), isFalse);
+  });
+
+  test('a question answered with ticks and own words keeps both', () {
+    const request = QuestionAnswerRequest(
+      sessionId: 's1',
+      toolUseId: 'q',
+      answers: [
+        AgentQuestionAnswer.optionsAndText([0, 2], 'Mango'),
+        AgentQuestionAnswer.text('Teal'),
+        AgentQuestionAnswer.options([1]),
+      ],
+    );
+    final read =
+        PromptAnswerRequest.fromJson(wire(request.toJson()))!
+            as QuestionAnswerRequest;
+    expect(
+      [for (final a in read.answers) '$a'],
+      ['options([0, 2])+text(Mango)', 'text(Teal)', 'options([1])'],
+    );
   });
 }

@@ -1235,6 +1235,62 @@ void main() {
       await rt.stop();
     });
 
+    // 2.1.296's question view: Other is drawn under a multi-select question
+    // too, and the answer is the ticked labels then the words, joined by
+    // ", ", an item holding ", " or a quote written as a JSON string.
+    test('a multi-select question takes ticks and own words together, '
+        'written as Claude writes them; each question says whether it '
+        'takes own words', () async {
+      final answered = Completer<Json>();
+      final designs = {
+        ...question(text: 'Which layout?'),
+        'options': [
+          {'label': 'Grid', 'preview': '+--+'},
+          {'label': 'List', 'preview': '----'},
+        ],
+      };
+      final machine = FakeClaudeMachine(
+        turns: [
+          asking([
+            question(
+              text: 'Which fruits?',
+              choices: ['Apple', 'Pear, ripe'],
+              multiSelect: true,
+            ),
+            designs,
+          ], answered),
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Ask me');
+      await until(() => rt.hasOpenPermission);
+      final asked = wire.firstWhere(
+        (m) => m['method'] == 'session/request_permission',
+      );
+      final toolCall = (asked['params'] as Json)['toolCall'] as Json;
+      final carried =
+          ((toolCall['_meta'] as Json)['karmashala'] as Json)['questions']
+              as List;
+      expect(carried.map((q) => (q as Json)['ownWords']), [true, false]);
+      await rt.answerQuestion(
+        toolUseId: 'q',
+        answers: const [
+          AgentQuestionAnswer.optionsAndText([0, 1], 'Mango "Alphonso"'),
+          AgentQuestionAnswer.option(0),
+        ],
+      );
+      expect(
+        (await answered.future)['updatedInput'],
+        containsPair('answers', {
+          'Which fruits?': 'Apple, "Pear, ripe", "Mango \\"Alphonso\\""',
+          'Which layout?': 'Grid',
+        }),
+      );
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
     test('an answer in the person\'s own words goes back as written', () async {
       final answered = Completer<Json>();
       final machine = FakeClaudeMachine(

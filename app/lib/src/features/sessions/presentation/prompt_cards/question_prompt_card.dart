@@ -22,8 +22,8 @@ const _sendHint = "Your choice is typed into the session's terminal.";
 const double _touchRow = 44;
 
 /// An agent's multiple-choice question as a compact card: a slim header, the
-/// question clamped, a dense row per option, an own-words row on a
-/// single-choice one whose agent draws one, and one row of answers.
+/// question clamped, a dense row per option, an own-words row where the
+/// agent draws one, and one row of answers.
 /// **No Approve**: on a question
 /// the approve key is Enter, which answers with the highlighted option
 /// instead of the one the user wanted.
@@ -42,8 +42,15 @@ class QuestionPromptCard extends StatefulWidget {
     this.numbered = false,
     this.onReplyInWords,
     this.controller,
+    this.wordsWithChoices = false,
     super.key,
   });
+
+  /// Whether a multi-choice answer may carry own words beside its ticks, as
+  /// Claude Code's Other row does: true where the answer reaches the agent
+  /// over its protocol, false where it is typed into a terminal, whose keys
+  /// for it were never measured.
+  final bool wordsWithChoices;
 
   /// Each option under its number, the key that picks it on the Overview's
   /// board, with Decline in sight rather than under ⋯.
@@ -188,9 +195,12 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
 
   List<RemoteQuestionAnswer> get _answers => [
     for (var i = 0; i < _chosen.length; i++)
-      _other[i]
-          ? RemoteQuestionAnswer.text(_words[i].text.trim())
-          : RemoteQuestionAnswer.options(_chosen[i].toList()..sort()),
+      switch ((_other[i], _chosen[i].toList()..sort())) {
+        (true, final chosen) when chosen.isNotEmpty =>
+          RemoteQuestionAnswer.optionsAndText(chosen, _words[i].text.trim()),
+        (true, _) => RemoteQuestionAnswer.text(_words[i].text.trim()),
+        (false, final chosen) => RemoteQuestionAnswer.options(chosen),
+      },
   ];
 
   Future<void> _send({bool decline = false, bool chat = false}) async {
@@ -214,11 +224,11 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
 
   void _pick(int question, int option) => setState(() {
     final item = widget.question.questions[question];
-    _other[question] = false;
     if (item.multiSelect) {
       final chosen = _chosen[question];
       if (!chosen.remove(option)) chosen.add(option);
     } else {
+      _other[question] = false;
       _chosen[question] = {option};
     }
   });
@@ -513,7 +523,8 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
           Builder(
             builder: (row) {
               final option = item.options[o];
-              final selected = !_other[i] && _chosen[i].contains(o);
+              final selected =
+                  (item.multiSelect || !_other[i]) && _chosen[i].contains(o);
               return _OptionRow(
                 key: ValueKey('question-option-$i-$o'),
                 id: '$i-$o',
@@ -538,24 +549,29 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
               );
             },
           ),
-        // Only where the agent draws its own row for them, and on a
-        // single-choice question, the only one whose keys were measured.
-        if (item.ownWords && !item.multiSelect) ...[
+        // Only where the agent draws its own row for them; on a
+        // multi-choice question only where words can go beside the ticks.
+        if (item.ownWords &&
+            (!item.multiSelect || widget.wordsWithChoices)) ...[
           Builder(
             builder: (row) => _OptionRow(
               key: ValueKey('question-option-$i-other'),
               id: '$i-other',
               label: 'Other…',
               description: '',
-              multi: false,
+              multi: item.multiSelect,
               selected: _other[i],
               dense: widget.dense,
               onTap: !interactive
                   ? null
                   : () {
                       setState(() {
-                        _other[i] = true;
-                        _chosen[i] = {};
+                        if (item.multiSelect) {
+                          _other[i] = !_other[i];
+                        } else {
+                          _other[i] = true;
+                          _chosen[i] = {};
+                        }
                       });
                       _reveal(row);
                     },

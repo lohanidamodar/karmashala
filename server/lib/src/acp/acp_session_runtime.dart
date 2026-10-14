@@ -839,6 +839,22 @@ class AcpSessionRuntime implements ScreenSession {
     for (final (i, answer) in answers.indexed) {
       final q = asked[i];
       final text = answer.text?.trim();
+      if (text != null && q.multiSelect && answer.chosen.isNotEmpty) {
+        final chosen = answer.chosen;
+        if (!q.ownWords ||
+            text.isEmpty ||
+            chosen.any((c) => c < 0 || c >= q.options.length)) {
+          throw SessionPromptRefusal(
+            'the answer to "${q.question}" does not fit its '
+            '${q.options.length} options and its own-words row',
+          );
+        }
+        said[q.question] = joinedChoices([
+          for (final c in chosen) q.options[c].label,
+          text,
+        ]);
+        continue;
+      }
       if (text != null) {
         if (!q.ownWords) {
           throw SessionPromptRefusal(
@@ -862,9 +878,9 @@ class AcpSessionRuntime implements ScreenSession {
           '${q.options.length} options',
         );
       }
-      said[q.question] = [
+      said[q.question] = joinedChoices([
         for (final c in chosen) q.options[c].label,
-      ].join(', ');
+      ]);
     }
     final send = pending.options.where((o) => o.kind.allows).firstOrNull;
     if (send == null) {

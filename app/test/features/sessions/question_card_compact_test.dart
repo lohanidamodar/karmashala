@@ -73,6 +73,7 @@ void main() {
     Size size = const Size(390, 844),
     bool touch = true,
     bool dense = false,
+    bool wordsWithChoices = false,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -92,6 +93,7 @@ void main() {
                 question: question ?? overview(),
                 chatLabel: 'Chat about this',
                 dense: dense,
+                wordsWithChoices: wordsWithChoices,
                 onAnswerInTerminal: () => terminals++,
                 onAnswer: (answers, {decline = false, chat = false}) async =>
                     sent.add((answers: answers, decline: decline, chat: chat)),
@@ -203,6 +205,41 @@ void main() {
       await tester.tap(send);
       await tester.pumpAndSettle();
       expect(sent.single.answers.single.options, [0, 2]);
+    });
+
+    // Claude draws its Other row under a multi-select question too, and
+    // takes the ticked labels and the words together.
+    testWidgets('a chat multi-select question draws "Other…" as one more '
+        'box, and sends the ticks with the words', (tester) async {
+      await pump(
+        tester,
+        question: overview(multiSelect: true),
+        wordsWithChoices: true,
+      );
+      final other = find.byKey(const ValueKey('question-option-0-other'));
+      expect(
+        find.descendant(of: other, matching: find.byIcon(AppIcons.square)),
+        findsOneWidget,
+      );
+      await tester.tap(option(0));
+      await tester.tap(other);
+      await tester.pump();
+      // Ticked with no words, Other answers nothing yet.
+      expect(enabled(tester), isFalse);
+      expect(
+        find.descendant(of: option(0), matching: find.byIcon(AppIcons.check)),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('question-other-field-0')),
+        'Something else',
+      );
+      await tester.pump();
+      await tester.tap(send);
+      await tester.pumpAndSettle();
+      final answer = sent.single.answers.single;
+      expect(answer.options, [0]);
+      expect(answer.text, 'Something else');
     });
   });
 
