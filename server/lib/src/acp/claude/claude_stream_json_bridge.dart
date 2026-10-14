@@ -443,6 +443,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       scheduleMicrotask(() => _reportModel(_resolvedOf(_model)));
 
   void _resetConversation() {
+    _toldCommands = null;
     _turn = null;
     _cancelling = false;
     _streamId = null;
@@ -883,6 +884,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     };
   }
 
+  /// The commands last told, so a list Claude repeats says nothing.
+  String? _toldCommands;
+
   void _announceCommands() {
     if (_commands.isEmpty) return;
     final commands = [
@@ -895,6 +899,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
             'input': {'hint': hint},
         },
     ];
+    final told = jsonEncode(commands);
+    if (told == _toldCommands) return;
+    _toldCommands = told;
     // After the answer that names the session, so it is the session's.
     scheduleMicrotask(
       () => _update({
@@ -902,6 +909,25 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         'availableCommands': commands,
       }),
     );
+  }
+
+  /// The command list an init names (`slash_commands`, and `skills` among
+  /// them), each with the words `initialize` gave it where it gave any: a
+  /// skill or plugin added since appears, and one removed goes.
+  void _commandsOfInit(JsonMap init) {
+    final names = (init['slash_commands'] as List?)?.whereType<String>();
+    if (names == null || names.isEmpty) return;
+    final skills = {...?(init['skills'] as List?)?.whereType<String>()};
+    final known = {
+      for (final command in _commands)
+        if (command['name'] case final String name) name: command,
+    };
+    _commands = [
+      for (final name in names)
+        known[name] ??
+            {'name': name, 'description': skills.contains(name) ? 'Skill' : ''},
+    ];
+    _announceCommands();
   }
 
   void _update(JsonMap update) => _acp.notify(AcpMethods.sessionUpdate, {
@@ -1230,12 +1256,21 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       case 'init':
         if (message['model'] case final String model) _followModel(model);
         _followFast(message['fast_mode_state']);
+        _commandsOfInit(message);
         if (message['permissionMode'] case final String mode) {
           _followMode(mode);
         }
       case 'status':
         if (message['permissionMode'] case final String mode) {
           _followMode(mode);
+        }
+      // 2.1.296: "the full slash-command list after a mid-session change
+      // … Clients should REPLACE their cached command list".
+      case 'commands_changed':
+        final commands = jsonObjects(message['commands']);
+        if (commands.isNotEmpty) {
+          _commands = commands;
+          _announceCommands();
         }
       case 'compact_boundary':
         _compaction = jsonObject(message['compact_metadata']) ?? const {};

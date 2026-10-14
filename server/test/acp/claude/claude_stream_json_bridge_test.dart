@@ -1704,6 +1704,51 @@ void main() {
       },
     );
 
+    // 2.1.296: each system init names slash_commands and skills; a
+    // system commands_changed carries the whole list to replace it with.
+    test('the commands follow each init and a commands_changed; a list '
+        'Claude repeats is not told again', () async {
+      final turnDone = Completer<void>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            for (var i = 0; i < 2; i++) {
+              c.system('init', {
+                'model': 'claude-opus-5-5',
+                'permissionMode': 'default',
+                'slash_commands': ['review', 'deploy'],
+                'skills': ['deploy'],
+              });
+            }
+            c.result();
+            turnDone.complete();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      List<(String, String)> listed() => [
+        for (final command in rt.commands!.commands)
+          (command.name, command.description),
+      ];
+      await until(() => rt.commands != null);
+      expect(listed(), [('review', 'Review')]);
+      await rt.send('Go');
+      await rt.awaitTurn();
+      await turnDone.future;
+      await until(() => listed().length == 2);
+      expect(listed(), [('review', 'Review'), ('deploy', 'Skill')]);
+      expect(updates('available_commands_update'), hasLength(2));
+
+      machine.current.system('commands_changed', {
+        'commands': [
+          {'name': 'fresh', 'description': 'Found in a subfolder'},
+        ],
+      });
+      await until(() => listed().length == 1 && listed().single.$1 == 'fresh');
+      await rt.stop();
+    });
+
     test('modes are set and followed over the control channel', () async {
       final machine = FakeClaudeMachine(
         turns: [
