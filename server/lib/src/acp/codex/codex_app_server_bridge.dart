@@ -884,6 +884,13 @@ final class CodexAppServerBridge implements AcpTransport {
   /// whose options are the choices; a free-text or secret one is declined,
   /// and said in the chat. Choices are `allow_always` because a client that
   /// answers for the person (autoRun) picks an `allow_once` unseen.
+  ///
+  /// Each is also carried whole under `_meta.karmashala.questions`, so a
+  /// client that draws questions draws it as one, with a row for the
+  /// person's own words only where Codex said `isOther` — its TUI's "None
+  /// of the above". Such a client answers under `_meta.karmashala.answers`:
+  /// a choice's label, or the words, which go back as Codex's own CLI sends
+  /// a free-form answer, `user_note: <words>`.
   Future<JsonMap> _questions(JsonMap params) async {
     final answers = <String, Object?>{};
     for (final q in _list(params['questions'])) {
@@ -900,7 +907,8 @@ final class CodexAppServerBridge implements AcpTransport {
         );
         continue;
       }
-      final chosen = await _ask(
+      final other = q['isOther'] == true;
+      final outcome = await _outcome(
         {
           'toolCallId': '${params['itemId']}:$id',
           'title': text,
@@ -913,6 +921,24 @@ final class CodexAppServerBridge implements AcpTransport {
           },
           '_meta': {
             'codex': {'question': id},
+            'karmashala': {
+              'questions': [
+                {
+                  'question': text,
+                  if (q['header'] case final String header) 'header': header,
+                  'ownWords': other,
+                  'options': [
+                    for (final o in _list(q['options']))
+                      if (o['label'] case final String label)
+                        {
+                          'label': label,
+                          if (o['description'] case final String description)
+                            'description': description,
+                        },
+                  ],
+                },
+              ],
+            },
           },
         },
         [
@@ -921,10 +947,30 @@ final class CodexAppServerBridge implements AcpTransport {
           ('skip', 'Skip the question', 'reject_once'),
         ],
       );
+      final chosen = outcome?['optionId'] as String?;
+      final said = _map(_map(outcome?['_meta'])['karmashala'])['answers'];
+      final words = chosen != null && chosen != 'skip' && said is Map
+          ? said[text]
+          : null;
+      if (words is String && words.trim().isNotEmpty) {
+        final answer = words.trim();
+        if (choices.contains(answer)) {
+          answers[id] = {
+            'answers': [answer],
+          };
+          continue;
+        }
+        if (other) {
+          answers[id] = {
+            'answers': ['user_note: $answer'],
+          };
+          continue;
+        }
+      }
       final index = chosen != null && chosen.startsWith('choice-')
           ? int.tryParse(chosen.substring('choice-'.length))
           : null;
-      if (index == null || index >= choices.length) {
+      if (words != null || index == null || index >= choices.length) {
         _notice('Codex asked: $text - no choice was made, so none was sent.');
         continue;
       }
@@ -952,6 +998,13 @@ final class CodexAppServerBridge implements AcpTransport {
   Future<String?> _ask(
     JsonMap toolCall,
     List<(String, String, String)> options,
+  ) async => (await _outcome(toolCall, options))?['optionId'] as String?;
+
+  /// The person's whole outcome, its `_meta` with it, or null when the turn
+  /// was cancelled or the client could not be asked.
+  Future<JsonMap?> _outcome(
+    JsonMap toolCall,
+    List<(String, String, String)> options,
   ) async {
     try {
       final answer = _map(
@@ -965,9 +1018,7 @@ final class CodexAppServerBridge implements AcpTransport {
         }),
       );
       final outcome = _map(answer['outcome']);
-      return outcome['outcome'] == 'selected'
-          ? outcome['optionId'] as String?
-          : null;
+      return outcome['outcome'] == 'selected' ? outcome : null;
     } on Object {
       return null;
     }
