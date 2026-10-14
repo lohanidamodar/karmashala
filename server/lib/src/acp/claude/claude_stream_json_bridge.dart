@@ -1281,7 +1281,59 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       case 'task_started' || 'task_progress' || 'task_notification':
         _trackBackground(message);
         _onTask(message);
+      case 'api_retry' ||
+          'model_refusal_fallback' ||
+          'model_refusal_no_fallback' ||
+          'permission_denied':
+        if (_systemNote(message) case (final text, final error)) {
+          _update({
+            'sessionUpdate': AcpExtensions.notice,
+            'text': text,
+            if (error) 'role': 'error',
+          });
+        }
     }
+  }
+
+  /// A line for a turn that is retrying, was refused, or had a call denied
+  /// unasked, so a slow or odd turn says why (2.1.296's system subtypes),
+  /// and whether it reads as a failure.
+  (String, bool)? _systemNote(JsonMap message) {
+    String? said(String key) => switch (message[key]) {
+      final String text when _plain(text).isNotEmpty => _plain(text),
+      _ => null,
+    };
+    switch (message['subtype']) {
+      case 'api_retry':
+        final attempt = message['attempt'];
+        final most = message['max_retries'];
+        final delay = message['retry_delay_ms'];
+        final status = message['error_status'];
+        final count = attempt is int && most is int
+            ? ' ($attempt of $most)'
+            : '';
+        final wait = delay is int ? ' in ${(delay / 1000).ceil()} s' : '';
+        final cause = status is int ? 'HTTP $status' : 'a connection error';
+        return ('Claude Code is retrying$count$wait, after $cause.', false);
+      case 'model_refusal_fallback':
+        final from = said('original_model') ?? 'The model';
+        final to = said('fallback_model') ?? 'another model';
+        return (
+          message['scope'] == 'local'
+              ? '$from declined part of the work; $to answered that part.'
+              : '$from declined; Claude Code switched to $to.',
+          false,
+        );
+      case 'model_refusal_no_fallback':
+        final model = said('original_model') ?? 'The model';
+        return (said('content') ?? '$model declined to answer.', true);
+      case 'permission_denied':
+        final tool = said('tool_name') ?? 'a tool';
+        final reason = said('decision_reason');
+        final why = reason == null ? '.' : ': $reason';
+        return ('Claude Code refused $tool without asking$why', false);
+    }
+    return null;
   }
 
   void _trackBackground(JsonMap message) {

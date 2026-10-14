@@ -952,6 +952,71 @@ void main() {
       await rt.stop();
     });
 
+    // 2.1.296's system subtypes api_retry, model_refusal_fallback,
+    // model_refusal_no_fallback and permission_denied, by their schemas.
+    test('a retry, a refusal and a call denied unasked are notes in the '
+        'chat, so a slow turn says why', () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.system('api_retry', {
+              'attempt': 2,
+              'max_retries': 10,
+              'retry_delay_ms': 4200,
+              'error_status': 529,
+              'error': 'overloaded',
+            });
+            c.system('api_retry', {
+              'attempt': 3,
+              'max_retries': 10,
+              'retry_delay_ms': 8000,
+              'error_status': null,
+              'error': 'unknown',
+            });
+            c.system('model_refusal_fallback', {
+              'trigger': 'refusal',
+              'direction': 'retry',
+              'original_model': 'claude-opus-5-5',
+              'fallback_model': 'claude-sonnet-5-5',
+              'request_id': null,
+            });
+            c.system('permission_denied', {
+              'tool_name': 'Bash',
+              'tool_use_id': 'b1',
+              'decision_reason': 'dontAsk mode refuses anything that asks',
+            });
+            c.system('model_refusal_no_fallback', {
+              'original_model': 'claude-opus-5-5',
+              'request_id': null,
+              'content': 'Claude declined to help with this request.',
+            });
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      final notes = [
+        for (final row in rows())
+          if (SessionMessageTranscriptSource.project(row) case final m
+              when m.role == 'notice' || m.role == 'error')
+            '${m.role}: ${m.text}',
+      ];
+      expect(notes, [
+        'notice: Claude Code is retrying (2 of 10) in 5 s, after HTTP 529.',
+        'notice: Claude Code is retrying (3 of 10) in 8 s, after a '
+            'connection error.',
+        'notice: claude-opus-5-5 declined; Claude Code switched to '
+            'claude-sonnet-5-5.',
+        'notice: Claude Code refused Bash without asking: dontAsk mode '
+            'refuses anything that asks',
+        'error: Claude declined to help with this request.',
+      ]);
+      await rt.stop();
+    });
+
     test('a failed turn is an error with its words; a usage limit reads as '
         'one', () async {
       final machine = FakeClaudeMachine(
