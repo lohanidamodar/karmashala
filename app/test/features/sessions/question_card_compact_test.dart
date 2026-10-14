@@ -25,32 +25,34 @@ const _long =
 /// questions"): one slim header, the question clamped, a dense row per
 /// option with its description clamped, and one row of actions.
 void main() {
-  RemoteQuestion overview({bool multiSelect = false}) => RemoteQuestion(
-    toolUseId: 'toolu_1',
-    questions: [
-      RemoteQuestionItem(
-        question:
-            'Which Overview should the next round build? Each was drawn at '
-            'desktop and phone width, and they differ mostly in what the '
-            'first screen answers, which is the thing to decide here.',
-        header: 'Overview',
-        multiSelect: multiSelect,
-        options: const [
-          RemoteQuestionOption(label: 'A · Strips', description: _long),
-          RemoteQuestionOption(
-            label: 'B · Cards',
-            description: _long,
-            preview: '+------+------+\n| card | card |\n+------+------+',
+  RemoteQuestion overview({bool multiSelect = false, bool ownWords = true}) =>
+      RemoteQuestion(
+        toolUseId: 'toolu_1',
+        questions: [
+          RemoteQuestionItem(
+            question:
+                'Which Overview should the next round build? Each was drawn at '
+                'desktop and phone width, and they differ mostly in what the '
+                'first screen answers, which is the thing to decide here.',
+            header: 'Overview',
+            multiSelect: multiSelect,
+            ownWords: ownWords,
+            options: const [
+              RemoteQuestionOption(label: 'A · Strips', description: _long),
+              RemoteQuestionOption(
+                label: 'B · Cards',
+                description: _long,
+                preview: '+------+------+\n| card | card |\n+------+------+',
+              ),
+              RemoteQuestionOption(
+                label: 'C · Hybrid (Recommended)',
+                description: _long,
+              ),
+              RemoteQuestionOption(label: 'D · Keep', description: _long),
+            ],
           ),
-          RemoteQuestionOption(
-            label: 'C · Hybrid (Recommended)',
-            description: _long,
-          ),
-          RemoteQuestionOption(label: 'D · Keep', description: _long),
         ],
-      ),
-    ],
-  );
+      );
 
   final send = find.byKey(const ValueKey('question-send'));
   Finder option(int o) => find.byKey(ValueKey('question-option-0-$o'));
@@ -155,6 +157,27 @@ void main() {
       await tester.tap(send);
       await tester.pumpAndSettle();
       expect(sent.single.answers.single.text, 'Something else');
+    });
+
+    // The owner, 2026-10-14: "Our chat always shows the Other option in a
+    // choice even when the actual option on Claude did not show it."
+    testWidgets('a question whose agent draws no row for own words has no '
+        '"Other…", so only one of its options can be sent', (tester) async {
+      await pump(tester, question: overview(ownWords: false));
+      expect(
+        find.byKey(const ValueKey('question-option-0-other')),
+        findsNothing,
+      );
+      expect(find.text('Other…'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(enabled(tester), isFalse);
+
+      await tester.tap(option(3));
+      await tester.pump();
+      await tester.tap(send);
+      await tester.pumpAndSettle();
+      expect(sent.single.answers.single.text, isNull);
+      expect(sent.single.answers.single.options, [3]);
     });
 
     testWidgets('a multi-select question keeps checkboxes and sends every '
@@ -375,6 +398,7 @@ void main() {
         AgentQuestion(
           question: overview().questions.single.question,
           header: 'Overview',
+          ownWords: true,
           options: [
             for (final o in overview().questions.single.options)
               AgentQuestionOption(

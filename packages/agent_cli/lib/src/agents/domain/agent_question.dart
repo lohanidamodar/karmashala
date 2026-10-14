@@ -34,6 +34,7 @@ class AgentQuestion {
     required this.options,
     this.header = '',
     this.multiSelect = false,
+    this.ownWords = false,
   });
 
   final String question;
@@ -45,6 +46,10 @@ class AgentQuestion {
 
   /// Several options may be chosen.
   final bool multiSelect;
+
+  /// The agent itself offers a row for the person's own words, so an answer
+  /// in them is one it takes. False where it draws none, or nobody knows.
+  final bool ownWords;
 }
 
 /// Everything one tool call asks, and which call it is.
@@ -69,6 +74,15 @@ class AgentQuestionSet {
 
   /// The questions in a tool call's `input`, or null for a shape this build
   /// cannot read — which is no question, never a guessed one.
+  ///
+  /// Whether a question takes own words is its `ownWords`, where a bridge
+  /// said so. Otherwise the input is Claude Code's own and Claude's rule
+  /// holds: 2.1.296 draws its "Other" row ("Type something") under every
+  /// question's options except a single-choice one whose options carry a
+  /// `preview` key. That one is drawn side by side, with notes on the
+  /// highlighted design and "Chat about this", and no Other row (read from
+  /// the installed binary's question view; only screen-reader mode skips
+  /// the side-by-side view).
   static AgentQuestionSet? fromToolInput(String toolUseId, Object? input) {
     if (input is! Map) return null;
     final raw = input['questions'];
@@ -82,7 +96,10 @@ class AgentQuestionSet {
         return null;
       }
       final read = <AgentQuestionOption>[];
+      // Claude tests the key, not its value: `preview !== undefined`.
+      var previews = false;
       for (final option in options) {
+        if (option is Map && option.containsKey('preview')) previews = true;
         final label = option is Map ? option['label'] : option;
         if (label is! String || label.isEmpty) return null;
         final description = option is Map ? option['description'] : null;
@@ -100,6 +117,10 @@ class AgentQuestionSet {
           question: question,
           header: entry['header'] is String ? entry['header']! as String : '',
           multiSelect: entry['multiSelect'] == true,
+          ownWords: switch (entry['ownWords']) {
+            final bool said => said,
+            _ => entry['multiSelect'] == true || !previews,
+          },
           options: read,
         ),
       );
@@ -255,6 +276,9 @@ String claudeQuestionKeys(
     final count = question.options.length;
     final text = answer.text;
     if (text != null) {
+      if (!question.ownWords) {
+        throw ArgumentError('"${question.question}" has no row for own words');
+      }
       if (question.multiSelect) {
         throw ArgumentError('own words on a multi-choice question');
       }

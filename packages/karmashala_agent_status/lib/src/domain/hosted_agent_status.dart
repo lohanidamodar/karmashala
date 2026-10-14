@@ -124,6 +124,7 @@ Map<String, Object?> questionToJson(AgentQuestionSet set) => {
         'question': q.question,
         'header': q.header,
         'multiSelect': q.multiSelect,
+        'ownWords': q.ownWords,
         'options': [
           for (final o in q.options)
             {

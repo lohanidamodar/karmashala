@@ -3,9 +3,16 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart'
-    show AcpLaunchSpec, AcpNativeBridge, AgentActivityStatus, PermissionRisk;
+    show
+        AcpLaunchSpec,
+        AcpNativeBridge,
+        AgentActivityStatus,
+        AgentQuestionAnswer,
+        PermissionRisk;
 import 'package:agent_cli/process.dart' show EnvironmentKind;
 import 'package:karmashala_acp/karmashala_acp.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show SessionPromptRefusal;
 import 'package:karmashala_host/src/acp/acp_login_link.dart';
 import 'package:karmashala_host/src/acp/acp_native_bridge.dart';
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
@@ -871,6 +878,95 @@ void main() {
             for (final c in choices) {'label': c, 'description': 'about $c'},
           ],
   };
+
+  /// A turn asking [questions] once, its answer kept in [answered].
+  FakeCodexAppServer asking(
+    List<JsonMap> questions,
+    void Function(Future<Object?>) answered,
+  ) => FakeCodexAppServer(
+    onTurn: (turn) async {
+      final answer = turn.ask('item/tool/requestUserInput', {
+        'itemId': 'ask-o',
+        'questions': questions,
+        'isBlocking': true,
+      });
+      answered(answer);
+      await answer;
+      turn.end('completed');
+    },
+  );
+
+  // Codex's own TUI adds "None of the above" with a notes field only where
+  // the question says `isOther`, and its CLI sends a free-form answer as
+  // `user_note: <words>` (both read from codex-cli 0.160.0's strings).
+  test("own words are offered where Codex says isOther, and go back as "
+      'its user_note', () async {
+    late Future<Object?> answered;
+    final codex = asking([
+      {
+        ...question('q1', 'Which database?', ['sqlite', 'postgres']),
+        'isOther': true,
+      },
+    ], (a) => answered = a);
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Set it up');
+    await pump(40);
+    final open = runtime.openQuestion!;
+    expect(open.questions.single.ownWords, isTrue);
+    expect(open.questions.single.options.map((o) => o.label), [
+      'sqlite',
+      'postgres',
+    ]);
+    await runtime.answerQuestion(
+      toolUseId: open.toolUseId,
+      answers: const [AgentQuestionAnswer.text('duckdb')],
+    );
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['user_note: duckdb'],
+        },
+      },
+    });
+    await runtime.awaitTurn();
+    await runtime.stop();
+  });
+
+  test('without isOther a question takes no own words, and a choice made '
+      'on the card is the one sent', () async {
+    late Future<Object?> answered;
+    final codex = asking([
+      question('q1', 'Which database?', ['sqlite', 'postgres']),
+    ], (a) => answered = a);
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Set it up');
+    await pump(40);
+    final open = runtime.openQuestion!;
+    expect(open.questions.single.ownWords, isFalse);
+    await expectLater(
+      runtime.answerQuestion(
+        toolUseId: open.toolUseId,
+        answers: const [AgentQuestionAnswer.text('duckdb')],
+      ),
+      throwsA(isA<SessionPromptRefusal>()),
+    );
+    expect(runtime.hasOpenPermission, isTrue);
+    await runtime.answerQuestion(
+      toolUseId: open.toolUseId,
+      answers: const [AgentQuestionAnswer.option(1)],
+    );
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['postgres'],
+        },
+      },
+    });
+    await runtime.awaitTurn();
+    await runtime.stop();
+  });
 
   test('a question with choices asks the person, even under autoRun, and '
       'the choice reaches Codex', () async {

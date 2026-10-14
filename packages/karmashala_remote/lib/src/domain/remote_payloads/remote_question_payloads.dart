@@ -62,6 +62,7 @@ class RemoteQuestionItem {
     required this.options,
     this.header = '',
     this.multiSelect = false,
+    this.ownWords = false,
   });
 
   final String question;
@@ -69,10 +70,16 @@ class RemoteQuestionItem {
   final List<RemoteQuestionOption> options;
   final bool multiSelect;
 
+  /// The agent offers a row for the person's own words. Absent from an
+  /// older host, which reads as no such row: words it cannot take are never
+  /// offered.
+  final bool ownWords;
+
   Map<String, Object?> toJson() => {
     'question': question,
     if (header.isNotEmpty) 'header': header,
     if (multiSelect) 'multiSelect': true,
+    if (ownWords) 'ownWords': true,
     'options': [for (final o in options) o.toJson()],
   };
 }
@@ -127,6 +134,7 @@ class RemoteQuestion {
           question: question,
           header: entry['header'] is String ? entry['header']! as String : '',
           multiSelect: entry['multiSelect'] == true,
+          ownWords: entry['ownWords'] == true,
           options: read,
         ),
       );

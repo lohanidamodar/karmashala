@@ -95,6 +95,44 @@ void main() {
       ]);
     });
 
+    // Claude 2.1.296's question view, read from the binary: an "Other"
+    // ("Type something") row under every question's options, except a
+    // single-choice one with previews, drawn side by side without one.
+    test('own words are taken where Claude draws its Other row', () {
+      Map<String, Object?> layout({bool multi = false}) => {
+        'question': 'Which layout?',
+        'multiSelect': multi,
+        'options': [
+          {'label': 'Grid', 'preview': '+--+'},
+          {'label': 'List'},
+        ],
+      };
+      final read = set([
+        q('Pick a fruit', ['Apple', 'Banana']),
+        q('Pick colours', ['Red', 'Blue'], multi: true),
+        layout(),
+        layout(multi: true),
+      ]);
+      expect(read.questions.map((q) => q.ownWords), [true, true, false, true]);
+    });
+
+    test("a bridge's own word for it wins over Claude's rule", () {
+      final read = set([
+        {
+          ...q('Pick a fruit', ['Apple', 'Banana']),
+          'ownWords': false,
+        },
+        {
+          'question': 'Which layout?',
+          'ownWords': true,
+          'options': [
+            {'label': 'Grid', 'preview': '+--+'},
+          ],
+        },
+      ]);
+      expect(read.questions.map((q) => q.ownWords), [false, true]);
+    });
+
     test('a shape this build cannot read is no question at all', () {
       for (final input in <Object?>[
         null,
@@ -212,6 +250,28 @@ void main() {
         );
       },
     );
+
+    test('words for a question drawn without an Other row are refused, '
+        'not typed onto an option', () {
+      final designs = set([
+        {
+          'question': 'Which layout?',
+          'options': [
+            {'label': 'Grid', 'preview': '+--+'},
+            {'label': 'List', 'preview': '----'},
+          ],
+        },
+      ]);
+      expect(
+        () =>
+            support.keysFor(designs, [const AgentQuestionAnswer.text('Tabs')]),
+        throwsArgumentError,
+      );
+      expect(
+        support.keysFor(designs, [const AgentQuestionAnswer.option(1)]),
+        [down, enter].join(),
+      );
+    });
 
     test('several boxes: Enter on each, down to Next, then Submit', () {
       expect(

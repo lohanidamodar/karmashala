@@ -840,6 +840,11 @@ class AcpSessionRuntime implements ScreenSession {
       final q = asked[i];
       final text = answer.text?.trim();
       if (text != null) {
+        if (!q.ownWords) {
+          throw SessionPromptRefusal(
+            '"${q.question}" has no row for own words',
+          );
+        }
         if (text.isEmpty) {
           throw SessionPromptRefusal(
             '"${q.question}" was answered with nothing',

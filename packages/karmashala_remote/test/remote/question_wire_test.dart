@@ -15,6 +15,7 @@ void main() {
       RemoteQuestionItem(
         question: 'Pick a fruit',
         header: 'Fruit',
+        ownWords: true,
         options: [
           RemoteQuestionOption(
             label: 'Apple',
@@ -50,7 +51,27 @@ void main() {
       expect(read.question!.questions.first.options.first.preview, '( )\n \\|');
       expect(read.question!.questions.first.options.last.preview, isEmpty);
       expect(read.question!.questions.last.multiSelect, isTrue);
+      expect(read.question!.questions.map((q) => q.ownWords), [true, false]);
       expect(read.approveLabel, isNull);
+    });
+
+    test("a question from a host that does not say so takes no own words", () {
+      final json = fruit.toJson();
+      expect(
+        (json['questions']! as List).first,
+        containsPair('ownWords', true),
+      );
+      final older = {
+        ...json,
+        'questions': [
+          for (final q in json['questions']! as List)
+            {...q as Map}..remove('ownWords'),
+        ],
+      };
+      expect(
+        RemoteQuestion.tryFromJson(older)!.questions.map((q) => q.ownWords),
+        [false, false],
+      );
     });
 
     test('an approval from an older host carries no question', () {
