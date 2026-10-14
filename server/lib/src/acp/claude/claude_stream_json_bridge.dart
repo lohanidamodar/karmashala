@@ -1492,7 +1492,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           ]
         : [
             _option('allow', 'Allow', 'allow_once'),
-            if (suggestions.isNotEmpty)
+            // Claude bars the persistent row where accepting it would write
+            // a rule broader than this ask.
+            if (suggestions.isNotEmpty &&
+                request['suppress_always_allow_rule'] != true)
               _option('allow_always', 'Always allow', 'allow_always'),
             _option('reject', 'Reject', 'reject_once'),
           ];
@@ -1500,7 +1503,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     try {
       answer = await _acp.call(AcpMethods.sessionRequestPermission, {
         'sessionId': _sessionId,
-        'toolCall': {..._toolFields(id, tool), 'status': 'pending'},
+        'toolCall': _askedCall(request, id, tool),
         'options': options,
       }, withdrawn: withdrawn);
     } on Object {
@@ -1552,6 +1555,59 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       if (chosen == 'allow_always') 'updatedPermissions': suggestions,
     };
   }
+
+  /// The call a `can_use_tool` asks about, with why Claude asks: its
+  /// `title`, `description`, `decision_reason`, `blocked_path`,
+  /// `display_name` and `agent_id` under `_meta.claudeCode`, and in
+  /// `_meta.karmashala.ask` one line of `reason` and the subagent `asker`.
+  JsonMap _askedCall(JsonMap request, String id, _Tool tool) {
+    final fields = _toolFields(id, tool);
+    final meta = jsonObject(fields['_meta']) ?? const {};
+    String? said(String key) => switch (request[key]) {
+      final String text when _plain(text).isNotEmpty => _plain(text),
+      _ => null,
+    };
+    final because = said('decision_reason') ?? said('description');
+    final path = said('blocked_path');
+    final reason = [
+      ?because,
+      if (path != null && !(because?.contains(path) ?? false)) path,
+    ].join(' · ');
+    final parent = tool.parent == null ? null : _tools[tool.parent];
+    final asker =
+        _nameOf(parent?.input['subagent_type']) ??
+        _nameOf(parent?.input['description']) ??
+        (request['agent_id'] is String ? 'a subagent' : null);
+    return {
+      ...fields,
+      'status': 'pending',
+      '_meta': {
+        ...meta,
+        'claudeCode': {
+          ...?jsonObject(meta['claudeCode']),
+          'title': ?said('title'),
+          'description': ?said('description'),
+          'decisionReason': ?said('decision_reason'),
+          'blockedPath': ?path,
+          'displayName': ?said('display_name'),
+          'agentId': ?request['agent_id'],
+        },
+        'karmashala': {
+          'ask': {if (reason.isNotEmpty) 'reason': reason, 'asker': ?asker},
+        },
+      },
+    };
+  }
+
+  static String? _nameOf(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+  /// [text] without the ANSI escapes Claude says its reasons may carry, on
+  /// one line.
+  static String _plain(String text) => text
+      .replaceAll(RegExp(r'\x1B\[[0-9;?]*[ -/]*[@-~]'), '')
+      .replaceAll(RegExp(r'[\x00-\x1F\x7F]+'), ' ')
+      .trim();
 
   /// Claude's questions, asked together as one permission that carries them
   /// whole under `_meta.karmashala.questions`; a client that can show them

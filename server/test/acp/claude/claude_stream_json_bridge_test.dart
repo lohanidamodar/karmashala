@@ -1038,6 +1038,77 @@ void main() {
       },
     );
 
+    // 2.1.296's can_use_tool schema: title, display_name, description,
+    // decision_reason (may carry ANSI), blocked_path, agent_id, and
+    // suppress_always_allow_rule ("hosts … should omit any persistent-rule
+    // affordance when set").
+    test('why Claude asks, and which subagent, rides on the request and the '
+        "card; a suppressed persistent rule offers no Always allow", () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('t1', 'Task', {
+              'subagent_type': 'Explore',
+              'description': 'Find the config',
+            });
+            c.toolUse('r1', 'Bash', {
+              'command': 'cat /etc/hosts',
+            }, parentToolUseId: 't1');
+            unawaited(
+              c.askPermission(
+                'r1',
+                'Bash',
+                {'command': 'cat /etc/hosts'},
+                suggestions: [suggestion],
+                extra: {
+                  'title': 'Claude wants to read hosts',
+                  'display_name': 'Bash',
+                  'decision_reason':
+                      '\x1b[1mPath is outside the allowed working '
+                      'directories\x1b[0m',
+                  'blocked_path': '/etc/hosts',
+                  'agent_id': 'agent-7',
+                  'suppress_always_allow_rule': true,
+                },
+              ),
+            );
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Look');
+      await until(() => rt.hasOpenPermission);
+      final asked = wire.firstWhere(
+        (m) => m['method'] == 'session/request_permission',
+      );
+      final params = asked['params'] as Json;
+      expect((params['options'] as List).map((o) => (o as Json)['kind']), [
+        'allow_once',
+        'reject_once',
+      ]);
+      final meta = (params['toolCall'] as Json)['_meta'] as Json;
+      expect(meta['claudeCode'], {
+        'toolName': 'Bash',
+        'parentToolUseId': 't1',
+        'title': 'Claude wants to read hosts',
+        'decisionReason': 'Path is outside the allowed working directories',
+        'blockedPath': '/etc/hosts',
+        'displayName': 'Bash',
+        'agentId': 'agent-7',
+      });
+      final ask = host.statuses.lastWhere((s) => s.toolAsk != null).toolAsk!;
+      expect(
+        ask.reason,
+        'Path is outside the allowed working directories · /etc/hosts',
+      );
+      expect(ask.asker, 'Explore');
+      await rt.answerPermission(approve: false);
+      machine.current.result();
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
     // 2.1.296 retracts an ask it no longer waits on with
     // control_cancel_request {request_id}, and ignores an answer after it.
     test('a request Claude withdraws leaves the card and gets no answer; '

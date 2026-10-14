@@ -1551,6 +1551,8 @@ class AcpSessionRuntime implements ScreenSession {
             ),
         ],
         kind: call.kind?.raw,
+        reason: _askNote(call, 'reason'),
+        asker: _askNote(call, 'asker'),
       ),
       waitingSince: now,
     );
@@ -1559,6 +1561,14 @@ class AcpSessionRuntime implements ScreenSession {
     } finally {
       if (identical(_pending, pending)) _pending = null;
     }
+  }
+
+  /// What a Karmashala bridge says of why it asks about [call]
+  /// (`_meta.karmashala.ask`): its `reason`, or the subagent `asker`.
+  static String? _askNote(ToolCallUpdate call, String key) {
+    final ask = asJsonMap(asJsonMap(call.meta?['karmashala'])?['ask']);
+    final note = ask?[key];
+    return note is String && note.trim().isNotEmpty ? note.trim() : null;
   }
 
   /// Whether [call] only reads, by the ACP kind the agent gave it here or
