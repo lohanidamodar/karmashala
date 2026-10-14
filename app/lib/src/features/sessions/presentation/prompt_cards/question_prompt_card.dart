@@ -23,7 +23,8 @@ const double _touchRow = 44;
 
 /// An agent's multiple-choice question as a compact card: a slim header, the
 /// question clamped, a dense row per option, an own-words row on a
-/// single-choice one, and one row of answers. **No Approve**: on a question
+/// single-choice one whose agent draws one, and one row of answers.
+/// **No Approve**: on a question
 /// the approve key is Enter, which answers with the highlighted option
 /// instead of the one the user wanted.
 class QuestionPromptCard extends StatefulWidget {
@@ -537,8 +538,9 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
               );
             },
           ),
-        // Own words were measured for a single-choice question only.
-        if (!item.multiSelect) ...[
+        // Only where the agent draws its own row for them, and on a
+        // single-choice question, the only one whose keys were measured.
+        if (item.ownWords && !item.multiSelect) ...[
           Builder(
             builder: (row) => _OptionRow(
               key: ValueKey('question-option-$i-other'),

@@ -28,6 +28,7 @@ void main() {
         ),
         AgentQuestion(
           question: 'Pick a fruit',
+          ownWords: true,
           options: [
             AgentQuestionOption(label: 'Apple'),
             AgentQuestionOption(label: 'Banana'),

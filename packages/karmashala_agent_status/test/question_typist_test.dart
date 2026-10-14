@@ -125,6 +125,7 @@ void main() {
   );
   const fruit = AgentQuestion(
     question: 'Pick a fruit?',
+    ownWords: true,
     options: [
       AgentQuestionOption(label: 'Apple'),
       AgentQuestionOption(label: 'Banana'),
@@ -183,6 +184,34 @@ void main() {
     expect(screen.done, isTrue);
   });
 
+  test('own words for a question drawn without an Other row are refused '
+      'before a key is pressed', () async {
+    const designs = AgentQuestion(
+      question: 'Which layout?',
+      options: [
+        AgentQuestionOption(label: 'Grid', preview: '+--+'),
+        AgentQuestionOption(label: 'List', preview: '----'),
+      ],
+    );
+    const set = AgentQuestionSet(toolUseId: 't', questions: [fruit, designs]);
+    final screen = FakeQuestionScreen(set);
+
+    await expectLater(
+      typistOn(screen).answer('s', set, const [
+        AgentQuestionAnswer.option(0),
+        AgentQuestionAnswer.text('Tabs'),
+      ]),
+      throwsA(
+        isA<SessionPromptRefusal>().having(
+          (r) => r.message,
+          'message',
+          contains('no row for own words'),
+        ),
+      ),
+    );
+    expect(screen.keys, isEmpty);
+  });
+
   test('a question that never draws stops the answer, and nothing is '
       'confirmed', () async {
     const set = AgentQuestionSet(toolUseId: 't', questions: [fruit]);
@@ -214,37 +243,43 @@ void main() {
     );
   });
 
-  test('2.1.287 names the row after the options "Submit", not "Next"', () async {
-    const toppings = AgentQuestion(
-      question: 'Pick toppings',
-      multiSelect: true,
-      options: [
-        AgentQuestionOption(label: 'Nuts'),
-        AgentQuestionOption(label: 'Honey'),
-        AgentQuestionOption(label: 'Yogurt'),
-      ],
-    );
-    const set = AgentQuestionSet(toolUseId: 't', questions: [toppings]);
-    final screen = FakeQuestionScreen(set, continueWord: 'Submit');
-
-    await typistOn(screen).answer('s', set, const [
-      AgentQuestionAnswer.options([0, 2]),
-    ]);
-
-    expect(screen.chosen, {0: 'Nuts, Yogurt'});
-    expect(screen.done, isTrue);
-  });
-
-  for (final question in [fruit, colours]) {
-    test('"Chat about this" leaves ${question.multiSelect ? 'a multi' : 'a '
-        'single'}-choice question to talk it over', () async {
-      final set = AgentQuestionSet(toolUseId: 't', questions: [question]);
+  test(
+    '2.1.287 names the row after the options "Submit", not "Next"',
+    () async {
+      const toppings = AgentQuestion(
+        question: 'Pick toppings',
+        multiSelect: true,
+        options: [
+          AgentQuestionOption(label: 'Nuts'),
+          AgentQuestionOption(label: 'Honey'),
+          AgentQuestionOption(label: 'Yogurt'),
+        ],
+      );
+      const set = AgentQuestionSet(toolUseId: 't', questions: [toppings]);
       final screen = FakeQuestionScreen(set, continueWord: 'Submit');
 
-      await typistOn(screen).chatAbout('s', set, 'Chat about this');
+      await typistOn(screen).answer('s', set, const [
+        AgentQuestionAnswer.options([0, 2]),
+      ]);
 
-      expect(screen.chatting, isTrue);
-      expect(screen.chosen, isEmpty);
-    });
+      expect(screen.chosen, {0: 'Nuts, Yogurt'});
+      expect(screen.done, isTrue);
+    },
+  );
+
+  for (final question in [fruit, colours]) {
+    test(
+      '"Chat about this" leaves ${question.multiSelect ? 'a multi' : 'a '
+                'single'}-choice question to talk it over',
+      () async {
+        final set = AgentQuestionSet(toolUseId: 't', questions: [question]);
+        final screen = FakeQuestionScreen(set, continueWord: 'Submit');
+
+        await typistOn(screen).chatAbout('s', set, 'Chat about this');
+
+        expect(screen.chatting, isTrue);
+        expect(screen.chosen, isEmpty);
+      },
+    );
   }
 }

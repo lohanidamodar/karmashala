@@ -1258,6 +1258,63 @@ void main() {
       await rt.stop();
     });
 
+    // Claude's own view draws a question with previews side by side, with
+    // notes and no Other row; its words are not offered here either.
+    test('a question with previews takes no own words: they are refused '
+        'with nothing sent, and a design still answers it', () async {
+      final answered = Completer<Json>();
+      final designs = {
+        ...question(text: 'Which layout?'),
+        'options': [
+          {'label': 'Grid', 'preview': '+--+'},
+          {'label': 'List', 'preview': '----'},
+        ],
+      };
+      final machine = FakeClaudeMachine(
+        turns: [
+          asking([question(), designs], answered),
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Ask me');
+      await until(() => rt.hasOpenPermission);
+      expect(rt.openQuestion!.questions.map((q) => q.ownWords), [true, false]);
+      await expectLater(
+        rt.answerQuestion(
+          toolUseId: 'q',
+          answers: const [
+            AgentQuestionAnswer.option(0),
+            AgentQuestionAnswer.text('Tabs'),
+          ],
+        ),
+        throwsA(
+          isA<SessionPromptRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('no row for own words'),
+          ),
+        ),
+      );
+      expect(answered.isCompleted, isFalse);
+      await rt.answerQuestion(
+        toolUseId: 'q',
+        answers: const [
+          AgentQuestionAnswer.text('Mango'),
+          AgentQuestionAnswer.option(1),
+        ],
+      );
+      expect(
+        (await answered.future)['updatedInput'],
+        containsPair('answers', {
+          'Which fruit?': 'Mango',
+          'Which layout?': 'List',
+        }),
+      );
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
     test('an answer for another question, or one that does not fit, is '
         'refused with nothing sent', () async {
       final answered = Completer<Json>();

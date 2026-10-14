@@ -53,6 +53,15 @@ class SessionQuestionTypist {
         '${answers.length} answers for ${list.length} questions',
       );
     }
+    // Refused before a key is pressed: words typed where the question draws
+    // no row for them would land on an option instead.
+    for (final (i, question) in list.indexed) {
+      if (answers[i].text != null && !question.ownWords) {
+        throw SessionPromptRefusal(
+          '"${question.question}" has no row for own words',
+        );
+      }
+    }
     final review = list.length > 1 || list.any((q) => q.multiSelect);
     for (var i = 0; i < list.length; i++) {
       final question = list[i];
