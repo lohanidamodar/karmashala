@@ -1038,6 +1038,42 @@ void main() {
       },
     );
 
+    // 2.1.296 retracts an ask it no longer waits on with
+    // control_cancel_request {request_id}, and ignores an answer after it.
+    test('a request Claude withdraws leaves the card and gets no answer; '
+        'the client is told the permission request is withdrawn', () async {
+      final asked = Completer<String>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('w1', 'Write', writeInput());
+            unawaited(c.askPermission('w1', 'Write', writeInput()));
+            asked.complete(c.lastAsked);
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Write it');
+      await until(() => rt.hasOpenPermission);
+      final id = await asked.future;
+      machine.current.withdraw(id);
+      await until(() => !rt.hasOpenPermission);
+      expect(
+        wire.where((m) => m['method'] == r'$/cancel_request'),
+        hasLength(1),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(machine.current.answered(id), isFalse);
+      await expectLater(
+        rt.answerPermission(approve: true),
+        throwsA(isA<SessionPromptRefusal>()),
+      );
+      machine.current.result();
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
     test('a denied permission is a deny with a message', () async {
       final answered = Completer<Json>();
       final machine = FakeClaudeMachine(

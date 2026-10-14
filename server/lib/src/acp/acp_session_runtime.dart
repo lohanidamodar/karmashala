@@ -1598,6 +1598,15 @@ class AcpSessionRuntime implements ScreenSession {
     if (!pending.completer.isCompleted) pending.completer.complete(outcome);
   }
 
+  /// The agent withdrew its request about [call] (it was settled elsewhere,
+  /// or the turn moved on): nothing is left to answer, so the card goes.
+  void _permissionWithdrawn(ToolCallUpdate call) {
+    final pending = _pending;
+    if (pending == null || pending.call.toolCallId != call.toolCallId) return;
+    _resolvePending(const PermissionOutcome.cancelled());
+    _publish(AgentActivityStatus.working, evidence: [pending.title]);
+  }
+
   PermissionOption? _optionFor(
     List<PermissionOption> options, {
     required bool approve,
@@ -1868,6 +1877,10 @@ final class _Handler extends AcpClientHandler {
     ToolCallUpdate toolCall,
     List<PermissionOption> options,
   ) => _runtime._requestPermission(toolCall, options);
+
+  @override
+  void permissionWithdrawn(String sessionId, ToolCallUpdate toolCall) =>
+      _runtime._permissionWithdrawn(toolCall);
 
   @override
   Future<String> readTextFile(

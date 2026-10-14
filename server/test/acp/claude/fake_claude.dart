@@ -423,8 +423,9 @@ class FakeClaude {
     String toolName,
     Json input, {
     List<Json> suggestions = const [],
+    Json extra = const {},
   }) {
-    final id = 'perm-${++_requests}';
+    final id = lastAsked = 'perm-${++_requests}';
     final answer = Completer<Json>();
     _controlAnswers[id] = answer;
     emit({
@@ -436,10 +437,26 @@ class FakeClaude {
         'input': input,
         'tool_use_id': toolUseId,
         'permission_suggestions': suggestions,
+        ...extra,
       },
     });
     return answer.future.then((r) => (r['response'] as Json?) ?? r);
   }
+
+  /// The id of the last `can_use_tool` asked.
+  String? lastAsked;
+
+  /// Withdraws a request still unanswered, as Claude's
+  /// `control_cancel_request` does.
+  void withdraw(String requestId) =>
+      emit({'type': 'control_cancel_request', 'request_id': requestId});
+
+  /// Whether the bridge answered request [requestId].
+  bool answered(String requestId) => received.any(
+    (m) =>
+        m['type'] == 'control_response' &&
+        (m['response'] as Json)['request_id'] == requestId,
+  );
 
   /// The next message the bridge writes that [test] accepts, or one it
   /// already wrote.

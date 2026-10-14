@@ -134,8 +134,8 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       onMessage: (message) {
         if (identical(_claude, claude)) _onClaude(message);
       },
-      onControlRequest: (request) => identical(_claude, claude)
-          ? _onClaudeRequest(request)
+      onControlRequest: (request, withdrawn) => identical(_claude, claude)
+          ? _onClaudeRequest(request, withdrawn)
           : Future.error(const ClaudeControlError('not the live process')),
       onErrorLine: (line) {
         if (!_errors.isClosed) _errors.add(line);
@@ -1457,10 +1457,15 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   // Claude's requests of the client.
 
-  Future<JsonMap?> _onClaudeRequest(JsonMap request) async {
+  /// Claude's requests of the client. Each ACP request they raise is
+  /// withdrawn with them when Claude withdraws theirs.
+  Future<JsonMap?> _onClaudeRequest(
+    JsonMap request,
+    Future<void> withdrawn,
+  ) async {
     switch (request['subtype']) {
       case 'can_use_tool':
-        return _canUseTool(request);
+        return _canUseTool(request, withdrawn);
       case 'hook_callback':
         return const {};
     }
@@ -1469,12 +1474,12 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     );
   }
 
-  Future<JsonMap> _canUseTool(JsonMap request) async {
+  Future<JsonMap> _canUseTool(JsonMap request, Future<void> withdrawn) async {
     final name = '${request['tool_name'] ?? ''}';
     final input = jsonObject(request['input']) ?? const {};
     final id = '${request['tool_use_id'] ?? ''}';
     final suggestions = jsonObjects(request['permission_suggestions']);
-    if (name == 'AskUserQuestion') return _ask(id, input);
+    if (name == 'AskUserQuestion') return _ask(id, input, withdrawn);
     final tool = _tools[id] ?? _Tool(name, input, null);
     final exitPlan = name == 'ExitPlanMode';
     final options = exitPlan
@@ -1497,7 +1502,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         'sessionId': _sessionId,
         'toolCall': {..._toolFields(id, tool), 'status': 'pending'},
         'options': options,
-      });
+      }, withdrawn: withdrawn);
     } on Object {
       answer = null;
     }
@@ -1556,7 +1561,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   /// asked where nobody answers prompts (bypass, which the runtime answers
   /// itself), or ones left to the person's reply are shown in the chat and
   /// declined.
-  Future<JsonMap> _ask(String id, JsonMap input) async {
+  Future<JsonMap> _ask(String id, JsonMap input, Future<void> withdrawn) async {
     final questions = jsonObjects(input['questions']);
     final askable =
         questions.isNotEmpty &&
@@ -1595,7 +1600,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
             _option('answer', 'Send answer', 'allow_once'),
             _option('reply', 'Answer in my reply', 'reject_once'),
           ],
-        });
+        }, withdrawn: withdrawn);
       } on Object {
         answer = null;
       }
