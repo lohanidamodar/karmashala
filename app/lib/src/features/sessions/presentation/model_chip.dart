@@ -346,6 +346,7 @@ class SessionModelChip extends ConsumerWidget {
       return SessionConfigPickers(
         sessionId: sessionId,
         maxLabelWidth: maxLabelWidth,
+        modelOnly: short,
       );
     }
     return _buildModelChip(

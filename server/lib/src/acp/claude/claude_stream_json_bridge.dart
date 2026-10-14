@@ -82,6 +82,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   String _mode = 'default';
   String _model = 'default';
 
+  /// The effort `get_settings` last applied, or null where it named none or
+  /// could not be read.
+  String? _effort;
+
+  /// Whether fast mode serves, by Claude's `fast_mode_state`.
+  var _fast = false;
+
   // The turn.
   Completer<String>? _turn;
   var _cancelling = false;
@@ -167,6 +174,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           if (!_errors.isClosed) _errors.add('MCP servers refused: $error');
         }
       }
+      await _readSettings(claude);
     } on ClaudeControlError {
       await claude.ended.timeout(
         const Duration(seconds: 2),
@@ -343,6 +351,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _commands = jsonObjects(answer['commands']);
     final mode = answer['current_permission_mode'];
     if (mode is String && mode.isNotEmpty) _mode = mode;
+    _fast = _fastIn(answer['fast_mode_state']) ?? _fast;
     final account = jsonObject(answer['account']) ?? const {};
     final token = account['tokenSource'];
     _loggedIn =
@@ -407,10 +416,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     // A load of the conversation already open (checkouts attached since)
     // keeps the mode and model the person had it in.
     final reopening = id == _sessionId;
-    final mode = _mode;
-    final model = _model;
+    final held = _held;
     final claude = await _open(_resumeArguments(id, resumeAt), params);
-    if (reopening) await _restore(claude, mode, model);
+    if (reopening) await _restore(claude, held);
     _openParams = params;
     _sessionId = id;
     _resumeAt = resumeAt;
@@ -548,14 +556,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   JsonMap _openParams = const {};
 
   Future<void> _resume() async {
-    final mode = _mode;
-    final model = _model;
+    final held = _held;
     final claude = await _open(
       _resumeArguments(_sessionId, _resumeAt),
       _openParams,
     );
     _abandoned = false;
-    await _restore(claude, mode, model);
+    await _restore(claude, held);
     // The new process lists its models afresh; the client is told.
     _update({'sessionUpdate': 'current_mode_update', 'currentModeId': _mode});
     _update({
@@ -565,25 +572,98 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _retellModes();
   }
 
-  /// Puts a reopened conversation back in the mode and model it was in. One
-  /// the new process refuses stays as it started, which is then what is told.
-  Future<void> _restore(ClaudeProcess claude, String mode, String model) async {
-    if (_mode != mode) {
+  /// What a reopened conversation is put back in: its mode, model, effort
+  /// and fast mode.
+  ({String mode, String model, String? effort, bool fast}) get _held =>
+      (mode: _mode, model: _model, effort: _effort, fast: _fast);
+
+  /// Puts a reopened conversation back as [held] says. What the new process
+  /// refuses stays as it started, which is then what is told.
+  Future<void> _restore(
+    ClaudeProcess claude,
+    ({String mode, String model, String? effort, bool fast}) held,
+  ) async {
+    if (_mode != held.mode) {
       try {
-        await claude.control('set_permission_mode', {'mode': mode});
-        _mode = mode;
+        await claude.control('set_permission_mode', {'mode': held.mode});
+        _mode = held.mode;
       } on ClaudeControlError {
         // Kept as Claude answered it.
       }
     }
-    if (_model != model) {
+    var flags = <String, Object?>{
+      if (held.effort != null && held.effort != _effort)
+        'effortLevel': held.effort,
+      if (held.fast && !_fast) 'fastMode': true,
+    };
+    if (_model != held.model) {
       try {
-        await claude.control('set_model', {'model': model});
-        _model = model;
+        await claude.control('set_model', {'model': held.model});
+        _model = held.model;
       } on ClaudeControlError {
         // Kept as Claude answered it.
       }
+      flags = {...flags, if (held.effort != null) 'effortLevel': held.effort};
     }
+    if (flags.isEmpty) return;
+    try {
+      await claude.control('apply_flag_settings', {'settings': flags});
+      if (flags['fastMode'] == true) _fast = true;
+    } on ClaudeControlError {
+      // Kept as Claude answered it.
+    }
+    await _readSettings(claude);
+  }
+
+  /// Reads back the effort Claude applies and whether the fast-mode flag is
+  /// on, with `get_settings` (2.1.296: `applied.effort`, null on a model
+  /// without effort; the `flagSettings` source's `fastMode`, the only layer
+  /// that opts a stream-json session in). A Claude that refuses it has no
+  /// effort to offer.
+  Future<void> _readSettings(ClaudeProcess claude) async {
+    try {
+      final answer = await claude.control('get_settings');
+      final effort = jsonObject(answer?['applied'])?['effort'];
+      _effort = effort is String && effort.isNotEmpty ? effort : null;
+      for (final source in jsonObjects(answer?['sources'])) {
+        if (source['source'] != 'flagSettings') continue;
+        final fast = jsonObject(source['settings'])?['fastMode'];
+        if (fast is bool) _fast = fast;
+      }
+    } on ClaudeControlError {
+      _effort = null;
+    }
+  }
+
+  /// Reads the effort again after a turn, and tells it where it moved.
+  Future<void> _refreshEffort(ClaudeProcess claude) async {
+    final before = _effort;
+    await _readSettings(claude);
+    if (_effort == before || !identical(_claude, claude)) return;
+    _update({
+      'sessionUpdate': 'config_option_update',
+      'configOptions': _configOptions(),
+    });
+  }
+
+  /// `fast_mode_state` (on, cooldown, off) as whether fast mode is chosen; a
+  /// cooldown is fast mode resting after a rate limit.
+  static bool? _fastIn(Object? state) => switch (state) {
+    'on' || 'cooldown' => true,
+    'off' => false,
+    _ => null,
+  };
+
+  /// Follows a `fast_mode_state` Claude reported on init or a result.
+  void _followFast(Object? state) {
+    final fast = _fastIn(state);
+    if (fast == null || fast == _fast) return;
+    _fast = fast;
+    if (_fastOption() == null) return;
+    _update({
+      'sessionUpdate': 'config_option_update',
+      'configOptions': _configOptions(),
+    });
   }
 
   Future<JsonMap> _setMode(JsonMap params) async {
@@ -606,22 +686,49 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   Future<JsonMap> _setConfigOption(JsonMap params) async {
     final claude = _claude;
+    final id = params['configId'];
     final value = params['value'];
-    if (params['configId'] != 'model' || value is! String || claude == null) {
+    final option = [
+      for (final o in _configOptions())
+        if (o['id'] == id) o,
+    ].firstOrNull;
+    final offered = [
+      for (final choice in jsonObjects(option?['options'])) choice['value'],
+    ];
+    if (option == null ||
+        value is! String ||
+        claude == null ||
+        (id != 'model' && !offered.contains(value))) {
       throw AcpRpcError(
         JsonRpcErrorCodes.invalidParams,
-        'Claude Code has no config option "${params['configId']}" to set '
-        'to "$value"; it has model',
+        'Claude Code has no config option "$id" to set to "$value"; it has '
+        '${[for (final o in _configOptions()) o['id']].join(', ')}',
       );
     }
     try {
-      await claude.control('set_model', {'model': value});
+      switch (id) {
+        case 'model':
+          await claude.control('set_model', {'model': value});
+          _model = value;
+          _reportModel(
+            _resolvedOf(value) ?? (value == 'default' ? null : value),
+          );
+          _retellModes();
+        case 'effort':
+          await claude.control('apply_flag_settings', {
+            'settings': {'effortLevel': value},
+          });
+        case 'fast_mode':
+          await claude.control('apply_flag_settings', {
+            'settings': {'fastMode': value == 'on'},
+          });
+      }
     } on ClaudeControlError catch (error) {
       throw AcpRpcError(JsonRpcErrorCodes.invalidParams, error.message);
     }
-    _model = value;
-    _reportModel(_resolvedOf(value) ?? (value == 'default' ? null : value));
-    _retellModes();
+    // What Claude applies, never what was asked: it takes a level a model
+    // lacks without a word, and a model change moves the effort.
+    await _readSettings(claude);
     return {'configOptions': _configOptions()};
   }
 
@@ -703,7 +810,78 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           },
       ],
     },
+    ?_effortOption(),
+    ?_fastOption(),
   ];
+
+  /// Claude's own words for its effort levels: the model picker's names
+  /// ("xHigh") and `/effort`'s descriptions (2.1.296's binary).
+  static const _effortWords = {
+    'low': (
+      'Low',
+      'Quick, straightforward implementation with minimal '
+          'overhead',
+    ),
+    'medium': (
+      'Medium',
+      'Balanced approach with standard implementation '
+          'and testing',
+    ),
+    'high': (
+      'High',
+      'Comprehensive implementation with extensive testing '
+          'and documentation',
+    ),
+    'xhigh': ('xHigh', 'Deeper reasoning than high, just below maximum'),
+    'max': ('Max', 'Maximum capability with deepest reasoning'),
+  };
+
+  /// The effort picker, from the model row's `supportedEffortLevels`: none
+  /// for a model without them, or where Claude did not say which it applies.
+  JsonMap? _effortOption() {
+    final effort = _effort;
+    final levels = [
+      ...?(_modelRow()?['supportedEffortLevels'] as List?)?.whereType<String>(),
+    ];
+    if (effort == null || levels.isEmpty) return null;
+    return {
+      'id': 'effort',
+      'name': 'Effort',
+      'type': 'select',
+      'category': 'thought_level',
+      'currentValue': effort,
+      'options': [
+        for (final level in levels)
+          {
+            'value': level,
+            'name': _effortWords[level]?.$1 ?? level,
+            'description': ?_effortWords[level]?.$2,
+          },
+      ],
+    };
+  }
+
+  /// Fast mode, on a model whose row has `supportsFastMode`; set with
+  /// `apply_flag_settings` `fastMode`, which Claude reports back as
+  /// `fast_mode_state` (2.1.296, read live 2026-10-14).
+  JsonMap? _fastOption() {
+    if (_modelRow()?['supportsFastMode'] != true) return null;
+    return {
+      'id': 'fast_mode',
+      'name': 'Speed',
+      'type': 'select',
+      'currentValue': _fast ? 'on' : 'off',
+      'options': [
+        {'value': 'off', 'name': 'Standard'},
+        {
+          'value': 'on',
+          'name': 'Fast',
+          // Claude's own words for it.
+          'description': 'Same model, faster output. Draws from usage credits.',
+        },
+      ],
+    };
+  }
 
   void _announceCommands() {
     if (_commands.isEmpty) return;
@@ -1051,6 +1229,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     switch (message['subtype']) {
       case 'init':
         if (message['model'] case final String model) _followModel(model);
+        _followFast(message['fast_mode_state']);
         if (message['permissionMode'] case final String mode) {
           _followMode(mode);
         }
@@ -1146,6 +1325,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   void _onResult(JsonMap message) {
     _reportUsage(message);
+    _followFast(message['fast_mode_state']);
+    // `/effort` sent as a prompt moves it with no other word.
+    final claude = _claude;
+    if (claude != null) unawaited(_refreshEffort(claude));
     final turn = _turn;
     // A turn Claude began itself (a background task finishing) carries its
     // origin and answers no prompt, even one queued behind it.

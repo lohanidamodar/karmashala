@@ -1795,6 +1795,68 @@ void main() {
       await rt.stop();
     });
 
+    // 2.1.296, read live: the models rows carry supportedEffortLevels and
+    // supportsFastMode; apply_flag_settings {effortLevel} and {fastMode} set
+    // them, get_settings reads applied.effort back (null on Haiku 4.5).
+    test('effort and speed are config options from the model row, set with '
+        'apply_flag_settings and read back with get_settings; a model '
+        'without them offers neither', () async {
+      final machine = FakeClaudeMachine(
+        models: const [
+          {
+            'value': 'default',
+            'resolvedModel': 'claude-opus-5-5',
+            'displayName': 'Default (recommended)',
+            'supportsEffort': true,
+            'supportedEffortLevels': ['low', 'medium', 'high', 'xhigh'],
+            'supportsFastMode': true,
+          },
+          {
+            'value': 'claude-haiku-4-5-20251001',
+            'resolvedModel': 'claude-haiku-4-5-20251001',
+            'displayName': 'Haiku 4.5',
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      option(String id) =>
+          rt.configOptions!.options.where((o) => o.id == id).firstOrNull;
+      expect(rt.configOptions!.options.map((o) => o.id), [
+        'model',
+        'effort',
+        'fast_mode',
+      ]);
+      expect(option('effort')!.category, 'thought_level');
+      expect(option('effort')!.currentValue, 'medium');
+      expect(option('effort')!.choices.map((c) => c.name), [
+        'Low',
+        'Medium',
+        'High',
+        'xHigh',
+      ]);
+      expect(option('fast_mode')!.currentValue, 'off');
+
+      await rt.setConfigOption('effort', 'high');
+      expect(machine.current.controls('apply_flag_settings').last, {
+        'subtype': 'apply_flag_settings',
+        'settings': {'effortLevel': 'high'},
+      });
+      expect(option('effort')!.currentValue, 'high');
+      await expectLater(
+        rt.setConfigOption('effort', 'max'),
+        throwsA(isA<StateError>()),
+      );
+
+      await rt.setConfigOption('fast_mode', 'on');
+      expect(machine.current.flags['fastMode'], isTrue);
+      expect(option('fast_mode')!.currentValue, 'on');
+
+      await rt.setConfigOption('model', 'claude-haiku-4-5-20251001');
+      expect(rt.configOptions!.options.map((o) => o.id), ['model']);
+      await rt.stop();
+    });
+
     test('the model Claude actually runs is told, never its alias: what '
         "`default` resolves to at start, a pick at once, and each reply's "
         "own; a subagent's is not the session's", () async {

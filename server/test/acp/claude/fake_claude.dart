@@ -105,6 +105,9 @@ class FakeClaude {
   String permissionMode = 'default';
   String? model;
 
+  /// What `apply_flag_settings` merged in: Claude's session flag layer.
+  final flags = <String, Object?>{};
+
   /// Whether an interrupt ends the open turn with an aborted result.
   var turnOpen = false;
 
@@ -226,6 +229,27 @@ class FakeClaude {
       case 'set_model':
         model = request['model'] as String?;
         _answer(id, null);
+      case 'apply_flag_settings':
+        flags.addAll(request['settings'] as Json);
+        _answer(id, null);
+      case 'get_settings':
+        final row = machine.models
+            .where((m) => m['value'] == (model ?? 'default'))
+            .firstOrNull;
+        _answer(id, {
+          'effective': {...flags},
+          'sources': [
+            {'source': 'flagSettings', 'settings': flags},
+          ],
+          'applied': {
+            'model': row?['resolvedModel'],
+            // 2.1.296 applies medium unless told, and nothing on a model
+            // without effort.
+            'effort': row?['supportsEffort'] == true
+                ? flags['effortLevel'] ?? 'medium'
+                : null,
+          },
+        });
       case 'mcp_set_servers':
         _answer(id, {
           'added': (request['servers'] as Json).keys.toList(),
@@ -276,6 +300,7 @@ class FakeClaude {
     'model': model,
     'permissionMode': permissionMode,
     'claude_code_version': machine.version,
+    'fast_mode_state': flags['fastMode'] == true ? 'on' : 'off',
   });
 
   /// Streamed deltas for [text] in message [id], as `--include-partial-messages`.
