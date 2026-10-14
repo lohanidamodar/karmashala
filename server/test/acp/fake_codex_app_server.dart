@@ -36,6 +36,9 @@ class FakeCodexAppServer {
   final exit = Completer<int>();
   final calls = <String, List<JsonMap>>{};
   final notifications = <String>[];
+
+  /// What `model/list` answers; a test may add to it mid-session.
+  final listedModels = <Object?>[...models];
   var killed = false;
   FakeCodexTurn? turn;
   var _turns = 0;
@@ -175,7 +178,7 @@ class FakeCodexAppServer {
         account = null;
         request.respond(const <String, Object?>{});
       case 'model/list':
-        request.respond({'data': models, 'nextCursor': null});
+        request.respond({'data': listedModels, 'nextCursor': null});
       case 'thread/start':
         request.respond(_threadResult(thread('thr-new')));
       case 'thread/resume':
