@@ -436,7 +436,8 @@ class AcpSessionRuntime implements ScreenSession {
         options = created.configOptions;
       }
       await _applyInitialMode(modes, notices);
-      _configOptions = options == null ? null : _distinct(options);
+      // Kept when the answer has none: an update may have come first.
+      if (options != null) _configOptions = _distinct(options);
       _announceConfigOptions();
       host.promptKindsChanged(promptKinds!);
       _publish(
@@ -517,7 +518,7 @@ class AcpSessionRuntime implements ScreenSession {
     if (_sameRoots(roots, _toldRoots)) return;
     _loading = true;
     try {
-      await _within(
+      final loaded = await _within(
         AcpMethods.sessionLoad,
         client.loadSession(
           sessionId: agent,
@@ -527,6 +528,7 @@ class AcpSessionRuntime implements ScreenSession {
         ),
       );
       _toldRoots = roots;
+      _relisted(loaded);
     } on Object catch (error) {
       host.notice(
         sessionId,
@@ -855,8 +857,9 @@ class AcpSessionRuntime implements ScreenSession {
           '${q.options.length} options',
         );
       }
-      said[q.question] = [for (final c in chosen) q.options[c].label]
-          .join(', ');
+      said[q.question] = [
+        for (final c in chosen) q.options[c].label,
+      ].join(', ');
     }
     final send = pending.options.where((o) => o.kind.allows).firstOrNull;
     if (send == null) {
@@ -1011,8 +1014,6 @@ class AcpSessionRuntime implements ScreenSession {
       if (title.isNotEmpty) host.titleChanged(sessionId, title);
       return;
     }
-    // A load replays the conversation the rows already hold.
-    if (_loading) return;
     if (update is CurrentModeUpdate) {
       final modes = _modes;
       if (modes != null && modes.currentModeId != update.currentModeId) {
@@ -1029,6 +1030,8 @@ class AcpSessionRuntime implements ScreenSession {
       _announceConfigOptions();
       return;
     }
+    // A load replays the conversation the rows already hold.
+    if (_loading) return;
     if (update is UsageUpdate) {
       _usageReported(update);
       return;
@@ -1262,6 +1265,21 @@ class AcpSessionRuntime implements ScreenSession {
       }
     }
     _announceModes();
+  }
+
+  /// What a later load answered with replaces the lists held: the agent may
+  /// offer other modes or models than it did at the start.
+  void _relisted(LoadSessionResult loaded) {
+    final modes = loaded.modes;
+    if (modes != null) {
+      _modes = modes;
+      _announceModes();
+    }
+    final options = loaded.configOptions;
+    if (options != null) {
+      _configOptions = _distinct(options);
+      _announceConfigOptions();
+    }
   }
 
   static String _modeName(SessionModeState modes, String id) {
