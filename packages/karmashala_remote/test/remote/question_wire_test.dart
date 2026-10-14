@@ -133,6 +133,12 @@ void main() {
       expect(read.answers.first.options, [1]);
       expect(read.answers.last.text, 'Teal');
 
+      final both = RemoteQuestionAnswer.fromJson(
+        const RemoteQuestionAnswer.optionsAndText([0, 2], 'Teal').toJson(),
+      );
+      expect(both.options, [0, 2]);
+      expect(both.text, 'Teal');
+
       final declined = RemoteQuestionAnswerRequest.fromJson(
         const RemoteQuestionAnswerRequest(
           sessionId: 's1',

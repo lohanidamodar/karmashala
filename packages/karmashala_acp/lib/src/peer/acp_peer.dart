@@ -47,8 +47,14 @@ class AcpPeer {
 
   /// Sends a request and completes with its `result`; an `error` answer
   /// becomes an [AcpRpcError], and closing before the answer an
-  /// [AcpPeerClosed].
-  Future<Object?> call(String method, Object? params) {
+  /// [AcpPeerClosed]. Should [withdrawn] complete first, the other side is
+  /// told the request is withdrawn (`$/cancel_request`), and its answer to
+  /// that ends the call.
+  Future<Object?> call(
+    String method,
+    Object? params, {
+    Future<void>? withdrawn,
+  }) {
     if (_closed) return Future.error(AcpPeerClosed(method));
     final id = _nextId++;
     final pending = _PendingCall(method);
@@ -61,6 +67,11 @@ class AcpPeer {
         'params': params,
       }),
     );
+    withdrawn?.then((_) {
+      if (_pending.containsKey(id)) {
+        notify(AcpMethods.cancelRequest, {'requestId': id});
+      }
+    });
     return pending.completer.future;
   }
 

@@ -31,7 +31,7 @@ void main() {
     ),
   ];
 
-  final report = AgentStatusReport(
+  final askReport = AgentStatusReport(
     agentId: AgentIds.claudeAcp,
     sessionId: 's1',
     status: AgentActivityStatus.awaitingApproval,
@@ -49,12 +49,20 @@ void main() {
     ),
   );
 
-  Future<_Recorder> pump(WidgetTester tester, {Size? size}) async {
+  Future<_Recorder> pump(
+    WidgetTester tester, {
+    Size? size,
+    AgentStatusReport? shown,
+    double textScale = 1,
+  }) async {
     if (size != null) {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
     }
+    tester.platformDispatcher.textScaleFactorTestValue = textScale;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final report = shown ?? askReport;
     final db = TestMachine();
     final server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
@@ -97,6 +105,49 @@ void main() {
     await tester.pumpAndSettle();
     return recorder;
   }
+
+  testWidgets('an ask that says no reason draws no reason line', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.byKey(const ValueKey('dock-ask-reason')), findsNothing);
+  });
+
+  // Claude's can_use_tool says why it asks and which subagent asks.
+  testWidgets('why the agent asks, and which subagent, is one line under '
+      'the header, even at 360 px and text scale 1.6', (tester) async {
+    await pump(
+      tester,
+      size: const Size(360, 800),
+      textScale: 1.6,
+      shown: AgentStatusReport(
+        agentId: AgentIds.claudeAcp,
+        sessionId: 's1',
+        status: AgentActivityStatus.awaitingApproval,
+        source: AgentStatusSource.protocol,
+        observedAt: testTime,
+        waiting: AgentWaitKind.approval,
+        waitingSince: testTime,
+        toolAsk: AgentToolAsk(
+          toolName: 'Bash',
+          input: const {'command': 'cat /etc/hosts'},
+          at: testTime,
+          toolUseId: 'c1',
+          options: offered,
+          kind: 'execute',
+          reason: 'Path is outside the allowed working directories',
+          asker: 'Explore',
+        ),
+      ),
+    );
+    final line = find.byKey(const ValueKey('dock-ask-reason'));
+    expect(
+      tester.widget<Text>(line).data,
+      'Asked by Explore · Path is outside the allowed working directories',
+    );
+    expect(tester.widget<Text>(line).maxLines, 1);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('every option the agent offered, in its words and order', (
     tester,

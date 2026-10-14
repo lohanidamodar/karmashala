@@ -222,13 +222,15 @@ class _QuestionOr extends ConsumerWidget {
         .asData
         ?.value
         .agentId;
-    final chatRow = agentId == null
+    final agent = agentId == null
         ? null
-        : ref.read(agentRegistryProvider).byId(agentId)?.questions?.chatRow;
+        : ref.read(agentRegistryProvider).byId(agentId);
     return QuestionPromptCard(
       agentName: agentName,
       question: question,
-      chatLabel: chatRow,
+      chatLabel: agent?.questions?.chatRow,
+      // A chat session's answer goes over the protocol, never as keys.
+      wordsWithChoices: agent?.acp != null,
       where: where,
       trailing: trailing,
       dense: dense,

@@ -306,6 +306,7 @@ final class SessionUsageChanged extends DataChange {
     required this.contextSize,
     this.costAmount,
     this.costCurrency,
+    this.autoCompactAt,
   });
 
   factory SessionUsageChanged.fromJson(Map<String, Object?> json) {
@@ -316,6 +317,7 @@ final class SessionUsageChanged extends DataChange {
       contextSize: json['contextSize'] as int? ?? 0,
       costAmount: cost is num ? cost.toDouble() : null,
       costCurrency: json['costCurrency'] as String?,
+      autoCompactAt: json['autoCompactAt'] as int?,
     );
   }
 
@@ -327,6 +329,10 @@ final class SessionUsageChanged extends DataChange {
   /// ISO 4217, as the agent wrote it.
   final String? costCurrency;
 
+  /// The context size at which the agent compacts on its own, where it
+  /// says; null where it does not, or does not compact.
+  final int? autoCompactAt;
+
   @override
   Map<String, Object?> toJson() => {
     'change': 'sessionUsageChanged',
@@ -335,6 +341,7 @@ final class SessionUsageChanged extends DataChange {
     'contextSize': contextSize,
     'costAmount': ?costAmount,
     'costCurrency': ?costCurrency,
+    'autoCompactAt': ?autoCompactAt,
   };
 }
 

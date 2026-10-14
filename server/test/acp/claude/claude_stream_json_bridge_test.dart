@@ -756,6 +756,48 @@ void main() {
       },
     };
 
+    // 2.1.296, read live: get_context_usage {detail: summary} answered
+    // totalTokens 27180, maxTokens 1000000, autoCompactThreshold 967000
+    // before the first turn, and 31655 after a one-word reply.
+    test("the context meter reads Claude's own count, with where it compacts, "
+        'from the start and after each turn', () async {
+      final machine = FakeClaudeMachine(
+        contextUsage: {
+          'totalTokens': 27180,
+          'maxTokens': 1000000,
+          'autoCompactThreshold': 967000,
+          'isAutoCompactEnabled': true,
+        },
+        turns: [
+          (c, user) async {
+            c.machine.contextUsage = {
+              'totalTokens': 31655,
+              'maxTokens': 1000000,
+              'autoCompactThreshold': 967000,
+              'isAutoCompactEnabled': true,
+            };
+            c.assistant('msg_1', [
+              {'type': 'text', 'text': 'OK'},
+            ]);
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await until(() => host.usage.isNotEmpty);
+      expect(
+        (host.usage.last.contextUsed, host.usage.last.contextSize),
+        (27180, 1000000),
+      );
+      expect(host.usage.last.autoCompactAt, 967000);
+      await rt.send('Reply OK');
+      await rt.awaitTurn();
+      await until(() => host.usage.last.contextUsed == 31655);
+      expect(host.usage.last.autoCompactAt, 967000);
+      await rt.stop();
+    });
+
     test('rate-limit events are usage updates carrying the limits and their '
         'reset in _meta', () async {
       final machine = FakeClaudeMachine(
@@ -952,6 +994,71 @@ void main() {
       await rt.stop();
     });
 
+    // 2.1.296's system subtypes api_retry, model_refusal_fallback,
+    // model_refusal_no_fallback and permission_denied, by their schemas.
+    test('a retry, a refusal and a call denied unasked are notes in the '
+        'chat, so a slow turn says why', () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.system('api_retry', {
+              'attempt': 2,
+              'max_retries': 10,
+              'retry_delay_ms': 4200,
+              'error_status': 529,
+              'error': 'overloaded',
+            });
+            c.system('api_retry', {
+              'attempt': 3,
+              'max_retries': 10,
+              'retry_delay_ms': 8000,
+              'error_status': null,
+              'error': 'unknown',
+            });
+            c.system('model_refusal_fallback', {
+              'trigger': 'refusal',
+              'direction': 'retry',
+              'original_model': 'claude-opus-5-5',
+              'fallback_model': 'claude-sonnet-5-5',
+              'request_id': null,
+            });
+            c.system('permission_denied', {
+              'tool_name': 'Bash',
+              'tool_use_id': 'b1',
+              'decision_reason': 'dontAsk mode refuses anything that asks',
+            });
+            c.system('model_refusal_no_fallback', {
+              'original_model': 'claude-opus-5-5',
+              'request_id': null,
+              'content': 'Claude declined to help with this request.',
+            });
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      final notes = [
+        for (final row in rows())
+          if (SessionMessageTranscriptSource.project(row) case final m
+              when m.role == 'notice' || m.role == 'error')
+            '${m.role}: ${m.text}',
+      ];
+      expect(notes, [
+        'notice: Claude Code is retrying (2 of 10) in 5 s, after HTTP 529.',
+        'notice: Claude Code is retrying (3 of 10) in 8 s, after a '
+            'connection error.',
+        'notice: claude-opus-5-5 declined; Claude Code switched to '
+            'claude-sonnet-5-5.',
+        'notice: Claude Code refused Bash without asking: dontAsk mode '
+            'refuses anything that asks',
+        'error: Claude declined to help with this request.',
+      ]);
+      await rt.stop();
+    });
+
     test('a failed turn is an error with its words; a usage limit reads as '
         'one', () async {
       final machine = FakeClaudeMachine(
@@ -1037,6 +1144,113 @@ void main() {
         await rt.stop();
       },
     );
+
+    // 2.1.296's can_use_tool schema: title, display_name, description,
+    // decision_reason (may carry ANSI), blocked_path, agent_id, and
+    // suppress_always_allow_rule ("hosts … should omit any persistent-rule
+    // affordance when set").
+    test('why Claude asks, and which subagent, rides on the request and the '
+        "card; a suppressed persistent rule offers no Always allow", () async {
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('t1', 'Task', {
+              'subagent_type': 'Explore',
+              'description': 'Find the config',
+            });
+            c.toolUse('r1', 'Bash', {
+              'command': 'cat /etc/hosts',
+            }, parentToolUseId: 't1');
+            unawaited(
+              c.askPermission(
+                'r1',
+                'Bash',
+                {'command': 'cat /etc/hosts'},
+                suggestions: [suggestion],
+                extra: {
+                  'title': 'Claude wants to read hosts',
+                  'display_name': 'Bash',
+                  'decision_reason':
+                      '\x1b[1mPath is outside the allowed working '
+                      'directories\x1b[0m',
+                  'blocked_path': '/etc/hosts',
+                  'agent_id': 'agent-7',
+                  'suppress_always_allow_rule': true,
+                },
+              ),
+            );
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Look');
+      await until(() => rt.hasOpenPermission);
+      final asked = wire.firstWhere(
+        (m) => m['method'] == 'session/request_permission',
+      );
+      final params = asked['params'] as Json;
+      expect((params['options'] as List).map((o) => (o as Json)['kind']), [
+        'allow_once',
+        'reject_once',
+      ]);
+      final meta = (params['toolCall'] as Json)['_meta'] as Json;
+      expect(meta['claudeCode'], {
+        'toolName': 'Bash',
+        'parentToolUseId': 't1',
+        'title': 'Claude wants to read hosts',
+        'decisionReason': 'Path is outside the allowed working directories',
+        'blockedPath': '/etc/hosts',
+        'displayName': 'Bash',
+        'agentId': 'agent-7',
+      });
+      final ask = host.statuses.lastWhere((s) => s.toolAsk != null).toolAsk!;
+      expect(
+        ask.reason,
+        'Path is outside the allowed working directories · /etc/hosts',
+      );
+      expect(ask.asker, 'Explore');
+      await rt.answerPermission(approve: false);
+      machine.current.result();
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
+    // 2.1.296 retracts an ask it no longer waits on with
+    // control_cancel_request {request_id}, and ignores an answer after it.
+    test('a request Claude withdraws leaves the card and gets no answer; '
+        'the client is told the permission request is withdrawn', () async {
+      final asked = Completer<String>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.toolUse('w1', 'Write', writeInput());
+            unawaited(c.askPermission('w1', 'Write', writeInput()));
+            asked.complete(c.lastAsked);
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Write it');
+      await until(() => rt.hasOpenPermission);
+      final id = await asked.future;
+      machine.current.withdraw(id);
+      await until(() => !rt.hasOpenPermission);
+      expect(
+        wire.where((m) => m['method'] == r'$/cancel_request'),
+        hasLength(1),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(machine.current.answered(id), isFalse);
+      await expectLater(
+        rt.answerPermission(approve: true),
+        throwsA(isA<SessionPromptRefusal>()),
+      );
+      machine.current.result();
+      await rt.awaitTurn();
+      await rt.stop();
+    });
 
     test('a denied permission is a deny with a message', () async {
       final answered = Completer<Json>();
@@ -1232,6 +1446,62 @@ void main() {
         ('Which fruit?', 'Pear'),
         ('Which fruits?', 'Apple, Plum'),
       ]);
+      await rt.stop();
+    });
+
+    // 2.1.296's question view: Other is drawn under a multi-select question
+    // too, and the answer is the ticked labels then the words, joined by
+    // ", ", an item holding ", " or a quote written as a JSON string.
+    test('a multi-select question takes ticks and own words together, '
+        'written as Claude writes them; each question says whether it '
+        'takes own words', () async {
+      final answered = Completer<Json>();
+      final designs = {
+        ...question(text: 'Which layout?'),
+        'options': [
+          {'label': 'Grid', 'preview': '+--+'},
+          {'label': 'List', 'preview': '----'},
+        ],
+      };
+      final machine = FakeClaudeMachine(
+        turns: [
+          asking([
+            question(
+              text: 'Which fruits?',
+              choices: ['Apple', 'Pear, ripe'],
+              multiSelect: true,
+            ),
+            designs,
+          ], answered),
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Ask me');
+      await until(() => rt.hasOpenPermission);
+      final asked = wire.firstWhere(
+        (m) => m['method'] == 'session/request_permission',
+      );
+      final toolCall = (asked['params'] as Json)['toolCall'] as Json;
+      final carried =
+          ((toolCall['_meta'] as Json)['karmashala'] as Json)['questions']
+              as List;
+      expect(carried.map((q) => (q as Json)['ownWords']), [true, false]);
+      await rt.answerQuestion(
+        toolUseId: 'q',
+        answers: const [
+          AgentQuestionAnswer.optionsAndText([0, 1], 'Mango "Alphonso"'),
+          AgentQuestionAnswer.option(0),
+        ],
+      );
+      expect(
+        (await answered.future)['updatedInput'],
+        containsPair('answers', {
+          'Which fruits?': 'Apple, "Pear, ripe", "Mango \\"Alphonso\\""',
+          'Which layout?': 'Grid',
+        }),
+      );
+      await rt.awaitTurn();
       await rt.stop();
     });
 
@@ -1541,6 +1811,51 @@ void main() {
       },
     );
 
+    // 2.1.296: each system init names slash_commands and skills; a
+    // system commands_changed carries the whole list to replace it with.
+    test('the commands follow each init and a commands_changed; a list '
+        'Claude repeats is not told again', () async {
+      final turnDone = Completer<void>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            for (var i = 0; i < 2; i++) {
+              c.system('init', {
+                'model': 'claude-opus-5-5',
+                'permissionMode': 'default',
+                'slash_commands': ['review', 'deploy'],
+                'skills': ['deploy'],
+              });
+            }
+            c.result();
+            turnDone.complete();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      List<(String, String)> listed() => [
+        for (final command in rt.commands!.commands)
+          (command.name, command.description),
+      ];
+      await until(() => rt.commands != null);
+      expect(listed(), [('review', 'Review')]);
+      await rt.send('Go');
+      await rt.awaitTurn();
+      await turnDone.future;
+      await until(() => listed().length == 2);
+      expect(listed(), [('review', 'Review'), ('deploy', 'Skill')]);
+      expect(updates('available_commands_update'), hasLength(2));
+
+      machine.current.system('commands_changed', {
+        'commands': [
+          {'name': 'fresh', 'description': 'Found in a subfolder'},
+        ],
+      });
+      await until(() => listed().length == 1 && listed().single.$1 == 'fresh');
+      await rt.stop();
+    });
+
     test('modes are set and followed over the control channel', () async {
       final machine = FakeClaudeMachine(
         turns: [
@@ -1622,6 +1937,45 @@ void main() {
       await rt.stop();
     });
 
+    // 2.1.296's initialize models rows carry supportsAutoMode on the models
+    // that have it; Haiku 4.5's row has no such key.
+    test('Automatic is offered only on a model whose row supports it, and '
+        'comes and goes as the model changes', () async {
+      final machine = FakeClaudeMachine(
+        models: const [
+          {
+            'value': 'default',
+            'resolvedModel': 'claude-opus-5-5',
+            'displayName': 'Default (recommended)',
+            'supportsAutoMode': true,
+          },
+          {
+            'value': 'claude-haiku-4-5-20251001',
+            'resolvedModel': 'claude-haiku-4-5-20251001',
+            'displayName': 'Haiku 4.5',
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      List<String> offered() => [
+        for (final mode in rt.modes!.availableModes) mode.id,
+      ];
+      expect(offered(), contains('auto'));
+      await rt.setConfigOption('model', 'claude-haiku-4-5-20251001');
+      await until(() => !offered().contains('auto'));
+      expect(offered(), [
+        'plan',
+        'dontAsk',
+        'default',
+        'acceptEdits',
+        'bypassPermissions',
+      ]);
+      await rt.setConfigOption('model', 'default');
+      await until(() => offered().contains('auto'));
+      await rt.stop();
+    });
+
     test('in auto mode what Claude still asks reaches the person: its '
         'reviewer screened it, the rung does not allow it', () async {
       final answered = Completer<Json>();
@@ -1697,6 +2051,68 @@ void main() {
       await until(
         () => rt.configOptions!.options.single.currentValue == 'haiku',
       );
+      await rt.stop();
+    });
+
+    // 2.1.296, read live: the models rows carry supportedEffortLevels and
+    // supportsFastMode; apply_flag_settings {effortLevel} and {fastMode} set
+    // them, get_settings reads applied.effort back (null on Haiku 4.5).
+    test('effort and speed are config options from the model row, set with '
+        'apply_flag_settings and read back with get_settings; a model '
+        'without them offers neither', () async {
+      final machine = FakeClaudeMachine(
+        models: const [
+          {
+            'value': 'default',
+            'resolvedModel': 'claude-opus-5-5',
+            'displayName': 'Default (recommended)',
+            'supportsEffort': true,
+            'supportedEffortLevels': ['low', 'medium', 'high', 'xhigh'],
+            'supportsFastMode': true,
+          },
+          {
+            'value': 'claude-haiku-4-5-20251001',
+            'resolvedModel': 'claude-haiku-4-5-20251001',
+            'displayName': 'Haiku 4.5',
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      option(String id) =>
+          rt.configOptions!.options.where((o) => o.id == id).firstOrNull;
+      expect(rt.configOptions!.options.map((o) => o.id), [
+        'model',
+        'effort',
+        'fast_mode',
+      ]);
+      expect(option('effort')!.category, 'thought_level');
+      expect(option('effort')!.currentValue, 'medium');
+      expect(option('effort')!.choices.map((c) => c.name), [
+        'Low',
+        'Medium',
+        'High',
+        'xHigh',
+      ]);
+      expect(option('fast_mode')!.currentValue, 'off');
+
+      await rt.setConfigOption('effort', 'high');
+      expect(machine.current.controls('apply_flag_settings').last, {
+        'subtype': 'apply_flag_settings',
+        'settings': {'effortLevel': 'high'},
+      });
+      expect(option('effort')!.currentValue, 'high');
+      await expectLater(
+        rt.setConfigOption('effort', 'max'),
+        throwsA(isA<StateError>()),
+      );
+
+      await rt.setConfigOption('fast_mode', 'on');
+      expect(machine.current.flags['fastMode'], isTrue);
+      expect(option('fast_mode')!.currentValue, 'on');
+
+      await rt.setConfigOption('model', 'claude-haiku-4-5-20251001');
+      expect(rt.configOptions!.options.map((o) => o.id), ['model']);
       await rt.stop();
     });
 

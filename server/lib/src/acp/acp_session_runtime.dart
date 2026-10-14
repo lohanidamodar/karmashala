@@ -839,6 +839,22 @@ class AcpSessionRuntime implements ScreenSession {
     for (final (i, answer) in answers.indexed) {
       final q = asked[i];
       final text = answer.text?.trim();
+      if (text != null && q.multiSelect && answer.chosen.isNotEmpty) {
+        final chosen = answer.chosen;
+        if (!q.ownWords ||
+            text.isEmpty ||
+            chosen.any((c) => c < 0 || c >= q.options.length)) {
+          throw SessionPromptRefusal(
+            'the answer to "${q.question}" does not fit its '
+            '${q.options.length} options and its own-words row',
+          );
+        }
+        said[q.question] = joinedChoices([
+          for (final c in chosen) q.options[c].label,
+          text,
+        ]);
+        continue;
+      }
       if (text != null) {
         if (!q.ownWords) {
           throw SessionPromptRefusal(
@@ -862,9 +878,9 @@ class AcpSessionRuntime implements ScreenSession {
           '${q.options.length} options',
         );
       }
-      said[q.question] = [
+      said[q.question] = joinedChoices([
         for (final c in chosen) q.options[c].label,
-      ].join(', ');
+      ]);
     }
     final send = pending.options.where((o) => o.kind.allows).firstOrNull;
     if (send == null) {
@@ -1033,6 +1049,13 @@ class AcpSessionRuntime implements ScreenSession {
     if (update is ConfigOptionUpdate) {
       _configOptions = _distinct(update.configOptions);
       _announceConfigOptions();
+      return;
+    }
+    if (update is UnknownUpdate &&
+        update.kind == AcpExtensions.availableModes &&
+        update.raw['currentModeId'] is String) {
+      _modes = SessionModeState.fromJson(update.raw);
+      _announceModes();
       return;
     }
     // A load replays the conversation the rows already hold.
@@ -1453,6 +1476,12 @@ class AcpSessionRuntime implements ScreenSession {
     contextSize: update.size,
     costAmount: update.cost?.amount,
     costCurrency: update.cost?.currency,
+    autoCompactAt: switch (asJsonMap(
+      update.meta?['karmashala'],
+    )?['autoCompactAt']) {
+      final int at when at > 0 => at,
+      _ => null,
+    },
   );
 
   /// The agent is gone, so it offers nothing to set: a client's picker for
@@ -1542,6 +1571,8 @@ class AcpSessionRuntime implements ScreenSession {
             ),
         ],
         kind: call.kind?.raw,
+        reason: _askNote(call, 'reason'),
+        asker: _askNote(call, 'asker'),
       ),
       waitingSince: now,
     );
@@ -1550,6 +1581,14 @@ class AcpSessionRuntime implements ScreenSession {
     } finally {
       if (identical(_pending, pending)) _pending = null;
     }
+  }
+
+  /// What a Karmashala bridge says of why it asks about [call]
+  /// (`_meta.karmashala.ask`): its `reason`, or the subagent `asker`.
+  static String? _askNote(ToolCallUpdate call, String key) {
+    final ask = asJsonMap(asJsonMap(call.meta?['karmashala'])?['ask']);
+    final note = ask?[key];
+    return note is String && note.trim().isNotEmpty ? note.trim() : null;
   }
 
   /// Whether [call] only reads, by the ACP kind the agent gave it here or
@@ -1587,6 +1626,15 @@ class AcpSessionRuntime implements ScreenSession {
     if (pending == null) return;
     _pending = null;
     if (!pending.completer.isCompleted) pending.completer.complete(outcome);
+  }
+
+  /// The agent withdrew its request about [call] (it was settled elsewhere,
+  /// or the turn moved on): nothing is left to answer, so the card goes.
+  void _permissionWithdrawn(ToolCallUpdate call) {
+    final pending = _pending;
+    if (pending == null || pending.call.toolCallId != call.toolCallId) return;
+    _resolvePending(const PermissionOutcome.cancelled());
+    _publish(AgentActivityStatus.working, evidence: [pending.title]);
   }
 
   PermissionOption? _optionFor(
@@ -1859,6 +1907,10 @@ final class _Handler extends AcpClientHandler {
     ToolCallUpdate toolCall,
     List<PermissionOption> options,
   ) => _runtime._requestPermission(toolCall, options);
+
+  @override
+  void permissionWithdrawn(String sessionId, ToolCallUpdate toolCall) =>
+      _runtime._permissionWithdrawn(toolCall);
 
   @override
   Future<String> readTextFile(

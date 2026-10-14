@@ -146,26 +146,36 @@ class RemoteQuestion {
   }
 }
 
-/// What the user chose for one question: option indexes, or their own words.
+/// What the user chose for one question: option indexes, their own words, or
+/// on a multi-choice question both.
 class RemoteQuestionAnswer {
   const RemoteQuestionAnswer.options(this.options) : text = null;
 
   const RemoteQuestionAnswer.text(String this.text) : options = const [];
 
+  const RemoteQuestionAnswer.optionsAndText(this.options, String this.text);
+
   final List<int> options;
   final String? text;
 
-  Map<String, Object?> toJson() =>
-      text != null ? {'text': text} : {'options': options};
+  Map<String, Object?> toJson() => {
+    'text': ?text,
+    if (text == null || options.isNotEmpty) 'options': options,
+  };
 
   static RemoteQuestionAnswer fromJson(Object? json) {
     if (json is Map) {
       final text = json['text'];
-      if (text is String) return RemoteQuestionAnswer.text(text);
       final options = json['options'];
-      if (options is List && options.every((o) => o is int)) {
-        return RemoteQuestionAnswer.options(options.cast<int>());
+      final ints = options is List && options.every((o) => o is int)
+          ? options.cast<int>()
+          : null;
+      if (text is String) {
+        return ints == null || ints.isEmpty
+            ? RemoteQuestionAnswer.text(text)
+            : RemoteQuestionAnswer.optionsAndText(ints, text);
       }
+      if (ints != null) return RemoteQuestionAnswer.options(ints);
     }
     throw const ProtocolException('bad question answer');
   }

@@ -183,12 +183,32 @@ class _AskDock extends ConsumerWidget {
         Flexible(child: _WaitingFor(since: report.waitingSince)),
       ],
     );
+    // Why it asks and which subagent, in the agent's words, on one line.
+    final why = [
+      if (ask?.asker case final asker?) 'Asked by $asker',
+      ?ask?.reason,
+    ].join(' · ');
     // Held to a height, the header stays and the body scrolls under it.
     final plain = _FlexColumn(
-      flexible: 2,
+      // The body's place: after the header, the reason line, and the gap.
+      flexible: why.isEmpty ? 2 : 3,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         header,
+        if (why.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Tooltip(
+              message: why,
+              child: Text(
+                why,
+                key: const ValueKey('dock-ask-reason'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: density.muted(theme),
+              ),
+            ),
+          ),
         const SizedBox(height: _dockGap),
         SingleChildScrollView(primary: false, child: body),
       ],

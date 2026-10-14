@@ -113,15 +113,21 @@ class SessionConfigOptionPicker extends ConsumerWidget {
 /// A picker per `select` option the session's agent exposes, the `model`
 /// one first; nothing at all — no width either — until the agent has
 /// announced some. A `boolean` or any other type gets no control here.
+/// Where they do not fit on one line they wrap rather than overflow.
 class SessionConfigPickers extends ConsumerWidget {
   const SessionConfigPickers({
     required this.sessionId,
     this.maxLabelWidth = 120,
+    this.modelOnly = false,
     super.key,
   });
 
   final String sessionId;
   final double maxLabelWidth;
+
+  /// Only the model's picker, for a phone's one-line bar; the rest (effort,
+  /// speed) are in the session's sheet.
+  final bool modelOnly;
 
   /// The options drawn, in the order drawn.
   static List<SessionConfigOption> selectable(
@@ -140,21 +146,24 @@ class SessionConfigPickers extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final options = selectable(
-      ref.watch(sessionConfigOptionsProvider(sessionId)),
-    );
+    final options = [
+      for (final option in selectable(
+        ref.watch(sessionConfigOptionsProvider(sessionId)),
+      ))
+        if (!modelOnly || option.isModel) option,
+    ];
     if (options.isEmpty) return const SizedBox.shrink();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: Insets.xs,
+      runSpacing: Insets.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        for (final (index, option) in options.indexed) ...[
-          if (index > 0) const SizedBox(width: Insets.xs),
+        for (final option in options)
           SessionConfigOptionPicker(
             sessionId: sessionId,
             option: option,
             maxLabelWidth: maxLabelWidth,
           ),
-        ],
       ],
     );
   }

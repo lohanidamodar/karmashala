@@ -23,7 +23,8 @@ final class ClaudeProcess {
   ClaudeProcess(
     this._transport, {
     required void Function(JsonMap message) onMessage,
-    required Future<JsonMap?> Function(JsonMap request) onControlRequest,
+    required Future<JsonMap?> Function(JsonMap request, Future<void> withdrawn)
+    onControlRequest,
     required void Function(String line) onErrorLine,
   }) : _onMessage = onMessage,
        _onControlRequest = onControlRequest {
@@ -53,8 +54,13 @@ final class ClaudeProcess {
 
   final AcpTransport _transport;
   final void Function(JsonMap message) _onMessage;
-  final Future<JsonMap?> Function(JsonMap request) _onControlRequest;
+  final Future<JsonMap?> Function(JsonMap request, Future<void> withdrawn)
+  _onControlRequest;
   final _pending = <String, Completer<JsonMap?>>{};
+
+  /// Claude's requests still being answered, by id: completed when Claude
+  /// withdraws one (`control_cancel_request`), which then gets no answer.
+  final _asked = <Object?, Completer<void>>{};
   final _ended = Completer<int>();
   final _stderr = <String>[];
   var _next = 0;
@@ -136,14 +142,19 @@ final class ClaudeProcess {
             jsonObject(message['request']) ?? const {},
           ),
         );
+      case 'control_cancel_request':
+        final withdrawn = _asked.remove(message['request_id']);
+        if (withdrawn != null && !withdrawn.isCompleted) withdrawn.complete();
       default:
         _onMessage(message);
     }
   }
 
   Future<void> _answer(Object? id, JsonMap request) async {
+    final withdrawn = _asked[id] = Completer<void>();
     try {
-      final response = await _onControlRequest(request);
+      final response = await _onControlRequest(request, withdrawn.future);
+      if (withdrawn.isCompleted) return;
       send({
         'type': 'control_response',
         'response': {
@@ -153,10 +164,13 @@ final class ClaudeProcess {
         },
       });
     } on Object catch (error) {
+      if (withdrawn.isCompleted) return;
       send({
         'type': 'control_response',
         'response': {'subtype': 'error', 'request_id': id, 'error': '$error'},
       });
+    } finally {
+      if (identical(_asked[id], withdrawn)) _asked.remove(id);
     }
   }
 
@@ -169,6 +183,10 @@ final class ClaudeProcess {
       answer.completeError(ClaudeControlError(words));
     }
     _pending.clear();
+    for (final withdrawn in _asked.values) {
+      if (!withdrawn.isCompleted) withdrawn.complete();
+    }
+    _asked.clear();
     _ended.complete(code);
   }
 }

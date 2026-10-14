@@ -89,19 +89,19 @@ void main() {
   Future<void> pump(
     WidgetTester tester, {
     Size size = const Size(1200, 800),
+    Widget body = const Row(children: [SessionConfigPickers(sessionId: 's1')]),
+    double textScale = 1,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
+    tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: Row(children: [SessionConfigPickers(sessionId: 's1')]),
-          ),
-        ),
+        child: MaterialApp(home: Scaffold(body: body)),
       ),
     );
     await tester.pumpAndSettle();
@@ -212,6 +212,75 @@ void main() {
 
     expect(find.byType(PickerFace), findsNWidgets(2));
     expect(tester.takeException(), isNull);
+  });
+
+  // Claude's chat announces a model, an effort and a speed.
+  const claude = SessionConfigOptionsChanged(
+    sessionId: 's1',
+    options: [
+      SessionConfigOption(
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'default',
+        choices: [
+          SessionConfigChoice(value: 'default', name: 'Default (recommended)'),
+        ],
+      ),
+      SessionConfigOption(
+        id: 'effort',
+        name: 'Effort',
+        type: 'select',
+        category: 'thought_level',
+        currentValue: 'xhigh',
+        choices: [
+          SessionConfigChoice(value: 'medium', name: 'Medium'),
+          SessionConfigChoice(value: 'xhigh', name: 'xHigh'),
+        ],
+      ),
+      SessionConfigOption(
+        id: 'fast_mode',
+        name: 'Speed',
+        type: 'select',
+        currentValue: 'off',
+        choices: [
+          SessionConfigChoice(value: 'off', name: 'Standard'),
+          SessionConfigChoice(value: 'on', name: 'Fast'),
+        ],
+      ),
+    ],
+  );
+
+  testWidgets('model, effort and speed wrap at 360 px and text scale 1.6 '
+      'rather than overflow; a phone bar shows the model alone', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      size: const Size(360, 800),
+      textScale: 1.6,
+      body: const Padding(
+        padding: EdgeInsets.all(16),
+        child: SessionConfigPickers(sessionId: 's1'),
+      ),
+    );
+    server.writeAsAnotherClient([claude]);
+    await tester.pumpAndSettle();
+    expect(find.byType(PickerFace), findsNWidgets(3));
+    expect(find.text('xHigh'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await pump(
+      tester,
+      size: const Size(360, 800),
+      textScale: 1.6,
+      body: const Row(
+        children: [SessionConfigPickers(sessionId: 's1', modelOnly: true)],
+      ),
+    );
+    expect(find.byType(PickerFace), findsOneWidget);
+    expect(find.text('xHigh'), findsNothing);
   });
 
   testWidgets('a new list the agent announces mid-session redraws the '

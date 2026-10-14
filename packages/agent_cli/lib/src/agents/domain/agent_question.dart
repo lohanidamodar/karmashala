@@ -134,7 +134,8 @@ class AgentQuestionSet {
   }
 }
 
-/// What the user chose for one question: option indexes, or their own words.
+/// What the user chose for one question: option indexes, their own words, or
+/// on a multi-choice question both.
 class AgentQuestionAnswer {
   const AgentQuestionAnswer.option(int index)
     : selected = const [],
@@ -147,6 +148,11 @@ class AgentQuestionAnswer {
     : selected = const [],
       _one = null;
 
+  /// Options ticked on a multi-choice question and words in its Other row,
+  /// which Claude Code takes together.
+  const AgentQuestionAnswer.optionsAndText(this.selected, String this.text)
+    : _one = null;
+
   final List<int> selected;
   final String? text;
   final int? _one;
@@ -155,8 +161,20 @@ class AgentQuestionAnswer {
   List<int> get chosen => _one == null ? selected : [_one];
 
   @override
-  String toString() => text != null ? 'text($text)' : 'options($chosen)';
+  String toString() => text == null
+      ? 'options($chosen)'
+      : chosen.isEmpty
+      ? 'text($text)'
+      : 'options($chosen)+text($text)';
 }
+
+/// A multi-choice answer as Claude Code 2.1.296 writes it: the picked labels,
+/// then the Other row's words, joined by ", ", with an item holding ", " or a
+/// quote written as a JSON string (read from the binary's question view).
+String joinedChoices(List<String> items) => [
+  for (final item in items)
+    item.contains(', ') || item.contains('"') ? jsonEncode(item) : item,
+].join(', ');
 
 /// How one agent's questions are found and answered.
 class AgentQuestionSupport {

@@ -24,6 +24,11 @@ abstract class AcpClientHandler {
 
   Future<void> writeTextFile(String sessionId, String path, String content);
 
+  /// The agent withdrew a `session/request_permission` it is still waiting
+  /// on (`$/cancel_request`): whatever is asking the person about
+  /// [toolCall] should go. Its request has already been answered.
+  void permissionWithdrawn(String sessionId, ToolCallUpdate toolCall) {}
+
   /// `terminal/*` ([method] and its params), answered only by a client that
   /// advertises `terminal`; the default refuses.
   Future<Object?> terminal(String method, Object? params) async =>

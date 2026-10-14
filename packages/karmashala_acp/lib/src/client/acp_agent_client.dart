@@ -213,6 +213,11 @@ class AcpAgentClient {
             PermissionOption.fromJson(o),
         ];
         _pendingPermissions.putIfAbsent(sessionId, () => {}).add(request);
+        unawaited(
+          request.cancelled.then(
+            (_) => _handler.permissionWithdrawn(sessionId, toolCall),
+          ),
+        );
         try {
           final outcome = await _handler.requestPermission(
             sessionId,

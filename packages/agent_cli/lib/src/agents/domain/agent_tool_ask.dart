@@ -21,7 +21,16 @@ class AgentToolAsk {
     this.cwd,
     this.options = const [],
     this.kind,
+    this.reason,
+    this.asker,
   });
+
+  /// Why the agent asks, in its own words — a rule it matched, a path
+  /// outside the project — or null where it said none.
+  final String? reason;
+
+  /// The subagent asking, by its name, or null for the session's own agent.
+  final String? asker;
 
   /// The answers the agent itself offers, in its order — an ACP agent's
   /// permission options; empty for an ask read off a hook.
@@ -63,6 +72,8 @@ class AgentToolAsk {
     'cwd': ?cwd,
     if (options.isNotEmpty) 'options': [for (final o in options) o.toJson()],
     'kind': ?kind,
+    'reason': ?reason,
+    'asker': ?asker,
   };
 
   /// Null for a shape this build cannot read — never a guessed call.
@@ -85,6 +96,8 @@ class AgentToolAsk {
           ?AgentToolAskOption.fromJson(option),
       ],
       kind: json['kind'] as String?,
+      reason: json['reason'] is String ? json['reason'] as String : null,
+      asker: json['asker'] is String ? json['asker'] as String : null,
     );
   }
 

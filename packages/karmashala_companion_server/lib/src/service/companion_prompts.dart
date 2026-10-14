@@ -58,9 +58,12 @@ class CompanionPrompts {
           chat: request.chat,
           answers: [
             for (final answer in request.answers)
-              answer.text != null
-                  ? AgentQuestionAnswer.text(answer.text!)
-                  : AgentQuestionAnswer.options(answer.options),
+              switch (answer.text) {
+                final text? when answer.options.isNotEmpty =>
+                  AgentQuestionAnswer.optionsAndText(answer.options, text),
+                final text? => AgentQuestionAnswer.text(text),
+                null => AgentQuestionAnswer.options(answer.options),
+              },
           ],
         ),
       ),

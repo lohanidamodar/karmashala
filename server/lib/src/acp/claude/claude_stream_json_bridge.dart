@@ -82,6 +82,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   String _mode = 'default';
   String _model = 'default';
 
+  /// The effort `get_settings` last applied, or null where it named none or
+  /// could not be read.
+  String? _effort;
+
+  /// Whether fast mode serves, by Claude's `fast_mode_state`.
+  var _fast = false;
+
   // The turn.
   Completer<String>? _turn;
   var _cancelling = false;
@@ -127,8 +134,8 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       onMessage: (message) {
         if (identical(_claude, claude)) _onClaude(message);
       },
-      onControlRequest: (request) => identical(_claude, claude)
-          ? _onClaudeRequest(request)
+      onControlRequest: (request, withdrawn) => identical(_claude, claude)
+          ? _onClaudeRequest(request, withdrawn)
           : Future.error(const ClaudeControlError('not the live process')),
       onErrorLine: (line) {
         if (!_errors.isClosed) _errors.add(line);
@@ -167,6 +174,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           if (!_errors.isClosed) _errors.add('MCP servers refused: $error');
         }
       }
+      await _readSettings(claude);
     } on ClaudeControlError {
       await claude.ended.timeout(
         const Duration(seconds: 2),
@@ -343,6 +351,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _commands = jsonObjects(answer['commands']);
     final mode = answer['current_permission_mode'];
     if (mode is String && mode.isNotEmpty) _mode = mode;
+    _fast = _fastIn(answer['fast_mode_state']) ?? _fast;
     final account = jsonObject(answer['account']) ?? const {};
     final token = account['tokenSource'];
     _loggedIn =
@@ -387,9 +396,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _resumeAt = null;
     _announceCommands();
     _announceModel();
+    _measureSoon();
     return {
       'sessionId': id,
-      'modes': _modes(),
+      'modes': _toldModesOf(_modes()),
       'configOptions': _configOptions(),
     };
   }
@@ -407,16 +417,16 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     // A load of the conversation already open (checkouts attached since)
     // keeps the mode and model the person had it in.
     final reopening = id == _sessionId;
-    final mode = _mode;
-    final model = _model;
+    final held = _held;
     final claude = await _open(_resumeArguments(id, resumeAt), params);
-    if (reopening) await _restore(claude, mode, model);
+    if (reopening) await _restore(claude, held);
     _openParams = params;
     _sessionId = id;
     _resumeAt = resumeAt;
     _announceCommands();
     _announceModel();
-    return {'modes': _modes(), 'configOptions': _configOptions()};
+    _measureSoon();
+    return {'modes': _toldModesOf(_modes()), 'configOptions': _configOptions()};
   }
 
   /// A rewind's cut, kept until a prompt lands on it: a cut with nothing
@@ -435,12 +445,14 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       scheduleMicrotask(() => _reportModel(_resolvedOf(_model)));
 
   void _resetConversation() {
+    _toldCommands = null;
     _turn = null;
     _cancelling = false;
     _streamId = null;
     _streamed.clear();
     _lastUsage = null;
     _reported = null;
+    _autoCompactAt = null;
     _agentTurnOpen = false;
     _tools.clear();
     _planCalls.clear();
@@ -548,41 +560,114 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   JsonMap _openParams = const {};
 
   Future<void> _resume() async {
-    final mode = _mode;
-    final model = _model;
+    final held = _held;
     final claude = await _open(
       _resumeArguments(_sessionId, _resumeAt),
       _openParams,
     );
     _abandoned = false;
-    await _restore(claude, mode, model);
+    await _restore(claude, held);
     // The new process lists its models afresh; the client is told.
     _update({'sessionUpdate': 'current_mode_update', 'currentModeId': _mode});
     _update({
       'sessionUpdate': 'config_option_update',
       'configOptions': _configOptions(),
     });
+    _retellModes();
   }
 
-  /// Puts a reopened conversation back in the mode and model it was in. One
-  /// the new process refuses stays as it started, which is then what is told.
-  Future<void> _restore(ClaudeProcess claude, String mode, String model) async {
-    if (_mode != mode) {
+  /// What a reopened conversation is put back in: its mode, model, effort
+  /// and fast mode.
+  ({String mode, String model, String? effort, bool fast}) get _held =>
+      (mode: _mode, model: _model, effort: _effort, fast: _fast);
+
+  /// Puts a reopened conversation back as [held] says. What the new process
+  /// refuses stays as it started, which is then what is told.
+  Future<void> _restore(
+    ClaudeProcess claude,
+    ({String mode, String model, String? effort, bool fast}) held,
+  ) async {
+    if (_mode != held.mode) {
       try {
-        await claude.control('set_permission_mode', {'mode': mode});
-        _mode = mode;
+        await claude.control('set_permission_mode', {'mode': held.mode});
+        _mode = held.mode;
       } on ClaudeControlError {
         // Kept as Claude answered it.
       }
     }
-    if (_model != model) {
+    var flags = <String, Object?>{
+      if (held.effort != null && held.effort != _effort)
+        'effortLevel': held.effort,
+      if (held.fast && !_fast) 'fastMode': true,
+    };
+    if (_model != held.model) {
       try {
-        await claude.control('set_model', {'model': model});
-        _model = model;
+        await claude.control('set_model', {'model': held.model});
+        _model = held.model;
       } on ClaudeControlError {
         // Kept as Claude answered it.
       }
+      flags = {...flags, if (held.effort != null) 'effortLevel': held.effort};
     }
+    if (flags.isEmpty) return;
+    try {
+      await claude.control('apply_flag_settings', {'settings': flags});
+      if (flags['fastMode'] == true) _fast = true;
+    } on ClaudeControlError {
+      // Kept as Claude answered it.
+    }
+    await _readSettings(claude);
+  }
+
+  /// Reads back the effort Claude applies and whether the fast-mode flag is
+  /// on, with `get_settings` (2.1.296: `applied.effort`, null on a model
+  /// without effort; the `flagSettings` source's `fastMode`, the only layer
+  /// that opts a stream-json session in). A Claude that refuses it has no
+  /// effort to offer.
+  Future<void> _readSettings(ClaudeProcess claude) async {
+    try {
+      final answer = await claude.control('get_settings');
+      final effort = jsonObject(answer?['applied'])?['effort'];
+      _effort = effort is String && effort.isNotEmpty ? effort : null;
+      for (final source in jsonObjects(answer?['sources'])) {
+        if (source['source'] != 'flagSettings') continue;
+        final fast = jsonObject(source['settings'])?['fastMode'];
+        if (fast is bool) _fast = fast;
+      }
+    } on ClaudeControlError {
+      _effort = null;
+    }
+  }
+
+  /// Reads the effort again after a turn, and tells it where it moved.
+  Future<void> _refreshEffort(ClaudeProcess claude) async {
+    final before = _effort;
+    await _readSettings(claude);
+    if (_effort == before || !identical(_claude, claude)) return;
+    _update({
+      'sessionUpdate': 'config_option_update',
+      'configOptions': _configOptions(),
+    });
+  }
+
+  /// `fast_mode_state` (on, cooldown, off) as whether fast mode is chosen; a
+  /// cooldown is fast mode resting after a rate limit.
+  static bool? _fastIn(Object? state) => switch (state) {
+    'on' || 'cooldown' => true,
+    'off' => false,
+    _ => null,
+  };
+
+  /// Follows a `fast_mode_state` Claude reported on init or a result.
+  void _followFast(Object? state) {
+    final fast = _fastIn(state);
+    if (fast == null || fast == _fast) return;
+    _fast = fast;
+    if (_fastOption() == null) return;
+    _update({
+      'sessionUpdate': 'config_option_update',
+      'configOptions': _configOptions(),
+    });
   }
 
   Future<JsonMap> _setMode(JsonMap params) async {
@@ -605,21 +690,49 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   Future<JsonMap> _setConfigOption(JsonMap params) async {
     final claude = _claude;
+    final id = params['configId'];
     final value = params['value'];
-    if (params['configId'] != 'model' || value is! String || claude == null) {
+    final option = [
+      for (final o in _configOptions())
+        if (o['id'] == id) o,
+    ].firstOrNull;
+    final offered = [
+      for (final choice in jsonObjects(option?['options'])) choice['value'],
+    ];
+    if (option == null ||
+        value is! String ||
+        claude == null ||
+        (id != 'model' && !offered.contains(value))) {
       throw AcpRpcError(
         JsonRpcErrorCodes.invalidParams,
-        'Claude Code has no config option "${params['configId']}" to set '
-        'to "$value"; it has model',
+        'Claude Code has no config option "$id" to set to "$value"; it has '
+        '${[for (final o in _configOptions()) o['id']].join(', ')}',
       );
     }
     try {
-      await claude.control('set_model', {'model': value});
+      switch (id) {
+        case 'model':
+          await claude.control('set_model', {'model': value});
+          _model = value;
+          _reportModel(
+            _resolvedOf(value) ?? (value == 'default' ? null : value),
+          );
+          _retellModes();
+        case 'effort':
+          await claude.control('apply_flag_settings', {
+            'settings': {'effortLevel': value},
+          });
+        case 'fast_mode':
+          await claude.control('apply_flag_settings', {
+            'settings': {'fastMode': value == 'on'},
+          });
+      }
     } on ClaudeControlError catch (error) {
       throw AcpRpcError(JsonRpcErrorCodes.invalidParams, error.message);
     }
-    _model = value;
-    _reportModel(_resolvedOf(value) ?? (value == 'default' ? null : value));
+    // What Claude applies, never what was asked: it takes a level a model
+    // lacks without a word, and a model change moves the effort.
+    await _readSettings(claude);
     return {'configOptions': _configOptions()};
   }
 
@@ -639,10 +752,51 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     'availableModes': [
       for (final MapEntry(key: id, value: (name, description))
           in _modeNames.entries)
-        {'id': id, 'name': name, 'description': description},
+        if (id != 'auto' || _mode == 'auto' || _offersAuto())
+          {'id': id, 'name': name, 'description': description},
       if (!_modeNames.containsKey(_mode)) {'id': _mode, 'name': _mode},
     ],
   };
+
+  /// The `models` row of the conversation's model, by its value.
+  JsonMap? _modelRow() {
+    for (final model in _models) {
+      if (model['value'] == _model) return model;
+    }
+    return null;
+  }
+
+  /// Whether the model offers auto mode, by its row's `supportsAutoMode`
+  /// (2.1.296; absent on a model without it, such as Haiku 4.5). A Claude
+  /// whose rows never carry the field, or a model with no row, is not
+  /// judged: auto stays offered, and a refusal is still met.
+  bool _offersAuto() {
+    if (!_models.any((m) => m.containsKey('supportsAutoMode'))) return true;
+    final row = _modelRow();
+    return row == null || row['supportsAutoMode'] == true;
+  }
+
+  /// The mode ids last told, so a model change retells them only when
+  /// they moved.
+  List<String> _toldModes = const [];
+
+  JsonMap _toldModesOf(JsonMap modes) {
+    _toldModes = [
+      for (final mode in jsonObjects(modes['availableModes'])) '${mode['id']}',
+    ];
+    return modes;
+  }
+
+  /// After a model change: the modes again, where the model offers others.
+  void _retellModes() {
+    final modes = _modes();
+    final ids = [
+      for (final mode in jsonObjects(modes['availableModes'])) '${mode['id']}',
+    ];
+    if (ids.join(',') == _toldModes.join(',')) return;
+    _toldModesOf(modes);
+    _update({'sessionUpdate': AcpExtensions.availableModes, ...modes});
+  }
 
   List<JsonMap> _configOptions() => [
     {
@@ -660,7 +814,81 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           },
       ],
     },
+    ?_effortOption(),
+    ?_fastOption(),
   ];
+
+  /// Claude's own words for its effort levels: the model picker's names
+  /// ("xHigh") and `/effort`'s descriptions (2.1.296's binary).
+  static const _effortWords = {
+    'low': (
+      'Low',
+      'Quick, straightforward implementation with minimal '
+          'overhead',
+    ),
+    'medium': (
+      'Medium',
+      'Balanced approach with standard implementation '
+          'and testing',
+    ),
+    'high': (
+      'High',
+      'Comprehensive implementation with extensive testing '
+          'and documentation',
+    ),
+    'xhigh': ('xHigh', 'Deeper reasoning than high, just below maximum'),
+    'max': ('Max', 'Maximum capability with deepest reasoning'),
+  };
+
+  /// The effort picker, from the model row's `supportedEffortLevels`: none
+  /// for a model without them, or where Claude did not say which it applies.
+  JsonMap? _effortOption() {
+    final effort = _effort;
+    final levels = [
+      ...?(_modelRow()?['supportedEffortLevels'] as List?)?.whereType<String>(),
+    ];
+    if (effort == null || levels.isEmpty) return null;
+    return {
+      'id': 'effort',
+      'name': 'Effort',
+      'type': 'select',
+      'category': 'thought_level',
+      'currentValue': effort,
+      'options': [
+        for (final level in levels)
+          {
+            'value': level,
+            'name': _effortWords[level]?.$1 ?? level,
+            'description': ?_effortWords[level]?.$2,
+          },
+      ],
+    };
+  }
+
+  /// Fast mode, on a model whose row has `supportsFastMode`; set with
+  /// `apply_flag_settings` `fastMode`, which Claude reports back as
+  /// `fast_mode_state` (2.1.296, read live 2026-10-14).
+  JsonMap? _fastOption() {
+    if (_modelRow()?['supportsFastMode'] != true) return null;
+    return {
+      'id': 'fast_mode',
+      'name': 'Speed',
+      'type': 'select',
+      'currentValue': _fast ? 'on' : 'off',
+      'options': [
+        {'value': 'off', 'name': 'Standard'},
+        {
+          'value': 'on',
+          'name': 'Fast',
+          // Claude's own words for it.
+          'description': 'Same model, faster output. Draws from usage credits.',
+        },
+      ],
+    };
+  }
+
+  /// The commands last told, so a list Claude repeats says nothing.
+  String? _toldCommands;
 
   void _announceCommands() {
     if (_commands.isEmpty) return;
@@ -674,6 +902,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
             'input': {'hint': hint},
         },
     ];
+    final told = jsonEncode(commands);
+    if (told == _toldCommands) return;
+    _toldCommands = told;
     // After the answer that names the session, so it is the session's.
     scheduleMicrotask(
       () => _update({
@@ -681,6 +912,25 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         'availableCommands': commands,
       }),
     );
+  }
+
+  /// The command list an init names (`slash_commands`, and `skills` among
+  /// them), each with the words `initialize` gave it where it gave any: a
+  /// skill or plugin added since appears, and one removed goes.
+  void _commandsOfInit(JsonMap init) {
+    final names = (init['slash_commands'] as List?)?.whereType<String>();
+    if (names == null || names.isEmpty) return;
+    final skills = {...?(init['skills'] as List?)?.whereType<String>()};
+    final known = {
+      for (final command in _commands)
+        if (command['name'] case final String name) name: command,
+    };
+    _commands = [
+      for (final name in names)
+        known[name] ??
+            {'name': name, 'description': skills.contains(name) ? 'Skill' : ''},
+    ];
+    _announceCommands();
   }
 
   void _update(JsonMap update) => _acp.notify(AcpMethods.sessionUpdate, {
@@ -723,6 +973,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           'sessionUpdate': 'config_option_update',
           'configOptions': _configOptions(),
         });
+        _retellModes();
         return;
       }
     }
@@ -1007,12 +1258,22 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     switch (message['subtype']) {
       case 'init':
         if (message['model'] case final String model) _followModel(model);
+        _followFast(message['fast_mode_state']);
+        _commandsOfInit(message);
         if (message['permissionMode'] case final String mode) {
           _followMode(mode);
         }
       case 'status':
         if (message['permissionMode'] case final String mode) {
           _followMode(mode);
+        }
+      // 2.1.296: "the full slash-command list after a mid-session change
+      // … Clients should REPLACE their cached command list".
+      case 'commands_changed':
+        final commands = jsonObjects(message['commands']);
+        if (commands.isNotEmpty) {
+          _commands = commands;
+          _announceCommands();
         }
       case 'compact_boundary':
         _compaction = jsonObject(message['compact_metadata']) ?? const {};
@@ -1023,7 +1284,59 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       case 'task_started' || 'task_progress' || 'task_notification':
         _trackBackground(message);
         _onTask(message);
+      case 'api_retry' ||
+          'model_refusal_fallback' ||
+          'model_refusal_no_fallback' ||
+          'permission_denied':
+        if (_systemNote(message) case (final text, final error)) {
+          _update({
+            'sessionUpdate': AcpExtensions.notice,
+            'text': text,
+            if (error) 'role': 'error',
+          });
+        }
     }
+  }
+
+  /// A line for a turn that is retrying, was refused, or had a call denied
+  /// unasked, so a slow or odd turn says why (2.1.296's system subtypes),
+  /// and whether it reads as a failure.
+  (String, bool)? _systemNote(JsonMap message) {
+    String? said(String key) => switch (message[key]) {
+      final String text when _plain(text).isNotEmpty => _plain(text),
+      _ => null,
+    };
+    switch (message['subtype']) {
+      case 'api_retry':
+        final attempt = message['attempt'];
+        final most = message['max_retries'];
+        final delay = message['retry_delay_ms'];
+        final status = message['error_status'];
+        final count = attempt is int && most is int
+            ? ' ($attempt of $most)'
+            : '';
+        final wait = delay is int ? ' in ${(delay / 1000).ceil()} s' : '';
+        final cause = status is int ? 'HTTP $status' : 'a connection error';
+        return ('Claude Code is retrying$count$wait, after $cause.', false);
+      case 'model_refusal_fallback':
+        final from = said('original_model') ?? 'The model';
+        final to = said('fallback_model') ?? 'another model';
+        return (
+          message['scope'] == 'local'
+              ? '$from declined part of the work; $to answered that part.'
+              : '$from declined; Claude Code switched to $to.',
+          false,
+        );
+      case 'model_refusal_no_fallback':
+        final model = said('original_model') ?? 'The model';
+        return (said('content') ?? '$model declined to answer.', true);
+      case 'permission_denied':
+        final tool = said('tool_name') ?? 'a tool';
+        final reason = said('decision_reason');
+        final why = reason == null ? '.' : ': $reason';
+        return ('Claude Code refused $tool without asking$why', false);
+    }
+    return null;
   }
 
   void _trackBackground(JsonMap message) {
@@ -1102,6 +1415,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   void _onResult(JsonMap message) {
     _reportUsage(message);
+    _followFast(message['fast_mode_state']);
+    // `/effort` sent as a prompt moves it with no other word.
+    final claude = _claude;
+    if (claude != null) {
+      unawaited(_refreshEffort(claude));
+      unawaited(_measureContext(claude));
+    }
     final turn = _turn;
     // A turn Claude began itself (a background task finishing) carries its
     // origin and answers no prompt, even one queued behind it.
@@ -1225,15 +1545,67 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         'size': usage.size,
         if (usage.cost case final cost?)
           'cost': {'amount': cost, 'currency': 'USD'},
-        '_meta': {'claudeCode': meta},
+        '_meta': {
+          'claudeCode': meta,
+          if (_autoCompactAt case final at?)
+            'karmashala': {'autoCompactAt': at},
+        },
       });
+
+  /// The context size Claude compacts at, as `get_context_usage` last said.
+  int? _autoCompactAt;
+
+  /// Measures the context soon: after the answer that names the session.
+  void _measureSoon() {
+    final claude = _claude;
+    if (claude != null) scheduleMicrotask(() => _measureContext(claude));
+  }
+
+  /// Claude's own count of its context, as `/context` reads it
+  /// (`get_context_usage`, 2.1.296: totalTokens, maxTokens and
+  /// autoCompactThreshold; `summary` answers from the last response and
+  /// local estimates, with no token-count calls). Told in place of the
+  /// estimate from the last response's usage, which stays where Claude
+  /// refuses it.
+  Future<void> _measureContext(ClaudeProcess claude) async {
+    JsonMap? usage;
+    try {
+      usage = await claude
+          .control('get_context_usage', {'detail': 'summary'})
+          .timeout(const Duration(seconds: 5));
+    } on Object {
+      return;
+    }
+    if (!identical(_claude, claude) || usage == null) return;
+    final used = usage['totalTokens'];
+    final size = usage['maxTokens'];
+    if (used is! int || size is! int || size <= 0) return;
+    final threshold = usage['autoCompactThreshold'];
+    _autoCompactAt = usage['isAutoCompactEnabled'] != false && threshold is int
+        ? threshold
+        : null;
+    final reported = _reported = (
+      used: used,
+      size: size,
+      cost: _reported?.cost,
+    );
+    _sendUsage(reported, {
+      'measured': true,
+      'autoCompactThreshold': ?_autoCompactAt,
+    });
+  }
 
   // Claude's requests of the client.
 
-  Future<JsonMap?> _onClaudeRequest(JsonMap request) async {
+  /// Claude's requests of the client. Each ACP request they raise is
+  /// withdrawn with them when Claude withdraws theirs.
+  Future<JsonMap?> _onClaudeRequest(
+    JsonMap request,
+    Future<void> withdrawn,
+  ) async {
     switch (request['subtype']) {
       case 'can_use_tool':
-        return _canUseTool(request);
+        return _canUseTool(request, withdrawn);
       case 'hook_callback':
         return const {};
     }
@@ -1242,12 +1614,12 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     );
   }
 
-  Future<JsonMap> _canUseTool(JsonMap request) async {
+  Future<JsonMap> _canUseTool(JsonMap request, Future<void> withdrawn) async {
     final name = '${request['tool_name'] ?? ''}';
     final input = jsonObject(request['input']) ?? const {};
     final id = '${request['tool_use_id'] ?? ''}';
     final suggestions = jsonObjects(request['permission_suggestions']);
-    if (name == 'AskUserQuestion') return _ask(id, input);
+    if (name == 'AskUserQuestion') return _ask(id, input, withdrawn);
     final tool = _tools[id] ?? _Tool(name, input, null);
     final exitPlan = name == 'ExitPlanMode';
     final options = exitPlan
@@ -1260,7 +1632,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           ]
         : [
             _option('allow', 'Allow', 'allow_once'),
-            if (suggestions.isNotEmpty)
+            // Claude bars the persistent row where accepting it would write
+            // a rule broader than this ask.
+            if (suggestions.isNotEmpty &&
+                request['suppress_always_allow_rule'] != true)
               _option('allow_always', 'Always allow', 'allow_always'),
             _option('reject', 'Reject', 'reject_once'),
           ];
@@ -1268,9 +1643,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     try {
       answer = await _acp.call(AcpMethods.sessionRequestPermission, {
         'sessionId': _sessionId,
-        'toolCall': {..._toolFields(id, tool), 'status': 'pending'},
+        'toolCall': _askedCall(request, id, tool),
         'options': options,
-      });
+      }, withdrawn: withdrawn);
     } on Object {
       answer = null;
     }
@@ -1321,6 +1696,59 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     };
   }
 
+  /// The call a `can_use_tool` asks about, with why Claude asks: its
+  /// `title`, `description`, `decision_reason`, `blocked_path`,
+  /// `display_name` and `agent_id` under `_meta.claudeCode`, and in
+  /// `_meta.karmashala.ask` one line of `reason` and the subagent `asker`.
+  JsonMap _askedCall(JsonMap request, String id, _Tool tool) {
+    final fields = _toolFields(id, tool);
+    final meta = jsonObject(fields['_meta']) ?? const {};
+    String? said(String key) => switch (request[key]) {
+      final String text when _plain(text).isNotEmpty => _plain(text),
+      _ => null,
+    };
+    final because = said('decision_reason') ?? said('description');
+    final path = said('blocked_path');
+    final reason = [
+      ?because,
+      if (path != null && !(because?.contains(path) ?? false)) path,
+    ].join(' · ');
+    final parent = tool.parent == null ? null : _tools[tool.parent];
+    final asker =
+        _nameOf(parent?.input['subagent_type']) ??
+        _nameOf(parent?.input['description']) ??
+        (request['agent_id'] is String ? 'a subagent' : null);
+    return {
+      ...fields,
+      'status': 'pending',
+      '_meta': {
+        ...meta,
+        'claudeCode': {
+          ...?jsonObject(meta['claudeCode']),
+          'title': ?said('title'),
+          'description': ?said('description'),
+          'decisionReason': ?said('decision_reason'),
+          'blockedPath': ?path,
+          'displayName': ?said('display_name'),
+          'agentId': ?request['agent_id'],
+        },
+        'karmashala': {
+          'ask': {if (reason.isNotEmpty) 'reason': reason, 'asker': ?asker},
+        },
+      },
+    };
+  }
+
+  static String? _nameOf(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+  /// [text] without the ANSI escapes Claude says its reasons may carry, on
+  /// one line.
+  static String _plain(String text) => text
+      .replaceAll(RegExp(r'\x1B\[[0-9;?]*[ -/]*[@-~]'), '')
+      .replaceAll(RegExp(r'[\x00-\x1F\x7F]+'), ' ')
+      .trim();
+
   /// Claude's questions, asked together as one permission that carries them
   /// whole under `_meta.karmashala.questions`; a client that can show them
   /// answers "Send answer" with `_meta.karmashala.answers` (question text to
@@ -1329,7 +1757,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   /// asked where nobody answers prompts (bypass, which the runtime answers
   /// itself), or ones left to the person's reply are shown in the chat and
   /// declined.
-  Future<JsonMap> _ask(String id, JsonMap input) async {
+  Future<JsonMap> _ask(String id, JsonMap input, Future<void> withdrawn) async {
     final questions = jsonObjects(input['questions']);
     final askable =
         questions.isNotEmpty &&
@@ -1357,14 +1785,18 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
             ],
             '_meta': {
               'claudeCode': {'toolName': 'AskUserQuestion'},
-              'karmashala': {'questions': questions},
+              'karmashala': {
+                'questions': [
+                  for (final q in questions) {...q, 'ownWords': _drawsOther(q)},
+                ],
+              },
             },
           },
           'options': [
             _option('answer', 'Send answer', 'allow_once'),
             _option('reply', 'Answer in my reply', 'reject_once'),
           ],
-        });
+        }, withdrawn: withdrawn);
       } on Object {
         answer = null;
       }
@@ -1410,6 +1842,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           'Unanswered: ${[for (final q in questions) q['question']].join('; ')}',
     };
   }
+
+  /// Whether Claude draws its Other row under [question]: 2.1.296 draws it
+  /// under every question but a single-choice one whose options carry a
+  /// `preview` key, which it lays out side by side instead.
+  static bool _drawsOther(JsonMap question) =>
+      question['multiSelect'] == true ||
+      !jsonObjects(question['options']).any((o) => o.containsKey('preview'));
 
   static String _questionWords(JsonMap question) => [
     '${question['question'] ?? ''}',

@@ -21,6 +21,7 @@ class FakeClaudeMachine {
     this.models = defaultModels,
     this.ignoreInterrupt = false,
     this.autoMode = true,
+    this.contextUsage,
   }) : turns = List.of(turns),
        conversations = {...conversations};
 
@@ -36,6 +37,9 @@ class FakeClaudeMachine {
 
   /// Whether the model offers auto mode; 2.1.296 refuses it on Haiku 4.5.
   final bool autoMode;
+
+  /// What `get_context_usage` answers; null refuses it, as an older Claude.
+  Json? contextUsage;
 
   /// Every process started, in order.
   final launched = <FakeClaude>[];
@@ -104,6 +108,9 @@ class FakeClaude {
   String? sessionId;
   String permissionMode = 'default';
   String? model;
+
+  /// What `apply_flag_settings` merged in: Claude's session flag layer.
+  final flags = <String, Object?>{};
 
   /// Whether an interrupt ends the open turn with an aborted result.
   var turnOpen = false;
@@ -226,6 +233,29 @@ class FakeClaude {
       case 'set_model':
         model = request['model'] as String?;
         _answer(id, null);
+      case 'get_context_usage' when machine.contextUsage != null:
+        _answer(id, machine.contextUsage);
+      case 'apply_flag_settings':
+        flags.addAll(request['settings'] as Json);
+        _answer(id, null);
+      case 'get_settings':
+        final row = machine.models
+            .where((m) => m['value'] == (model ?? 'default'))
+            .firstOrNull;
+        _answer(id, {
+          'effective': {...flags},
+          'sources': [
+            {'source': 'flagSettings', 'settings': flags},
+          ],
+          'applied': {
+            'model': row?['resolvedModel'],
+            // 2.1.296 applies medium unless told, and nothing on a model
+            // without effort.
+            'effort': row?['supportsEffort'] == true
+                ? flags['effortLevel'] ?? 'medium'
+                : null,
+          },
+        });
       case 'mcp_set_servers':
         _answer(id, {
           'added': (request['servers'] as Json).keys.toList(),
@@ -276,6 +306,7 @@ class FakeClaude {
     'model': model,
     'permissionMode': permissionMode,
     'claude_code_version': machine.version,
+    'fast_mode_state': flags['fastMode'] == true ? 'on' : 'off',
   });
 
   /// Streamed deltas for [text] in message [id], as `--include-partial-messages`.
@@ -398,8 +429,9 @@ class FakeClaude {
     String toolName,
     Json input, {
     List<Json> suggestions = const [],
+    Json extra = const {},
   }) {
-    final id = 'perm-${++_requests}';
+    final id = lastAsked = 'perm-${++_requests}';
     final answer = Completer<Json>();
     _controlAnswers[id] = answer;
     emit({
@@ -411,10 +443,26 @@ class FakeClaude {
         'input': input,
         'tool_use_id': toolUseId,
         'permission_suggestions': suggestions,
+        ...extra,
       },
     });
     return answer.future.then((r) => (r['response'] as Json?) ?? r);
   }
+
+  /// The id of the last `can_use_tool` asked.
+  String? lastAsked;
+
+  /// Withdraws a request still unanswered, as Claude's
+  /// `control_cancel_request` does.
+  void withdraw(String requestId) =>
+      emit({'type': 'control_cancel_request', 'request_id': requestId});
+
+  /// Whether the bridge answered request [requestId].
+  bool answered(String requestId) => received.any(
+    (m) =>
+        m['type'] == 'control_response' &&
+        (m['response'] as Json)['request_id'] == requestId,
+  );
 
   /// The next message the bridge writes that [test] accepts, or one it
   /// already wrote.

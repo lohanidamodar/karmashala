@@ -76,7 +76,14 @@ sealed class PromptAnswerRequest {
           chat: json['chat'] == true,
           answers: [
             for (final answer in answers)
-              if (answer is Map && answer['text'] is String)
+              if (answer is Map &&
+                  answer['text'] is String &&
+                  answer['options'] is List)
+                AgentQuestionAnswer.optionsAndText(
+                  (answer['options'] as List).whereType<int>().toList(),
+                  answer['text'] as String,
+                )
+              else if (answer is Map && answer['text'] is String)
                 AgentQuestionAnswer.text(answer['text'] as String)
               else if (answer is Map && answer['options'] is List)
                 AgentQuestionAnswer.options(
@@ -315,9 +322,11 @@ class QuestionAnswerRequest extends PromptAnswerRequest {
     if (chat) 'chat': true,
     'answers': [
       for (final answer in answers)
-        answer.text != null
-            ? {'text': answer.text}
-            : {'options': answer.chosen},
+        {
+          'text': ?answer.text,
+          if (answer.text == null || answer.chosen.isNotEmpty)
+            'options': answer.chosen,
+        },
     ],
   };
 }
