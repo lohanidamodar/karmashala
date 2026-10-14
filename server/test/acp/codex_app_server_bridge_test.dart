@@ -1344,32 +1344,188 @@ void main() {
     });
   });
 
-  test('a free-text question is declined, and the chat says so', () async {
+  String said() => rows()
+      .where((r) => r.role == SessionMessageRole.agent)
+      .map((r) => r.text)
+      .join('\n');
+
+  // Codex's CLI reads such a question as "Answer:", which takes no empty
+  // answer (0.160.0's strings): the words are the answer itself.
+  test('a question with no options is answered in own words alone, sent as '
+      'the answer itself', () async {
     late Future<Object?> answered;
+    final codex = asking([
+      question('q1', 'What should the table be called?'),
+    ], (a) => answered = a);
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Make a table');
+    await pump(40);
+    final open = runtime.openQuestion!;
+    expect(open.questions.single.options, isEmpty);
+    expect(open.questions.single.ownWords, isTrue);
+    await runtime.answerQuestion(
+      toolUseId: open.toolUseId,
+      answers: const [AgentQuestionAnswer.text('orders')],
+    );
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['orders'],
+        },
+      },
+    });
+    await runtime.awaitTurn();
+    await runtime.stop();
+  });
+
+  test('several questions are one card, answered at once; a secret one is '
+      'still declined, and the chat says so', () async {
+    late Future<Object?> answered;
+    final codex = asking([
+      question('q1', 'Which database?', ['sqlite', 'postgres']),
+      {
+        ...question('q2', 'Anything else?', ['no']),
+        'isOther': true,
+      },
+      question('q3', 'Its name?'),
+      {...question('q4', 'The password?'), 'isSecret': true},
+    ], (a) => answered = a);
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Set it up');
+    await pump(40);
+    final open = runtime.openQuestion!;
+    expect(open.questions.map((q) => q.question), [
+      'Which database?',
+      'Anything else?',
+      'Its name?',
+    ]);
+    await runtime.answerQuestion(
+      toolUseId: open.toolUseId,
+      answers: const [
+        AgentQuestionAnswer.option(1),
+        AgentQuestionAnswer.text('add an index'),
+        AgentQuestionAnswer.text('shop'),
+      ],
+    );
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['postgres'],
+        },
+        'q2': {
+          'answers': ['user_note: add an index'],
+        },
+        'q3': {
+          'answers': ['shop'],
+        },
+      },
+    });
+    await runtime.awaitTurn();
+    expect(said(), contains('The password?'));
+    expect(said(), contains('secret'));
+    await runtime.stop();
+  });
+
+  test('a non-blocking question says Codex carries on, and closes when '
+      'Codex resolves it itself', () async {
+    late Future<Object?> answered;
+    final asked = Completer<void>();
     final codex = FakeCodexAppServer(
       onTurn: (turn) async {
         answered = turn.ask('item/tool/requestUserInput', {
-          'itemId': 'ask-3',
-          'questions': [question('q1', 'What should the table be called?')],
-          'isBlocking': true,
+          'itemId': 'ask-nb',
+          'questions': [
+            question('q1', 'Tabs or spaces?', ['tabs', 'spaces']),
+          ],
+          'isBlocking': false,
         });
+        asked.complete();
         await answered;
         turn.end('completed');
       },
     );
     final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
     await runtime.start();
-    await runtime.send('Make a table');
-    await runtime.awaitTurn();
+    await runtime.send('Format it');
+    await asked.future;
+    await pump(40);
+    expect(runtime.hasOpenPermission, isTrue);
+    codex.notify('serverRequest/resolved', {
+      'threadId': 'thr-new',
+      'requestId': codex.lastRequestId,
+    });
     expect(await answered, {'answers': <String, Object?>{}});
+    await runtime.awaitTurn();
     expect(runtime.hasOpenPermission, isFalse);
-    final said = rows()
-        .where((r) => r.role == SessionMessageRole.agent)
-        .map((r) => r.text)
-        .join('\n');
-    expect(said, contains('What should the table be called?'));
-    expect(said, contains('declined'));
+    expect(said(), contains('carries on'));
     await runtime.stop();
+  });
+
+  group("Codex's async questions", () {
+    FakeCodexAppServer asyncAsking() => FakeCodexAppServer(
+      onTurn: (turn) async {
+        if (turn.id == 'turn-1') {
+          turn.completed({
+            'type': 'agentMessage',
+            'id': 'msg-async',
+            'text': 'Done for now.',
+            'phase': null,
+            'memoryCitation': null,
+            'delivery': 'async',
+            'questions': [
+              {
+                'title': 'Ship it today?',
+                'options': ['yes', 'no'],
+              },
+            ],
+          });
+        }
+        turn.end('completed');
+      },
+    );
+
+    test('are asked once the turn is over, and the answer goes back as the '
+        'next message, in a turn of Codex\'s own', () async {
+      final codex = asyncAsking();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.send('Wrap up');
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final open = runtime.openQuestion!;
+      expect(open.questions.single.question, 'Ship it today?');
+      expect(open.questions.single.options.map((o) => o.label), ['yes', 'no']);
+      await runtime.answerQuestion(
+        toolUseId: open.toolUseId,
+        answers: const [AgentQuestionAnswer.option(0)],
+      );
+      await pump(100);
+      final turns = codex.callsTo('turn/start');
+      expect(turns, hasLength(2));
+      expect(turns.last['input'], [
+        {'type': 'text', 'text': 'yes', 'text_elements': <Object?>[]},
+      ]);
+      expect(statuses().last, AgentActivityStatus.idle);
+      await runtime.stop();
+    });
+
+    test('a message sent instead closes the card, and is the reply', () async {
+      final codex = asyncAsking();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.send('Wrap up');
+      await runtime.awaitTurn();
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(runtime.hasOpenPermission, isTrue);
+      await runtime.send('Not today');
+      await runtime.awaitTurn();
+      await pump(40);
+      expect(runtime.hasOpenPermission, isFalse);
+      expect(codex.callsTo('turn/start'), hasLength(2));
+      await runtime.stop();
+    });
   });
 
   test(

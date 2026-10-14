@@ -16,6 +16,11 @@ abstract final class AcpExtensions {
   /// failure or message, a turn that failed or was interrupted.
   static const notice = '_karmashala/notice';
 
+  /// The agent settled an ask it put to the person itself (`toolCallId`):
+  /// a question that resolved on its own, or one a message overtook. Its
+  /// card closes, and the request it was is answered cancelled.
+  static const askWithdrawn = '_karmashala/ask_withdrawn';
+
   /// The model the agent is actually running (`modelId`), where its `model`
   /// option holds an alias such as `default`.
   static const activeModel = '_karmashala/active_model';

@@ -563,4 +563,63 @@ void main() {
       expect(inside(tester.getRect(send), screen), isTrue);
     });
   });
+
+  // Codex asks some questions with no options at all, answered in words.
+  testWidgets('a question with no options is its field alone, at 360 px and '
+      'text scale 1.6', (tester) async {
+    tester.view.physicalSize = const Size(360, 780);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final answered = <List<RemoteQuestionAnswer>>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.6)),
+          child: child!,
+        ),
+        home: UiDensityScope(
+          density: UiDensity.touch,
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: QuestionPromptCard(
+                agentName: 'Codex',
+                where: 'in karmashala',
+                question: const RemoteQuestion(
+                  toolUseId: 'toolu_2',
+                  questions: [
+                    RemoteQuestionItem(
+                      question: 'What should the table be called?',
+                      ownWords: true,
+                      options: [],
+                    ),
+                  ],
+                ),
+                chatLabel: 'Chat about this',
+                onAnswerInTerminal: () {},
+                onAnswer: (answers, {decline = false, chat = false}) async =>
+                    answered.add(answers),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Other…'), findsNothing);
+    final field = find.byKey(const ValueKey('question-other-field-0'));
+    expect(field, findsOneWidget);
+    expect(enabled(tester), isFalse);
+    await tester.enterText(field, 'orders');
+    await tester.pump();
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(answered.single.single.text, 'orders');
+    final screen = Offset.zero & const Size(360, 780);
+    final rect = tester.getRect(field);
+    expect(rect.right, lessThanOrEqualTo(screen.right + 0.5));
+  });
 }

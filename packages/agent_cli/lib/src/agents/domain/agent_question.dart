@@ -83,6 +83,9 @@ class AgentQuestionSet {
   /// highlighted design and "Chat about this", and no Other row (read from
   /// the installed binary's question view; only screen-reader mode skips
   /// the side-by-side view).
+  ///
+  /// A question with no options is read only where a bridge said it takes
+  /// own words: it is answered in them alone (Codex's free-text question).
   static AgentQuestionSet? fromToolInput(String toolUseId, Object? input) {
     if (input is! Map) return null;
     final raw = input['questions'];
@@ -92,7 +95,9 @@ class AgentQuestionSet {
       if (entry is! Map) return null;
       final question = entry['question'];
       final options = entry['options'];
-      if (question is! String || options is! List || options.isEmpty) {
+      if (question is! String ||
+          options is! List ||
+          (options.isEmpty && entry['ownWords'] != true)) {
         return null;
       }
       final read = <AgentQuestionOption>[];

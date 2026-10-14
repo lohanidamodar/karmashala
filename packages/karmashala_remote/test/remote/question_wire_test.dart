@@ -93,6 +93,22 @@ void main() {
       );
     });
 
+    test('a question with no options crosses only where own words answer '
+        'it', () {
+      RemoteQuestion? read(bool ownWords) => RemoteQuestion.tryFromJson({
+        'toolUseId': 't',
+        'questions': [
+          {
+            'question': 'Its name?',
+            'ownWords': ownWords,
+            'options': <Object?>[],
+          },
+        ],
+      });
+      expect(read(true)!.questions.single.options, isEmpty);
+      expect(read(false), isNull);
+    });
+
     test('a garbled question is dropped, not half-read', () {
       final read = RemoteApprovalRequest.fromJson(const {
         'sessionId': 's1',

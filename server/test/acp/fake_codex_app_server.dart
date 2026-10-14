@@ -118,8 +118,14 @@ class FakeCodexAppServer {
 
   void notify(String method, JsonMap params) => _peer.notify(method, params);
 
-  Future<Object?> request(String method, JsonMap params) =>
-      _peer.call(method, params);
+  Future<Object?> request(String method, JsonMap params) {
+    lastRequestId++;
+    return _peer.call(method, params);
+  }
+
+  /// The JSON-RPC id of the request this fake sent last: its peer numbers
+  /// them from 1, and only [request] sends any.
+  var lastRequestId = 0;
 
   JsonMap thread(String id, {List<JsonMap> turns = const [], String? name}) => {
     'id': id,

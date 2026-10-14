@@ -133,6 +133,25 @@ void main() {
       expect(read.questions.map((q) => q.ownWords), [false, true]);
     });
 
+    test('a question with no options is read only where own words answer '
+        'it', () {
+      final read = AgentQuestionSet.fromToolInput('t', {
+        'questions': [
+          {'question': 'Its name?', 'ownWords': true, 'options': <Object?>[]},
+        ],
+      })!;
+      expect(read.questions.single.options, isEmpty);
+      expect(read.questions.single.ownWords, isTrue);
+      expect(
+        AgentQuestionSet.fromToolInput('t', {
+          'questions': [
+            {'question': 'Its name?', 'options': <Object?>[]},
+          ],
+        }),
+        isNull,
+      );
+    });
+
     test('a shape this build cannot read is no question at all', () {
       for (final input in <Object?>[
         null,

@@ -21,6 +21,7 @@ final class CodexAppServerBridge implements AcpTransport {
     this._raw, {
     this.loginPatience = const Duration(minutes: 10),
     this.outputEvery = const Duration(milliseconds: 100),
+    this.asyncAfter = const Duration(milliseconds: 250),
   }) {
     _codex = AcpPeer(_raw.output, _raw.input);
     _client = AcpPeer(_fromClient.stream, _toClient.sink);
@@ -45,6 +46,10 @@ final class CodexAppServerBridge implements AcpTransport {
 
   /// How often a running command's output is sent on.
   final Duration outputEvery;
+
+  /// How long after a turn's end Codex's async questions are asked, so the
+  /// client has settled the prompt first.
+  final Duration asyncAfter;
 
   late final AcpPeer _codex;
   late final AcpPeer _client;
@@ -540,6 +545,14 @@ final class CodexAppServerBridge implements AcpTransport {
         'Codex is still working on the last turn',
       );
     }
+    // A message sent past Codex's async questions is the reply to them.
+    if (_asyncOpen case final open?) {
+      _asyncOpen = null;
+      _update({
+        'sessionUpdate': AcpExtensions.askWithdrawn,
+        'toolCallId': open,
+      });
+    }
     final done = _turn = Completer<JsonMap>();
     _cancelAsked = false;
     try {
@@ -650,6 +663,8 @@ final class CodexAppServerBridge implements AcpTransport {
     final turn = _map(params['turn']);
     if (done == null || done.isCompleted) return;
     if (_turnId != null && turn['id'] != _turnId) return;
+    final asyncAsked = _asyncWaiting;
+    _asyncWaiting = null;
     _flushOutput();
     // Codex completes no item it interrupted: a call still open ended with
     // the turn.
@@ -715,6 +730,11 @@ final class CodexAppServerBridge implements AcpTransport {
           unawaited(_offerImplement(done, plan, ended));
         } else {
           done.complete(ended);
+          // Asked once the client has settled the prompt: settling closes
+          // whatever ask is open, and this one belongs to no turn.
+          if (asyncAsked != null) {
+            Timer(asyncAfter, () => unawaited(_askAsync(asyncAsked)));
+          }
         }
     }
   }
@@ -755,7 +775,9 @@ final class CodexAppServerBridge implements AcpTransport {
       case 'item/started':
         _itemStarted(_map(params['item']));
       case 'item/completed':
-        _itemCompleted(_map(params['item']));
+        final item = _map(params['item']);
+        _itemCompleted(item);
+        _keepAsyncQuestions(item);
       case 'item/commandExecution/outputDelta':
         final id = '${params['itemId']}';
         (_output[id] ??= StringBuffer()).write(params['delta'] ?? '');
@@ -811,6 +833,8 @@ final class CodexAppServerBridge implements AcpTransport {
         });
       case 'turn/completed':
         _turnCompleted(params);
+      case 'serverRequest/resolved':
+        _requestResolved(params['requestId']);
       case 'account/login/completed':
         final login = _login;
         if (login != null &&
@@ -862,6 +886,117 @@ final class CodexAppServerBridge implements AcpTransport {
       'sessionUpdate': known ? 'tool_call_update' : 'tool_call',
       ...call,
     });
+  }
+
+  /// An agent message Codex delivers `async` with `questions` (0.160.0's
+  /// AgentMessageDelivery, AsyncUserInputQuestion): asked once its turn is
+  /// over, so it never stands in front of that turn's own asks.
+  void _keepAsyncQuestions(JsonMap item) {
+    if (item['type'] != 'agentMessage' || item['delivery'] != 'async') return;
+    final questions = [
+      for (final q in _list(item['questions']))
+        if (q['title'] case final String title when title.trim().isNotEmpty) q,
+    ];
+    if (questions.isEmpty) return;
+    final asked = ('${item['id']}', questions);
+    if (_turn == null) {
+      unawaited(_askAsync(asked));
+    } else {
+      _asyncWaiting = asked;
+    }
+  }
+
+  (String, List<JsonMap>)? _asyncWaiting;
+
+  /// The async questions' card while it is open, by tool call id.
+  String? _asyncOpen;
+
+  /// Codex's async questions as one card. Nothing in the protocol answers
+  /// them — the item has no request id, and no client method takes one —
+  /// so the answer goes back as Codex reads any reply: the next user
+  /// message, sent as a turn of the bridge's own. Any words answer; a
+  /// message the person sends instead closes the card.
+  Future<void> _askAsync((String, List<JsonMap>) asked) async {
+    final (itemId, questions) = asked;
+    final toolCallId = 'codex-async-$itemId';
+    _asyncOpen = toolCallId;
+    String title(JsonMap q) => '${q['title']}'.trim();
+    final outcome = await _outcome(
+      {
+        'toolCallId': toolCallId,
+        'title': questions.length == 1
+            ? title(questions.single)
+            : 'Codex asks ${questions.length} questions',
+        'kind': 'other',
+        'status': 'pending',
+        'rawInput': {'questions': questions},
+        '_meta': {
+          'codex': {'delivery': 'async', 'itemId': itemId},
+          'karmashala': {
+            'questions': [
+              for (final q in questions)
+                {
+                  'question': title(q),
+                  'ownWords': true,
+                  'options': [
+                    for (final option in _strings(q['options']))
+                      {'label': option},
+                  ],
+                },
+            ],
+          },
+        },
+      },
+      const [
+        ('answer', 'Answer', 'allow_always'),
+        ('skip', 'Not now', 'reject_once'),
+      ],
+    );
+    if (_asyncOpen == toolCallId) _asyncOpen = null;
+    final said = outcome?['optionId'] == 'answer'
+        ? _map(_map(outcome?['_meta'])['karmashala'])['answers']
+        : null;
+    if (said is! Map) return;
+    final replies = [
+      for (final q in questions)
+        if (said[title(q)] case final String words when words.trim().isNotEmpty)
+          (title(q), words.trim()),
+    ];
+    if (replies.isEmpty) return;
+    await _ownTurn(
+      replies.length == 1 && questions.length == 1
+          ? replies.single.$2
+          : [for (final (q, a) in replies) '$q\n$a'].join('\n\n'),
+    );
+  }
+
+  /// A turn no prompt asked for, carrying [text] as the person's message:
+  /// the client sees it as the agent's own turn.
+  Future<void> _ownTurn(String text) async {
+    final thread = _threadId;
+    if (thread == null || _turn != null) {
+      _notice('Your answer was not sent: Codex is busy. Send it as a message.');
+      return;
+    }
+    final done = _turn = Completer<JsonMap>();
+    _cancelAsked = false;
+    _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'started'});
+    _note('You answered: $text');
+    try {
+      await _startTurn(
+        thread,
+        codexInput([
+          {'type': 'text', 'text': text},
+        ]),
+      );
+      await done.future;
+    } on Object catch (error) {
+      _note('Codex did not take the answer: $error', error: true);
+    } finally {
+      if (identical(_turn, done)) _turn = null;
+      _flushOutput();
+      _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'ended'});
+    }
   }
 
   /// A finished conversation's item, as `session/load` replays it.
@@ -977,14 +1112,23 @@ final class CodexAppServerBridge implements AcpTransport {
             'decision': await _decide(
               _commandAsk(params),
               codexCommandDecisions(params['availableDecisions']),
+              request.id,
             ),
           });
         case 'item/fileChange/requestApproval':
           request.respond({
-            'decision': await _decide(_fileAsk(params), kCodexFileDecisions),
+            'decision': await _decide(
+              _fileAsk(params),
+              kCodexFileDecisions,
+              request.id,
+            ),
           });
         case 'item/permissions/requestApproval':
-          final chosen = await _ask(_permissionsAsk(params), _grants);
+          final chosen = await _ask(
+            _permissionsAsk(params),
+            _grants,
+            codexRequest: request.id,
+          );
           final granted = chosen == 'turn' || chosen == 'session';
           request.respond({
             'permissions': granted
@@ -1007,7 +1151,7 @@ final class CodexAppServerBridge implements AcpTransport {
             '_meta': null,
           });
         case 'item/tool/requestUserInput':
-          request.respond({'answers': await _questions(params)});
+          request.respond({'answers': await _questions(params, request.id)});
         case 'execCommandApproval' || 'applyPatchApproval':
           request.respond({'decision': 'denied'});
         case 'currentTime/read':
@@ -1030,10 +1174,11 @@ final class CodexAppServerBridge implements AcpTransport {
   Future<Object> _decide(
     JsonMap toolCall,
     List<CodexDecision> decisions,
+    Object codexRequest,
   ) async {
     final chosen = await _ask(toolCall, [
       for (final d in decisions) (d.id, d.name, d.kind),
-    ]);
+    ], codexRequest: codexRequest);
     return decisions.where((d) => d.id == chosen).firstOrNull?.decision ??
         'cancel';
   }
@@ -1044,53 +1189,77 @@ final class CodexAppServerBridge implements AcpTransport {
     ('decline', 'Reject', 'reject_once'),
   ];
 
-  /// Codex's questions, each with choices asked as a permission request
-  /// whose options are the choices; a free-text or secret one is declined,
-  /// and said in the chat. Choices are `allow_always` because a client that
-  /// answers for the person (autoRun) picks an `allow_once` unseen.
+  /// Codex's questions, asked as one permission request whose `_meta`
+  /// carries them all under `karmashala.questions`, so a client that draws
+  /// questions draws one card and answers them at once under
+  /// `_meta.karmashala.answers`. A lone question with choices also has its
+  /// choices as the request's options, for a client that draws none; they
+  /// are `allow_always` because a client that answers for the person
+  /// (autoRun) picks an `allow_once` unseen.
   ///
-  /// Each is also carried whole under `_meta.karmashala.questions`, so a
-  /// client that draws questions draws it as one, with a row for the
-  /// person's own words only where Codex said `isOther` — its TUI's "None
-  /// of the above". Such a client answers under `_meta.karmashala.answers`:
-  /// a choice's label, or the words, which go back as Codex's own CLI sends
-  /// a free-form answer, `user_note: <words>`.
-  Future<JsonMap> _questions(JsonMap params) async {
+  /// Own words are taken where Codex said `isOther` — its TUI's "None of
+  /// the above" — and go back as its CLI sends a free-form answer,
+  /// `user_note: <words>`; and for a question with no options, which they
+  /// answer outright, as its CLI's "Answer:" does. A secret question is
+  /// still declined, said in the chat: nothing here hides what is typed.
+  ///
+  /// A request that `isBlocking: false` is one Codex goes on without: the
+  /// chat says so, and when Codex resolves it itself (its TUI counts down
+  /// "auto-resolves in"), `serverRequest/resolved` closes the card.
+  Future<JsonMap> _questions(JsonMap params, Object requestId) async {
     final answers = <String, Object?>{};
+    final asked = <JsonMap>[];
     for (final q in _list(params['questions'])) {
-      final id = '${q['id']}';
-      final text = '${q['question'] ?? q['header'] ?? ''}';
-      final choices = [
-        for (final o in _list(q['options']))
-          if (o['label'] case final String label) label,
-      ];
-      if (choices.isEmpty || q['isSecret'] == true) {
+      if (q['isSecret'] == true) {
         _notice(
-          'Codex asked: $text - declined, since Karmashala\'s chat cannot '
-          'answer a question without choices yet.',
+          'Codex asked: ${_questionText(q)} - declined, since Karmashala\'s '
+          'chat cannot take a secret answer yet.',
         );
         continue;
       }
-      final other = q['isOther'] == true;
-      final outcome = await _outcome(
-        {
-          'toolCallId': '${params['itemId']}:$id',
-          'title': text,
-          'kind': 'other',
-          'status': 'pending',
-          'rawInput': {
-            'header': q['header'],
-            'question': text,
-            'options': q['options'],
+      asked.add(q);
+    }
+    if (asked.isEmpty) return answers;
+    if (params['isBlocking'] == false) {
+      _notice(
+        'Codex asked without waiting for an answer, and carries on '
+        'meanwhile: ${[for (final q in asked) _questionText(q)].join(' · ')}',
+      );
+    }
+    final lone = asked.length == 1 ? _choices(asked.single) : const <String>[];
+    final first = asked.first;
+    final outcome = await _outcome(
+      {
+        'toolCallId': asked.length == 1
+            ? '${params['itemId']}:${first['id']}'
+            : '${params['itemId']}',
+        'title': asked.length == 1
+            ? _questionText(first)
+            : 'Codex asks ${asked.length} questions',
+        'kind': 'other',
+        'status': 'pending',
+        'rawInput': {
+          'questions': [
+            for (final q in asked)
+              {
+                'header': q['header'],
+                'question': _questionText(q),
+                'options': q['options'],
+              },
+          ],
+        },
+        '_meta': {
+          'codex': {
+            'questions': [for (final q in asked) '${q['id']}'],
+            if (params['isBlocking'] == false) 'isBlocking': false,
           },
-          '_meta': {
-            'codex': {'question': id},
-            'karmashala': {
-              'questions': [
+          'karmashala': {
+            'questions': [
+              for (final q in asked)
                 {
-                  'question': text,
+                  'question': _questionText(q),
                   if (q['header'] case final String header) 'header': header,
-                  'ownWords': other,
+                  'ownWords': q['isOther'] == true || _choices(q).isEmpty,
                   'options': [
                     for (final o in _list(q['options']))
                       if (o['label'] case final String label)
@@ -1101,21 +1270,33 @@ final class CodexAppServerBridge implements AcpTransport {
                         },
                   ],
                 },
-              ],
-            },
+            ],
           },
         },
-        [
-          for (final (i, label) in choices.indexed)
-            ('choice-$i', label, 'allow_always'),
-          ('skip', 'Skip the question', 'reject_once'),
-        ],
-      );
-      final chosen = outcome?['optionId'] as String?;
-      final said = _map(_map(outcome?['_meta'])['karmashala'])['answers'];
-      final words = chosen != null && chosen != 'skip' && said is Map
-          ? said[text]
-          : null;
+      },
+      [
+        if (lone.isNotEmpty)
+          for (final (i, label) in lone.indexed)
+            ('choice-$i', label, 'allow_always')
+        else
+          ('answer', 'Answer', 'allow_always'),
+        (
+          'skip',
+          asked.length == 1 ? 'Skip the question' : 'Skip the questions',
+          'reject_once',
+        ),
+      ],
+      codexRequest: requestId,
+    );
+    final chosen = outcome?['optionId'] as String?;
+    final said = chosen == null || chosen == 'skip'
+        ? null
+        : _map(_map(outcome?['_meta'])['karmashala'])['answers'];
+    for (final q in asked) {
+      final id = '${q['id']}';
+      final text = _questionText(q);
+      final choices = _choices(q);
+      final words = said is Map ? said[text] : null;
       if (words is String && words.trim().isNotEmpty) {
         final answer = words.trim();
         if (choices.contains(answer)) {
@@ -1124,18 +1305,24 @@ final class CodexAppServerBridge implements AcpTransport {
           };
           continue;
         }
-        if (other) {
+        if (choices.isEmpty) {
+          answers[id] = {
+            'answers': [answer],
+          };
+          continue;
+        }
+        if (q['isOther'] == true) {
           answers[id] = {
             'answers': ['user_note: $answer'],
           };
           continue;
         }
       }
-      final index = chosen != null && chosen.startsWith('choice-')
-          ? int.tryParse(chosen.substring('choice-'.length))
+      final index = words == null && chosen != null && lone.isNotEmpty
+          ? int.tryParse(chosen.replaceFirst('choice-', ''))
           : null;
-      if (words != null || index == null || index >= choices.length) {
-        _notice('Codex asked: $text - no choice was made, so none was sent.');
+      if (index == null || index < 0 || index >= choices.length) {
+        _notice('Codex asked: $text - no answer was given, so none was sent.');
         continue;
       }
       answers[id] = {
@@ -1143,6 +1330,27 @@ final class CodexAppServerBridge implements AcpTransport {
       };
     }
     return answers;
+  }
+
+  static String _questionText(JsonMap q) =>
+      '${q['question'] ?? q['header'] ?? ''}';
+
+  static List<String> _choices(JsonMap q) => [
+    for (final o in _list(q['options']))
+      if (o['label'] case final String label) label,
+  ];
+
+  /// Codex's own requests now open in the client, by request id → the tool
+  /// call they were asked as, so one Codex resolves itself can be withdrawn.
+  final _openAsks = <String, String>{};
+
+  void _requestResolved(Object? requestId) {
+    final toolCallId = _openAsks.remove('$requestId');
+    if (toolCallId == null) return;
+    _update({
+      'sessionUpdate': AcpExtensions.askWithdrawn,
+      'toolCallId': toolCallId,
+    });
   }
 
   var _notices = 0;
@@ -1161,15 +1369,27 @@ final class CodexAppServerBridge implements AcpTransport {
   /// or the client could not be asked.
   Future<String?> _ask(
     JsonMap toolCall,
-    List<(String, String, String)> options,
-  ) async => (await _outcome(toolCall, options))?['optionId'] as String?;
+    List<(String, String, String)> options, {
+    Object? codexRequest,
+  }) async =>
+      (await _outcome(
+            toolCall,
+            options,
+            codexRequest: codexRequest,
+          ))?['optionId']
+          as String?;
 
   /// The person's whole outcome, its `_meta` with it, or null when the turn
-  /// was cancelled or the client could not be asked.
+  /// was cancelled, the client could not be asked, or the ask was withdrawn.
+  /// [codexRequest] is the Codex request it answers, so Codex resolving that
+  /// itself withdraws it.
   Future<JsonMap?> _outcome(
     JsonMap toolCall,
-    List<(String, String, String)> options,
-  ) async {
+    List<(String, String, String)> options, {
+    Object? codexRequest,
+  }) async {
+    final key = codexRequest == null ? null : '$codexRequest';
+    if (key != null) _openAsks[key] = '${toolCall['toolCallId']}';
     try {
       final answer = _map(
         await _client.call(AcpMethods.sessionRequestPermission, {
@@ -1185,6 +1405,8 @@ final class CodexAppServerBridge implements AcpTransport {
       return outcome['outcome'] == 'selected' ? outcome : null;
     } on Object {
       return null;
+    } finally {
+      if (key != null) _openAsks.remove(key);
     }
   }
 
