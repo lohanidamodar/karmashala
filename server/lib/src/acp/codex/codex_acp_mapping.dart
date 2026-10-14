@@ -7,25 +7,48 @@ import 'package:path/path.dart' as p;
 /// a live session of the same binary.
 const String kCodexAppServerProtocolSource = 'codex-cli 0.160.0 app-server v2';
 
-/// One of the ACP modes the bridge offers: an approval policy and a sandbox,
-/// as `thread/start` and `turn/start` take them.
+/// One of the ACP modes the bridge offers: an approval policy, a sandbox,
+/// who reviews what asks and Codex's collaboration mode (`plan` or
+/// `default`), as `thread/start` and `turn/start` take them.
 typedef CodexMode = ({
   String id,
   String name,
   String description,
   String approvalPolicy,
   String sandboxType,
+  String approvalsReviewer,
+  String collaboration,
 });
 
+const String kCodexPlanMode = 'plan';
+
 /// The ids are the ones the codex-acp adapter offered, so a stored choice
-/// and the descriptor's permission axis still name a mode that exists.
+/// and the descriptor's permission axis still name a mode that exists;
+/// `plan` and `auto` are Codex's own.
+///
+/// No mode sends `approvalPolicy: untrusted`: the schema still lists it, but
+/// 0.160.0 says `approval_policy = "untrusted" is no longer supported` and
+/// its `--ask-for-approval` offers only on-request and never.
 const List<CodexMode> kCodexModes = [
+  // Codex's Plan collaboration mode, in the read-only sandbox: it plans and
+  // proposes, and nothing it is asked changes a file.
+  (
+    id: kCodexPlanMode,
+    name: 'Plan',
+    description: 'Plans the work and proposes it; changes nothing.',
+    approvalPolicy: 'on-request',
+    sandboxType: 'readOnly',
+    approvalsReviewer: 'user',
+    collaboration: 'plan',
+  ),
   (
     id: 'read-only',
     name: 'Read-only',
     description: 'Reads and proposes; asks before changing anything.',
     approvalPolicy: 'on-request',
     sandboxType: 'readOnly',
+    approvalsReviewer: 'user',
+    collaboration: 'default',
   ),
   (
     id: 'workspace-write',
@@ -33,6 +56,22 @@ const List<CodexMode> kCodexModes = [
     description: 'Writes inside the workspace; asks before anything outside.',
     approvalPolicy: 'on-request',
     sandboxType: 'workspaceWrite',
+    approvalsReviewer: 'user',
+    collaboration: 'default',
+  ),
+  // `approvalsReviewer: auto_review` hands what Codex would ask to "a
+  // carefully prompted subagent" that approves or denies it by risk
+  // (ApprovalsReviewer, 0.160.0 schema).
+  (
+    id: 'auto',
+    name: 'Auto',
+    description:
+        'Writes inside the workspace; what it would ask, a Codex reviewer '
+        'approves or denies by risk.',
+    approvalPolicy: 'on-request',
+    sandboxType: 'workspaceWrite',
+    approvalsReviewer: 'auto_review',
+    collaboration: 'default',
   ),
   (
     id: 'agent',
@@ -40,6 +79,8 @@ const List<CodexMode> kCodexModes = [
     description: 'Runs without asking, inside the sandbox.',
     approvalPolicy: 'never',
     sandboxType: 'workspaceWrite',
+    approvalsReviewer: 'user',
+    collaboration: 'default',
   ),
   (
     id: 'agent-full-access',
@@ -47,6 +88,8 @@ const List<CodexMode> kCodexModes = [
     description: 'Runs without asking and without a sandbox.',
     approvalPolicy: 'never',
     sandboxType: 'dangerFullAccess',
+    approvalsReviewer: 'user',
+    collaboration: 'default',
   ),
 ];
 
@@ -57,24 +100,295 @@ CodexMode? codexModeById(String id) {
   return null;
 }
 
-/// The mode a thread's own approval policy and sandbox amount to.
-CodexMode codexModeOf(Object? approvalPolicy, JsonMap? sandbox) {
+CodexMode _mode(String id) => codexModeById(id)!;
+
+/// The mode a thread's own approval policy, sandbox, reviewer and
+/// collaboration mode (ThreadSettings' `collaborationMode.mode`) amount to.
+CodexMode codexModeOf(
+  Object? approvalPolicy,
+  JsonMap? sandbox, {
+  Object? approvalsReviewer,
+  Object? collaboration,
+}) {
   final never = approvalPolicy == 'never';
+  if (collaboration == 'plan') return _mode(kCodexPlanMode);
   return switch (sandbox?['type']) {
-    'readOnly' => kCodexModes[0],
-    'dangerFullAccess' => kCodexModes[3],
-    _ => never ? kCodexModes[2] : kCodexModes[1],
+    'readOnly' => _mode('read-only'),
+    'dangerFullAccess' => _mode('agent-full-access'),
+    _ when never => _mode('agent'),
+    _ when approvalsReviewer == 'auto_review' => _mode('auto'),
+    _ => _mode('workspace-write'),
   };
 }
 
-/// ACP's `modes` for [current].
-JsonMap codexModeState(CodexMode current) => {
+/// ACP's `modes` for [current]: Plan only where Codex lists it
+/// ([planOffered], from `collaborationMode/list`).
+JsonMap codexModeState(CodexMode current, {required bool planOffered}) => {
   'currentModeId': current.id,
   'availableModes': [
     for (final mode in kCodexModes)
-      {'id': mode.id, 'name': mode.name, 'description': mode.description},
+      if (planOffered || mode.id != kCodexPlanMode)
+        {'id': mode.id, 'name': mode.name, 'description': mode.description},
   ],
 };
+
+/// The modes a plan can be carried out in, offered when Codex's plan turn
+/// ends: each writes, so the session's rung picks among them.
+List<CodexMode> get codexImplementModes => [
+  for (final mode in kCodexModes)
+    if (mode.collaboration == 'default' && mode.sandboxType != 'readOnly') mode,
+];
+
+/// One answer Codex takes to an approval: the ACP option the person picks
+/// (id, words, kind) and the `decision` it sends back.
+typedef CodexDecision = ({
+  String id,
+  String name,
+  String kind,
+  Object decision,
+});
+
+const CodexDecision _accept = (
+  id: 'accept',
+  name: 'Allow',
+  kind: 'allow_once',
+  decision: 'accept',
+);
+const CodexDecision _acceptForSession = (
+  id: 'acceptForSession',
+  name: 'Allow for this session',
+  kind: 'allow_always',
+  decision: 'acceptForSession',
+);
+const CodexDecision _decline = (
+  id: 'decline',
+  name: 'Reject',
+  kind: 'reject_once',
+  decision: 'decline',
+);
+// Codex's TUI words it "No, and tell Codex what to do differently": the
+// call is refused and the turn stops.
+const CodexDecision _cancel = (
+  id: 'cancel',
+  name: 'Reject and stop the turn',
+  kind: 'reject_once',
+  decision: 'cancel',
+);
+
+/// A file change's answers: all four FileChangeApprovalDecision allows,
+/// since its request lists none of its own (0.160.0 schema).
+const List<CodexDecision> kCodexFileDecisions = [
+  _accept,
+  _acceptForSession,
+  _decline,
+  _cancel,
+];
+
+/// A command approval's answers: exactly the request's own
+/// `availableDecisions` ("the ordered list of decisions the client may
+/// present", experimental in 0.160.0), in its order but with cancel after
+/// decline, so a plain reject never stops the turn. A request without the
+/// list gets the four every CommandExecutionApprovalDecision allows; a
+/// decision this build cannot read is left out, never guessed.
+List<CodexDecision> codexCommandDecisions(Object? available) {
+  if (available is! List) return kCodexFileDecisions;
+  final read = <CodexDecision>[];
+  var networks = 0;
+  for (final decision in available) {
+    switch (decision) {
+      case 'accept':
+        read.add(_accept);
+      case 'acceptForSession':
+        read.add(_acceptForSession);
+      case 'decline':
+        read.add(_decline);
+      case 'cancel':
+        read.add(_cancel);
+      case {
+            'acceptWithExecpolicyAmendment': {
+              'execpolicy_amendment': final List<Object?> prefix,
+            },
+          }
+          when prefix.isNotEmpty:
+        // The prefix becomes an execpolicy allow rule (ExecPolicyAmendment).
+        read.add((
+          id: 'acceptWithExecpolicyAmendment',
+          name: 'Always allow commands starting with `${prefix.join(' ')}`',
+          kind: 'allow_always',
+          decision: decision as Object,
+        ));
+      case {
+            'applyNetworkPolicyAmendment': {
+              'network_policy_amendment': {
+                'host': final String host,
+                'action': final String action,
+              },
+            },
+          }
+          when action == 'allow' || action == 'deny':
+        final allow = action == 'allow';
+        read.add((
+          id: 'network-${networks++}',
+          name: '${allow ? 'Always allow' : 'Always block'} $host',
+          kind: allow ? 'allow_always' : 'reject_always',
+          decision: decision as Object,
+        ));
+    }
+  }
+  return [
+    for (final d in read)
+      if (d.id != 'cancel') d,
+    for (final d in read)
+      if (d.id == 'cancel') d,
+  ];
+}
+
+/// Codex's own commands the app-server carries out, in its TUI's words
+/// (0.160.0): `compact` is `thread/compact/start`, which runs as a turn of
+/// its own (seen live), and `review` is `review/start`.
+const List<JsonMap> kCodexCommands = [
+  {
+    'name': 'compact',
+    'description':
+        'summarize conversation to prevent hitting the context '
+        'limit',
+  },
+  {
+    'name': 'review',
+    'description': 'review my current changes and find issues',
+    'input': {'hint': 'what to review instead (optional)'},
+  },
+];
+
+/// A skill `skills/list` offers, as the chat runs it.
+typedef CodexSkill = ({String name, String description, String path});
+
+/// The enabled skills in a `skills/list` answer, each once, none named as
+/// one of [kCodexCommands].
+List<CodexSkill> codexSkills(Object? listed) {
+  final seen = {for (final c in kCodexCommands) c['name']};
+  return [
+    for (final entry in _objects(listed is Map ? listed['data'] : null))
+      for (final skill in _objects(entry['skills']))
+        if (skill case {
+          'name': final String name,
+          'path': final String path,
+        } when skill['enabled'] != false && seen.add(name))
+          (
+            name: name,
+            description: switch (skill) {
+              {'interface': {'shortDescription': final String short}} => short,
+              {'shortDescription': final String short} => short,
+              _ => '${skill['description'] ?? ''}',
+            },
+            path: path,
+          ),
+  ];
+}
+
+/// ACP's `available_commands_update` commands: Codex's own, then its skills.
+List<JsonMap> codexAvailableCommands(List<CodexSkill> skills) => [
+  ...kCodexCommands,
+  for (final skill in skills)
+    {
+      'name': skill.name,
+      'description': skill.description,
+      'input': {'hint': 'what to do with it (optional)'},
+    },
+];
+
+/// One field of an MCP server's elicitation form, as the chat asks it:
+/// [kind] is `string`, `number`, `integer`, `boolean` or `enum`, and
+/// [choices] an enum's (value, label) pairs.
+typedef CodexFormField = ({
+  String key,
+  String title,
+  String? description,
+  String kind,
+  List<(String, String)> choices,
+});
+
+/// The fields of an elicitation's `requestedSchema` (MCP 2025-11-25's
+/// ElicitRequestFormParams, as 0.160.0's McpElicitationSchema has it):
+/// empty for a request that asks nothing but consent, null for a form
+/// that asks more than text, a choice, yes or no, or a number — a
+/// multi-select, say — which the chat does not fill in.
+List<CodexFormField>? codexElicitationForm(Object? schema) {
+  if (schema == null) return const [];
+  if (schema is! Map) return null;
+  final type = schema['type'];
+  if (type != null && type != 'object') return null;
+  final properties = schema['properties'];
+  if (properties == null) return const [];
+  if (properties is! Map) return null;
+  final fields = <CodexFormField>[];
+  for (final MapEntry(:key, :value) in properties.entries) {
+    if (key is! String || value is! Map) return null;
+    final title = value['title'] is String ? value['title'] as String : key;
+    final description = value['description'] is String
+        ? value['description'] as String
+        : null;
+    final (String, List<(String, String)>)? read = switch (value) {
+      {'type': 'boolean'} => ('boolean', const []),
+      {'type': 'number'} => ('number', const []),
+      {'type': 'integer'} => ('integer', const []),
+      {'type': 'string', 'oneOf': final List<Object?> options} => (
+        'enum',
+        [
+          for (final o in options)
+            if (o case {'const': final String v, 'title': final String t})
+              (v, t),
+        ],
+      ),
+      {'type': 'string', 'enum': final List<Object?> values} => (
+        'enum',
+        _enumChoices(values, value['enumNames']),
+      ),
+      {'type': 'string'} => ('string', const []),
+      _ => null,
+    };
+    if (read == null) return null;
+    final (kind, choices) = read;
+    if (kind == 'enum' && choices.isEmpty) return null;
+    fields.add((
+      key: key,
+      title: title,
+      description: description,
+      kind: kind,
+      choices: choices,
+    ));
+  }
+  return fields;
+}
+
+List<(String, String)> _enumChoices(List<Object?> values, Object? names) {
+  final labels = names is List && names.length == values.length ? names : null;
+  return [
+    for (final (i, v) in values.indexed)
+      if (v is String) (v, labels?[i] is String ? labels![i] as String : v),
+  ];
+}
+
+/// The value an elicitation field takes for [words] the person gave, or
+/// null when they do not fit it: a number that is none, a choice not
+/// offered.
+Object? codexFormValue(CodexFormField field, String words) {
+  final text = words.trim();
+  return switch (field.kind) {
+    'boolean' => switch (text) {
+      'Yes' => true,
+      'No' => false,
+      _ => null,
+    },
+    'number' => num.tryParse(text),
+    'integer' => int.tryParse(text),
+    'enum' => [
+      for (final (value, label) in field.choices)
+        if (label == text) value,
+    ].firstOrNull,
+    _ => text.isEmpty ? null : text,
+  };
+}
 
 /// The `sandboxPolicy` a turn takes for [mode]: the thread's own [current]
 /// policy when it is already of that kind, so its writable roots and network

@@ -20,6 +20,8 @@ import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
     show kProtocolUsageLimitReason;
 import 'package:karmashala_host/src/acp/acp_version_probe.dart';
+import 'package:karmashala_host/src/acp/codex/codex_acp_mapping.dart'
+    show kCodexFileDecisions;
 import 'package:karmashala_host/src/acp/codex/codex_app_server_bridge.dart';
 import 'package:karmashala_host/src/sessions/session_message_transcripts.dart'
     show SessionMessageTranscriptSource;
@@ -35,12 +37,13 @@ const _spec = AcpLaunchSpec(
   arguments: ['app-server'],
   nativeBridge: AcpNativeBridge.codexAppServer,
   modeNames: {
-    PermissionRisk.readOnly: ['read-only'],
+    PermissionRisk.readOnly: ['read-only', 'plan'],
     PermissionRisk.ask: ['workspace-write'],
     PermissionRisk.acceptEdits: ['workspace-write'],
-    PermissionRisk.autoRun: ['agent'],
+    PermissionRisk.autoRun: ['agent', 'auto'],
     PermissionRisk.bypass: ['agent-full-access'],
   },
+  screenedModes: {'auto'},
 );
 
 /// Codex's app-server, translated to ACP in-process, under the real session
@@ -113,6 +116,11 @@ void main() {
       'title': null,
       'version': '9.9.9',
     });
+    // What Codex's own TUI offers (Plan, its decisions) is experimental API.
+    expect(codex.callsTo('initialize').single['capabilities'], {
+      'experimentalApi': true,
+      'requestAttestation': false,
+    });
     expect(codex.notifications, contains('initialized'));
 
     final again = FakeCodexAppServer();
@@ -131,6 +139,27 @@ void main() {
     expect(init.authMethods.single.description, contains('plus'));
     // The account's email is not repeated anywhere ACP carries.
     expect(jsonEncode(init.toJson()), isNot(contains('someone@example.com')));
+  });
+
+  test('Codex asking the time is answered in whole Unix seconds', () async {
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.server.request('currentTime/read', {
+          'threadId': turn.threadId,
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final runtime = runtimeOver(codex);
+    await runtime.start();
+    final before = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await runtime.send('What time is it?');
+    await runtime.awaitTurn();
+    final at = ((await answered)! as Map)['currentTimeAt']! as int;
+    expect(at, inInclusiveRange(before, before + 60));
+    await runtime.stop();
   });
 
   test('authenticate runs Codex\'s ChatGPT login, says its link on stderr, '
@@ -187,8 +216,10 @@ void main() {
 
       final modes = runtime.modes!;
       expect(modes.availableModes.map((m) => m.id), [
+        'plan',
         'read-only',
         'workspace-write',
+        'auto',
         'agent',
         'agent-full-access',
       ]);
@@ -244,6 +275,272 @@ void main() {
     expect(turn['effort'], 'xhigh');
     expect(turn['approvalPolicy'], 'never');
     expect((turn['sandboxPolicy']! as Map)['writableRoots'], ['/extra']);
+    await runtime.stop();
+  });
+
+  group("the slash menu is Codex's own commands and its skills", () {
+    test('compact, review and each enabled skill are offered, and read '
+        'again when Codex says its skills changed', () async {
+      final codex = FakeCodexAppServer();
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      expect(codex.callsTo('skills/list').single['cwds'], ['/work']);
+      final offered = runtime.commands!.commands;
+      expect(offered.map((c) => c.name), ['compact', 'review', 'pdf:pdf']);
+      expect(offered.last.description, 'Read and make PDFs');
+
+      codex.skills = [
+        {
+          'name': 'deploy',
+          'description': 'Ship it.',
+          'path': '/home/someone/.codex/skills/deploy/SKILL.md',
+          'enabled': true,
+        },
+      ];
+      codex.notify('skills/changed', const {});
+      await pump(40);
+      expect(runtime.commands!.commands.map((c) => c.name), [
+        'compact',
+        'review',
+        'deploy',
+      ]);
+      await runtime.stop();
+    });
+
+    test('/compact runs thread/compact/start, a turn of its own, and the '
+        'prompt ends with it', () async {
+      final codex = FakeCodexAppServer();
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('/compact');
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      expect(codex.callsTo('thread/compact/start').single, {
+        'threadId': 'thr-new',
+      });
+      expect(codex.callsTo('turn/start'), isEmpty);
+      await runtime.stop();
+    });
+
+    test(
+      '/review reviews the uncommitted changes, or what it is told',
+      () async {
+        final codex = FakeCodexAppServer();
+        final runtime = runtimeOver(codex);
+        await runtime.start();
+        await runtime.send('/review');
+        await runtime.awaitTurn();
+        await runtime.send('/review the login code');
+        await runtime.awaitTurn();
+        expect(codex.callsTo('review/start').map((c) => c['target']), [
+          {'type': 'uncommittedChanges'},
+          {'type': 'custom', 'instructions': 'the login code'},
+        ]);
+        await runtime.stop();
+      },
+    );
+
+    test('a skill rides the turn as Codex\'s skill input, its words after '
+        'it', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async => turn.end('completed'),
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('/pdf:pdf read the report');
+      await runtime.awaitTurn();
+      expect(codex.callsTo('turn/start').single['input'], [
+        {
+          'type': 'skill',
+          'name': 'pdf:pdf',
+          'path': '/home/someone/.codex/skills/pdf/SKILL.md',
+        },
+        {
+          'type': 'text',
+          'text': r'$pdf:pdf read the report',
+          'text_elements': <Object?>[],
+        },
+      ]);
+      // A slash nobody offered is only text.
+      await runtime.send('/nope at all');
+      await runtime.awaitTurn();
+      expect(
+        (codex.callsTo('turn/start').last['input']! as List).single,
+        containsPair('text', '/nope at all'),
+      );
+      await runtime.stop();
+    });
+  });
+
+  group("Plan is Codex's own collaboration mode", () {
+    test('offered only where collaborationMode/list lists it', () async {
+      final codex = FakeCodexAppServer()..presets = null;
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      expect(codex.callsTo('collaborationMode/list'), hasLength(1));
+      expect(
+        runtime.modes!.availableModes.map((m) => m.id),
+        isNot(contains('plan')),
+      );
+      await expectLater(runtime.setMode('plan'), throwsA(anything));
+      await runtime.stop();
+    });
+
+    test('a plan turn carries collaborationMode plan with the preset\'s '
+        'effort, in the read-only sandbox; a mode left goes back to '
+        'default', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async => turn.end('completed'),
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.setMode('plan');
+      await runtime.send('Plan it');
+      await runtime.awaitTurn();
+      final plan = codex.callsTo('turn/start').last;
+      expect(plan['collaborationMode'], {
+        'mode': 'plan',
+        'settings': {
+          'model': 'gpt-fast',
+          'reasoning_effort': 'low',
+          'developer_instructions': null,
+        },
+      });
+      expect((plan['sandboxPolicy']! as Map)['type'], 'readOnly');
+
+      await runtime.setMode('workspace-write');
+      await runtime.send('Now do it');
+      await runtime.awaitTurn();
+      expect(codex.callsTo('turn/start').last['collaborationMode'], {
+        'mode': 'default',
+        'settings': {
+          'model': 'gpt-fast',
+          'reasoning_effort': 'medium',
+          'developer_instructions': null,
+        },
+      });
+      await runtime.stop();
+    });
+
+    FakeCodexAppServer planning() => FakeCodexAppServer(
+      onTurn: (turn) async {
+        if (turn.id == 'turn-1') {
+          turn.delta('item/plan/delta', 'plan-1', '1. Add a ');
+          turn.delta('item/plan/delta', 'plan-1', 'table');
+          turn.completed({
+            'type': 'plan',
+            'id': 'plan-1',
+            'text': '1. Add a table\n2. Test it',
+          });
+        }
+        turn.end('completed');
+      },
+    );
+
+    test('a plan turn ending with a plan asks to implement it; a yes '
+        'switches to the mode the rung allows and sends Codex\'s own '
+        '"Implement the plan." in the same prompt', () async {
+      final codex = planning();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.setMode('plan');
+      await runtime.send('Plan a table');
+      await pump(40);
+      final ask = host.statuses.last.toolAsk!;
+      expect(ask.kind, 'switch_mode');
+      expect(ask.toolName, 'Implement this plan?');
+      expect(ask.input['plan'], '1. Add a table\n2. Test it');
+      expect(ask.options.map((o) => (o.id, o.kind)), [
+        ('workspace-write', 'allow_once'),
+        ('auto', 'allow_once'),
+        ('agent', 'allow_once'),
+        ('agent-full-access', 'allow_once'),
+        ('plan', 'reject_once'),
+      ]);
+      final answer = await runtime.answerPermission(approve: true);
+      expect(answer.answered, contains('Workspace write'));
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      final turns = codex.callsTo('turn/start');
+      expect(turns, hasLength(2));
+      expect(turns.last['input'], [
+        {
+          'type': 'text',
+          'text': 'Implement the plan.',
+          'text_elements': <Object?>[],
+        },
+      ]);
+      expect((turns.last['collaborationMode']! as Map)['mode'], 'default');
+      expect((turns.last['sandboxPolicy']! as Map)['type'], 'workspaceWrite');
+      expect(runtime.modes!.currentModeId, 'workspace-write');
+      await runtime.stop();
+    });
+
+    test('staying in Plan ends the prompt, still planning', () async {
+      final codex = planning();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.setMode('plan');
+      await runtime.send('Plan a table');
+      await pump(40);
+      expect(host.statuses.last.toolAsk?.kind, 'switch_mode');
+      await runtime.answerPermission(approve: false);
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      expect(codex.callsTo('turn/start'), hasLength(1));
+      expect(runtime.modes!.currentModeId, 'plan');
+      await runtime.stop();
+    });
+
+    test('a thread Codex reports in Plan shows Plan', () async {
+      final codex = FakeCodexAppServer();
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      codex.notify('thread/settings/updated', {
+        'threadId': 'thr-new',
+        'threadSettings': {
+          'approvalPolicy': 'on-request',
+          'sandboxPolicy': {'type': 'workspaceWrite'},
+          'collaborationMode': {
+            'mode': 'plan',
+            'settings': {'model': 'gpt-fast', 'reasoning_effort': 'low'},
+          },
+        },
+      });
+      await pump(40);
+      expect(runtime.modes!.currentModeId, 'plan');
+      await runtime.stop();
+    });
+  });
+
+  test("Auto is Codex's own reviewer: it rides the turn as auto_review, a "
+      'mode left hands asks back to the person, and a thread Codex reports '
+      'under the reviewer shows Auto', () async {
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async => turn.end('completed'),
+    );
+    final runtime = runtimeOver(codex);
+    await runtime.start();
+    await runtime.setMode('auto');
+    await runtime.send('Tidy up');
+    await runtime.awaitTurn();
+    final auto = codex.callsTo('turn/start').last;
+    expect(auto['approvalPolicy'], 'on-request');
+    expect(auto['approvalsReviewer'], 'auto_review');
+    expect((auto['sandboxPolicy']! as Map)['type'], 'workspaceWrite');
+
+    await runtime.setMode('workspace-write');
+    await runtime.send('Again');
+    await runtime.awaitTurn();
+    expect(codex.callsTo('turn/start').last['approvalsReviewer'], 'user');
+
+    codex.notify('thread/settings/updated', {
+      'threadId': 'thr-new',
+      'threadSettings': {
+        'approvalPolicy': 'on-request',
+        'approvalsReviewer': 'auto_review',
+        'sandboxPolicy': {'type': 'workspaceWrite'},
+      },
+    });
+    await pump(40);
+    expect(runtime.modes!.currentModeId, 'auto');
     await runtime.stop();
   });
 
@@ -541,6 +838,86 @@ void main() {
     expect(await answered, {'decision': 'accept'});
     expect(await runtime.awaitTurn(), StopReason.endTurn);
     await runtime.stop();
+  });
+
+  test("a command approval offers exactly Codex's availableDecisions, its "
+      'prefix rule worded, and the one picked goes back whole', () async {
+    final amendment = {
+      'acceptWithExecpolicyAmendment': {
+        'execpolicy_amendment': ['git', 'status'],
+      },
+    };
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.ask('item/commandExecution/requestApproval', {
+          'itemId': 'exec-4',
+          'command': 'git status --short',
+          'cwd': temp.path,
+          'availableDecisions': [
+            'accept',
+            amendment,
+            'cancel',
+            {
+              'applyNetworkPolicyAmendment': {
+                'network_policy_amendment': {
+                  'host': 'example.com',
+                  'action': 'deny',
+                },
+              },
+            },
+            'decline',
+            {'somethingNew': <String, Object?>{}},
+          ],
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final offered = <List<JsonMap>>[];
+    await talkToAcpAgent(() async => codexAppServerBridge(codex.transport), (
+      peer,
+      init,
+    ) async {
+      peer.requests.listen((request) {
+        final options = request.paramsMap['options']! as List;
+        offered.add([for (final o in options) (o as Map).cast()]);
+        request.respond({
+          'outcome': {
+            'outcome': 'selected',
+            'optionId': 'acceptWithExecpolicyAmendment',
+          },
+        });
+      });
+      final created = await peer.call(AcpMethods.sessionNew, {
+        'cwd': temp.path,
+        'mcpServers': <Object?>[],
+      });
+      await peer.call(AcpMethods.sessionPrompt, {
+        'sessionId': (created! as Map)['sessionId'],
+        'prompt': [
+          {'type': 'text', 'text': 'Check git'},
+        ],
+      });
+    });
+    // No "for this session": Codex did not list it. Cancel comes last.
+    expect(offered.single.map((o) => (o['name'], o['kind'])), [
+      ('Allow', 'allow_once'),
+      ('Always allow commands starting with `git status`', 'allow_always'),
+      ('Always block example.com', 'reject_always'),
+      ('Reject', 'reject_once'),
+      ('Reject and stop the turn', 'reject_once'),
+    ]);
+    expect(await answered, {'decision': amendment});
+  });
+
+  test('a file change offers Codex\'s four decisions, cancel among them', () {
+    expect(kCodexFileDecisions.map((d) => d.decision), [
+      'accept',
+      'acceptForSession',
+      'decline',
+      'cancel',
+    ]);
   });
 
   test('a refused file change reaches Codex as decline, with its diff shown '
@@ -1060,65 +1437,342 @@ void main() {
     });
   });
 
-  test('a free-text question is declined, and the chat says so', () async {
+  String said() => rows()
+      .where((r) => r.role == SessionMessageRole.agent)
+      .map((r) => r.text)
+      .join('\n');
+
+  // Codex's CLI reads such a question as "Answer:", which takes no empty
+  // answer (0.160.0's strings): the words are the answer itself.
+  test('a question with no options is answered in own words alone, sent as '
+      'the answer itself', () async {
     late Future<Object?> answered;
+    final codex = asking([
+      question('q1', 'What should the table be called?'),
+    ], (a) => answered = a);
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Make a table');
+    await pump(40);
+    final open = runtime.openQuestion!;
+    expect(open.questions.single.options, isEmpty);
+    expect(open.questions.single.ownWords, isTrue);
+    await runtime.answerQuestion(
+      toolUseId: open.toolUseId,
+      answers: const [AgentQuestionAnswer.text('orders')],
+    );
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['orders'],
+        },
+      },
+    });
+    await runtime.awaitTurn();
+    await runtime.stop();
+  });
+
+  test('several questions are one card, answered at once; a secret one is '
+      'still declined, and the chat says so', () async {
+    late Future<Object?> answered;
+    final codex = asking([
+      question('q1', 'Which database?', ['sqlite', 'postgres']),
+      {
+        ...question('q2', 'Anything else?', ['no']),
+        'isOther': true,
+      },
+      question('q3', 'Its name?'),
+      {...question('q4', 'The password?'), 'isSecret': true},
+    ], (a) => answered = a);
+    final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+    await runtime.start();
+    await runtime.send('Set it up');
+    await pump(40);
+    final open = runtime.openQuestion!;
+    expect(open.questions.map((q) => q.question), [
+      'Which database?',
+      'Anything else?',
+      'Its name?',
+    ]);
+    await runtime.answerQuestion(
+      toolUseId: open.toolUseId,
+      answers: const [
+        AgentQuestionAnswer.option(1),
+        AgentQuestionAnswer.text('add an index'),
+        AgentQuestionAnswer.text('shop'),
+      ],
+    );
+    expect(await answered, {
+      'answers': {
+        'q1': {
+          'answers': ['postgres'],
+        },
+        'q2': {
+          'answers': ['user_note: add an index'],
+        },
+        'q3': {
+          'answers': ['shop'],
+        },
+      },
+    });
+    await runtime.awaitTurn();
+    expect(said(), contains('The password?'));
+    expect(said(), contains('secret'));
+    await runtime.stop();
+  });
+
+  test('a non-blocking question says Codex carries on, and closes when '
+      'Codex resolves it itself', () async {
+    late Future<Object?> answered;
+    final asked = Completer<void>();
     final codex = FakeCodexAppServer(
       onTurn: (turn) async {
         answered = turn.ask('item/tool/requestUserInput', {
-          'itemId': 'ask-3',
-          'questions': [question('q1', 'What should the table be called?')],
-          'isBlocking': true,
+          'itemId': 'ask-nb',
+          'questions': [
+            question('q1', 'Tabs or spaces?', ['tabs', 'spaces']),
+          ],
+          'isBlocking': false,
         });
+        asked.complete();
         await answered;
         turn.end('completed');
       },
     );
     final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
     await runtime.start();
-    await runtime.send('Make a table');
-    await runtime.awaitTurn();
+    await runtime.send('Format it');
+    await asked.future;
+    await pump(40);
+    expect(runtime.hasOpenPermission, isTrue);
+    codex.notify('serverRequest/resolved', {
+      'threadId': 'thr-new',
+      'requestId': codex.lastRequestId,
+    });
     expect(await answered, {'answers': <String, Object?>{}});
+    await runtime.awaitTurn();
     expect(runtime.hasOpenPermission, isFalse);
-    final said = rows()
-        .where((r) => r.role == SessionMessageRole.agent)
-        .map((r) => r.text)
-        .join('\n');
-    expect(said, contains('What should the table be called?'));
-    expect(said, contains('declined'));
+    expect(said(), contains('carries on'));
     await runtime.stop();
   });
 
-  test(
-    'an MCP server\'s request for input is declined, and the chat says so',
-    () async {
-      late Future<Object?> answered;
-      final codex = FakeCodexAppServer(
-        onTurn: (turn) async {
-          answered = turn.ask('mcpServer/elicitation/request', {
-            'serverName': 'tracker',
-            'mode': 'form',
-            'message': 'Pick a project',
-            'requestedSchema': <String, Object?>{},
+  group("Codex's async questions", () {
+    FakeCodexAppServer asyncAsking() => FakeCodexAppServer(
+      onTurn: (turn) async {
+        if (turn.id == 'turn-1') {
+          turn.completed({
+            'type': 'agentMessage',
+            'id': 'msg-async',
+            'text': 'Done for now.',
+            'phase': null,
+            'memoryCitation': null,
+            'delivery': 'async',
+            'questions': [
+              {
+                'title': 'Ship it today?',
+                'options': ['yes', 'no'],
+              },
+            ],
           });
-          await answered;
-          turn.end('completed');
-        },
+        }
+        turn.end('completed');
+      },
+    );
+
+    test('are asked once the turn is over, and the answer goes back as the '
+        'next message, in a turn of Codex\'s own', () async {
+      final codex = asyncAsking();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.send('Wrap up');
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final open = runtime.openQuestion!;
+      expect(open.questions.single.question, 'Ship it today?');
+      expect(open.questions.single.options.map((o) => o.label), ['yes', 'no']);
+      await runtime.answerQuestion(
+        toolUseId: open.toolUseId,
+        answers: const [AgentQuestionAnswer.option(0)],
       );
-      final runtime = runtimeOver(codex);
+      await pump(100);
+      final turns = codex.callsTo('turn/start');
+      expect(turns, hasLength(2));
+      expect(turns.last['input'], [
+        {'type': 'text', 'text': 'yes', 'text_elements': <Object?>[]},
+      ]);
+      expect(statuses().last, AgentActivityStatus.idle);
+      await runtime.stop();
+    });
+
+    test('a message sent instead closes the card, and is the reply', () async {
+      final codex = asyncAsking();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.send('Wrap up');
+      await runtime.awaitTurn();
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(runtime.hasOpenPermission, isTrue);
+      await runtime.send('Not today');
+      await runtime.awaitTurn();
+      await pump(40);
+      expect(runtime.hasOpenPermission, isFalse);
+      expect(codex.callsTo('turn/start'), hasLength(2));
+      await runtime.stop();
+    });
+  });
+
+  group("an MCP server's elicitation", () {
+    FakeCodexAppServer eliciting(
+      JsonMap request,
+      void Function(Future<Object?>) answered,
+    ) => FakeCodexAppServer(
+      onTurn: (turn) async {
+        final answer = turn.ask('mcpServer/elicitation/request', {
+          'serverName': 'tracker',
+          '_meta': null,
+          ...request,
+        });
+        answered(answer);
+        await answer;
+        turn.end('completed');
+      },
+    );
+
+    test('asking only consent is Allow / Decline / Cancel, and Allow '
+        'accepts with nothing filled in', () async {
+      late Future<Object?> answered;
+      final codex = eliciting({
+        'mode': 'form',
+        'message': 'May I read your projects?',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': <String, Object?>{},
+        },
+      }, (a) => answered = a);
+      final runtime = runtimeOver(codex, risk: PermissionRisk.autoRun);
       await runtime.start();
       await runtime.send('Ask me');
+      await pump(40);
+      // Consent is the person's, whatever the rung.
+      final ask = host.statuses.last.toolAsk!;
+      expect(ask.toolName, contains('May I read your projects?'));
+      expect(ask.options.map((o) => o.name), ['Allow', 'Decline', 'Cancel']);
+      await runtime.answerPermission(approve: true);
+      expect(await answered, {
+        'action': 'accept',
+        'content': <String, Object?>{},
+        '_meta': null,
+      });
       await runtime.awaitTurn();
-      expect((await answered)! as Map, containsPair('action', 'decline'));
-      final said = rows()
-          .where((r) => r.role == SessionMessageRole.agent)
-          .map((r) => r.text)
-          .join('\n');
-      expect(said, contains('tracker'));
-      expect(said, contains('Pick a project'));
-      expect(said, contains('declined'));
       await runtime.stop();
-    },
-  );
+    });
+
+    test('a form of text, a choice, yes or no and a number is one question '
+        'card, its answers sent typed', () async {
+      late Future<Object?> answered;
+      final codex = eliciting({
+        'mode': 'form',
+        'message': 'New issue',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': {
+            'title': {'type': 'string', 'title': 'Title'},
+            'size': {
+              'type': 'string',
+              'title': 'Size',
+              'oneOf': [
+                {'const': 's', 'title': 'Small'},
+                {'const': 'l', 'title': 'Large'},
+              ],
+            },
+            'urgent': {'type': 'boolean', 'title': 'Urgent'},
+            'points': {'type': 'integer', 'title': 'Points'},
+          },
+          'required': ['title'],
+        },
+      }, (a) => answered = a);
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.send('File it');
+      await pump(40);
+      final open = runtime.openQuestion!;
+      expect(open.questions.map((q) => q.header), [
+        'Title',
+        'Size',
+        'Urgent',
+        'Points',
+      ]);
+      expect(open.questions.first.question, startsWith('New issue'));
+      expect(open.questions.map((q) => q.ownWords), [true, false, false, true]);
+      expect(open.questions[1].options.map((o) => o.label), ['Small', 'Large']);
+      await runtime.answerQuestion(
+        toolUseId: open.toolUseId,
+        answers: const [
+          AgentQuestionAnswer.text('Crash on start'),
+          AgentQuestionAnswer.option(1),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.text('3'),
+        ],
+      );
+      expect(await answered, {
+        'action': 'accept',
+        'content': {
+          'title': 'Crash on start',
+          'size': 'l',
+          'urgent': true,
+          'points': 3,
+        },
+        '_meta': null,
+      });
+      await runtime.awaitTurn();
+      await runtime.stop();
+    });
+
+    for (final (what, request) in <(String, JsonMap)>[
+      (
+        'a form with more in it',
+        {
+          'mode': 'form',
+          'message': 'Pick labels',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'labels': {
+                'type': 'array',
+                'items': {
+                  'type': 'string',
+                  'enum': ['bug', 'ui'],
+                },
+              },
+            },
+          },
+        },
+      ),
+      (
+        'a link to open',
+        {
+          'mode': 'url',
+          'message': 'Sign in to the tracker',
+          'url': 'https://tracker.example.com/auth',
+          'elicitationId': 'e1',
+        },
+      ),
+    ]) {
+      test('$what is cancelled, and the chat says why', () async {
+        late Future<Object?> answered;
+        final codex = eliciting(request, (a) => answered = a);
+        final runtime = runtimeOver(codex);
+        await runtime.start();
+        await runtime.send('Ask me');
+        await runtime.awaitTurn();
+        expect((await answered)! as Map, containsPair('action', 'cancel'));
+        expect(said(), contains('tracker'));
+        expect(said(), contains('${request['message']}'));
+        expect(said(), contains('cancelled'));
+        await runtime.stop();
+      });
+    }
+  });
 
   group("what is no one's turn is said in the chat, as a terminal session "
       'says it', () {

@@ -1062,6 +1062,20 @@ class AcpSessionRuntime implements ScreenSession {
       }
       return;
     }
+    if (update is UnknownUpdate && update.kind == AcpExtensions.askWithdrawn) {
+      final pending = _pending;
+      if (pending != null &&
+          pending.call.toolCallId == update.raw['toolCallId']) {
+        _resolvePending(const PermissionOutcome.cancelled());
+        _publish(
+          _turn != null || _agentWorking
+              ? AgentActivityStatus.working
+              : AgentActivityStatus.idle,
+          evidence: [pending.title],
+        );
+      }
+      return;
+    }
     if (update is UnknownUpdate && update.kind == AcpExtensions.compaction) {
       final trigger = update.raw['trigger'];
       final summary = update.raw['summary'];

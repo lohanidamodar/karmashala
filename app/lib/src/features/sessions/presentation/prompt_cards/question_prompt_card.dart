@@ -122,8 +122,9 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
   List<Set<int>> _fresh() => [
     for (final _ in widget.question.questions) <int>{},
   ];
+  // A question with no options is answered in own words alone.
   List<bool> _freshOther() => [
-    for (final _ in widget.question.questions) false,
+    for (final q in widget.question.questions) q.options.isEmpty,
   ];
   List<TextEditingController> _freshWords() => [
     for (final _ in widget.question.questions) TextEditingController(),
@@ -541,35 +542,41 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
         // Only where the agent draws its own row for them, and on a
         // single-choice question, the only one whose keys were measured.
         if (item.ownWords && !item.multiSelect) ...[
-          Builder(
-            builder: (row) => _OptionRow(
-              key: ValueKey('question-option-$i-other'),
-              id: '$i-other',
-              label: 'Other…',
-              description: '',
-              multi: false,
-              selected: _other[i],
-              dense: widget.dense,
-              onTap: !interactive
-                  ? null
-                  : () {
-                      setState(() {
-                        _other[i] = true;
-                        _chosen[i] = {};
-                      });
-                      _reveal(row);
-                    },
+          // A question with no options is its field alone.
+          if (item.options.isNotEmpty)
+            Builder(
+              builder: (row) => _OptionRow(
+                key: ValueKey('question-option-$i-other'),
+                id: '$i-other',
+                label: 'Other…',
+                description: '',
+                multi: false,
+                selected: _other[i],
+                dense: widget.dense,
+                onTap: !interactive
+                    ? null
+                    : () {
+                        setState(() {
+                          _other[i] = true;
+                          _chosen[i] = {};
+                        });
+                        _reveal(row);
+                      },
+              ),
             ),
-          ),
           if (_other[i])
             Padding(
               padding: EdgeInsetsDirectional.only(
-                start: density.icon + density.glyphGap,
+                start: item.options.isEmpty
+                    ? 0
+                    : density.icon + density.glyphGap,
               ),
               child: TextField(
                 key: ValueKey('question-other-field-$i'),
                 controller: _words[i],
-                autofocus: true,
+                // Opened by a tap on Other, not by the card appearing.
+                autofocus: item.options.isNotEmpty,
+                enabled: interactive,
                 maxLines: 1,
                 decoration: const InputDecoration(
                   isDense: true,

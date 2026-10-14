@@ -112,7 +112,10 @@ class RemoteQuestion {
       if (entry is! Map) return null;
       final question = entry['question'];
       final options = entry['options'];
-      if (question is! String || options is! List || options.isEmpty) {
+      // No options only where own words answer it: a free-text question.
+      if (question is! String ||
+          options is! List ||
+          (options.isEmpty && entry['ownWords'] != true)) {
         return null;
       }
       final read = <RemoteQuestionOption>[];

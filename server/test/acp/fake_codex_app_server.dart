@@ -39,6 +39,41 @@ class FakeCodexAppServer {
 
   /// What `model/list` answers; a test may add to it mid-session.
   final listedModels = <Object?>[...models];
+
+  /// The skills `skills/list` answers for the thread's folder, shaped as
+  /// 0.160.0 answered a live probe; a test may change them mid-session.
+  var skills = <JsonMap>[
+    {
+      'name': 'pdf:pdf',
+      'description': 'Read, create and verify PDF files.',
+      'interface': {'shortDescription': 'Read and make PDFs'},
+      'path': '/home/someone/.codex/skills/pdf/SKILL.md',
+      'scope': 'user',
+      'enabled': true,
+      'pluginId': 'pdf@openai',
+    },
+    {
+      'name': 'off',
+      'description': 'Turned off.',
+      'path': '/home/someone/.codex/skills/off/SKILL.md',
+      'scope': 'user',
+      'enabled': false,
+      'pluginId': null,
+    },
+  ];
+
+  /// What `collaborationMode/list` answers, shaped as 0.160.0 answered a
+  /// live probe; null refuses it, as a Codex without the experimental API
+  /// does.
+  List<JsonMap>? presets = const [
+    {'name': 'Plan', 'mode': 'plan', 'model': null, 'reasoning_effort': 'low'},
+    {
+      'name': 'Default',
+      'mode': 'default',
+      'model': null,
+      'reasoning_effort': null,
+    },
+  ];
   var killed = false;
   FakeCodexTurn? turn;
   var _turns = 0;
@@ -105,8 +140,14 @@ class FakeCodexAppServer {
 
   void notify(String method, JsonMap params) => _peer.notify(method, params);
 
-  Future<Object?> request(String method, JsonMap params) =>
-      _peer.call(method, params);
+  Future<Object?> request(String method, JsonMap params) {
+    lastRequestId++;
+    return _peer.call(method, params);
+  }
+
+  /// The JSON-RPC id of the request this fake sent last: its peer numbers
+  /// them from 1, and only [request] sends any.
+  var lastRequestId = 0;
 
   JsonMap thread(String id, {List<JsonMap> turns = const [], String? name}) => {
     'id': id,
@@ -179,6 +220,16 @@ class FakeCodexAppServer {
         request.respond(const <String, Object?>{});
       case 'model/list':
         request.respond({'data': listedModels, 'nextCursor': null});
+      case 'collaborationMode/list':
+        final listed = presets;
+        if (listed == null) {
+          request.fail(
+            -32600,
+            'collaborationMode/list requires experimentalApi capability',
+          );
+        } else {
+          request.respond({'data': listed});
+        }
       case 'thread/start':
         request.respond(_threadResult(thread('thr-new')));
       case 'thread/resume':
@@ -208,6 +259,49 @@ class FakeCodexAppServer {
       case 'turn/interrupt':
         request.respond(const <String, Object?>{});
         turn?.interrupted.complete();
+      case 'skills/list':
+        request.respond({
+          'data': [
+            {'cwd': '/work', 'skills': skills, 'errors': <Object?>[]},
+          ],
+        });
+      // Seen live (0.160.0): an empty answer, then a turn of its own that
+      // holds the contextCompaction item.
+      case 'thread/compact/start':
+        request.respond(const <String, Object?>{});
+        final turn = FakeCodexTurn(
+          this,
+          '${params['threadId']}',
+          'turn-${++_turns}',
+        );
+        scheduleMicrotask(() {
+          notify('turn/started', {
+            'threadId': turn.threadId,
+            'turn': {'id': turn.id, 'status': 'inProgress'},
+          });
+          turn.started({'type': 'contextCompaction', 'id': 'compact-1'});
+          turn.completed({'type': 'contextCompaction', 'id': 'compact-1'});
+          turn.end('completed');
+        });
+      // An inline review is a turn on the thread: [onTurn] runs it.
+      case 'review/start':
+        final turn = this.turn = FakeCodexTurn(
+          this,
+          '${params['threadId']}',
+          'turn-${++_turns}',
+        );
+        request.respond({
+          'turn': {'id': turn.id, 'items': <Object?>[], 'status': 'inProgress'},
+          'reviewThreadId': turn.threadId,
+        });
+        final script = onTurn;
+        scheduleMicrotask(() async {
+          if (script != null) {
+            await script(turn);
+          } else {
+            turn.end('completed');
+          }
+        });
       default:
         request.fail(-32600, 'unknown method ${request.method}');
     }
