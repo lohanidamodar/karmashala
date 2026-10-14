@@ -396,6 +396,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _resumeAt = null;
     _announceCommands();
     _announceModel();
+    _measureSoon();
     return {
       'sessionId': id,
       'modes': _toldModesOf(_modes()),
@@ -424,6 +425,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _resumeAt = resumeAt;
     _announceCommands();
     _announceModel();
+    _measureSoon();
     return {'modes': _toldModesOf(_modes()), 'configOptions': _configOptions()};
   }
 
@@ -450,6 +452,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _streamed.clear();
     _lastUsage = null;
     _reported = null;
+    _autoCompactAt = null;
     _agentTurnOpen = false;
     _tools.clear();
     _planCalls.clear();
@@ -1415,7 +1418,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _followFast(message['fast_mode_state']);
     // `/effort` sent as a prompt moves it with no other word.
     final claude = _claude;
-    if (claude != null) unawaited(_refreshEffort(claude));
+    if (claude != null) {
+      unawaited(_refreshEffort(claude));
+      unawaited(_measureContext(claude));
+    }
     final turn = _turn;
     // A turn Claude began itself (a background task finishing) carries its
     // origin and answers no prompt, even one queued behind it.
@@ -1539,8 +1545,55 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         'size': usage.size,
         if (usage.cost case final cost?)
           'cost': {'amount': cost, 'currency': 'USD'},
-        '_meta': {'claudeCode': meta},
+        '_meta': {
+          'claudeCode': meta,
+          if (_autoCompactAt case final at?)
+            'karmashala': {'autoCompactAt': at},
+        },
       });
+
+  /// The context size Claude compacts at, as `get_context_usage` last said.
+  int? _autoCompactAt;
+
+  /// Measures the context soon: after the answer that names the session.
+  void _measureSoon() {
+    final claude = _claude;
+    if (claude != null) scheduleMicrotask(() => _measureContext(claude));
+  }
+
+  /// Claude's own count of its context, as `/context` reads it
+  /// (`get_context_usage`, 2.1.296: totalTokens, maxTokens and
+  /// autoCompactThreshold; `summary` answers from the last response and
+  /// local estimates, with no token-count calls). Told in place of the
+  /// estimate from the last response's usage, which stays where Claude
+  /// refuses it.
+  Future<void> _measureContext(ClaudeProcess claude) async {
+    JsonMap? usage;
+    try {
+      usage = await claude
+          .control('get_context_usage', {'detail': 'summary'})
+          .timeout(const Duration(seconds: 5));
+    } on Object {
+      return;
+    }
+    if (!identical(_claude, claude) || usage == null) return;
+    final used = usage['totalTokens'];
+    final size = usage['maxTokens'];
+    if (used is! int || size is! int || size <= 0) return;
+    final threshold = usage['autoCompactThreshold'];
+    _autoCompactAt = usage['isAutoCompactEnabled'] != false && threshold is int
+        ? threshold
+        : null;
+    final reported = _reported = (
+      used: used,
+      size: size,
+      cost: _reported?.cost,
+    );
+    _sendUsage(reported, {
+      'measured': true,
+      'autoCompactThreshold': ?_autoCompactAt,
+    });
+  }
 
   // Claude's requests of the client.
 

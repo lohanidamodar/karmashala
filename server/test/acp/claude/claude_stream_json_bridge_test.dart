@@ -756,6 +756,48 @@ void main() {
       },
     };
 
+    // 2.1.296, read live: get_context_usage {detail: summary} answered
+    // totalTokens 27180, maxTokens 1000000, autoCompactThreshold 967000
+    // before the first turn, and 31655 after a one-word reply.
+    test("the context meter reads Claude's own count, with where it compacts, "
+        'from the start and after each turn', () async {
+      final machine = FakeClaudeMachine(
+        contextUsage: {
+          'totalTokens': 27180,
+          'maxTokens': 1000000,
+          'autoCompactThreshold': 967000,
+          'isAutoCompactEnabled': true,
+        },
+        turns: [
+          (c, user) async {
+            c.machine.contextUsage = {
+              'totalTokens': 31655,
+              'maxTokens': 1000000,
+              'autoCompactThreshold': 967000,
+              'isAutoCompactEnabled': true,
+            };
+            c.assistant('msg_1', [
+              {'type': 'text', 'text': 'OK'},
+            ]);
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await until(() => host.usage.isNotEmpty);
+      expect(
+        (host.usage.last.contextUsed, host.usage.last.contextSize),
+        (27180, 1000000),
+      );
+      expect(host.usage.last.autoCompactAt, 967000);
+      await rt.send('Reply OK');
+      await rt.awaitTurn();
+      await until(() => host.usage.last.contextUsed == 31655);
+      expect(host.usage.last.autoCompactAt, 967000);
+      await rt.stop();
+    });
+
     test('rate-limit events are usage updates carrying the limits and their '
         'reset in _meta', () async {
       final machine = FakeClaudeMachine(

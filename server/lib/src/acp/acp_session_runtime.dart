@@ -1462,6 +1462,12 @@ class AcpSessionRuntime implements ScreenSession {
     contextSize: update.size,
     costAmount: update.cost?.amount,
     costCurrency: update.cost?.currency,
+    autoCompactAt: switch (asJsonMap(
+      update.meta?['karmashala'],
+    )?['autoCompactAt']) {
+      final int at when at > 0 => at,
+      _ => null,
+    },
   );
 
   /// The agent is gone, so it offers nothing to set: a client's picker for

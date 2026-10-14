@@ -829,6 +829,36 @@ void main() {
       expect(find.text('75% context'), findsOneWidget);
     });
 
+    testWidgets('where the agent compacts on its own is in the tooltip', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SessionStatsChip(
+                stats: null,
+                liveContext: (used: 31655, size: 1000000),
+                autoCompactAt: 967000,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('3% context'), findsOneWidget);
+      final tooltip = tester.widget<Tooltip>(
+        find.ancestor(
+          of: find.text('3% context'),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(
+        tooltip.message,
+        contains('The agent compacts it on its own at 97% (967k).'),
+      );
+    });
+
     testWidgets('a live report of no size is no report', (tester) async {
       await tester.pumpWidget(
         MaterialApp(

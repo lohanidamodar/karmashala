@@ -470,6 +470,7 @@ class _SessionStatsButtonState extends ConsumerState<SessionStatsButton> {
         liveContext: live == null
             ? null
             : (used: live.contextUsed, size: live.contextSize),
+        autoCompactAt: live?.autoCompactAt,
         onTap: () =>
             _controller.isOpen ? _controller.close() : _controller.open(),
       ),
@@ -510,6 +511,7 @@ class SessionStatsChip extends StatelessWidget {
     required this.stats,
     required this.onTap,
     this.liveContext,
+    this.autoCompactAt,
     super.key,
   });
 
@@ -518,7 +520,17 @@ class SessionStatsChip extends StatelessWidget {
   /// The agent's own latest report of its context, ahead of [stats] while a
   /// turn runs. A size of zero is no report.
   final ({int used, int size})? liveContext;
+
+  /// Where the agent said it compacts on its own, in tokens.
+  final int? autoCompactAt;
   final VoidCallback onTap;
+
+  String _compactsAt(int window) => switch (autoCompactAt) {
+    final at? when at > 0 && at <= window =>
+      'The agent compacts it on its own at '
+          '${(at / window * 100).round()}% (${formatCompactCount(at)}). ',
+    _ => '',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -539,6 +551,7 @@ class SessionStatsChip extends StatelessWidget {
         : 'The newest request filled ${(fill * 100).round()}% of the '
               'context window (${formatCompactCount(used!)} '
               'of ${formatCompactCount(window!)} tokens). '
+              '${_compactsAt(window)}'
               'Opens Session stats.';
 
     return Tooltip(

@@ -21,6 +21,7 @@ class FakeClaudeMachine {
     this.models = defaultModels,
     this.ignoreInterrupt = false,
     this.autoMode = true,
+    this.contextUsage,
   }) : turns = List.of(turns),
        conversations = {...conversations};
 
@@ -36,6 +37,9 @@ class FakeClaudeMachine {
 
   /// Whether the model offers auto mode; 2.1.296 refuses it on Haiku 4.5.
   final bool autoMode;
+
+  /// What `get_context_usage` answers; null refuses it, as an older Claude.
+  Json? contextUsage;
 
   /// Every process started, in order.
   final launched = <FakeClaude>[];
@@ -229,6 +233,8 @@ class FakeClaude {
       case 'set_model':
         model = request['model'] as String?;
         _answer(id, null);
+      case 'get_context_usage' when machine.contextUsage != null:
+        _answer(id, machine.contextUsage);
       case 'apply_flag_settings':
         flags.addAll(request['settings'] as Json);
         _answer(id, null);

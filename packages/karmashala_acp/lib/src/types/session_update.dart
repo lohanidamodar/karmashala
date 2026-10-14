@@ -71,6 +71,7 @@ sealed class SessionUpdate {
           final cost? => UsageCost.fromJson(cost),
           null => null,
         },
+        meta: json.object('_meta'),
       ),
       _ => UnknownUpdate(kind ?? '', json),
     };
@@ -346,11 +347,19 @@ final class UsageCost {
 
 /// Context used of context available, in tokens.
 final class UsageUpdate extends SessionUpdate {
-  const UsageUpdate({required this.used, required this.size, this.cost});
+  const UsageUpdate({
+    required this.used,
+    required this.size,
+    this.cost,
+    this.meta,
+  });
 
   final int used;
   final int size;
   final UsageCost? cost;
+
+  /// The update's `_meta`, where an agent says more than ACP has fields for.
+  final JsonMap? meta;
 
   @override
   String get sessionUpdate => 'usage_update';
@@ -361,6 +370,7 @@ final class UsageUpdate extends SessionUpdate {
     'used': used,
     'size': size,
     'cost': cost?.toJson(),
+    '_meta': meta,
   });
 }
 
