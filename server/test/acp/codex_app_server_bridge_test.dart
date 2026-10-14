@@ -38,9 +38,10 @@ const _spec = AcpLaunchSpec(
     PermissionRisk.readOnly: ['read-only'],
     PermissionRisk.ask: ['workspace-write'],
     PermissionRisk.acceptEdits: ['workspace-write'],
-    PermissionRisk.autoRun: ['agent'],
+    PermissionRisk.autoRun: ['agent', 'auto'],
     PermissionRisk.bypass: ['agent-full-access'],
   },
+  screenedModes: {'auto'},
 );
 
 /// Codex's app-server, translated to ACP in-process, under the real session
@@ -215,6 +216,7 @@ void main() {
       expect(modes.availableModes.map((m) => m.id), [
         'read-only',
         'workspace-write',
+        'auto',
         'agent',
         'agent-full-access',
       ]);
@@ -270,6 +272,40 @@ void main() {
     expect(turn['effort'], 'xhigh');
     expect(turn['approvalPolicy'], 'never');
     expect((turn['sandboxPolicy']! as Map)['writableRoots'], ['/extra']);
+    await runtime.stop();
+  });
+
+  test("Auto is Codex's own reviewer: it rides the turn as auto_review, a "
+      'mode left hands asks back to the person, and a thread Codex reports '
+      'under the reviewer shows Auto', () async {
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async => turn.end('completed'),
+    );
+    final runtime = runtimeOver(codex);
+    await runtime.start();
+    await runtime.setMode('auto');
+    await runtime.send('Tidy up');
+    await runtime.awaitTurn();
+    final auto = codex.callsTo('turn/start').last;
+    expect(auto['approvalPolicy'], 'on-request');
+    expect(auto['approvalsReviewer'], 'auto_review');
+    expect((auto['sandboxPolicy']! as Map)['type'], 'workspaceWrite');
+
+    await runtime.setMode('workspace-write');
+    await runtime.send('Again');
+    await runtime.awaitTurn();
+    expect(codex.callsTo('turn/start').last['approvalsReviewer'], 'user');
+
+    codex.notify('thread/settings/updated', {
+      'threadId': 'thr-new',
+      'threadSettings': {
+        'approvalPolicy': 'on-request',
+        'approvalsReviewer': 'auto_review',
+        'sandboxPolicy': {'type': 'workspaceWrite'},
+      },
+    });
+    await pump(40);
+    expect(runtime.modes!.currentModeId, 'auto');
     await runtime.stop();
   });
 

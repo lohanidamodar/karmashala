@@ -59,8 +59,9 @@ final class CodexAppServerBridge implements AcpTransport {
 
   String? _threadId;
   String _cwd = '';
-  CodexMode _mode = kCodexModes[1];
+  CodexMode _mode = codexModeById('workspace-write')!;
   JsonMap? _sandbox;
+  Object? _reviewer;
   var _modeChosen = false;
   String? _model;
   String? _effort;
@@ -319,7 +320,12 @@ final class CodexAppServerBridge implements AcpTransport {
     _threadId = thread['id'] as String?;
     _cwd = '${opened['cwd'] ?? thread['cwd'] ?? ''}';
     _sandbox = opened['sandbox'] is Map ? _map(opened['sandbox']) : null;
-    _mode = codexModeOf(opened['approvalPolicy'], _sandbox);
+    _reviewer = opened['approvalsReviewer'];
+    _mode = codexModeOf(
+      opened['approvalPolicy'],
+      _sandbox,
+      approvalsReviewer: _reviewer,
+    );
     _model = opened['model'] as String? ?? thread['model'] as String?;
     _effort =
         opened['reasoningEffort'] as String? ??
@@ -369,7 +375,14 @@ final class CodexAppServerBridge implements AcpTransport {
     if (settings['sandboxPolicy'] case final Map<Object?, Object?> sandbox) {
       _sandbox = _map(sandbox);
     }
-    final mode = codexModeOf(settings['approvalPolicy'], _sandbox);
+    if (settings.containsKey('approvalsReviewer')) {
+      _reviewer = settings['approvalsReviewer'];
+    }
+    final mode = codexModeOf(
+      settings['approvalPolicy'],
+      _sandbox,
+      approvalsReviewer: _reviewer,
+    );
     if (mode.id != _mode.id) {
       _mode = mode;
       _update({
@@ -482,9 +495,12 @@ final class CodexAppServerBridge implements AcpTransport {
           _dropNulls({
             'threadId': thread,
             'input': codexInput(_list(params['prompt'])),
+            // The reviewer always rides with the mode, so leaving Auto
+            // hands asks back to the person; each sticks for later turns.
             if (_modeChosen) ...{
               'approvalPolicy': _mode.approvalPolicy,
               'sandboxPolicy': codexSandboxPolicy(_mode, _sandbox),
+              'approvalsReviewer': _mode.approvalsReviewer,
             },
             if (_modelChosen) ...{'model': _model, 'effort': _effort},
           }),

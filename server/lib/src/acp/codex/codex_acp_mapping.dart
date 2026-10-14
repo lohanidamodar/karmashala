@@ -7,18 +7,24 @@ import 'package:path/path.dart' as p;
 /// a live session of the same binary.
 const String kCodexAppServerProtocolSource = 'codex-cli 0.160.0 app-server v2';
 
-/// One of the ACP modes the bridge offers: an approval policy and a sandbox,
-/// as `thread/start` and `turn/start` take them.
+/// One of the ACP modes the bridge offers: an approval policy, a sandbox and
+/// who reviews what asks, as `thread/start` and `turn/start` take them.
 typedef CodexMode = ({
   String id,
   String name,
   String description,
   String approvalPolicy,
   String sandboxType,
+  String approvalsReviewer,
 });
 
 /// The ids are the ones the codex-acp adapter offered, so a stored choice
-/// and the descriptor's permission axis still name a mode that exists.
+/// and the descriptor's permission axis still name a mode that exists;
+/// `auto` is Codex's own.
+///
+/// No mode sends `approvalPolicy: untrusted`: the schema still lists it, but
+/// 0.160.0 says `approval_policy = "untrusted" is no longer supported` and
+/// its `--ask-for-approval` offers only on-request and never.
 const List<CodexMode> kCodexModes = [
   (
     id: 'read-only',
@@ -26,6 +32,7 @@ const List<CodexMode> kCodexModes = [
     description: 'Reads and proposes; asks before changing anything.',
     approvalPolicy: 'on-request',
     sandboxType: 'readOnly',
+    approvalsReviewer: 'user',
   ),
   (
     id: 'workspace-write',
@@ -33,6 +40,20 @@ const List<CodexMode> kCodexModes = [
     description: 'Writes inside the workspace; asks before anything outside.',
     approvalPolicy: 'on-request',
     sandboxType: 'workspaceWrite',
+    approvalsReviewer: 'user',
+  ),
+  // `approvalsReviewer: auto_review` hands what Codex would ask to "a
+  // carefully prompted subagent" that approves or denies it by risk
+  // (ApprovalsReviewer, 0.160.0 schema).
+  (
+    id: 'auto',
+    name: 'Auto',
+    description:
+        'Writes inside the workspace; what it would ask, a Codex reviewer '
+        'approves or denies by risk.',
+    approvalPolicy: 'on-request',
+    sandboxType: 'workspaceWrite',
+    approvalsReviewer: 'auto_review',
   ),
   (
     id: 'agent',
@@ -40,6 +61,7 @@ const List<CodexMode> kCodexModes = [
     description: 'Runs without asking, inside the sandbox.',
     approvalPolicy: 'never',
     sandboxType: 'workspaceWrite',
+    approvalsReviewer: 'user',
   ),
   (
     id: 'agent-full-access',
@@ -47,6 +69,7 @@ const List<CodexMode> kCodexModes = [
     description: 'Runs without asking and without a sandbox.',
     approvalPolicy: 'never',
     sandboxType: 'dangerFullAccess',
+    approvalsReviewer: 'user',
   ),
 ];
 
@@ -57,13 +80,21 @@ CodexMode? codexModeById(String id) {
   return null;
 }
 
-/// The mode a thread's own approval policy and sandbox amount to.
-CodexMode codexModeOf(Object? approvalPolicy, JsonMap? sandbox) {
+CodexMode _mode(String id) => codexModeById(id)!;
+
+/// The mode a thread's own approval policy, sandbox and reviewer amount to.
+CodexMode codexModeOf(
+  Object? approvalPolicy,
+  JsonMap? sandbox, {
+  Object? approvalsReviewer,
+}) {
   final never = approvalPolicy == 'never';
   return switch (sandbox?['type']) {
-    'readOnly' => kCodexModes[0],
-    'dangerFullAccess' => kCodexModes[3],
-    _ => never ? kCodexModes[2] : kCodexModes[1],
+    'readOnly' => _mode('read-only'),
+    'dangerFullAccess' => _mode('agent-full-access'),
+    _ when never => _mode('agent'),
+    _ when approvalsReviewer == 'auto_review' => _mode('auto'),
+    _ => _mode('workspace-write'),
   };
 }
 
