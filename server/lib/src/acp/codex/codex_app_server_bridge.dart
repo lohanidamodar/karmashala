@@ -127,6 +127,11 @@ final class CodexAppServerBridge implements AcpTransport {
     if (notification.method == AcpMethods.sessionCancel) _interrupt();
   }
 
+  /// Opted in to Codex's experimental API, which 0.160.0's schema gates the
+  /// options its own TUI offers behind: `collaborationMode/list` and a turn's
+  /// `collaborationMode` (Plan), and an approval's `availableDecisions`. It
+  /// also lets Codex ask `currentTime/read`, answered from this machine's
+  /// clock. Every stable shape stays as it was; experimental ones add fields.
   Future<JsonMap> _initialize(JsonMap params) async {
     final info = _map(params['clientInfo']);
     final init = _map(
@@ -136,7 +141,7 @@ final class CodexAppServerBridge implements AcpTransport {
           'title': info['title'],
           'version': info['version'] ?? '0',
         },
-        'capabilities': {'experimentalApi': false, 'requestAttestation': false},
+        'capabilities': {'experimentalApi': true, 'requestAttestation': false},
       }),
     );
     _codex.notify('initialized', null);
@@ -857,6 +862,10 @@ final class CodexAppServerBridge implements AcpTransport {
           request.respond({'answers': await _questions(params)});
         case 'execCommandApproval' || 'applyPatchApproval':
           request.respond({'decision': 'denied'});
+        case 'currentTime/read':
+          request.respond({
+            'currentTimeAt': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          });
         default:
           request.fail(
             JsonRpcErrorCodes.methodNotFound,

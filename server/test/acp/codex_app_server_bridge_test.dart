@@ -113,6 +113,11 @@ void main() {
       'title': null,
       'version': '9.9.9',
     });
+    // What Codex's own TUI offers (Plan, its decisions) is experimental API.
+    expect(codex.callsTo('initialize').single['capabilities'], {
+      'experimentalApi': true,
+      'requestAttestation': false,
+    });
     expect(codex.notifications, contains('initialized'));
 
     final again = FakeCodexAppServer();
@@ -131,6 +136,27 @@ void main() {
     expect(init.authMethods.single.description, contains('plus'));
     // The account's email is not repeated anywhere ACP carries.
     expect(jsonEncode(init.toJson()), isNot(contains('someone@example.com')));
+  });
+
+  test('Codex asking the time is answered in whole Unix seconds', () async {
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.server.request('currentTime/read', {
+          'threadId': turn.threadId,
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final runtime = runtimeOver(codex);
+    await runtime.start();
+    final before = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await runtime.send('What time is it?');
+    await runtime.awaitTurn();
+    final at = ((await answered)! as Map)['currentTimeAt']! as int;
+    expect(at, inInclusiveRange(before, before + 60));
+    await runtime.stop();
   });
 
   test('authenticate runs Codex\'s ChatGPT login, says its link on stderr, '
