@@ -38,30 +38,44 @@ class OverviewDoneCard extends StatelessWidget {
     this.leading = 0,
     this.footer,
     this.family = const [],
+    this.compact = false,
+    this.bare = false,
     super.key,
   });
 
   final OverviewCard card;
   final ValueChanged<OverviewCard> onOpen;
 
-  /// See [OverviewCardFrame.leading]; with it, the avatar names the agent.
+  /// See [OverviewCardFrame.leading]; with it, the avatar names the agent
+  /// and carries the pick box.
   final double leading;
   final Widget? footer;
 
   /// The sessions below it on the tree, archived with it by Archive family.
   final List<OverviewCard> family;
 
+  /// See [OverviewWorkCard.compact] and [OverviewCardFrame.bare].
+  final bool compact;
+  final bool bare;
+
   @override
   Widget build(BuildContext context) => OverviewCardFrame(
     card: card,
     onOpen: onOpen,
     leading: leading,
+    compact: compact,
+    bare: bare,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        OverviewCardHeader(card: card, ring: leading == 0),
-        const SizedBox(height: Insets.sm),
+        OverviewCardHeader(
+          card: card,
+          ring: leading == 0,
+          pick: leading == 0,
+          stacked: compact,
+        ),
+        SizedBox(height: compact ? Insets.xs : Insets.sm),
         OverviewLatestMessage(sessionId: card.id),
         const SizedBox(height: Insets.xs),
         OverviewMetaLine(card: card),
@@ -69,7 +83,7 @@ class OverviewDoneCard extends StatelessWidget {
           const SizedBox(height: Insets.xs),
           footer,
         ],
-        const SizedBox(height: Insets.sm),
+        SizedBox(height: compact ? Insets.xs : Insets.sm),
         OverviewCloseActions(card: card, family: family),
       ],
     ),
@@ -143,6 +157,8 @@ class _OverviewCloseActionsState extends ConsumerState<OverviewCloseActions> {
       for (final below in widget.family) ?below.entry.native,
     ].where((s) => !s.isArchived).toList();
     final idle = !_busy;
+    // Under a thumb, compact to see and a thumb's target to hit.
+    final compact = UiDensity.of(context).compactButton;
     return Wrap(
       alignment: WrapAlignment.end,
       spacing: Insets.xs,
@@ -151,6 +167,7 @@ class _OverviewCloseActionsState extends ConsumerState<OverviewCloseActions> {
         if (widget.family.isNotEmpty && family.isNotEmpty)
           TextButton(
             key: ValueKey('overview-archive-family:$id'),
+            style: compact,
             onPressed: idle
                 ? () => archiveSessionsFromUi(context, ref, family)
                 : null,
@@ -161,6 +178,7 @@ class _OverviewCloseActionsState extends ConsumerState<OverviewCloseActions> {
             sessionId: id,
             builder: (resuming) => TextButton(
               key: ValueKey('overview-done-archive:$id'),
+              style: compact,
               onPressed: idle && !resuming
                   ? () => archiveSessionsFromUi(context, ref, [native])
                   : null,
@@ -172,6 +190,7 @@ class _OverviewCloseActionsState extends ConsumerState<OverviewCloseActions> {
             message: 'Sends its last answer to ${parent.entry.title}',
             child: OutlinedButton(
               key: ValueKey('overview-hand-back:$id'),
+              style: compact,
               onPressed: !idle
                   ? null
                   : () =>
@@ -195,6 +214,7 @@ class _OverviewCloseActionsState extends ConsumerState<OverviewCloseActions> {
             message: _mergeTip(merge, base),
             child: FilledButton(
               key: ValueKey('overview-merge:$id'),
+              style: compact,
               onPressed: !idle || merge == null || !merge.isEnabled
                   ? null
                   : () => _run(

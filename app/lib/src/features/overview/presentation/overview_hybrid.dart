@@ -205,6 +205,8 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         // A phone draws the same trees, its avatars a step smaller.
         final phone = box.maxWidth < WidthClass.mediumMin;
         final gutter = phone ? Insets.lg : Insets.xl;
+        // Between families: a list's step on a phone.
+        final gap = phone ? Insets.sm : Insets.md;
         final inner = box.maxWidth - gutter * 2;
         final sideBySide =
             sections.queue.isNotEmpty &&
@@ -299,7 +301,11 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     ),
                   ),
                 ),
-                ..._grid([for (final node in trees) tree(node)], across),
+                ..._grid(
+                  [for (final node in trees) tree(node)],
+                  across,
+                  gap: gap,
+                ),
               ],
             if (forest.ready.isNotEmpty) ...[
               EyebrowLabel(
@@ -310,9 +316,11 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   bottom: Insets.sm,
                 ),
               ),
-              ..._grid([
-                for (final node in forest.ready) tree(node, ready: true),
-              ], across),
+              ..._grid(
+                [for (final node in forest.ready) tree(node, ready: true)],
+                across,
+                gap: gap,
+              ),
             ],
           ],
         );
@@ -395,16 +403,20 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   }
 
   /// [cells] — whole families — in rows of [across], each family keeping its
-  /// own height, from the top.
-  static List<Widget> _grid(List<Widget> cells, int across) => [
+  /// own height, from the top, [gap] apart.
+  static List<Widget> _grid(
+    List<Widget> cells,
+    int across, {
+    required double gap,
+  }) => [
     for (var start = 0; start < cells.length; start += across)
       Padding(
-        padding: const EdgeInsets.only(bottom: Insets.md),
+        padding: EdgeInsets.only(bottom: gap),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var i = start; i < start + across; i++) ...[
-              if (i > start) const SizedBox(width: Insets.md),
+              if (i > start) SizedBox(width: gap),
               Expanded(
                 child: i < cells.length ? cells[i] : const SizedBox.shrink(),
               ),

@@ -170,63 +170,98 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
       _ => 'Message…',
     };
     final said = _said;
+    // Under a thumb the field is a compact control's height, as the app's
+    // other dense fields are, and Send keeps a thumb's target: laid over the
+    // field's end, its hit area reaching past the field's top and bottom.
+    final touch = density.isTouch;
+    const reach = (Touch.target - Touch.compactControl) / 2;
+    final send = IconButton(
+      key: ValueKey('overview-composer-send:${card.id}'),
+      tooltip: 'Send to ${card.entry.title}',
+      visualDensity: touch ? null : VisualDensity.compact,
+      style: touch
+          ? IconButton.styleFrom(
+              minimumSize: const Size.square(Touch.compactControl),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.padded,
+            )
+          : null,
+      iconSize: density.icon,
+      onPressed: idle ? _send : null,
+      icon: _sending
+          ? const InlineSpinner()
+          : Icon(AppIcons.paperPlaneRight, color: scheme.primary),
+    );
+    final field = TextField(
+      key: ValueKey('overview-composer:${card.id}'),
+      controller: _text,
+      focusNode: _focus,
+      minLines: 1,
+      maxLines: 4,
+      enabled: idle,
+      textInputAction: TextInputAction.newline,
+      keyboardType: TextInputType.multiline,
+      style: theme.textTheme.bodySmall,
+      onChanged: (_) {
+        if (_said != null) setState(() => _said = null);
+      },
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: theme.textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        filled: true,
+        fillColor: scheme.surfaceContainerLowest,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.sm,
+        ),
+        prefixIcon: Icon(
+          AppIcons.chatCircle,
+          size: density.iconSmall + Insets.xxs,
+          color: scheme.onSurfaceVariant,
+        ),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: Insets.xl + Insets.xs,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(Radii.sm),
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(Radii.sm),
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        // Under a thumb, room for Send, which is laid over it.
+        suffixIcon: touch ? const SizedBox(width: Touch.target) : send,
+        suffixIconConstraints: touch
+            ? const BoxConstraints(minWidth: Touch.target)
+            : null,
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        TextField(
-          key: ValueKey('overview-composer:${card.id}'),
-          controller: _text,
-          focusNode: _focus,
-          minLines: 1,
-          maxLines: 4,
-          enabled: idle,
-          textInputAction: TextInputAction.newline,
-          keyboardType: TextInputType.multiline,
-          style: theme.textTheme.bodySmall,
-          onChanged: (_) {
-            if (_said != null) setState(() => _said = null);
-          },
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: hint,
-            hintStyle: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-            filled: true,
-            fillColor: scheme.surfaceContainerLowest,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: Insets.sm,
-              vertical: Insets.sm,
-            ),
-            prefixIcon: Icon(
-              AppIcons.chatCircle,
-              size: density.iconSmall + Insets.xxs,
-              color: scheme.onSurfaceVariant,
-            ),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: Insets.xl + Insets.xs,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(Radii.sm),
-              borderSide: BorderSide(color: scheme.outlineVariant),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(Radii.sm),
-              borderSide: BorderSide(color: scheme.outlineVariant),
-            ),
-            suffixIcon: IconButton(
-              key: ValueKey('overview-composer-send:${card.id}'),
-              tooltip: 'Send to ${card.entry.title}',
-              visualDensity: VisualDensity.compact,
-              iconSize: density.icon,
-              onPressed: idle ? _send : null,
-              icon: _sending
-                  ? const InlineSpinner()
-                  : Icon(AppIcons.paperPlaneRight, color: scheme.primary),
-            ),
-          ),
-        ),
+        if (touch)
+          Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: reach),
+                child: field,
+              ),
+              PositionedDirectional(
+                end: 0,
+                bottom: 0,
+                width: Touch.target,
+                height: Touch.target,
+                child: send,
+              ),
+            ],
+          )
+        else
+          field,
         if (said != null || _sent != null)
           Padding(
             padding: const EdgeInsets.only(top: Insets.xs, left: Insets.xs),

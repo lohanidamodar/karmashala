@@ -38,6 +38,8 @@ class OverviewCardFrame extends ConsumerWidget {
     required this.onOpen,
     required this.child,
     this.leading = 0,
+    this.compact = false,
+    this.bare = false,
     super.key,
   });
 
@@ -48,6 +50,13 @@ class OverviewCardFrame extends ConsumerWidget {
   /// Room at the start for what sits over the card's edge: the tree's avatar.
   final double leading;
 
+  /// A phone's card: padded a step tighter.
+  final bool compact;
+
+  /// No surface or edge of its own, inside a frame that already draws them:
+  /// a family's root on a phone. The keyboard's ring still shows.
+  final bool bare;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
@@ -55,17 +64,20 @@ class OverviewCardFrame extends ConsumerWidget {
       overviewFocusProvider.select((f) => f.selected == card.id),
     );
     final radius = BorderRadius.circular(Radii.lg);
+    final pad = compact ? Insets.sm : Insets.md;
     return Material(
       key: ValueKey('overview-card:${card.id}'),
-      color: scheme.surfaceContainerLow,
+      color: bare ? Colors.transparent : scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
-        side: BorderSide(
-          color: selected
-              ? scheme.primary
-              : overviewCardEdge(context, card.state),
-          width: selected ? StateLayers.focusRingWidth * 2 : 1,
-        ),
+        side: selected
+            ? BorderSide(
+                color: scheme.primary,
+                width: StateLayers.focusRingWidth * 2,
+              )
+            : bare
+            ? BorderSide.none
+            : BorderSide(color: overviewCardEdge(context, card.state)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -88,12 +100,7 @@ class OverviewCardFrame extends ConsumerWidget {
         // Hovered or holding the keys, the card shows its End.
         child: OverviewHoverScope(
           child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              Insets.md + leading,
-              Insets.md,
-              Insets.md,
-              Insets.md,
-            ),
+            padding: EdgeInsets.fromLTRB(pad + leading, pad, pad, pad),
             child: child,
           ),
         ),
@@ -110,6 +117,8 @@ class OverviewCardHeader extends ConsumerWidget {
     required this.card,
     this.chip,
     this.ring = true,
+    this.pick = true,
+    this.stacked = false,
     super.key,
   });
 
@@ -121,6 +130,13 @@ class OverviewCardHeader extends ConsumerWidget {
   /// The agent's ring before the title; off where an avatar says it.
   final bool ring;
 
+  /// The pick box before the title; off where the avatar's face carries it.
+  final bool pick;
+
+  /// The state, End and ⋯ on a row of their own under the title, from its
+  /// start: a phone's tree root, whose title keeps the width.
+  final bool stacked;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -131,9 +147,12 @@ class OverviewCardHeader extends ConsumerWidget {
     final titleStyle = theme.textTheme.bodyMedium?.copyWith(
       fontWeight: FontWeight.w600,
     );
-    return Row(
+    final state = ExcludeSemantics(
+      child: chip ?? OverviewStatePill(card: card),
+    );
+    final head = Row(
       children: [
-        OverviewSelectBox(card: card),
+        if (pick) OverviewSelectBox(card: card),
         if (ring) ...[
           OverviewAgentRing(
             card: card,
@@ -188,21 +207,42 @@ class OverviewCardHeader extends ConsumerWidget {
                 : null,
             // The menu and End stay their own buttons; the state is in the
             // title's label.
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                OverviewNewBadge(card: card),
-                const SizedBox(width: Insets.sm),
-                Flexible(
-                  child: ExcludeSemantics(
-                    child: chip ?? OverviewStatePill(card: card),
+            trailing: stacked
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OverviewNewBadge(card: card),
+                      const SizedBox(width: Insets.sm),
+                      Flexible(child: state),
+                      OverviewEndButton(card: card),
+                      OverviewCardMenu(card: card),
+                    ],
                   ),
-                ),
-                OverviewEndButton(card: card),
-                OverviewCardMenu(card: card),
-              ],
-            ),
           ),
+        ),
+      ],
+    );
+    if (!stacked) return head;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        head,
+        Row(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(child: state),
+                  const SizedBox(width: Insets.xs),
+                  OverviewNewBadge(card: card),
+                ],
+              ),
+            ),
+            OverviewEndButton(card: card),
+            OverviewCardMenu(card: card),
+          ],
         ),
       ],
     );
@@ -247,27 +287,43 @@ class OverviewWorkCard extends ConsumerWidget {
     required this.onOpen,
     this.leading = 0,
     this.footer,
+    this.compact = false,
+    this.bare = false,
     super.key,
   });
 
   final OverviewCard card;
   final ValueChanged<OverviewCard> onOpen;
 
-  /// See [OverviewCardFrame.leading]; with it, the avatar names the agent.
+  /// See [OverviewCardFrame.leading]; with it, the avatar names the agent
+  /// and carries the pick box.
   final double leading;
   final Widget? footer;
+
+  /// See [OverviewCardFrame.compact]: its state on a row of its own, too.
+  final bool compact;
+
+  /// See [OverviewCardFrame.bare].
+  final bool bare;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => OverviewCardFrame(
     card: card,
     onOpen: onOpen,
     leading: leading,
+    compact: compact,
+    bare: bare,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        OverviewCardHeader(card: card, ring: leading == 0),
-        const SizedBox(height: Insets.sm),
+        OverviewCardHeader(
+          card: card,
+          ring: leading == 0,
+          pick: leading == 0,
+          stacked: compact,
+        ),
+        SizedBox(height: compact ? Insets.xs : Insets.sm),
         if (card.waitingOn != null)
           OverviewWaitingOnLine(card: card)
         else
