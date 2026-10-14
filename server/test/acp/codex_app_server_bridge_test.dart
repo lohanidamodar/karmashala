@@ -278,6 +278,99 @@ void main() {
     await runtime.stop();
   });
 
+  group("the slash menu is Codex's own commands and its skills", () {
+    test('compact, review and each enabled skill are offered, and read '
+        'again when Codex says its skills changed', () async {
+      final codex = FakeCodexAppServer();
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      expect(codex.callsTo('skills/list').single['cwds'], ['/work']);
+      final offered = runtime.commands!.commands;
+      expect(offered.map((c) => c.name), ['compact', 'review', 'pdf:pdf']);
+      expect(offered.last.description, 'Read and make PDFs');
+
+      codex.skills = [
+        {
+          'name': 'deploy',
+          'description': 'Ship it.',
+          'path': '/home/someone/.codex/skills/deploy/SKILL.md',
+          'enabled': true,
+        },
+      ];
+      codex.notify('skills/changed', const {});
+      await pump(40);
+      expect(runtime.commands!.commands.map((c) => c.name), [
+        'compact',
+        'review',
+        'deploy',
+      ]);
+      await runtime.stop();
+    });
+
+    test('/compact runs thread/compact/start, a turn of its own, and the '
+        'prompt ends with it', () async {
+      final codex = FakeCodexAppServer();
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('/compact');
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      expect(codex.callsTo('thread/compact/start').single, {
+        'threadId': 'thr-new',
+      });
+      expect(codex.callsTo('turn/start'), isEmpty);
+      await runtime.stop();
+    });
+
+    test(
+      '/review reviews the uncommitted changes, or what it is told',
+      () async {
+        final codex = FakeCodexAppServer();
+        final runtime = runtimeOver(codex);
+        await runtime.start();
+        await runtime.send('/review');
+        await runtime.awaitTurn();
+        await runtime.send('/review the login code');
+        await runtime.awaitTurn();
+        expect(codex.callsTo('review/start').map((c) => c['target']), [
+          {'type': 'uncommittedChanges'},
+          {'type': 'custom', 'instructions': 'the login code'},
+        ]);
+        await runtime.stop();
+      },
+    );
+
+    test('a skill rides the turn as Codex\'s skill input, its words after '
+        'it', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async => turn.end('completed'),
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.send('/pdf:pdf read the report');
+      await runtime.awaitTurn();
+      expect(codex.callsTo('turn/start').single['input'], [
+        {
+          'type': 'skill',
+          'name': 'pdf:pdf',
+          'path': '/home/someone/.codex/skills/pdf/SKILL.md',
+        },
+        {
+          'type': 'text',
+          'text': r'$pdf:pdf read the report',
+          'text_elements': <Object?>[],
+        },
+      ]);
+      // A slash nobody offered is only text.
+      await runtime.send('/nope at all');
+      await runtime.awaitTurn();
+      expect(
+        (codex.callsTo('turn/start').last['input']! as List).single,
+        containsPair('text', '/nope at all'),
+      );
+      await runtime.stop();
+    });
+  });
+
   group("Plan is Codex's own collaboration mode", () {
     test('offered only where collaborationMode/list lists it', () async {
       final codex = FakeCodexAppServer()..presets = null;

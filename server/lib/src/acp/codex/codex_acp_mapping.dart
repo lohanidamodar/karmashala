@@ -243,6 +243,60 @@ List<CodexDecision> codexCommandDecisions(Object? available) {
   ];
 }
 
+/// Codex's own commands the app-server carries out, in its TUI's words
+/// (0.160.0): `compact` is `thread/compact/start`, which runs as a turn of
+/// its own (seen live), and `review` is `review/start`.
+const List<JsonMap> kCodexCommands = [
+  {
+    'name': 'compact',
+    'description':
+        'summarize conversation to prevent hitting the context '
+        'limit',
+  },
+  {
+    'name': 'review',
+    'description': 'review my current changes and find issues',
+    'input': {'hint': 'what to review instead (optional)'},
+  },
+];
+
+/// A skill `skills/list` offers, as the chat runs it.
+typedef CodexSkill = ({String name, String description, String path});
+
+/// The enabled skills in a `skills/list` answer, each once, none named as
+/// one of [kCodexCommands].
+List<CodexSkill> codexSkills(Object? listed) {
+  final seen = {for (final c in kCodexCommands) c['name']};
+  return [
+    for (final entry in _objects(listed is Map ? listed['data'] : null))
+      for (final skill in _objects(entry['skills']))
+        if (skill case {
+          'name': final String name,
+          'path': final String path,
+        } when skill['enabled'] != false && seen.add(name))
+          (
+            name: name,
+            description: switch (skill) {
+              {'interface': {'shortDescription': final String short}} => short,
+              {'shortDescription': final String short} => short,
+              _ => '${skill['description'] ?? ''}',
+            },
+            path: path,
+          ),
+  ];
+}
+
+/// ACP's `available_commands_update` commands: Codex's own, then its skills.
+List<JsonMap> codexAvailableCommands(List<CodexSkill> skills) => [
+  ...kCodexCommands,
+  for (final skill in skills)
+    {
+      'name': skill.name,
+      'description': skill.description,
+      'input': {'hint': 'what to do with it (optional)'},
+    },
+];
+
 /// One field of an MCP server's elicitation form, as the chat asks it:
 /// [kind] is `string`, `number`, `integer`, `boolean` or `enum`, and
 /// [choices] an enum's (value, label) pairs.

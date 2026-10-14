@@ -349,6 +349,7 @@ final class CodexAppServerBridge implements AcpTransport {
         thread['reasoningEffort'] as String?;
     _models = await _listModels();
     await _readPresets();
+    await _readSkills();
     if (thread['name'] case final String name when name.isNotEmpty) {
       _update({'sessionUpdate': 'session_info_update', 'title': name});
     }
@@ -555,8 +556,40 @@ final class CodexAppServerBridge implements AcpTransport {
     }
     final done = _turn = Completer<JsonMap>();
     _cancelAsked = false;
+    final prompt = _list(params['prompt']);
     try {
-      await _startTurn(thread, codexInput(_list(params['prompt'])));
+      switch (_commandIn(prompt)) {
+        case ('compact', _):
+          _newTurn();
+          await _call('thread/compact/start', {'threadId': thread});
+        case ('review', final String rest):
+          _newTurn();
+          final started = _map(
+            await _call('review/start', {
+              'threadId': thread,
+              'target': rest.isEmpty
+                  ? {'type': 'uncommittedChanges'}
+                  : {'type': 'custom', 'instructions': rest},
+            }),
+          );
+          _turnId ??= _map(started['turn'])['id'] as String?;
+          if (_interruptWanted) _interrupt();
+        case (final String name, final String rest)
+            when _skills.any((s) => s.name == name):
+          final skill = _skills.firstWhere((s) => s.name == name);
+          await _startTurn(thread, [
+            {'type': 'skill', 'name': skill.name, 'path': skill.path},
+            ...codexInput([
+              {
+                'type': 'text',
+                'text': '\$$name${rest.isEmpty ? '' : ' $rest'}',
+              },
+              ...prompt.skip(1),
+            ]),
+          ]);
+        default:
+          await _startTurn(thread, codexInput(prompt));
+      }
       return await done.future;
     } finally {
       if (identical(_turn, done)) _turn = null;
@@ -564,12 +597,47 @@ final class CodexAppServerBridge implements AcpTransport {
     }
   }
 
-  /// One Codex turn on [thread], with what the person chose since.
-  Future<void> _startTurn(String thread, List<JsonMap> input) async {
+  /// The command a prompt opens with, `/name rest`, and the rest: only a
+  /// prompt whose first block is text starting with the slash.
+  static (String, String)? _commandIn(List<JsonMap> prompt) {
+    final first = prompt.firstOrNull;
+    if (first == null || first['type'] != 'text') return null;
+    final match = RegExp(
+      r'^/(\S+)(?:\s+([\s\S]*))?$',
+    ).firstMatch('${first['text'] ?? ''}'.trim());
+    if (match == null) return null;
+    return (match[1]!, (match[2] ?? '').trim());
+  }
+
+  void _newTurn() {
     _turnId = null;
     _interruptWanted = false;
     _turnDiff = null;
     _turnPlan = null;
+  }
+
+  /// Codex's skills for the thread's folder, announced with its own
+  /// commands as the chat's slash commands; read again on `skills/changed`.
+  Future<void> _readSkills() async {
+    try {
+      final listed = await _codex.call('skills/list', {
+        'cwds': [if (_cwd.isNotEmpty) _cwd],
+      });
+      _skills = codexSkills(listed);
+    } on AcpRpcError {
+      _skills = const [];
+    }
+    _update({
+      'sessionUpdate': 'available_commands_update',
+      'availableCommands': codexAvailableCommands(_skills),
+    });
+  }
+
+  List<CodexSkill> _skills = const [];
+
+  /// One Codex turn on [thread], with what the person chose since.
+  Future<void> _startTurn(String thread, List<JsonMap> input) async {
+    _newTurn();
     final started = _map(
       await _call(
         'turn/start',
@@ -831,8 +899,16 @@ final class CodexAppServerBridge implements AcpTransport {
             },
           },
         });
+      case 'turn/started':
+        // A compaction's turn is named only here.
+        if (_turn != null && _turnId == null) {
+          _turnId = _map(params['turn'])['id'] as String?;
+          if (_interruptWanted) _interrupt();
+        }
       case 'turn/completed':
         _turnCompleted(params);
+      case 'skills/changed':
+        unawaited(_readSkills());
       case 'serverRequest/resolved':
         _requestResolved(params['requestId']);
       case 'account/login/completed':
