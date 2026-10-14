@@ -1528,37 +1528,158 @@ void main() {
     });
   });
 
-  test(
-    'an MCP server\'s request for input is declined, and the chat says so',
-    () async {
+  group("an MCP server's elicitation", () {
+    FakeCodexAppServer eliciting(
+      JsonMap request,
+      void Function(Future<Object?>) answered,
+    ) => FakeCodexAppServer(
+      onTurn: (turn) async {
+        final answer = turn.ask('mcpServer/elicitation/request', {
+          'serverName': 'tracker',
+          '_meta': null,
+          ...request,
+        });
+        answered(answer);
+        await answer;
+        turn.end('completed');
+      },
+    );
+
+    test('asking only consent is Allow / Decline / Cancel, and Allow '
+        'accepts with nothing filled in', () async {
       late Future<Object?> answered;
-      final codex = FakeCodexAppServer(
-        onTurn: (turn) async {
-          answered = turn.ask('mcpServer/elicitation/request', {
-            'serverName': 'tracker',
-            'mode': 'form',
-            'message': 'Pick a project',
-            'requestedSchema': <String, Object?>{},
-          });
-          await answered;
-          turn.end('completed');
+      final codex = eliciting({
+        'mode': 'form',
+        'message': 'May I read your projects?',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': <String, Object?>{},
         },
-      );
-      final runtime = runtimeOver(codex);
+      }, (a) => answered = a);
+      final runtime = runtimeOver(codex, risk: PermissionRisk.autoRun);
       await runtime.start();
       await runtime.send('Ask me');
+      await pump(40);
+      // Consent is the person's, whatever the rung.
+      final ask = host.statuses.last.toolAsk!;
+      expect(ask.toolName, contains('May I read your projects?'));
+      expect(ask.options.map((o) => o.name), ['Allow', 'Decline', 'Cancel']);
+      await runtime.answerPermission(approve: true);
+      expect(await answered, {
+        'action': 'accept',
+        'content': <String, Object?>{},
+        '_meta': null,
+      });
       await runtime.awaitTurn();
-      expect((await answered)! as Map, containsPair('action', 'decline'));
-      final said = rows()
-          .where((r) => r.role == SessionMessageRole.agent)
-          .map((r) => r.text)
-          .join('\n');
-      expect(said, contains('tracker'));
-      expect(said, contains('Pick a project'));
-      expect(said, contains('declined'));
       await runtime.stop();
-    },
-  );
+    });
+
+    test('a form of text, a choice, yes or no and a number is one question '
+        'card, its answers sent typed', () async {
+      late Future<Object?> answered;
+      final codex = eliciting({
+        'mode': 'form',
+        'message': 'New issue',
+        'requestedSchema': {
+          'type': 'object',
+          'properties': {
+            'title': {'type': 'string', 'title': 'Title'},
+            'size': {
+              'type': 'string',
+              'title': 'Size',
+              'oneOf': [
+                {'const': 's', 'title': 'Small'},
+                {'const': 'l', 'title': 'Large'},
+              ],
+            },
+            'urgent': {'type': 'boolean', 'title': 'Urgent'},
+            'points': {'type': 'integer', 'title': 'Points'},
+          },
+          'required': ['title'],
+        },
+      }, (a) => answered = a);
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.send('File it');
+      await pump(40);
+      final open = runtime.openQuestion!;
+      expect(open.questions.map((q) => q.header), [
+        'Title',
+        'Size',
+        'Urgent',
+        'Points',
+      ]);
+      expect(open.questions.first.question, startsWith('New issue'));
+      expect(open.questions.map((q) => q.ownWords), [true, false, false, true]);
+      expect(open.questions[1].options.map((o) => o.label), ['Small', 'Large']);
+      await runtime.answerQuestion(
+        toolUseId: open.toolUseId,
+        answers: const [
+          AgentQuestionAnswer.text('Crash on start'),
+          AgentQuestionAnswer.option(1),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.text('3'),
+        ],
+      );
+      expect(await answered, {
+        'action': 'accept',
+        'content': {
+          'title': 'Crash on start',
+          'size': 'l',
+          'urgent': true,
+          'points': 3,
+        },
+        '_meta': null,
+      });
+      await runtime.awaitTurn();
+      await runtime.stop();
+    });
+
+    for (final (what, request) in <(String, JsonMap)>[
+      (
+        'a form with more in it',
+        {
+          'mode': 'form',
+          'message': 'Pick labels',
+          'requestedSchema': {
+            'type': 'object',
+            'properties': {
+              'labels': {
+                'type': 'array',
+                'items': {
+                  'type': 'string',
+                  'enum': ['bug', 'ui'],
+                },
+              },
+            },
+          },
+        },
+      ),
+      (
+        'a link to open',
+        {
+          'mode': 'url',
+          'message': 'Sign in to the tracker',
+          'url': 'https://tracker.example.com/auth',
+          'elicitationId': 'e1',
+        },
+      ),
+    ]) {
+      test('$what is cancelled, and the chat says why', () async {
+        late Future<Object?> answered;
+        final codex = eliciting(request, (a) => answered = a);
+        final runtime = runtimeOver(codex);
+        await runtime.start();
+        await runtime.send('Ask me');
+        await runtime.awaitTurn();
+        expect((await answered)! as Map, containsPair('action', 'cancel'));
+        expect(said(), contains('tracker'));
+        expect(said(), contains('${request['message']}'));
+        expect(said(), contains('cancelled'));
+        await runtime.stop();
+      });
+    }
+  });
 
   group("what is no one's turn is said in the chat, as a terminal session "
       'says it', () {

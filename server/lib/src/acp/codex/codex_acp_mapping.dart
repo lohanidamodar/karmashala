@@ -243,6 +243,99 @@ List<CodexDecision> codexCommandDecisions(Object? available) {
   ];
 }
 
+/// One field of an MCP server's elicitation form, as the chat asks it:
+/// [kind] is `string`, `number`, `integer`, `boolean` or `enum`, and
+/// [choices] an enum's (value, label) pairs.
+typedef CodexFormField = ({
+  String key,
+  String title,
+  String? description,
+  String kind,
+  List<(String, String)> choices,
+});
+
+/// The fields of an elicitation's `requestedSchema` (MCP 2025-11-25's
+/// ElicitRequestFormParams, as 0.160.0's McpElicitationSchema has it):
+/// empty for a request that asks nothing but consent, null for a form
+/// that asks more than text, a choice, yes or no, or a number — a
+/// multi-select, say — which the chat does not fill in.
+List<CodexFormField>? codexElicitationForm(Object? schema) {
+  if (schema == null) return const [];
+  if (schema is! Map) return null;
+  final type = schema['type'];
+  if (type != null && type != 'object') return null;
+  final properties = schema['properties'];
+  if (properties == null) return const [];
+  if (properties is! Map) return null;
+  final fields = <CodexFormField>[];
+  for (final MapEntry(:key, :value) in properties.entries) {
+    if (key is! String || value is! Map) return null;
+    final title = value['title'] is String ? value['title'] as String : key;
+    final description = value['description'] is String
+        ? value['description'] as String
+        : null;
+    final (String, List<(String, String)>)? read = switch (value) {
+      {'type': 'boolean'} => ('boolean', const []),
+      {'type': 'number'} => ('number', const []),
+      {'type': 'integer'} => ('integer', const []),
+      {'type': 'string', 'oneOf': final List<Object?> options} => (
+        'enum',
+        [
+          for (final o in options)
+            if (o case {'const': final String v, 'title': final String t})
+              (v, t),
+        ],
+      ),
+      {'type': 'string', 'enum': final List<Object?> values} => (
+        'enum',
+        _enumChoices(values, value['enumNames']),
+      ),
+      {'type': 'string'} => ('string', const []),
+      _ => null,
+    };
+    if (read == null) return null;
+    final (kind, choices) = read;
+    if (kind == 'enum' && choices.isEmpty) return null;
+    fields.add((
+      key: key,
+      title: title,
+      description: description,
+      kind: kind,
+      choices: choices,
+    ));
+  }
+  return fields;
+}
+
+List<(String, String)> _enumChoices(List<Object?> values, Object? names) {
+  final labels = names is List && names.length == values.length ? names : null;
+  return [
+    for (final (i, v) in values.indexed)
+      if (v is String) (v, labels?[i] is String ? labels![i] as String : v),
+  ];
+}
+
+/// The value an elicitation field takes for [words] the person gave, or
+/// null when they do not fit it: a number that is none, a choice not
+/// offered.
+Object? codexFormValue(CodexFormField field, String words) {
+  final text = words.trim();
+  return switch (field.kind) {
+    'boolean' => switch (text) {
+      'Yes' => true,
+      'No' => false,
+      _ => null,
+    },
+    'number' => num.tryParse(text),
+    'integer' => int.tryParse(text),
+    'enum' => [
+      for (final (value, label) in field.choices)
+        if (label == text) value,
+    ].firstOrNull,
+    _ => text.isEmpty ? null : text,
+  };
+}
+
 /// The `sandboxPolicy` a turn takes for [mode]: the thread's own [current]
 /// policy when it is already of that kind, so its writable roots and network
 /// setting survive.

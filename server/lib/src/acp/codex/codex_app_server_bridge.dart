@@ -1140,16 +1140,7 @@ final class CodexAppServerBridge implements AcpTransport {
             'scope': chosen == 'session' ? 'session' : 'turn',
           });
         case 'mcpServer/elicitation/request':
-          _notice(
-            'The MCP server "${params['serverName']}" asked: '
-            '${params['message'] ?? '(no message)'} - declined, since '
-            "Karmashala's chat cannot fill in its form.",
-          );
-          request.respond({
-            'action': 'decline',
-            'content': null,
-            '_meta': null,
-          });
+          request.respond(await _elicit(params, request.id));
         case 'item/tool/requestUserInput':
           request.respond({'answers': await _questions(params, request.id)});
         case 'execCommandApproval' || 'applyPatchApproval':
@@ -1181,6 +1172,118 @@ final class CodexAppServerBridge implements AcpTransport {
     ], codexRequest: codexRequest);
     return decisions.where((d) => d.id == chosen).firstOrNull?.decision ??
         'cancel';
+  }
+
+  /// An MCP server's elicitation, answered as MCP's `accept`, `decline` or
+  /// `cancel`. One asking only consent is an Allow / Decline / Cancel ask;
+  /// a form of text, choices, yes-or-no and numbers is a question card,
+  /// one question a field, every field answered. Anything else — a link to
+  /// open, a verification, a form with more in it — is cancelled, and the
+  /// chat says why.
+  Future<JsonMap> _elicit(JsonMap params, Object requestId) async {
+    final server = '${params['serverName']}';
+    final message = '${params['message'] ?? params['title'] ?? ''}'.trim();
+    JsonMap answer(String action, [JsonMap? content]) => {
+      'action': action,
+      'content': content,
+      '_meta': null,
+    };
+    JsonMap refuse(String why) {
+      _notice(
+        'The MCP server "$server" asked: ${message.isEmpty ? '(no message)' : message}'
+        ' - cancelled, since $why.',
+      );
+      return answer('cancel');
+    }
+
+    final fields = switch (params['mode']) {
+      'form' ||
+      'openai/form' ||
+      'openaiForm' => codexElicitationForm(params['requestedSchema']),
+      _ => null,
+    };
+    if (fields == null) {
+      return refuse(switch (params['mode']) {
+        'url' => "Karmashala's chat does not open the link it sent",
+        'openai/userVerification' => "Karmashala's chat cannot verify you",
+        'form' || 'openai/form' || 'openaiForm' =>
+          'its form asks for more than text, a choice, yes or no, or a '
+              'number',
+        _ => 'Karmashala does not know what it asks for',
+      });
+    }
+    const options = [
+      ('accept', 'Allow', 'allow_always'),
+      ('decline', 'Decline', 'reject_once'),
+      ('cancel', 'Cancel', 'reject_once'),
+    ];
+    final toolCall = <String, Object?>{
+      'toolCallId': 'elicitation-$requestId',
+      'title': 'The MCP server "$server" asks: $message',
+      'kind': 'other',
+      'status': 'pending',
+      'rawInput': {
+        'server': server,
+        'message': message,
+        'requestedSchema': params['requestedSchema'],
+      },
+    };
+    if (fields.isEmpty) {
+      final chosen = await _ask(toolCall, options, codexRequest: requestId);
+      return chosen == 'accept'
+          ? answer('accept', const {})
+          : answer(chosen ?? 'cancel');
+    }
+    String asked(int i, CodexFormField f) => [
+      if (i == 0 && message.isNotEmpty) '$message\n\n',
+      f.title,
+      if (f.description case final String d when d != f.title) ' — $d',
+    ].join();
+    final outcome = await _outcome(
+      {
+        ...toolCall,
+        '_meta': {
+          'karmashala': {
+            'questions': [
+              for (final (i, f) in fields.indexed)
+                {
+                  'question': asked(i, f),
+                  'header': f.title,
+                  'ownWords': f.choices.isEmpty && f.kind != 'boolean',
+                  'options': [
+                    if (f.kind == 'boolean') ...[
+                      {'label': 'Yes'},
+                      {'label': 'No'},
+                    ],
+                    for (final (_, label) in f.choices) {'label': label},
+                  ],
+                },
+            ],
+          },
+        },
+      },
+      [('accept', 'Submit', 'allow_always'), ...options.skip(1)],
+      codexRequest: requestId,
+    );
+    final chosen = outcome?['optionId'] as String?;
+    if (chosen != 'accept') return answer(chosen ?? 'cancel');
+    final said = _map(_map(outcome?['_meta'])['karmashala'])['answers'];
+    final content = <String, Object?>{};
+    for (final (i, f) in fields.indexed) {
+      final words = said is Map ? said[asked(i, f)] : null;
+      final value = words is String ? codexFormValue(f, words) : null;
+      if (value == null) {
+        return refuse(
+          '"${f.title}" was not answered with ${switch (f.kind) {
+            'number' || 'integer' => 'a number',
+            'enum' || 'boolean' => 'one of its choices',
+            _ => 'any words',
+          }}',
+        );
+      }
+      content[f.key] = value;
+    }
+    return answer('accept', content);
   }
 
   static const _grants = [
