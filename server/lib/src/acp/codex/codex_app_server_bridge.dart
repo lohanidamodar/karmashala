@@ -68,10 +68,19 @@ final class CodexAppServerBridge implements AcpTransport {
   var _modelChosen = false;
   List<JsonMap> _models = const [];
 
+  /// Codex's Plan preset from `collaborationMode/list`, or null where it
+  /// lists none (or the list was refused), and Plan is then not offered.
+  JsonMap? _planPreset;
+  var _presetsRead = false;
+
   Completer<JsonMap>? _turn;
   String? _turnId;
   var _interruptWanted = false;
+  var _cancelAsked = false;
   String? _turnDiff;
+
+  /// The proposed plan a plan turn's `plan` item carried.
+  String? _turnPlan;
   JsonMap? _rateLimits;
   JsonMap? _usage;
   final _tools = <String, JsonMap>{};
@@ -125,7 +134,10 @@ final class CodexAppServerBridge implements AcpTransport {
   }
 
   void _onClientNotification(AcpNotification notification) {
-    if (notification.method == AcpMethods.sessionCancel) _interrupt();
+    if (notification.method == AcpMethods.sessionCancel) {
+      if (_turn != null) _cancelAsked = true;
+      _interrupt();
+    }
   }
 
   /// Opted in to Codex's experimental API, which 0.160.0's schema gates the
@@ -270,7 +282,7 @@ final class CodexAppServerBridge implements AcpTransport {
     await _adopt(started);
     return {
       'sessionId': _threadId,
-      'modes': codexModeState(_mode),
+      'modes': codexModeState(_mode, planOffered: _planPreset != null),
       'configOptions': _configOptions(),
       '_meta': _threadMeta(started),
     };
@@ -309,7 +321,7 @@ final class CodexAppServerBridge implements AcpTransport {
       }
     }
     return {
-      'modes': codexModeState(_mode),
+      'modes': codexModeState(_mode, planOffered: _planPreset != null),
       'configOptions': _configOptions(),
       '_meta': _threadMeta(resumed),
     };
@@ -331,9 +343,47 @@ final class CodexAppServerBridge implements AcpTransport {
         opened['reasoningEffort'] as String? ??
         thread['reasoningEffort'] as String?;
     _models = await _listModels();
+    await _readPresets();
     if (thread['name'] case final String name when name.isNotEmpty) {
       _update({'sessionUpdate': 'session_info_update', 'title': name});
     }
+  }
+
+  /// Codex's collaboration presets, read once: 0.160.0 lists Plan (`mode:
+  /// plan`, its own reasoning effort) and Default. A Codex that lists no
+  /// plan, or refuses the experimental call, is offered no Plan.
+  Future<void> _readPresets() async {
+    if (_presetsRead) return;
+    _presetsRead = true;
+    try {
+      final listed = _map(await _codex.call('collaborationMode/list', {}));
+      _planPreset = _list(
+        listed['data'],
+      ).where((m) => m['mode'] == 'plan').firstOrNull;
+    } on AcpRpcError {
+      _planPreset = null;
+    }
+  }
+
+  /// The `collaborationMode` a turn takes for [mode]: Plan with its preset's
+  /// effort unless the person chose one, Default with the thread's own. Null
+  /// where Codex offers no Plan, so nothing it lacks is sent.
+  JsonMap? _collaborationFor(CodexMode mode) {
+    final preset = _planPreset;
+    final model = _model;
+    if (preset == null || model == null) return null;
+    final plan = mode.collaboration == 'plan';
+    return {
+      'mode': mode.collaboration,
+      'settings': {
+        'model': model,
+        'reasoning_effort': plan && !_modelChosen
+            ? preset['reasoning_effort'] ?? _effort
+            : _effort,
+        // Null is "the built-in instructions for the selected mode".
+        'developer_instructions': null,
+      },
+    };
   }
 
   JsonMap _threadMeta(JsonMap opened) {
@@ -382,6 +432,9 @@ final class CodexAppServerBridge implements AcpTransport {
       settings['approvalPolicy'],
       _sandbox,
       approvalsReviewer: _reviewer,
+      collaboration: _planPreset == null
+          ? null
+          : _map(settings['collaborationMode'])['mode'],
     );
     if (mode.id != _mode.id) {
       _mode = mode;
@@ -437,7 +490,10 @@ final class CodexAppServerBridge implements AcpTransport {
   }
 
   Future<JsonMap> _setMode(JsonMap params) async {
-    final mode = codexModeById('${params['modeId']}');
+    final id = '${params['modeId']}';
+    final mode = id == kCodexPlanMode && _planPreset == null
+        ? null
+        : codexModeById(id);
     if (mode == null) {
       throw AcpRpcError(
         JsonRpcErrorCodes.invalidParams,
@@ -485,33 +541,93 @@ final class CodexAppServerBridge implements AcpTransport {
       );
     }
     final done = _turn = Completer<JsonMap>();
-    _turnId = null;
-    _interruptWanted = false;
-    _turnDiff = null;
+    _cancelAsked = false;
     try {
-      final started = _map(
-        await _call(
-          'turn/start',
-          _dropNulls({
-            'threadId': thread,
-            'input': codexInput(_list(params['prompt'])),
-            // The reviewer always rides with the mode, so leaving Auto
-            // hands asks back to the person; each sticks for later turns.
-            if (_modeChosen) ...{
-              'approvalPolicy': _mode.approvalPolicy,
-              'sandboxPolicy': codexSandboxPolicy(_mode, _sandbox),
-              'approvalsReviewer': _mode.approvalsReviewer,
-            },
-            if (_modelChosen) ...{'model': _model, 'effort': _effort},
-          }),
-        ),
-      );
-      _turnId ??= _map(started['turn'])['id'] as String?;
-      if (_interruptWanted) _interrupt();
+      await _startTurn(thread, codexInput(_list(params['prompt'])));
       return await done.future;
     } finally {
       if (identical(_turn, done)) _turn = null;
       _flushOutput();
+    }
+  }
+
+  /// One Codex turn on [thread], with what the person chose since.
+  Future<void> _startTurn(String thread, List<JsonMap> input) async {
+    _turnId = null;
+    _interruptWanted = false;
+    _turnDiff = null;
+    _turnPlan = null;
+    final started = _map(
+      await _call(
+        'turn/start',
+        _dropNulls({
+          'threadId': thread,
+          'input': input,
+          // The reviewer and collaboration mode always ride with the mode,
+          // so leaving Auto or Plan takes; each sticks for later turns.
+          if (_modeChosen) ...{
+            'approvalPolicy': _mode.approvalPolicy,
+            'sandboxPolicy': codexSandboxPolicy(_mode, _sandbox),
+            'approvalsReviewer': _mode.approvalsReviewer,
+            'collaborationMode': _collaborationFor(_mode),
+          },
+          if (_modelChosen) ...{'model': _model, 'effort': _effort},
+        }),
+      ),
+    );
+    _turnId ??= _map(started['turn'])['id'] as String?;
+    if (_interruptWanted) _interrupt();
+  }
+
+  /// What Codex's own TUI asks when a Plan turn ends with a plan ("Implement
+  /// this plan?", 0.160.0): the app-server leaves it to its client. Asked as
+  /// a plan prompt whose yeses are the modes it can be carried out in, so the
+  /// session's rung picks one; a yes switches to it and sends what the TUI
+  /// sends, "Implement the plan.", as the next turn of the same prompt. No,
+  /// or a cancel, ends the prompt still in Plan.
+  Future<void> _offerImplement(
+    Completer<JsonMap> done,
+    String plan,
+    JsonMap ended,
+  ) async {
+    final chosen = await _ask(
+      {
+        'toolCallId': 'codex-plan-${_turnId ?? ''}',
+        'title': 'Implement this plan?',
+        'kind': 'switch_mode',
+        'status': 'pending',
+        'rawInput': {'plan': plan},
+      },
+      [
+        for (final mode in codexImplementModes)
+          (mode.id, 'Yes, implement this plan (${mode.name})', 'allow_once'),
+        ('plan', 'No, stay in Plan mode', 'reject_once'),
+      ],
+    );
+    final mode = chosen == null ? null : codexModeById(chosen);
+    final thread = _threadId;
+    if (done.isCompleted) return;
+    if (_cancelAsked || mode == null || mode.id == kCodexPlanMode) {
+      done.complete({...ended, if (_cancelAsked) 'stopReason': 'cancelled'});
+      return;
+    }
+    _mode = mode;
+    _modeChosen = true;
+    _update({'sessionUpdate': 'current_mode_update', 'currentModeId': mode.id});
+    if (thread == null) {
+      done.complete(ended);
+      return;
+    }
+    _note('Implementing the plan (${mode.name})');
+    try {
+      await _startTurn(
+        thread,
+        codexInput(const [
+          {'type': 'text', 'text': 'Implement the plan.'},
+        ]),
+      );
+    } on Object catch (error) {
+      if (!done.isCompleted) done.completeError(error);
     }
   }
 
@@ -593,7 +709,13 @@ final class CodexAppServerBridge implements AcpTransport {
           );
         }
       default:
-        done.complete({'stopReason': 'end_turn', '_meta': meta});
+        final ended = {'stopReason': 'end_turn', '_meta': meta};
+        final plan = _turnPlan;
+        if (_mode.id == kCodexPlanMode && plan != null && !_cancelAsked) {
+          unawaited(_offerImplement(done, plan, ended));
+        } else {
+          done.complete(ended);
+        }
     }
   }
 
@@ -718,6 +840,11 @@ final class CodexAppServerBridge implements AcpTransport {
     switch (item['type']) {
       case 'agentMessage' || 'plan':
         if (!_streamed.remove(id)) _message(item['text'], id);
+        // The plan whole, as its deltas need not add up to it (0.160.0's
+        // PlanDeltaNotification says so).
+        if (item['type'] == 'plan' && item['text'] is String) {
+          _turnPlan = item['text'] as String;
+        }
         return;
       case 'reasoning':
         if (!_streamed.remove(id)) {

@@ -7,8 +7,9 @@ import 'package:path/path.dart' as p;
 /// a live session of the same binary.
 const String kCodexAppServerProtocolSource = 'codex-cli 0.160.0 app-server v2';
 
-/// One of the ACP modes the bridge offers: an approval policy, a sandbox and
-/// who reviews what asks, as `thread/start` and `turn/start` take them.
+/// One of the ACP modes the bridge offers: an approval policy, a sandbox,
+/// who reviews what asks and Codex's collaboration mode (`plan` or
+/// `default`), as `thread/start` and `turn/start` take them.
 typedef CodexMode = ({
   String id,
   String name,
@@ -16,16 +17,30 @@ typedef CodexMode = ({
   String approvalPolicy,
   String sandboxType,
   String approvalsReviewer,
+  String collaboration,
 });
+
+const String kCodexPlanMode = 'plan';
 
 /// The ids are the ones the codex-acp adapter offered, so a stored choice
 /// and the descriptor's permission axis still name a mode that exists;
-/// `auto` is Codex's own.
+/// `plan` and `auto` are Codex's own.
 ///
 /// No mode sends `approvalPolicy: untrusted`: the schema still lists it, but
 /// 0.160.0 says `approval_policy = "untrusted" is no longer supported` and
 /// its `--ask-for-approval` offers only on-request and never.
 const List<CodexMode> kCodexModes = [
+  // Codex's Plan collaboration mode, in the read-only sandbox: it plans and
+  // proposes, and nothing it is asked changes a file.
+  (
+    id: kCodexPlanMode,
+    name: 'Plan',
+    description: 'Plans the work and proposes it; changes nothing.',
+    approvalPolicy: 'on-request',
+    sandboxType: 'readOnly',
+    approvalsReviewer: 'user',
+    collaboration: 'plan',
+  ),
   (
     id: 'read-only',
     name: 'Read-only',
@@ -33,6 +48,7 @@ const List<CodexMode> kCodexModes = [
     approvalPolicy: 'on-request',
     sandboxType: 'readOnly',
     approvalsReviewer: 'user',
+    collaboration: 'default',
   ),
   (
     id: 'workspace-write',
@@ -41,6 +57,7 @@ const List<CodexMode> kCodexModes = [
     approvalPolicy: 'on-request',
     sandboxType: 'workspaceWrite',
     approvalsReviewer: 'user',
+    collaboration: 'default',
   ),
   // `approvalsReviewer: auto_review` hands what Codex would ask to "a
   // carefully prompted subagent" that approves or denies it by risk
@@ -54,6 +71,7 @@ const List<CodexMode> kCodexModes = [
     approvalPolicy: 'on-request',
     sandboxType: 'workspaceWrite',
     approvalsReviewer: 'auto_review',
+    collaboration: 'default',
   ),
   (
     id: 'agent',
@@ -62,6 +80,7 @@ const List<CodexMode> kCodexModes = [
     approvalPolicy: 'never',
     sandboxType: 'workspaceWrite',
     approvalsReviewer: 'user',
+    collaboration: 'default',
   ),
   (
     id: 'agent-full-access',
@@ -70,6 +89,7 @@ const List<CodexMode> kCodexModes = [
     approvalPolicy: 'never',
     sandboxType: 'dangerFullAccess',
     approvalsReviewer: 'user',
+    collaboration: 'default',
   ),
 ];
 
@@ -82,13 +102,16 @@ CodexMode? codexModeById(String id) {
 
 CodexMode _mode(String id) => codexModeById(id)!;
 
-/// The mode a thread's own approval policy, sandbox and reviewer amount to.
+/// The mode a thread's own approval policy, sandbox, reviewer and
+/// collaboration mode (ThreadSettings' `collaborationMode.mode`) amount to.
 CodexMode codexModeOf(
   Object? approvalPolicy,
   JsonMap? sandbox, {
   Object? approvalsReviewer,
+  Object? collaboration,
 }) {
   final never = approvalPolicy == 'never';
+  if (collaboration == 'plan') return _mode(kCodexPlanMode);
   return switch (sandbox?['type']) {
     'readOnly' => _mode('read-only'),
     'dangerFullAccess' => _mode('agent-full-access'),
@@ -98,14 +121,23 @@ CodexMode codexModeOf(
   };
 }
 
-/// ACP's `modes` for [current].
-JsonMap codexModeState(CodexMode current) => {
+/// ACP's `modes` for [current]: Plan only where Codex lists it
+/// ([planOffered], from `collaborationMode/list`).
+JsonMap codexModeState(CodexMode current, {required bool planOffered}) => {
   'currentModeId': current.id,
   'availableModes': [
     for (final mode in kCodexModes)
-      {'id': mode.id, 'name': mode.name, 'description': mode.description},
+      if (planOffered || mode.id != kCodexPlanMode)
+        {'id': mode.id, 'name': mode.name, 'description': mode.description},
   ],
 };
+
+/// The modes a plan can be carried out in, offered when Codex's plan turn
+/// ends: each writes, so the session's rung picks among them.
+List<CodexMode> get codexImplementModes => [
+  for (final mode in kCodexModes)
+    if (mode.collaboration == 'default' && mode.sandboxType != 'readOnly') mode,
+];
 
 /// The `sandboxPolicy` a turn takes for [mode]: the thread's own [current]
 /// policy when it is already of that kind, so its writable roots and network

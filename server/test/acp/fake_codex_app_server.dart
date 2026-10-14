@@ -39,6 +39,19 @@ class FakeCodexAppServer {
 
   /// What `model/list` answers; a test may add to it mid-session.
   final listedModels = <Object?>[...models];
+
+  /// What `collaborationMode/list` answers, shaped as 0.160.0 answered a
+  /// live probe; null refuses it, as a Codex without the experimental API
+  /// does.
+  List<JsonMap>? presets = const [
+    {'name': 'Plan', 'mode': 'plan', 'model': null, 'reasoning_effort': 'low'},
+    {
+      'name': 'Default',
+      'mode': 'default',
+      'model': null,
+      'reasoning_effort': null,
+    },
+  ];
   var killed = false;
   FakeCodexTurn? turn;
   var _turns = 0;
@@ -179,6 +192,16 @@ class FakeCodexAppServer {
         request.respond(const <String, Object?>{});
       case 'model/list':
         request.respond({'data': listedModels, 'nextCursor': null});
+      case 'collaborationMode/list':
+        final listed = presets;
+        if (listed == null) {
+          request.fail(
+            -32600,
+            'collaborationMode/list requires experimentalApi capability',
+          );
+        } else {
+          request.respond({'data': listed});
+        }
       case 'thread/start':
         request.respond(_threadResult(thread('thr-new')));
       case 'thread/resume':

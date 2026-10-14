@@ -35,7 +35,7 @@ const _spec = AcpLaunchSpec(
   arguments: ['app-server'],
   nativeBridge: AcpNativeBridge.codexAppServer,
   modeNames: {
-    PermissionRisk.readOnly: ['read-only'],
+    PermissionRisk.readOnly: ['read-only', 'plan'],
     PermissionRisk.ask: ['workspace-write'],
     PermissionRisk.acceptEdits: ['workspace-write'],
     PermissionRisk.autoRun: ['agent', 'auto'],
@@ -214,6 +214,7 @@ void main() {
 
       final modes = runtime.modes!;
       expect(modes.availableModes.map((m) => m.id), [
+        'plan',
         'read-only',
         'workspace-write',
         'auto',
@@ -273,6 +274,145 @@ void main() {
     expect(turn['approvalPolicy'], 'never');
     expect((turn['sandboxPolicy']! as Map)['writableRoots'], ['/extra']);
     await runtime.stop();
+  });
+
+  group("Plan is Codex's own collaboration mode", () {
+    test('offered only where collaborationMode/list lists it', () async {
+      final codex = FakeCodexAppServer()..presets = null;
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      expect(codex.callsTo('collaborationMode/list'), hasLength(1));
+      expect(
+        runtime.modes!.availableModes.map((m) => m.id),
+        isNot(contains('plan')),
+      );
+      await expectLater(runtime.setMode('plan'), throwsA(anything));
+      await runtime.stop();
+    });
+
+    test('a plan turn carries collaborationMode plan with the preset\'s '
+        'effort, in the read-only sandbox; a mode left goes back to '
+        'default', () async {
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async => turn.end('completed'),
+      );
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      await runtime.setMode('plan');
+      await runtime.send('Plan it');
+      await runtime.awaitTurn();
+      final plan = codex.callsTo('turn/start').last;
+      expect(plan['collaborationMode'], {
+        'mode': 'plan',
+        'settings': {
+          'model': 'gpt-fast',
+          'reasoning_effort': 'low',
+          'developer_instructions': null,
+        },
+      });
+      expect((plan['sandboxPolicy']! as Map)['type'], 'readOnly');
+
+      await runtime.setMode('workspace-write');
+      await runtime.send('Now do it');
+      await runtime.awaitTurn();
+      expect(codex.callsTo('turn/start').last['collaborationMode'], {
+        'mode': 'default',
+        'settings': {
+          'model': 'gpt-fast',
+          'reasoning_effort': 'medium',
+          'developer_instructions': null,
+        },
+      });
+      await runtime.stop();
+    });
+
+    FakeCodexAppServer planning() => FakeCodexAppServer(
+      onTurn: (turn) async {
+        if (turn.id == 'turn-1') {
+          turn.delta('item/plan/delta', 'plan-1', '1. Add a ');
+          turn.delta('item/plan/delta', 'plan-1', 'table');
+          turn.completed({
+            'type': 'plan',
+            'id': 'plan-1',
+            'text': '1. Add a table\n2. Test it',
+          });
+        }
+        turn.end('completed');
+      },
+    );
+
+    test('a plan turn ending with a plan asks to implement it; a yes '
+        'switches to the mode the rung allows and sends Codex\'s own '
+        '"Implement the plan." in the same prompt', () async {
+      final codex = planning();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.setMode('plan');
+      await runtime.send('Plan a table');
+      await pump(40);
+      final ask = host.statuses.last.toolAsk!;
+      expect(ask.kind, 'switch_mode');
+      expect(ask.toolName, 'Implement this plan?');
+      expect(ask.input['plan'], '1. Add a table\n2. Test it');
+      expect(ask.options.map((o) => (o.id, o.kind)), [
+        ('workspace-write', 'allow_once'),
+        ('auto', 'allow_once'),
+        ('agent', 'allow_once'),
+        ('agent-full-access', 'allow_once'),
+        ('plan', 'reject_once'),
+      ]);
+      final answer = await runtime.answerPermission(approve: true);
+      expect(answer.answered, contains('Workspace write'));
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      final turns = codex.callsTo('turn/start');
+      expect(turns, hasLength(2));
+      expect(turns.last['input'], [
+        {
+          'type': 'text',
+          'text': 'Implement the plan.',
+          'text_elements': <Object?>[],
+        },
+      ]);
+      expect((turns.last['collaborationMode']! as Map)['mode'], 'default');
+      expect((turns.last['sandboxPolicy']! as Map)['type'], 'workspaceWrite');
+      expect(runtime.modes!.currentModeId, 'workspace-write');
+      await runtime.stop();
+    });
+
+    test('staying in Plan ends the prompt, still planning', () async {
+      final codex = planning();
+      final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+      await runtime.start();
+      await runtime.setMode('plan');
+      await runtime.send('Plan a table');
+      await pump(40);
+      expect(host.statuses.last.toolAsk?.kind, 'switch_mode');
+      await runtime.answerPermission(approve: false);
+      expect(await runtime.awaitTurn(), StopReason.endTurn);
+      expect(codex.callsTo('turn/start'), hasLength(1));
+      expect(runtime.modes!.currentModeId, 'plan');
+      await runtime.stop();
+    });
+
+    test('a thread Codex reports in Plan shows Plan', () async {
+      final codex = FakeCodexAppServer();
+      final runtime = runtimeOver(codex);
+      await runtime.start();
+      codex.notify('thread/settings/updated', {
+        'threadId': 'thr-new',
+        'threadSettings': {
+          'approvalPolicy': 'on-request',
+          'sandboxPolicy': {'type': 'workspaceWrite'},
+          'collaborationMode': {
+            'mode': 'plan',
+            'settings': {'model': 'gpt-fast', 'reasoning_effort': 'low'},
+          },
+        },
+      });
+      await pump(40);
+      expect(runtime.modes!.currentModeId, 'plan');
+      await runtime.stop();
+    });
   });
 
   test("Auto is Codex's own reviewer: it rides the turn as auto_review, a "

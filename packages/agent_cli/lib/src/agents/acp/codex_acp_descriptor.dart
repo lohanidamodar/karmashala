@@ -1,6 +1,7 @@
 import '../../permissions/permission_risk.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_permission_support.dart';
+import '../domain/agent_plan_approval.dart';
 
 const _evidence =
     'codexAppServer bridge: modes read-only, workspace-write, agent, '
@@ -28,11 +29,23 @@ const codexAcpDescriptor = AgentDescriptor(
     homeDirectoryName: '.codex',
     homeVariable: 'CODEX_HOME',
   ),
+  planApproval: AgentPlanApprovalSupport(
+    toolKind: 'switch_mode',
+    evidence:
+        'read 2026-10-14: codex-cli 0.160.0 TUI strings "Implement this '
+        'plan?" / "Yes, implement this plan" / "No, stay in Plan mode" and '
+        'its follow-up "Implement the plan."; the app-server sends no such '
+        'request, so codex_app_server_bridge.dart asks it {title "Implement '
+        'this plan?", kind switch_mode, rawInput.plan} when a Plan turn ends '
+        'with a plan item, its yeses the writing modes',
+  ),
   acp: AcpLaunchSpec(
     arguments: ['app-server'],
     nativeBridge: AcpNativeBridge.codexAppServer,
+    // Plan is offered only in the session (when collaborationMode/list
+    // lists it), never at launch: a rung picks read-only before it.
     modeNames: {
-      PermissionRisk.readOnly: ['read-only'],
+      PermissionRisk.readOnly: ['read-only', 'plan'],
       PermissionRisk.ask: ['workspace-write'],
       PermissionRisk.acceptEdits: ['workspace-write'],
       PermissionRisk.autoRun: ['agent', 'auto'],
