@@ -84,8 +84,13 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
       context,
       root.state,
     ).withValues(alpha: SemanticColors.surfaceEdgeAlpha);
-    final surface = scheme.surfaceContainerLowest;
-    final pad = widget.compact ? Insets.md : Insets.lg;
+    // On a phone, one frame: a session alone is its card, unframed; a
+    // family keeps its frame, and its root card draws none of its own.
+    final framed = !widget.compact || widget.node.children.isNotEmpty;
+    final surface = framed
+        ? scheme.surfaceContainerLowest
+        : Theme.of(context).scaffoldBackgroundColor;
+    final pad = widget.compact ? Insets.sm : Insets.lg;
     return Semantics(
       container: true,
       label: widget.node.children.isEmpty
@@ -93,12 +98,14 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
           : '${root.entry.title} and its sub-sessions',
       child: Container(
         key: ValueKey('overview-family:${root.id}'),
-        padding: EdgeInsets.all(pad),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: scheme.outlineVariant),
-        ),
+        padding: framed ? EdgeInsets.all(pad) : null,
+        decoration: framed
+            ? BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(Radii.lg),
+                border: Border.all(color: scheme.outlineVariant),
+              )
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -303,6 +310,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     final size = _rootSize;
     final tuck = size / 2;
     final below = node.descendants.toList();
+    final bare = widget.compact && node.children.isNotEmpty;
     // The parent always takes a message of its own, a family or not.
     final footer = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -323,6 +331,8 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
             leading: tuck,
             footer: footer,
             family: below,
+            compact: widget.compact,
+            bare: bare,
           )
         : OverviewWorkCard(
             key: ValueKey('overview-work-card:${card.id}'),
@@ -330,27 +340,140 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
             onOpen: widget.onOpen,
             leading: tuck,
             footer: footer,
+            compact: widget.compact,
+            bare: bare,
           );
-    return Stack(
-      children: [
-        Padding(
-          padding: EdgeInsets.only(left: tuck),
-          child: OverviewFamilyHover(card: card, child: body),
+    return _RootHead(
+      node: node,
+      size: size,
+      halo: surface,
+      child: Padding(
+        padding: EdgeInsets.only(left: tuck),
+        child: OverviewFamilyHover(card: card, child: body),
+      ),
+    );
+  }
+}
+
+/// A family root's avatar over its card's edge, the pick box on the
+/// avatar's face as a pill's is: while picking, or under a pointer over it.
+class _RootHead extends ConsumerStatefulWidget {
+  const _RootHead({
+    required this.node,
+    required this.size,
+    required this.halo,
+    required this.child,
+  });
+
+  final OverviewTreeNode node;
+  final double size;
+  final Color halo;
+
+  /// The card, tucked behind the avatar.
+  final Widget child;
+
+  @override
+  ConsumerState<_RootHead> createState() => _RootHeadState();
+}
+
+class _RootHeadState extends ConsumerState<_RootHead> {
+  var _hovered = false;
+  var _within = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final node = widget.node;
+    final card = node.card;
+    final size = widget.size;
+    final touch = UiDensity.of(context).isTouch;
+    final selecting = ref.watch(
+      overviewSelectionProvider.select((s) => !s.isEmpty),
+    );
+    final pickable = selecting || ((_hovered || _within) && !touch);
+    final hit = touch && Touch.target > size ? Touch.target : size;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (on) => setState(() => _within = on),
+        child: Stack(
+          children: [
+            widget.child,
+            Positioned(
+              left: 0,
+              top: 0,
+              child: IgnorePointer(
+                child: SessionAvatar(
+                  card: card,
+                  size: size,
+                  progress: overviewDoneShare(node),
+                  waiting: overviewWaitingIn(node),
+                  halo: widget.halo,
+                ),
+              ),
+            ),
+            if (pickable)
+              Positioned(
+                left: 0,
+                top: 0,
+                width: hit,
+                height: hit,
+                child: _AvatarPickBox(card: card, size: size),
+              ),
+          ],
         ),
-        Positioned(
-          left: 0,
-          top: 0,
-          child: IgnorePointer(
-            child: SessionAvatar(
-              card: card,
-              size: size,
-              progress: overviewDoneShare(node),
-              waiting: overviewWaitingIn(node),
-              halo: surface,
+      ),
+    );
+  }
+}
+
+/// Gmail's way: the pick box on an avatar's face, inside its bounds, in a
+/// hit area from its corner.
+class _AvatarPickBox extends ConsumerWidget {
+  const _AvatarPickBox({required this.card, required this.size});
+
+  final OverviewCard card;
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final picked = ref.watch(
+      overviewSelectionProvider.select((s) => s.contains(card.id)),
+    );
+    void toggle() =>
+        ref.read(overviewSelectionProvider.notifier).toggle(card.id);
+    return GestureDetector(
+      key: ValueKey('overview-tree-select-hit:${card.id}'),
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTap: toggle,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox.square(
+          dimension: size,
+          child: Center(
+            child: Container(
+              width: SessionAvatar.faceOf(size),
+              height: SessionAvatar.faceOf(size),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: scheme.surfaceContainerHigh,
+              ),
+              child: Checkbox(
+                key: ValueKey('overview-tree-select:${card.id}'),
+                value: picked,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                semanticLabel: 'Select ${card.entry.title}',
+                onChanged: (_) => toggle(),
+              ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -512,9 +635,6 @@ class _TreePillState extends ConsumerState<_TreePill> {
     );
     final selecting = ref.watch(
       overviewSelectionProvider.select((s) => !s.isEmpty),
-    );
-    final picked = ref.watch(
-      overviewSelectionProvider.select((s) => s.contains(card.id)),
     );
     if (widget.sent case final awaiting?) {
       ref.listen(overviewLastAnswerProvider(card.id), (_, now) {
@@ -690,10 +810,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
       ),
     );
 
-    // Gmail's way: the box takes the avatar's face, inside its bounds.
     final pickable = selecting || active;
-    void toggle() =>
-        ref.read(overviewSelectionProvider.notifier).toggle(card.id);
     return Semantics(
       expanded: widget.open,
       child: OverviewFamilyHover(
@@ -748,39 +865,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
                     top: 0,
                     width: minHeight,
                     height: minHeight,
-                    child: GestureDetector(
-                      key: ValueKey('overview-tree-select-hit:${card.id}'),
-                      behavior: HitTestBehavior.opaque,
-                      excludeFromSemantics: true,
-                      onTap: toggle,
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: SizedBox.square(
-                          dimension: size,
-                          child: Center(
-                            child: Container(
-                              width: SessionAvatar.faceOf(size),
-                              height: SessionAvatar.faceOf(size),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: scheme.surfaceContainerHigh,
-                              ),
-                              child: Checkbox(
-                                key: ValueKey(
-                                  'overview-tree-select:${card.id}',
-                                ),
-                                value: picked,
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                semanticLabel: 'Select ${card.entry.title}',
-                                onChanged: (_) => toggle(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: _AvatarPickBox(card: card, size: size),
                   ),
               ],
             ),
@@ -1247,6 +1332,7 @@ class _TreeDetail extends ConsumerWidget {
                 extra: [
                   FilledButton.tonal(
                     key: ValueKey('overview-tree-open:${card.id}'),
+                    style: UiDensity.of(context).compactButton,
                     onPressed: () => onOpen(card),
                     child: const Text('Open chat'),
                   ),

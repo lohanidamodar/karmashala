@@ -264,6 +264,8 @@ void main() {
     );
 
     Finder box(String id) => find.byKey(ValueKey('overview-select:$id'));
+    Finder treeBox(String id) =>
+        find.byKey(ValueKey('overview-tree-select:$id'));
     final bar = find.byKey(const ValueKey('overview-batch-bar'));
 
     Future<void> pick(WidgetTester tester, String id) async {
@@ -282,8 +284,9 @@ void main() {
       await pick(tester, 'r21');
       expect(bar, findsOneWidget);
       expect(find.text('1 selected'), findsOneWidget);
-      // While picking, every card can join.
-      expect(box('ks-release'), findsOneWidget);
+      // While picking, every card can join: a tree's root by its avatar.
+      expect(box('ks-release'), findsNothing);
+      expect(treeBox('ks-release'), findsOneWidget);
       await unmountMission(tester);
     });
 
@@ -457,11 +460,16 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('under a thumb every row has its box', (tester) async {
+    // A tree's root carries its box on its avatar, only while picking
+    // (owner, 2026-10-14); a long press starts that.
+    testWidgets('under a thumb a waiting row has its box, and a tree root '
+        'none at rest', (tester) async {
       await pump(tester, size: const Size(412, 780), phone: true);
-      final row = box('ks-release');
-      await tester.scrollUntilVisible(row, 200, scrollable: hybridList);
-      expect(row, findsOneWidget);
+      expect(box('r21'), findsOneWidget);
+      final root = find.byKey(const ValueKey('overview-card:ks-release'));
+      await tester.scrollUntilVisible(root, 200, scrollable: hybridList);
+      expect(box('ks-release'), findsNothing);
+      expect(treeBox('ks-release'), findsNothing);
       expect(bar, findsNothing);
       expect(tester.takeException(), isNull);
       await unmountMission(tester);
