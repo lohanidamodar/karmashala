@@ -20,6 +20,8 @@ import 'package:karmashala_host/src/acp/acp_transport.dart';
 import 'package:karmashala_host/src/acp/acp_usage_limit.dart'
     show kProtocolUsageLimitReason;
 import 'package:karmashala_host/src/acp/acp_version_probe.dart';
+import 'package:karmashala_host/src/acp/codex/codex_acp_mapping.dart'
+    show kCodexFileDecisions;
 import 'package:karmashala_host/src/acp/codex/codex_app_server_bridge.dart';
 import 'package:karmashala_host/src/sessions/session_message_transcripts.dart'
     show SessionMessageTranscriptSource;
@@ -743,6 +745,86 @@ void main() {
     expect(await answered, {'decision': 'accept'});
     expect(await runtime.awaitTurn(), StopReason.endTurn);
     await runtime.stop();
+  });
+
+  test("a command approval offers exactly Codex's availableDecisions, its "
+      'prefix rule worded, and the one picked goes back whole', () async {
+    final amendment = {
+      'acceptWithExecpolicyAmendment': {
+        'execpolicy_amendment': ['git', 'status'],
+      },
+    };
+    late Future<Object?> answered;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        answered = turn.ask('item/commandExecution/requestApproval', {
+          'itemId': 'exec-4',
+          'command': 'git status --short',
+          'cwd': temp.path,
+          'availableDecisions': [
+            'accept',
+            amendment,
+            'cancel',
+            {
+              'applyNetworkPolicyAmendment': {
+                'network_policy_amendment': {
+                  'host': 'example.com',
+                  'action': 'deny',
+                },
+              },
+            },
+            'decline',
+            {'somethingNew': <String, Object?>{}},
+          ],
+        });
+        await answered;
+        turn.end('completed');
+      },
+    );
+    final offered = <List<JsonMap>>[];
+    await talkToAcpAgent(() async => codexAppServerBridge(codex.transport), (
+      peer,
+      init,
+    ) async {
+      peer.requests.listen((request) {
+        final options = request.paramsMap['options']! as List;
+        offered.add([for (final o in options) (o as Map).cast()]);
+        request.respond({
+          'outcome': {
+            'outcome': 'selected',
+            'optionId': 'acceptWithExecpolicyAmendment',
+          },
+        });
+      });
+      final created = await peer.call(AcpMethods.sessionNew, {
+        'cwd': temp.path,
+        'mcpServers': <Object?>[],
+      });
+      await peer.call(AcpMethods.sessionPrompt, {
+        'sessionId': (created! as Map)['sessionId'],
+        'prompt': [
+          {'type': 'text', 'text': 'Check git'},
+        ],
+      });
+    });
+    // No "for this session": Codex did not list it. Cancel comes last.
+    expect(offered.single.map((o) => (o['name'], o['kind'])), [
+      ('Allow', 'allow_once'),
+      ('Always allow commands starting with `git status`', 'allow_always'),
+      ('Always block example.com', 'reject_always'),
+      ('Reject', 'reject_once'),
+      ('Reject and stop the turn', 'reject_once'),
+    ]);
+    expect(await answered, {'decision': amendment});
+  });
+
+  test('a file change offers Codex\'s four decisions, cancel among them', () {
+    expect(kCodexFileDecisions.map((d) => d.decision), [
+      'accept',
+      'acceptForSession',
+      'decline',
+      'cancel',
+    ]);
   });
 
   test('a refused file change reaches Codex as decline, with its diff shown '

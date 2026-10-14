@@ -973,11 +973,16 @@ final class CodexAppServerBridge implements AcpTransport {
     try {
       switch (request.method) {
         case 'item/commandExecution/requestApproval':
-          final chosen = await _ask(_commandAsk(params), _decisions);
-          request.respond({'decision': chosen ?? 'cancel'});
+          request.respond({
+            'decision': await _decide(
+              _commandAsk(params),
+              codexCommandDecisions(params['availableDecisions']),
+            ),
+          });
         case 'item/fileChange/requestApproval':
-          final chosen = await _ask(_fileAsk(params), _decisions);
-          request.respond({'decision': chosen ?? 'cancel'});
+          request.respond({
+            'decision': await _decide(_fileAsk(params), kCodexFileDecisions),
+          });
         case 'item/permissions/requestApproval':
           final chosen = await _ask(_permissionsAsk(params), _grants);
           final granted = chosen == 'turn' || chosen == 'session';
@@ -1020,11 +1025,18 @@ final class CodexAppServerBridge implements AcpTransport {
     }
   }
 
-  static const _decisions = [
-    ('accept', 'Allow', 'allow_once'),
-    ('acceptForSession', 'Allow for this session', 'allow_always'),
-    ('decline', 'Reject', 'reject_once'),
-  ];
+  /// Codex's decision for the option the person chose among [decisions];
+  /// `cancel` when the turn was cancelled or the client could not be asked.
+  Future<Object> _decide(
+    JsonMap toolCall,
+    List<CodexDecision> decisions,
+  ) async {
+    final chosen = await _ask(toolCall, [
+      for (final d in decisions) (d.id, d.name, d.kind),
+    ]);
+    return decisions.where((d) => d.id == chosen).firstOrNull?.decision ??
+        'cancel';
+  }
 
   static const _grants = [
     ('turn', 'Allow for this turn', 'allow_once'),

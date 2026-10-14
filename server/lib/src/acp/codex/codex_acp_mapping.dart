@@ -139,6 +139,110 @@ List<CodexMode> get codexImplementModes => [
     if (mode.collaboration == 'default' && mode.sandboxType != 'readOnly') mode,
 ];
 
+/// One answer Codex takes to an approval: the ACP option the person picks
+/// (id, words, kind) and the `decision` it sends back.
+typedef CodexDecision = ({
+  String id,
+  String name,
+  String kind,
+  Object decision,
+});
+
+const CodexDecision _accept = (
+  id: 'accept',
+  name: 'Allow',
+  kind: 'allow_once',
+  decision: 'accept',
+);
+const CodexDecision _acceptForSession = (
+  id: 'acceptForSession',
+  name: 'Allow for this session',
+  kind: 'allow_always',
+  decision: 'acceptForSession',
+);
+const CodexDecision _decline = (
+  id: 'decline',
+  name: 'Reject',
+  kind: 'reject_once',
+  decision: 'decline',
+);
+// Codex's TUI words it "No, and tell Codex what to do differently": the
+// call is refused and the turn stops.
+const CodexDecision _cancel = (
+  id: 'cancel',
+  name: 'Reject and stop the turn',
+  kind: 'reject_once',
+  decision: 'cancel',
+);
+
+/// A file change's answers: all four FileChangeApprovalDecision allows,
+/// since its request lists none of its own (0.160.0 schema).
+const List<CodexDecision> kCodexFileDecisions = [
+  _accept,
+  _acceptForSession,
+  _decline,
+  _cancel,
+];
+
+/// A command approval's answers: exactly the request's own
+/// `availableDecisions` ("the ordered list of decisions the client may
+/// present", experimental in 0.160.0), in its order but with cancel after
+/// decline, so a plain reject never stops the turn. A request without the
+/// list gets the four every CommandExecutionApprovalDecision allows; a
+/// decision this build cannot read is left out, never guessed.
+List<CodexDecision> codexCommandDecisions(Object? available) {
+  if (available is! List) return kCodexFileDecisions;
+  final read = <CodexDecision>[];
+  var networks = 0;
+  for (final decision in available) {
+    switch (decision) {
+      case 'accept':
+        read.add(_accept);
+      case 'acceptForSession':
+        read.add(_acceptForSession);
+      case 'decline':
+        read.add(_decline);
+      case 'cancel':
+        read.add(_cancel);
+      case {
+            'acceptWithExecpolicyAmendment': {
+              'execpolicy_amendment': final List<Object?> prefix,
+            },
+          }
+          when prefix.isNotEmpty:
+        // The prefix becomes an execpolicy allow rule (ExecPolicyAmendment).
+        read.add((
+          id: 'acceptWithExecpolicyAmendment',
+          name: 'Always allow commands starting with `${prefix.join(' ')}`',
+          kind: 'allow_always',
+          decision: decision as Object,
+        ));
+      case {
+            'applyNetworkPolicyAmendment': {
+              'network_policy_amendment': {
+                'host': final String host,
+                'action': final String action,
+              },
+            },
+          }
+          when action == 'allow' || action == 'deny':
+        final allow = action == 'allow';
+        read.add((
+          id: 'network-${networks++}',
+          name: '${allow ? 'Always allow' : 'Always block'} $host',
+          kind: allow ? 'allow_always' : 'reject_always',
+          decision: decision as Object,
+        ));
+    }
+  }
+  return [
+    for (final d in read)
+      if (d.id != 'cancel') d,
+    for (final d in read)
+      if (d.id == 'cancel') d,
+  ];
+}
+
 /// The `sandboxPolicy` a turn takes for [mode]: the thread's own [current]
 /// policy when it is already of that kind, so its writable roots and network
 /// setting survive.
