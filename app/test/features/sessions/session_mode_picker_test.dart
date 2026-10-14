@@ -202,4 +202,30 @@ void main() {
     expect(find.byType(PickerFace), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a new list of modes the agent announces mid-session redraws '
+      'the picker without a restart', (tester) async {
+    await pump(tester);
+    server.writeAsAnotherClient([offered]);
+    await tester.pumpAndSettle();
+    expect(faces(tester), ['Default']);
+
+    server.writeAsAnotherClient([
+      const SessionModesChanged(
+        sessionId: 's1',
+        currentModeId: 'review',
+        availableModes: [
+          SessionModeOption(id: 'default', name: 'Default'),
+          SessionModeOption(id: 'review', name: 'Review'),
+        ],
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    expect(faces(tester), ['Review']);
+
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Default'), findsOneWidget);
+    expect(find.text('Plan'), findsNothing);
+  });
 }
