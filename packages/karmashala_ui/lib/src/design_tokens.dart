@@ -483,6 +483,20 @@ enum UiDensity {
     minHeight: isTouch ? Touch.target : pointer,
   );
 
+  /// A text, outlined or filled button drawn compact under a thumb: a
+  /// [Touch.compactControl] face inside its padded [Touch.target] hit area,
+  /// as the composer's Send is. Null under a pointer, whose theme is dense.
+  ButtonStyle? get compactButton => isTouch
+      ? const ButtonStyle(
+          minimumSize: WidgetStatePropertyAll(Size(0, Touch.compactControl)),
+          padding: WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: Insets.md),
+          ),
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
+        )
+      : null;
+
   /// A dense glyph's size: [pointer] under a pointer, [Touch.icon] under a
   /// thumb — never smaller than [pointer].
   double iconSize(double pointer) =>
