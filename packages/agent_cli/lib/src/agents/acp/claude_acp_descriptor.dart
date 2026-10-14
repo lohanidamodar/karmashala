@@ -10,6 +10,15 @@ const _evidence =
     '--allow-dangerously-skip-permissions, bypassPermissions — read off live '
     'processes 2026-10-04';
 
+const _autoEvidence =
+    'Claude Code 2.1.296 in stream-json mode, read 2026-10-14: launched with '
+    '--permission-mode auto, initialize answered current_permission_mode '
+    'auto and system init permissionMode auto; set_permission_mode auto '
+    'answered {"mode":"auto"} and a status permissionMode auto; on Haiku 4.5 '
+    'it refused "auto mode unavailable for this model" (auto_mode_model), '
+    'and a bad mode was refused "must be one of acceptEdits, auto, '
+    'bypassPermissions, default, dontAsk, plan"';
+
 /// Claude Code as chat: the person's own `claude` in its stream-json mode
 /// (the protocol its Agent SDK speaks), translated to ACP in-process.
 ///
@@ -83,12 +92,15 @@ const claudeAcpDescriptor = AgentDescriptor(
       'exit-plan-bypass': 'bypassPermissions',
     },
     modeNames: {
-      PermissionRisk.readOnly: ['plan'],
+      PermissionRisk.readOnly: ['plan', 'dontAsk'],
       PermissionRisk.ask: ['default'],
       PermissionRisk.acceptEdits: ['acceptEdits'],
-      PermissionRisk.autoRun: ['bypassPermissions'],
+      PermissionRisk.autoRun: ['auto'],
       PermissionRisk.bypass: ['bypassPermissions'],
     },
+    // Auto mode's reviewer model screens each action; an ask that gets past
+    // it must reach the person, not be allowed by the rung.
+    screenedModes: {'auto'},
     authCompletions: {
       'claude-login': AcpAuthCompletion(
         how:
@@ -121,6 +133,15 @@ const claudeAcpDescriptor = AgentDescriptor(
               evidence: _evidence,
             ),
             AgentPermissionValue(
+              id: 'dontAsk',
+              label: "Don't ask",
+              shortLabel: "Don't ask",
+              description: 'Anything that would ask is refused instead.',
+              arguments: [],
+              permits: PermissionRisk.readOnly,
+              evidence: _autoEvidence,
+            ),
+            AgentPermissionValue(
               id: 'default',
               label: 'Ask every time',
               shortLabel: 'Ask',
@@ -137,6 +158,17 @@ const claudeAcpDescriptor = AgentDescriptor(
               arguments: [],
               permits: PermissionRisk.acceptEdits,
               evidence: _evidence,
+            ),
+            AgentPermissionValue(
+              id: 'auto',
+              label: 'Automatic',
+              shortLabel: 'Automatic',
+              description:
+                  'No routine prompts; a reviewer model screens actions. '
+                  'Not every model offers it.',
+              arguments: [],
+              permits: PermissionRisk.autoRun,
+              evidence: _autoEvidence,
             ),
             AgentPermissionValue(
               id: 'bypassPermissions',

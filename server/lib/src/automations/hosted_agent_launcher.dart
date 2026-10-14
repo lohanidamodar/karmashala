@@ -36,6 +36,7 @@ import '../sessions/launch/launch_settings.dart';
 import 'daemon_agents.dart';
 import 'session_mcp_access.dart';
 import '../sessions/rewind/rewind_cuts.dart';
+
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_session/lineage.dart';
 
@@ -206,8 +207,11 @@ class HostedStart {
 /// (`karmashala_<sessionId>`), at [columns]×[rows] — on this machine, or on
 /// the SSH box its launch names (slice 5d). `ServerTerminals` in `serve`, so
 /// the agent is one of the server's terminals like any pane.
-typedef AgentTerminalOpener =
-    Future<void> Function(AgentPaneLaunch launch, int columns, int rows);
+typedef AgentTerminalOpener = Future<void> Function(
+  AgentPaneLaunch launch,
+  int columns,
+  int rows,
+);
 
 /// Starts an agent as a session this host owns: the row first, then the PTY
 /// under the row's host id, so a client attaches to it as to any other hosted
@@ -676,6 +680,10 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         kind: kind,
         resumeId: resumeId,
         risk: descriptor?.launch.permission.riskOf(permission),
+        // An ACP agent's axis is its mode: the value picked is the mode.
+        startModeId: permission.values.length == 1
+            ? permission.values.values.single
+            : null,
         prompt: prompt,
         removed: agentLaunch.removedEnvironment,
         wslDistribution: agentLaunch.wslDistribution,
@@ -776,6 +784,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required EnvironmentKind kind,
     required String? resumeId,
     required PermissionRisk? risk,
+    required String? startModeId,
     required String? prompt,
     required Set<String> removed,
     required String? wslDistribution,
@@ -833,6 +842,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
           resumeAt: resumeId == null ? null : rewindCuts?.cutOf(id),
           onCutTaken: () => rewindCuts?.taken(id),
           risk: risk,
+          startModeId: startModeId,
         ),
       );
       opened = registry.openAcp(hostSessionIdOf(id), runtime);

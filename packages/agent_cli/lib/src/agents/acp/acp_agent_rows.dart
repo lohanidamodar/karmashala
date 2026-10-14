@@ -5,6 +5,7 @@ import '../adapter/agent_adapter.dart';
 import '../adapter/agent_presentation.dart';
 import '../adapter/data_only_agent_adapter.dart';
 import '../domain/agent_descriptor.dart';
+import '../domain/agent_permission_support.dart';
 
 /// Where an [AcpAgentRow] came from: typed in by hand, or picked from the
 /// public ACP registry.
@@ -156,9 +157,58 @@ AgentAdapter acpAgentAdapter(AcpAgentRow row) => DataOnlyAgentAdapter(
             ],
       },
     ),
+    launch: AgentLaunchSpec(permission: acpRowPermission(row)),
   ),
   presentation: AgentPresentation.of(row.name, iconUrl: row.iconUrl),
 );
+
+/// The modes [row] places, as a permission axis Settings and the session's
+/// picker offer, safest first. Its default is the mode that asks, where the
+/// row has one, and never a bypass: a row that places only bypassing modes,
+/// or none, declares nothing.
+AgentPermissionSupport acpRowPermission(AcpAgentRow row) {
+  // A `;` would split the stored selection (`mode=<id>`) in two.
+  final placed = [
+    for (final entry in row.modeRungs.entries)
+      if (!entry.key.contains(';')) entry,
+  ]..sort((a, b) => a.value.index.compareTo(b.value.index));
+  final defaultMode = [
+    for (final rung in const [
+      PermissionRisk.ask,
+      PermissionRisk.acceptEdits,
+      PermissionRisk.readOnly,
+      PermissionRisk.autoRun,
+    ])
+      for (final entry in placed)
+        if (entry.value == rung) entry.key,
+  ].firstOrNull;
+  if (defaultMode == null) return const AgentPermissionSupport.unknown();
+  final evidence = 'the mode lines on ${row.name}\'s row';
+  return AgentPermissionSupport.axes(
+    evidence: evidence,
+    axes: [
+      AgentPermissionAxis(
+        id: 'mode',
+        label: 'Mode',
+        description: 'How much ${row.name} may do without asking.',
+        defaultValueId: defaultMode,
+        values: [
+          for (final MapEntry(key: mode, value: rung) in placed)
+            AgentPermissionValue(
+              id: mode,
+              label: mode,
+              shortLabel: mode,
+              description: rung.description,
+              arguments: const [],
+              permits: rung,
+              isDangerous: rung.isDangerous,
+              evidence: evidence,
+            ),
+        ],
+      ),
+    ],
+  );
+}
 
 /// The words a person writes for each rung in a mode line, as in
 /// `Plan = read-only`.

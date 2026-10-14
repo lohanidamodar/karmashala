@@ -5,11 +5,11 @@ import 'dart:io';
 import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:agent_cli/descriptors.dart'
     show
-        AcpLaunchSpec,
         AcpNativeBridge,
         AgentActivityStatus,
         AgentQuestionAnswer,
-        PermissionRisk;
+        PermissionRisk,
+        claudeAcpDescriptor;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show SessionPromptRefusal;
 import 'package:karmashala_acp/karmashala_acp.dart';
@@ -34,16 +34,7 @@ import 'package:test/test.dart';
 import '../acp_fixture.dart';
 import 'fake_claude.dart';
 
-const _spec = AcpLaunchSpec(
-  nativeBridge: AcpNativeBridge.claudeStreamJson,
-  modeNames: {
-    PermissionRisk.readOnly: ['plan'],
-    PermissionRisk.ask: ['default'],
-    PermissionRisk.acceptEdits: ['acceptEdits'],
-    PermissionRisk.autoRun: ['bypassPermissions'],
-    PermissionRisk.bypass: ['bypassPermissions'],
-  },
-);
+final _spec = claudeAcpDescriptor.acp!;
 
 /// Claude Code's stream-json protocol, translated to ACP in-process, driven
 /// through the real session runtime against an in-memory `claude`.
@@ -86,6 +77,7 @@ void main() {
   AcpSessionRuntime runtime(
     FakeClaudeMachine machine, {
     PermissionRisk? risk,
+    String? startModeId,
     String? resumeSessionId,
     String? resumeAt,
     void Function()? onCutTaken,
@@ -121,6 +113,7 @@ void main() {
       files: files,
       mcpUrl: mcpUrl,
       risk: risk,
+      startModeId: startModeId,
       resumeSessionId: resumeSessionId,
       resumeAt: resumeAt,
       onCutTaken: onCutTaken,
@@ -182,9 +175,11 @@ void main() {
 
       final modes = rt.modes!;
       expect(modes.availableModes.map((m) => m.id), [
+        'plan',
+        'dontAsk',
         'default',
         'acceptEdits',
-        'plan',
+        'auto',
         'bypassPermissions',
       ]);
       // The rung's mode was set over the control channel.
@@ -248,7 +243,8 @@ void main() {
     });
 
     test('attached checkouts are Claude\'s --add-dir, and one attached later '
-        'is told with a resume before the next prompt', () async {
+        'is told with a resume before the next prompt, in the mode and model '
+        'the session was in', () async {
       final far = Directory('${temp.path}-far')..createSync();
       final later = Directory('${temp.path}-later')..createSync();
       addTearDown(() {
@@ -278,6 +274,8 @@ void main() {
         isEmpty,
       );
 
+      await rt.setMode('acceptEdits');
+      await rt.setConfigOption('model', 'sonnet');
       attached = [
         ...attached,
         EnvironmentPath(environmentId: 'local', path: later.path),
@@ -290,6 +288,15 @@ void main() {
         '--add-dir=${far.path}',
         '--add-dir=${later.path}',
       ]);
+      // The new process is put back in the mode and model picked, and the
+      // lists it answered with are the ones held.
+      expect(
+        machine.current.controls('set_permission_mode').single['mode'],
+        'acceptEdits',
+      );
+      expect(machine.current.controls('set_model').single['model'], 'sonnet');
+      expect(rt.modes!.currentModeId, 'acceptEdits');
+      expect(rt.configOptions!.options.single.currentValue, 'sonnet');
       expect(
         rows()
             .where((r) => r.role == SessionMessageRole.user)
@@ -1129,7 +1136,7 @@ void main() {
       expect((params['toolCall'] as Json)['kind'], 'switch_mode');
       expect(
         [for (final o in params['options'] as List) (o as Json)['optionId']],
-        ['acceptEdits', 'default', 'plan'],
+        ['auto', 'acceptEdits', 'default', 'plan'],
       );
       // The runtime allows once: plan mode is left for "ask every time".
       await rt.answerPermission(approve: true);
@@ -1360,8 +1367,11 @@ void main() {
   group('control', () {
     test('a Claude that does not end the turn after the interrupt is ended; '
         'the turn ends cancelled, and the next prompt resumes the '
-        'conversation in a new process with its mode and model', () async {
+        'conversation in a new process with its mode and model, and the '
+        'models it lists now', () async {
+      final models = [...FakeClaudeMachine.defaultModels];
       final machine = FakeClaudeMachine(
+        models: models,
         ignoreInterrupt: true,
         turns: [
           (c, user) async => c.streamText('m1', ['stuck ']),
@@ -1386,6 +1396,11 @@ void main() {
       rt.cancel();
       expect(await rt.awaitTurn(), StopReason.cancelled);
       expect(first.killed, isTrue);
+      models.add({
+        'value': 'fable',
+        'resolvedModel': 'claude-fable-5-1',
+        'displayName': 'Fable 5.1',
+      });
       expect(rt.lifecycle.hasEnded, isFalse, reason: 'the session lives on');
       expect(host.statuses.last.status, AgentActivityStatus.idle);
 
@@ -1396,6 +1411,14 @@ void main() {
       expect(second.args, ['--resume', rt.agentSessionId]);
       expect(second.controls('set_permission_mode').single['mode'], 'plan');
       expect(second.controls('set_model').single['model'], 'sonnet');
+      expect(rt.configOptions!.options.single.choices.map((c) => c.value), [
+        'default',
+        'sonnet',
+        'haiku',
+        'fable',
+      ]);
+      expect(rt.configOptions!.options.single.currentValue, 'sonnet');
+      expect(rt.modes!.currentModeId, 'plan');
       expect(rows().any((r) => r.text == 'Back.'), isTrue);
       await rt.stop();
     });
@@ -1482,6 +1505,118 @@ void main() {
       await rt.send('Go');
       await rt.awaitTurn();
       await until(() => rt.modes!.currentModeId == 'default');
+      await rt.stop();
+    });
+
+    test('every mode Claude accepts is offered by the name the descriptor '
+        'gives it, so the picker reads the same before a start and '
+        'after', () async {
+      final rt = runtime(FakeClaudeMachine());
+      await rt.start();
+      final values = claudeAcpDescriptor.launch.permission.axes.single.values;
+      expect(
+        {for (final m in rt.modes!.availableModes) m.id: m.name},
+        {for (final v in values) v.id: v.label},
+      );
+      await rt.stop();
+    });
+
+    test('a session started at the automatic rung starts in auto', () async {
+      final machine = FakeClaudeMachine();
+      final rt = runtime(machine, risk: PermissionRisk.autoRun);
+      final outcome = await rt.start();
+      expect(
+        machine.current.controls('set_permission_mode').single['mode'],
+        'auto',
+      );
+      expect(rt.modes!.currentModeId, 'auto');
+      expect(outcome.notices, isNot(contains(contains('refused'))));
+      await rt.stop();
+    });
+
+    test('auto refused for the model: the session starts in its default, '
+        'says why, and asks the person rather than allowing by rung', () async {
+      final answered = Completer<Json>();
+      final machine = FakeClaudeMachine(
+        autoMode: false,
+        turns: [
+          (c, user) async {
+            final input = {'file_path': '/w/out.txt', 'content': 'x'};
+            c.toolUse('w1', 'Write', input);
+            answered.complete(await c.askPermission('w1', 'Write', input));
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine, risk: PermissionRisk.autoRun);
+      final outcome = await rt.start();
+      expect(rt.modes!.currentModeId, 'default');
+      expect(
+        outcome.notices,
+        contains(
+          allOf(contains('Automatic'), contains('unavailable for this model')),
+        ),
+      );
+      await rt.send('Write it');
+      await until(() => rt.hasOpenPermission);
+      await rt.answerPermission(approve: false);
+      expect((await answered.future)['behavior'], 'deny');
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
+    test('in auto mode what Claude still asks reaches the person: its '
+        'reviewer screened it, the rung does not allow it', () async {
+      final answered = Completer<Json>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            final input = {'command': 'rm -rf build'};
+            c.toolUse('b1', 'Bash', input);
+            answered.complete(await c.askPermission('b1', 'Bash', input));
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine, risk: PermissionRisk.autoRun);
+      await rt.start();
+      await rt.send('Clean');
+      await until(() => rt.hasOpenPermission);
+      expect(rt.pendingToolCallId, 'b1');
+      await rt.answerPermission(approve: true);
+      expect((await answered.future)['behavior'], 'allow');
+      await rt.awaitTurn();
+      await rt.stop();
+    });
+
+    test("the mode picked before the start is the one started in: Don't "
+        'ask, not plan, though both are read-only', () async {
+      final machine = FakeClaudeMachine();
+      final rt = runtime(
+        machine,
+        risk: PermissionRisk.readOnly,
+        startModeId: 'dontAsk',
+      );
+      await rt.start();
+      expect(
+        machine.current.controls('set_permission_mode').single['mode'],
+        'dontAsk',
+      );
+      expect(rt.modes!.currentModeId, 'dontAsk');
+      await rt.stop();
+    });
+
+    test('a picked mode on another rung than the start is not trusted: the '
+        "rung's own mode is used", () async {
+      final machine = FakeClaudeMachine();
+      final rt = runtime(
+        machine,
+        risk: PermissionRisk.ask,
+        startModeId: 'bypassPermissions',
+      );
+      await rt.start();
+      expect(rt.modes!.currentModeId, 'default');
+      expect(machine.current.controls('set_permission_mode'), isEmpty);
       await rt.stop();
     });
 

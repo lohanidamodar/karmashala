@@ -213,4 +213,43 @@ void main() {
     expect(find.byType(PickerFace), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a new list the agent announces mid-session redraws the '
+      'picker: the model it offers now is there to pick', (tester) async {
+    await pump(tester);
+    server.writeAsAnotherClient([announced]);
+    await tester.pumpAndSettle();
+    expect(find.text('Claude Sonnet 5'), findsOneWidget);
+
+    server.writeAsAnotherClient([
+      const SessionConfigOptionsChanged(
+        sessionId: 's1',
+        options: [
+          SessionConfigOption(
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            currentValue: 'claude-fable-5',
+            choices: [
+              SessionConfigChoice(
+                value: 'claude-sonnet-5',
+                name: 'Claude Sonnet 5',
+              ),
+              SessionConfigChoice(value: 'claude-fable-5', name: 'Fable 5'),
+            ],
+          ),
+        ],
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    final faces = tester
+        .widgetList<PickerFace>(find.byType(PickerFace))
+        .map((face) => face.label)
+        .toList();
+    expect(faces, ['Fable 5']);
+    await tester.tap(find.text('Fable 5'));
+    await tester.pumpAndSettle();
+    expect(find.text('Claude Sonnet 5'), findsOneWidget);
+  });
 }

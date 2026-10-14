@@ -12,6 +12,7 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         JsonMap,
         JsonRpcErrorCodes;
 
+import 'package:agent_cli/descriptors.dart' show claudeAcpDescriptor;
 import 'package:agent_cli/read.dart' show kRedactedThinking;
 
 import '../../domain/uuid.dart';
@@ -403,7 +404,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     }
     final at = jsonObject(params['_meta'])?[AcpExtensions.resumeAt];
     final resumeAt = at is String && at.isNotEmpty ? at : null;
-    await _open(_resumeArguments(id, resumeAt), params);
+    // A load of the conversation already open (checkouts attached since)
+    // keeps the mode and model the person had it in.
+    final reopening = id == _sessionId;
+    final mode = _mode;
+    final model = _model;
+    final claude = await _open(_resumeArguments(id, resumeAt), params);
+    if (reopening) await _restore(claude, mode, model);
     _openParams = params;
     _sessionId = id;
     _resumeAt = resumeAt;
@@ -548,13 +555,33 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       _openParams,
     );
     _abandoned = false;
+    await _restore(claude, mode, model);
+    // The new process lists its models afresh; the client is told.
+    _update({'sessionUpdate': 'current_mode_update', 'currentModeId': _mode});
+    _update({
+      'sessionUpdate': 'config_option_update',
+      'configOptions': _configOptions(),
+    });
+  }
+
+  /// Puts a reopened conversation back in the mode and model it was in. One
+  /// the new process refuses stays as it started, which is then what is told.
+  Future<void> _restore(ClaudeProcess claude, String mode, String model) async {
     if (_mode != mode) {
-      await claude.control('set_permission_mode', {'mode': mode});
-      _mode = mode;
+      try {
+        await claude.control('set_permission_mode', {'mode': mode});
+        _mode = mode;
+      } on ClaudeControlError {
+        // Kept as Claude answered it.
+      }
     }
     if (_model != model) {
-      await claude.control('set_model', {'model': model});
-      _model = model;
+      try {
+        await claude.control('set_model', {'model': model});
+        _model = model;
+      } on ClaudeControlError {
+        // Kept as Claude answered it.
+      }
     }
   }
 
@@ -598,11 +625,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   // What ACP is told of the conversation.
 
-  static const _modeNames = {
-    'default': ('Ask before edits', 'Claude asks before edits and commands.'),
-    'acceptEdits': ('Accept edits', 'Edits apply without asking.'),
-    'plan': ('Plan mode', 'Claude plans and changes nothing.'),
-    'bypassPermissions': ('Bypass permissions', 'Nothing asks.'),
+  /// What set_permission_mode accepts (2.1.296: plan, dontAsk, default,
+  /// acceptEdits, auto, bypassPermissions), named as the chat descriptor
+  /// names them so the picker reads the same before a start and after.
+  static final _modeNames = {
+    for (final value
+        in claudeAcpDescriptor.launch.permission.axes.single.values)
+      value.id: (value.label, value.description),
   };
 
   JsonMap _modes() => {
@@ -1223,6 +1252,8 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     final exitPlan = name == 'ExitPlanMode';
     final options = exitPlan
         ? [
+            // An approval picks it only for a session whose rung is auto.
+            _option('auto', 'Yes, and use auto mode', 'allow_always'),
             _option('acceptEdits', 'Yes, and accept edits', 'allow_always'),
             _option('default', 'Yes, and ask before edits', 'allow_once'),
             _option('plan', 'No, keep planning', 'reject_once'),

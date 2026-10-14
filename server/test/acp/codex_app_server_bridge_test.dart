@@ -240,6 +240,43 @@ void main() {
     await runtime.stop();
   });
 
+  test('a settings change Codex reports moves the mode and model shown, and '
+      'a model the list lacks has the list read again', () async {
+    final codex = FakeCodexAppServer();
+    final runtime = runtimeOver(codex);
+    await runtime.start();
+    expect(codex.callsTo('model/list'), hasLength(1));
+
+    codex.listedModels.add({
+      'id': 'gpt-new',
+      'model': 'gpt-new',
+      'displayName': 'GPT New',
+      'hidden': false,
+      'supportedReasoningEfforts': <Object?>[],
+      'isDefault': false,
+    });
+    codex.notify('thread/settings/updated', {
+      'threadId': 'thr-new',
+      'threadSettings': {
+        'approvalPolicy': 'never',
+        'sandboxPolicy': {'type': 'dangerFullAccess'},
+        'model': 'gpt-new',
+        'effort': null,
+      },
+    });
+    await pump(40);
+
+    expect(runtime.modes!.currentModeId, 'agent-full-access');
+    final model = runtime.configOptions!.options.firstWhere(
+      (o) => o.id == 'model',
+    );
+    expect(model.currentValue, 'gpt-new');
+    expect(model.choices.map((c) => c.value), contains('gpt-new'));
+    expect(codex.callsTo('model/list'), hasLength(2));
+    expect(host.modes.last.currentModeId, 'agent-full-access');
+    await runtime.stop();
+  });
+
   test('a turn streams text and reasoning, tool calls with kind and input, '
       'command output, a file change as a diff, the plan, and usage', () async {
     final codex = FakeCodexAppServer(

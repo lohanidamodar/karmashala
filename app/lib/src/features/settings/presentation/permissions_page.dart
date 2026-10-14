@@ -5,6 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_browser/browser.dart';
 
+import '../../agents/application/agent_providers.dart';
 import '../../browser/application/browser_consent_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../application/settings_controller.dart';
@@ -24,6 +25,7 @@ class PermissionModesSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
+    final registry = ref.watch(agentRegistryProvider);
     return SettingsSection(
       title: SettingsAnchor.permissionModes.heading,
       child: Column(
@@ -33,15 +35,19 @@ class PermissionModesSection extends ConsumerWidget {
           const SettingsNote(
             'Defaults only: a mode picked on a session keeps it.',
           ),
-          for (final descriptor in AgentRegistry.builtIn.descriptors)
-            _PermissionRows(
-              descriptor: descriptor,
-              permissions: settings.permissionsFor(descriptor.id),
-              onNew: (m) =>
-                  controller.setNewSessionPermission(descriptor.id, m),
-              onExisting: (m) =>
-                  controller.setExistingSessionPermission(descriptor.id, m),
-            ),
+          // A person-added agent once its row places modes; until then it
+          // has nothing to default.
+          for (final descriptor in registry.descriptors)
+            if (AgentRegistry.builtIn.adapterFor(descriptor.id) != null ||
+                descriptor.launch.permission.isKnown)
+              _PermissionRows(
+                descriptor: descriptor,
+                permissions: settings.permissionsFor(descriptor.id),
+                onNew: (m) =>
+                    controller.setNewSessionPermission(descriptor.id, m),
+                onExisting: (m) =>
+                    controller.setExistingSessionPermission(descriptor.id, m),
+              ),
         ],
       ),
     );

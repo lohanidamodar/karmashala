@@ -54,6 +54,7 @@ class AcpSessionStart {
     this.resumeAt,
     this.onCutTaken,
     this.risk,
+    this.startModeId,
   });
 
   final String sessionId;
@@ -81,6 +82,9 @@ class AcpSessionStart {
   final String? resumeAt;
   final void Function()? onCutTaken;
   final PermissionRisk? risk;
+
+  /// See [AcpSessionRuntime.startModeId].
+  final String? startModeId;
 }
 
 /// The checkouts each session spans in [database], primary first: what
@@ -206,6 +210,7 @@ class AcpRuntimes {
     mcpUrl: start.mcpUrl,
     mcpBridge: start.mcpBridge,
     risk: start.risk,
+    startModeId: start.startModeId,
     resumeSessionId: start.resumeSessionId,
     resumeAt: start.resumeAt,
     onCutTaken: start.onCutTaken,

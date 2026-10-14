@@ -70,7 +70,7 @@ const codexAcpDescriptor = AgentDescriptor(
               id: 'read-only',
               label: 'Read-only',
               shortLabel: 'Read-only',
-              description: 'Reads and proposes; changes nothing.',
+              description: 'Reads and proposes; asks before changing anything.',
               arguments: [],
               permits: PermissionRisk.readOnly,
               evidence: _evidence,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/presentation/picker_face.dart';
 import 'package:karmashala/src/features/sessions/application/session_modes_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_mode_picker.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
@@ -48,6 +49,7 @@ void main() {
   Future<void> pump(
     WidgetTester tester, {
     Size size = const Size(1200, 800),
+    double textScale = 1,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -56,9 +58,15 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: Row(children: [SessionModePicker(sessionId: 's1')]),
+        child: MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: size,
+              textScaler: TextScaler.linear(textScale),
+            ),
+            child: const Scaffold(
+              body: Row(children: [SessionModePicker(sessionId: 's1')]),
+            ),
           ),
         ),
       ),
@@ -66,18 +74,85 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('nothing until the agent announces modes; then the current one', (
-    tester,
-  ) async {
+  String? storedMode() =>
+      container.read(sessionsDataProvider).getById('s1')?.permissionMode;
+
+  List<String> faces(WidgetTester tester) => [
+    for (final face in tester.widgetList<PickerFace>(find.byType(PickerFace)))
+      face.label,
+  ];
+
+  testWidgets('before the agent announces modes, the one the session will '
+      "start in, from the descriptor; then the agent's own", (tester) async {
     await pump(tester);
-    expect(find.byType(PickerFace), findsNothing);
+    expect(faces(tester), ['Ask every time']);
 
     server.writeAsAnotherClient([offered]);
     await tester.pumpAndSettle();
 
-    expect(find.byType(PickerFace), findsOneWidget);
-    expect(find.text('Default'), findsOneWidget);
+    expect(faces(tester), ['Default']);
     expect(container.read(sessionModesProvider('s1'))?.current?.id, 'default');
+  });
+
+  testWidgets("a pick before the start is the session's permission mode, "
+      'which the start sends to the agent', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Ask every time'));
+    await tester.pumpAndSettle();
+    // Every mode the descriptor declares, auto among them.
+    for (final label in [
+      'Plan mode',
+      "Don't ask",
+      'Accept edits',
+      'Automatic',
+      'Bypass (full autonomy)',
+    ]) {
+      expect(find.text(label), findsWidgets, reason: label);
+    }
+    await tester.tap(find.text('Automatic').last);
+    await tester.pumpAndSettle();
+
+    expect(storedMode(), 'mode=auto');
+    expect(faces(tester), ['Automatic']);
+
+    // Back to following Settings.
+    await tester.tap(find.text('Automatic'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Follow the Settings default'));
+    await tester.pumpAndSettle();
+    expect(storedMode(), isNull);
+    expect(faces(tester), ['Ask every time']);
+  });
+
+  testWidgets('bypass before the start is confirmed; Cancel leaves the '
+      'session as it was', (tester) async {
+    await pump(tester);
+    await tester.tap(find.text('Ask every time'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bypass (full autonomy)'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(storedMode(), isNull);
+    expect(faces(tester), ['Ask every time']);
+
+    await tester.tap(find.text('Ask every time'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bypass (full autonomy)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Use Bypass (full autonomy)'));
+    await tester.pumpAndSettle();
+    expect(storedMode(), 'mode=bypassPermissions');
+    expect(faces(tester), ['Bypass (full autonomy)']);
+  });
+
+  testWidgets('the starting face fits a phone at text scale 1.6', (
+    tester,
+  ) async {
+    await pump(tester, size: const Size(360, 740), textScale: 1.6);
+    expect(faces(tester), ['Ask every time']);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('lists every mode by name and sets the one chosen', (
@@ -126,5 +201,31 @@ void main() {
 
     expect(find.byType(PickerFace), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a new list of modes the agent announces mid-session redraws '
+      'the picker without a restart', (tester) async {
+    await pump(tester);
+    server.writeAsAnotherClient([offered]);
+    await tester.pumpAndSettle();
+    expect(faces(tester), ['Default']);
+
+    server.writeAsAnotherClient([
+      const SessionModesChanged(
+        sessionId: 's1',
+        currentModeId: 'review',
+        availableModes: [
+          SessionModeOption(id: 'default', name: 'Default'),
+          SessionModeOption(id: 'review', name: 'Review'),
+        ],
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    expect(faces(tester), ['Review']);
+
+    await tester.tap(find.text('Review'));
+    await tester.pumpAndSettle();
+    expect(find.text('Default'), findsOneWidget);
+    expect(find.text('Plan'), findsNothing);
   });
 }

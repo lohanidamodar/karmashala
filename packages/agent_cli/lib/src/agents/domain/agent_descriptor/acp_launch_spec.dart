@@ -77,7 +77,12 @@ class AcpLaunchSpec {
     this.optionModes = const {},
     this.authCompletions = const {},
     this.terminalLogin,
+    this.screenedModes = const {},
   });
+
+  /// Modes in which the agent's own reviewer decides what runs: what it still
+  /// asks is the person's to answer, at any rung.
+  final Set<String> screenedModes;
 
   /// Auth method id → how it completes, read off the agent.
   final Map<String, AcpAuthCompletion> authCompletions;
@@ -172,6 +177,7 @@ class AcpLaunchSpec {
     optionModes: optionModes,
     authCompletions: authCompletions,
     terminalLogin: terminalLogin,
+    screenedModes: screenedModes,
   );
 
   /// What `initialize` announces as `clientInfo.name`.

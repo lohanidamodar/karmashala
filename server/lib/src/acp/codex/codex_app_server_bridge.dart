@@ -356,6 +356,38 @@ final class CodexAppServerBridge implements AcpTransport {
     return models;
   }
 
+  /// The thread's settings changed — by a turn, or by another client of the
+  /// thread — so the mode and model shown follow them. A model the list
+  /// does not hold has the list read again.
+  Future<void> _settingsUpdated(JsonMap settings) async {
+    if (settings.isEmpty) return;
+    if (settings['sandboxPolicy'] case final Map<Object?, Object?> sandbox) {
+      _sandbox = _map(sandbox);
+    }
+    final mode = codexModeOf(settings['approvalPolicy'], _sandbox);
+    if (mode.id != _mode.id) {
+      _mode = mode;
+      _update({
+        'sessionUpdate': 'current_mode_update',
+        'currentModeId': mode.id,
+      });
+    }
+    final model = settings['model'] as String? ?? _model;
+    final effort = settings.containsKey('effort')
+        ? settings['effort'] as String?
+        : _effort;
+    final unlisted =
+        model != null && !_models.any((listed) => listed['model'] == model);
+    if (model == _model && effort == _effort && !unlisted) return;
+    _model = model;
+    _effort = effort;
+    if (unlisted) _models = await _listModels();
+    _update({
+      'sessionUpdate': 'config_option_update',
+      'configOptions': _configOptions(),
+    });
+  }
+
   List<JsonMap> _configOptions() =>
       codexConfigOptions(_models, _model, _effort);
 
@@ -620,6 +652,8 @@ final class CodexAppServerBridge implements AcpTransport {
         if (params['threadName'] case final String name) {
           _update({'sessionUpdate': 'session_info_update', 'title': name});
         }
+      case 'thread/settings/updated':
+        unawaited(_settingsUpdated(_map(params['threadSettings'])));
       case 'model/rerouted':
         _model = params['toModel'] as String? ?? _model;
         _update({

@@ -1,7 +1,12 @@
 import 'dart:io';
 
 import 'package:karmashala_acp/karmashala_acp.dart'
-    show AcpRpcError, JsonRpcErrorCodes;
+    show
+        AcpRpcError,
+        ConfigOption,
+        ConfigOptionUpdate,
+        ConfigSelectOption,
+        JsonRpcErrorCodes;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_host/src/acp/acp_path_scope.dart';
 import 'package:karmashala_host/src/acp/acp_runtimes.dart';
@@ -155,6 +160,81 @@ void main() {
       }
     },
   );
+
+  ConfigOption model(String current, List<String> values) => ConfigOption(
+    id: 'model',
+    name: 'Model',
+    type: 'select',
+    currentValue: current,
+    options: [for (final v in values) ConfigSelectOption(value: v, name: v)],
+  );
+
+  test('the lists a mid-session re-load answers with replace the ones held: '
+      'models the agent offers now are the ones shown', () async {
+    SessionRepositoryDao(database).unlink('s1', 'r-far');
+    final host = RecordingHost();
+    final agent = FakeAcpAgent(
+      turns: const [FakeTurn([]), FakeTurn([])],
+      supportsAdditionalDirectories: true,
+      configOptions: [
+        model('a', ['a', 'b']),
+      ],
+    );
+    final runtime = runtimeOver(
+      FakeAcpProcess(agent),
+      database: database,
+      workingDirectory: scratch,
+      files: scope(),
+      host: host,
+    );
+    await runtime.start();
+    await runtime.send('Before');
+    await runtime.awaitTurn();
+
+    agent.configOptions = [
+      model('a', ['a', 'b', 'c']),
+    ];
+    SessionRepositoryDao(database).link('s1', 'r-far');
+    await runtime.send('After the attach');
+    await runtime.awaitTurn();
+    expect(
+      host.configOptions.last.option('model')?.choices.map((c) => c.value),
+      ['a', 'b', 'c'],
+    );
+    await runtime.stop();
+  });
+
+  test('a config_option_update sent while the agent loads is kept, though '
+      'the conversation it replays is not', () async {
+    SessionRepositoryDao(database).unlink('s1', 'r-far');
+    final host = RecordingHost();
+    final agent = FakeAcpAgent(
+      turns: const [FakeTurn([]), FakeTurn([])],
+      supportsAdditionalDirectories: true,
+      loadReplay: [
+        ConfigOptionUpdate([
+          model('b', ['a', 'b']),
+        ]),
+      ],
+    );
+    final runtime = runtimeOver(
+      FakeAcpProcess(agent),
+      database: database,
+      workingDirectory: scratch,
+      files: scope(),
+      host: host,
+    );
+    await runtime.start();
+    await runtime.send('Before');
+    await runtime.awaitTurn();
+    expect(host.configOptions.last.options, isEmpty);
+
+    SessionRepositoryDao(database).link('s1', 'r-far');
+    await runtime.send('After the attach');
+    await runtime.awaitTurn();
+    expect(host.configOptions.last.option('model')?.currentValue, 'b');
+    await runtime.stop();
+  });
 
   test('terminal/create runs in an attached checkout', () async {
     SessionRepositoryDao(database).link('s1', 'r-far');
