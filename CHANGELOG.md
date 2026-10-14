@@ -17,6 +17,23 @@ installs claim the same version name.
 
 ---
 
+## 1.34.10 — 2026-10-14 (build 77)
+
+- **The dashboard on a phone is compact:** one frame per family, the title close to its avatar, a single pick box, and slim message fields and buttons that keep full-size touch targets.
+- **Chat shows each agent's real choices:**
+  - A chat session shows its permission mode before the first message, in that agent's own words, and starts in the one you pick.
+  - Questions show "Other…" only where the agent offers it, including multi-select questions in Claude.
+  - Model and mode lists follow the agent when it changes them mid-session. Agents you added yourself get a default on the Permissions page.
+- **Claude chat:**
+  - Adds Automatic (only for models that support it), Don't ask, Effort and Speed.
+  - A prompt Claude withdraws leaves the chat, and a permission card says why Claude is asking and which sub-agent asks.
+  - Slash commands stay current, API retries and refusals show as notes, and the context meter uses Claude's own count.
+- **Codex chat:**
+  - Adds Plan, with "Implement this plan?", and Codex's own Auto mode.
+  - Approval buttons are the ones Codex allows, including "Always allow commands starting with …".
+  - Open-ended and grouped questions get proper cards. MCP tools asking for consent get Allow and Decline.
+  - The "/" menu has /compact, /review and your skills.
+
 ## 1.34.9 — 2026-10-13 (build 76)
 
 - **The session tree on the Agent dashboard:**
