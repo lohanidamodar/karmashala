@@ -90,7 +90,13 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.byType(PickerFace), findsNothing);
+    // Before the agent announces, only the mode it will start in.
+    expect(
+      tester
+          .widgetList<PickerFace>(find.byType(PickerFace))
+          .map((face) => face.label),
+      ['Ask every time'],
+    );
 
     server.writeAsAnotherClient([modes, options]);
     await tester.pumpAndSettle();
