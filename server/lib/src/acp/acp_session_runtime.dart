@@ -92,6 +92,7 @@ class AcpSessionRuntime implements ScreenSession {
     this.mcpUrl,
     this.mcpBridge,
     this.risk,
+    this.startModeId,
     this.resumeSessionId,
     this.resumeAt,
     this.onCutTaken,
@@ -146,6 +147,10 @@ class AcpSessionRuntime implements ScreenSession {
   /// How much the session may do: picks the agent's mode, and answers
   /// `allow_once` itself from [PermissionRisk.autoRun] up.
   final PermissionRisk? risk;
+
+  /// The mode the person picked, by the agent's own id: started in when the
+  /// agent offers it and the spec places it on [risk]'s rung.
+  final String? startModeId;
 
   /// The agent's session to `session/load`, when it can.
   final String? resumeSessionId;
@@ -850,9 +855,8 @@ class AcpSessionRuntime implements ScreenSession {
           '${q.options.length} options',
         );
       }
-      said[q.question] = [
-        for (final c in chosen) q.options[c].label,
-      ].join(', ');
+      said[q.question] = [for (final c in chosen) q.options[c].label]
+          .join(', ');
     }
     final send = pending.options.where((o) => o.kind.allows).firstOrNull;
     if (send == null) {
@@ -1223,20 +1227,38 @@ class AcpSessionRuntime implements ScreenSession {
     _modes = modes;
     final rung = risk;
     if (modes != null && rung != null) {
-      final wanted = spec.modeForOffered(rung, [
-        for (final mode in modes.availableModes) (id: mode.id, name: mode.name),
-      ]);
+      final picked = startModeId;
+      final wanted =
+          picked != null &&
+              spec.rungOfMode(picked) == rung &&
+              modes.availableModes.any((mode) => mode.id == picked)
+          ? picked
+          : spec.modeForOffered(rung, [
+              for (final mode in modes.availableModes)
+                (id: mode.id, name: mode.name),
+            ]);
       if (wanted == null) {
         notices.add(
           '$agentName offers no mode for "${rung.label}"; it stays in its '
           'own default, "${_modeName(modes, modes.currentModeId)}".',
         );
       } else if (wanted != modes.currentModeId) {
-        await _client!.setMode(_agentSessionId!, wanted);
-        _modes = SessionModeState(
-          currentModeId: wanted,
-          availableModes: modes.availableModes,
-        );
+        try {
+          await _client!.setMode(_agentSessionId!, wanted);
+          _modes = SessionModeState(
+            currentModeId: wanted,
+            availableModes: modes.availableModes,
+          );
+        } on AcpRpcError catch (refused) {
+          // Auto mode is refused on a model without it. The session works in
+          // the mode the agent stayed in, never the rung it was refused.
+          _modeChosen(modes.currentModeId);
+          notices.add(
+            '$agentName refused "${_modeName(modes, wanted)}" '
+            '(${refused.message}); it stays in '
+            '"${_modeName(modes, modes.currentModeId)}".',
+          );
+        }
       }
     }
     _announceModes();
@@ -1438,7 +1460,10 @@ class AcpSessionRuntime implements ScreenSession {
           .where((o) => o.kind == PermissionOptionKind.allowOnce)
           .firstOrNull;
       final PermissionOption? unasked;
-      if (rung != null && !rung.isAtMost(PermissionRisk.acceptEdits)) {
+      final screened = spec.screenedModes.contains(_modes?.currentModeId);
+      if (rung != null &&
+          !screened &&
+          !rung.isAtMost(PermissionRisk.acceptEdits)) {
         unasked = switching != null ? switching.option : allowOnce;
       } else if (switching == null && _readsOnly(call)) {
         // A read is within every rung, read-only included.

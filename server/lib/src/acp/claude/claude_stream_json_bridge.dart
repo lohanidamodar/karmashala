@@ -12,6 +12,7 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         JsonMap,
         JsonRpcErrorCodes;
 
+import 'package:agent_cli/descriptors.dart' show claudeAcpDescriptor;
 import 'package:agent_cli/read.dart' show kRedactedThinking;
 
 import '../../domain/uuid.dart';
@@ -223,9 +224,8 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     }
     // The turn's error goes out before the exit, so it is read as the turn's.
     unawaited(
-      Future<void>.delayed(
-        const Duration(milliseconds: 20),
-      ).then((_) => _finish(code)),
+      Future<void>.delayed(const Duration(milliseconds: 20))
+          .then((_) => _finish(code)),
     );
   }
 
@@ -598,11 +598,13 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   // What ACP is told of the conversation.
 
-  static const _modeNames = {
-    'default': ('Ask before edits', 'Claude asks before edits and commands.'),
-    'acceptEdits': ('Accept edits', 'Edits apply without asking.'),
-    'plan': ('Plan mode', 'Claude plans and changes nothing.'),
-    'bypassPermissions': ('Bypass permissions', 'Nothing asks.'),
+  /// What set_permission_mode accepts (2.1.296: plan, dontAsk, default,
+  /// acceptEdits, auto, bypassPermissions), named as the chat descriptor
+  /// names them so the picker reads the same before a start and after.
+  static final _modeNames = {
+    for (final value
+        in claudeAcpDescriptor.launch.permission.axes.single.values)
+      value.id: (value.label, value.description),
   };
 
   JsonMap _modes() => {
@@ -1223,6 +1225,8 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     final exitPlan = name == 'ExitPlanMode';
     final options = exitPlan
         ? [
+            // An approval picks it only for a session whose rung is auto.
+            _option('auto', 'Yes, and use auto mode', 'allow_always'),
             _option('acceptEdits', 'Yes, and accept edits', 'allow_always'),
             _option('default', 'Yes, and ask before edits', 'allow_once'),
             _option('plan', 'No, keep planning', 'reject_once'),

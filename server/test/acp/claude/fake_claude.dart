@@ -20,6 +20,7 @@ class FakeClaudeMachine {
     this.version = '2.1.287',
     this.models = defaultModels,
     this.ignoreInterrupt = false,
+    this.autoMode = true,
   }) : turns = List.of(turns),
        conversations = {...conversations};
 
@@ -32,6 +33,9 @@ class FakeClaudeMachine {
   /// Whether an interrupt is answered but the turn goes on, as a stuck
   /// `claude` would.
   final bool ignoreInterrupt;
+
+  /// Whether the model offers auto mode; 2.1.296 refuses it on Haiku 4.5.
+  final bool autoMode;
 
   /// Every process started, in order.
   final launched = <FakeClaude>[];
@@ -201,6 +205,14 @@ class FakeClaude {
         final mode = request['mode'] as String;
         if (mode == 'nonsense') {
           _fail(id, 'Invalid permission mode: nonsense');
+          return;
+        }
+        if (mode == 'auto' && !machine.autoMode) {
+          _fail(
+            id,
+            'Cannot set permission mode to auto: auto mode unavailable for '
+            'this model',
+          );
           return;
         }
         permissionMode = mode;

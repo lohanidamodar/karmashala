@@ -44,6 +44,11 @@ void main() {
   /// feat/claude-native's bridge, `_canUseTool` for ExitPlanMode.
   const bridge = [
     PermissionOption(
+      optionId: 'auto',
+      name: 'Yes, and use auto mode',
+      kind: PermissionOptionKind.allowAlways,
+    ),
+    PermissionOption(
       optionId: 'acceptEdits',
       name: 'Yes, and accept edits',
       kind: PermissionOptionKind.allowAlways,
@@ -141,6 +146,7 @@ void main() {
   for (final (rung, chosen) in [
     (PermissionRisk.ask, 'default'),
     (PermissionRisk.acceptEdits, 'acceptEdits'),
+    (PermissionRisk.autoRun, 'auto'),
     // Approving a plan leaves read-only; asking before every edit is the
     // least it can be.
     (PermissionRisk.readOnly, 'default'),
@@ -158,8 +164,9 @@ void main() {
 
   for (final (rung, chosen) in [
     (PermissionRisk.ask, 'exit-plan-default'),
-    // Auto mode's rung is not one this spec names, so it is never chosen.
+    // Auto mode is above accept edits, and the adapter offers no accept edits.
     (PermissionRisk.acceptEdits, 'exit-plan-default'),
+    (PermissionRisk.autoRun, 'exit-plan-auto'),
     (PermissionRisk.bypass, 'exit-plan-bypass'),
   ]) {
     test('the adapter, at ${rung.name}: $chosen', () async {

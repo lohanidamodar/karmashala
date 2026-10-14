@@ -167,6 +167,8 @@ void main() {
     expect(start.directory.path, temp.path);
     expect(start.variables, {'KARMASHALA_SESSION_ID': 's1'});
     expect(start.risk, PermissionRisk.acceptEdits);
+    // The mode picked, by id, so two modes on one rung stay apart.
+    expect(start.startModeId, 'acceptEdits');
     expect(start.resumeSessionId, isNull);
     expect(start.mcpUrl, isNull);
 

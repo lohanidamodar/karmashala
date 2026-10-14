@@ -197,7 +197,7 @@ void main() {
         for (final value in axis.values) value.evidence,
     ]) {
       expect(evidence, contains('stream-json'));
-      expect(evidence, contains('2.1.287'));
+      expect(evidence, contains(RegExp(r'2\.1\.(287|296)')));
       expect(evidence, isNot(contains('claude-agent-acp')));
     }
     expect(claudeAcpDescriptor.acp!.arguments, [
