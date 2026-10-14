@@ -84,4 +84,45 @@ void main() {
       isNull,
     );
   });
+
+  test("a person's placed modes are the session's permission axis: safest "
+      'first, the one that asks by default, a bypass dangerous', () {
+    AcpAgentRow row(Map<String, PermissionRisk> rungs) => AcpAgentRow(
+      id: 'r1',
+      name: 'X',
+      command: 'x',
+      createdAt: DateTime.utc(2026),
+      modeRungs: rungs,
+    );
+    final support = acpAgentAdapter(
+      row(const {
+        'Yolo': PermissionRisk.bypass,
+        'Edit': PermissionRisk.acceptEdits,
+        'Plan': PermissionRisk.readOnly,
+      }),
+    ).descriptor.launch.permission;
+    final axis = support.axes.single;
+    expect(axis.values.map((v) => v.id), ['Plan', 'Edit', 'Yolo']);
+    // No mode asks, so the one that accepts edits is the default.
+    expect(axis.defaultValueId, 'Edit');
+    expect(support.isDangerous(PermissionSelection({'mode': 'Yolo'})), isTrue);
+    expect(
+      support.riskOf(PermissionSelection({'mode': 'Plan'})),
+      PermissionRisk.readOnly,
+    );
+
+    // Nothing to default to but a bypass, or nothing placed: none declared.
+    expect(
+      acpRowPermission(row(const {'Yolo': PermissionRisk.bypass})).isKnown,
+      isFalse,
+    );
+    expect(acpRowPermission(row(const {})).isKnown, isFalse);
+    // A `;` would not survive the stored selection.
+    expect(
+      acpRowPermission(
+        row(const {'a;b': PermissionRisk.ask, 'Plan': PermissionRisk.readOnly}),
+      ).axes.single.values.map((v) => v.id),
+      ['Plan'],
+    );
+  });
 }

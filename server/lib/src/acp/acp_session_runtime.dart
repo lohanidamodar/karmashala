@@ -1230,12 +1230,15 @@ class AcpSessionRuntime implements ScreenSession {
     _modes = modes;
     final rung = risk;
     if (modes != null && rung != null) {
-      final picked = startModeId;
+      // By id, or by name for a person who named the mode on their row.
+      final picked = startModeId == null
+          ? null
+          : modes.availableModes
+                .where((m) => m.id == startModeId || m.name == startModeId)
+                .firstOrNull;
       final wanted =
-          picked != null &&
-              spec.rungOfMode(picked) == rung &&
-              modes.availableModes.any((mode) => mode.id == picked)
-          ? picked
+          picked != null && spec.rungOfOffered(picked.id, picked.name) == rung
+          ? picked.id
           : spec.modeForOffered(rung, [
               for (final mode in modes.availableModes)
                 (id: mode.id, name: mode.name),

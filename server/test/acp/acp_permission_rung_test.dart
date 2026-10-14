@@ -206,4 +206,38 @@ void main() {
     ]);
     await runtime.stop();
   });
+
+  test('the mode picked before the start is found by its name, so of two '
+      'modes on one rung the one picked is started in', () async {
+    const url = 'https://agentclientprotocol.com/protocol/session-modes';
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        modes: const SessionModeState(
+          currentModeId: '$url#agent',
+          availableModes: [
+            SessionMode(id: '$url#agent', name: 'Agent'),
+            SessionMode(id: '$url#plan', name: 'Plan'),
+            SessionMode(id: '$url#review', name: 'Review'),
+          ],
+        ),
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      spec: const AcpLaunchSpec(
+        modeNames: {
+          PermissionRisk.readOnly: ['Plan', 'Review'],
+          PermissionRisk.ask: ['Agent'],
+        },
+      ),
+      risk: PermissionRisk.readOnly,
+      startModeId: 'Review',
+    );
+    await runtime.start();
+    expect(runtime.modes?.currentModeId, '$url#review');
+    await runtime.stop();
+  });
 }
