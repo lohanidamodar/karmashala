@@ -5,6 +5,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../data/timeline_data.dart';
+import '../domain/timeline_model.dart';
 
 /// What the timeline shows: a stretch of time and which projects. A null
 /// [projectIds] is every project.
@@ -54,8 +55,7 @@ class TimelineRange {
   final DateTime from;
   final DateTime to;
 
-  bool get isOneDay =>
-      DateTime(from.year, from.month, from.day + 1) == to;
+  bool get isOneDay => DateTime(from.year, from.month, from.day + 1) == to;
 
   /// The same length of days, [by] lengths later (or earlier).
   TimelineRange shifted(int by) {
@@ -66,10 +66,11 @@ class TimelineRange {
     );
   }
 
-  static int _daysBetween(DateTime a, DateTime b) =>
-      DateTime.utc(b.year, b.month, b.day)
-          .difference(DateTime.utc(a.year, a.month, a.day))
-          .inDays;
+  static int _daysBetween(DateTime a, DateTime b) => DateTime.utc(
+    b.year,
+    b.month,
+    b.day,
+  ).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
 
   @override
   bool operator ==(Object other) =>
@@ -98,7 +99,74 @@ class TimelineRangeController extends Notifier<TimelineRange> {
     from: DateTime(first.year, first.month, first.day),
     to: DateTime(last.year, last.month, last.day + 1),
   );
+
+  DateTime get _lastDay =>
+      DateTime(state.to.year, state.to.month, state.to.day - 1);
+
+  /// The range's last day on its own.
+  void day() => days(_lastDay, _lastDay);
+
+  /// The seven days ending on the range's last day.
+  void week() {
+    final last = _lastDay;
+    days(DateTime(last.year, last.month, last.day - 6), last);
+  }
 }
+
+/// What the Timeline narrows to on this device: machines (null for all),
+/// words in a title, and whether only waits on the owner stand out.
+@immutable
+class TimelineViewFilter {
+  const TimelineViewFilter({
+    this.machines,
+    this.query = '',
+    this.waitsOnly = false,
+  });
+
+  final Set<String>? machines;
+  final String query;
+  final bool waitsOnly;
+
+  bool admits(TimelineSession session) {
+    final words = query.trim().toLowerCase();
+    return (machines == null || machines!.contains(session.machine ?? '')) &&
+        (words.isEmpty || session.title.toLowerCase().contains(words));
+  }
+
+  TimelineViewFilter copyWith({
+    Set<String>? Function()? machines,
+    String? query,
+    bool? waitsOnly,
+  }) => TimelineViewFilter(
+    machines: machines == null ? this.machines : machines(),
+    query: query ?? this.query,
+    waitsOnly: waitsOnly ?? this.waitsOnly,
+  );
+}
+
+class TimelineViewFilterController extends Notifier<TimelineViewFilter> {
+  @override
+  TimelineViewFilter build() => const TimelineViewFilter();
+
+  void search(String query) => state = state.copyWith(query: query);
+  void waitsOnly(bool on) => state = state.copyWith(waitsOnly: on);
+  void allMachines() => state = state.copyWith(machines: () => null);
+
+  /// Shows or hides [machine], out of [all] when every one was shown.
+  void toggleMachine(String machine, Iterable<String> all) {
+    final every = all.toSet();
+    final shown = {...(state.machines ?? every)};
+    if (!shown.remove(machine)) shown.add(machine);
+    state = state.copyWith(
+      machines: () => shown.length == every.length ? null : shown,
+    );
+  }
+}
+
+final timelineViewFilterProvider =
+    NotifierProvider<TimelineViewFilterController, TimelineViewFilter>(
+      TimelineViewFilterController.new,
+    );
 
 final timelineRangeProvider =
     NotifierProvider<TimelineRangeController, TimelineRange>(

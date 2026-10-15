@@ -907,6 +907,19 @@ class Chrome {
   static const stackAvatar = 32.0;
   static const miniAvatar = 22.0;
 
+  /// The Timeline's rows at 1x text: a session's lane and a sub-session's,
+  /// the bar in each, and the thinner rail a ready stretch is drawn as.
+  static const timelineLane = 48.0;
+  static const timelineSubLane = 40.0;
+  static const timelineBar = 12.0;
+  static const timelineSubBar = 9.0;
+  static const timelineRail = 4.0;
+
+  /// A session's avatar at the start of its Timeline bar (a sub-session's is
+  /// [miniAvatar]), and the room left of the lanes an early start's takes.
+  static const timelineAvatar = 28.0;
+  static const timelineGutter = 40.0;
+
   /// The narrowest cell a family takes on the dashboard's grid, at 1x text.
   static const familyCellMin = 560.0;
 

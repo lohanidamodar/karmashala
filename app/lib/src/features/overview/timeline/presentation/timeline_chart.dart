@@ -3,49 +3,59 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../domain/timeline_model.dart';
+import 'timeline_avatar.dart';
 import 'timeline_painters.dart';
 
-/// The desktop timeline: time across, projects as rows, each session a bar.
-/// Lanes are built lazily, so a row off screen costs nothing per frame.
-class TimelineChart extends StatefulWidget {
-  const TimelineChart({
-    required this.model,
-    required this.now,
-    required this.onOpen,
-    this.controller,
-    super.key,
-  });
+/// Narrower than this, the lanes open on the last few hours rather than
+/// the whole day's activity.
+const double kTimelinePhoneWidth = 600;
 
-  final TimelineModel model;
-  final DateTime now;
-  final void Function(TimelineSession session) onOpen;
+/// How much a narrow Timeline shows when it opens on now.
+const Duration kTimelineNarrowSpan = Duration(hours: 3);
 
-  /// Zoom from outside (the toolbar's buttons).
-  final TimelineZoomController? controller;
-
-  /// The session-name column; no chart token says it yet.
-  static const double labelWidth = 240;
-
-  /// The axis band's least height; the band grows with the text scale
-  /// (`TimelineAxisPainter.heightFor`).
-  static const double axisHeight = Chrome.paneStrip;
-  static const double headerHeight = Chrome.tabStrip;
-  static const double laneHeight = Insets.xl + Insets.xs;
-
-  @override
-  State<TimelineChart> createState() => _TimelineChartState();
+/// What a Timeline [width] wide opens on: the hours up to now on a phone
+/// when the range holds now, otherwise everything that happened, padded.
+TimelineViewport timelineOpeningViewport(
+  TimelineModel model, {
+  required DateTime now,
+  required double width,
+}) {
+  if (width < kTimelinePhoneWidth &&
+      !now.isBefore(model.from) &&
+      now.isBefore(model.to)) {
+    const after = Duration(minutes: 15);
+    return clampTimelineViewport(
+      model,
+      now.add(after).subtract(kTimelineNarrowSpan),
+      kTimelineNarrowSpan,
+    );
+  }
+  final active = model.activity();
+  return TimelineViewport(start: active.from, end: active.to);
 }
 
-/// The toolbar's handle on the chart's zoom.
+/// [start] for [span], kept inside the model's range.
+TimelineViewport clampTimelineViewport(
+  TimelineModel model,
+  DateTime start,
+  Duration span,
+) {
+  final whole = model.to.difference(model.from);
+  final length = span > whole ? whole : span;
+  var from = start;
+  if (from.isBefore(model.from)) from = model.from;
+  if (from.add(length).isAfter(model.to)) from = model.to.subtract(length);
+  return TimelineViewport(start: from, end: from.add(length));
+}
+
+/// The toolbar's handle on the lanes: zoom, fit to what happened, jump to now.
 class TimelineZoomController extends ChangeNotifier {
   double _factor = 1;
-  int _fit = 0;
-
-  double get pendingFactor => _factor;
+  int _fits = 0;
+  int _nows = 0;
 
   void zoomIn() {
     _factor = 0.5;
@@ -58,7 +68,13 @@ class TimelineZoomController extends ChangeNotifier {
   }
 
   void fit() {
-    _fit++;
+    _fits++;
+    _factor = 1;
+    notifyListeners();
+  }
+
+  void now() {
+    _nows++;
     _factor = 1;
     notifyListeners();
   }
@@ -74,9 +90,13 @@ class _Header extends _Item {
 }
 
 class _Lane extends _Item {
-  const _Lane(this.session, {required this.hasChildren});
+  const _Lane(this.session, {required this.children, required this.folded});
   final TimelineSession session;
-  final bool hasChildren;
+
+  /// How many it started that are in the range, and how many of those are
+  /// folded away.
+  final int children;
+  final int folded;
 }
 
 class _Hover {
@@ -85,30 +105,67 @@ class _Hover {
   final Offset position;
 }
 
+/// **The Timeline's lanes**: time across the whole width, one lane per
+/// session with its title on its bar and its avatar at its start, the
+/// sub-sessions hanging off their parent on stems as on the dashboard's
+/// tree. Lanes are built lazily, so a row off screen costs nothing per frame.
+class TimelineChart extends StatefulWidget {
+  const TimelineChart({
+    required this.model,
+    required this.now,
+    required this.onSelect,
+    this.selectedId,
+    this.waitsOnly = false,
+    this.agentName,
+    this.controller,
+    super.key,
+  });
+
+  final TimelineModel model;
+  final DateTime now;
+
+  /// A lane was tapped: show what it did.
+  final void Function(TimelineSession session) onSelect;
+  final String? selectedId;
+
+  /// Fade everything but the waits on the owner.
+  final bool waitsOnly;
+
+  /// The agent's name for an agent id, as the app says it.
+  final String Function(String agentId)? agentName;
+
+  /// Zoom from outside (the toolbar's buttons).
+  final TimelineZoomController? controller;
+
+  /// The axis band's least height; it grows with the text scale.
+  static const double axisHeight = Chrome.paneStrip;
+
+  @override
+  State<TimelineChart> createState() => _TimelineChartState();
+}
+
 class _TimelineChartState extends State<TimelineChart> {
   final _scroll = ScrollController();
   final _folded = <String>{};
   final _hover = ValueNotifier<_Hover?>(null);
   final _stack = GlobalKey();
-  late TimelineViewport _viewport;
+  TimelineViewport? _viewport;
+  double _width = 0;
   int _fits = 0;
+  int _nows = 0;
 
   @override
   void initState() {
     super.initState();
-    _viewport = _whole;
     widget.controller?.addListener(_onZoom);
   }
-
-  TimelineViewport get _whole =>
-      TimelineViewport(start: widget.model.from, end: widget.model.to);
 
   @override
   void didUpdateWidget(TimelineChart old) {
     super.didUpdateWidget(old);
     if (old.model.from != widget.model.from ||
         old.model.to != widget.model.to) {
-      _viewport = _whole;
+      _viewport = null;
     }
     if (old.controller != widget.controller) {
       old.controller?.removeListener(_onZoom);
@@ -124,19 +181,41 @@ class _TimelineChartState extends State<TimelineChart> {
     super.dispose();
   }
 
+  TimelineViewport get _shown => _viewport ??= timelineOpeningViewport(
+    widget.model,
+    now: widget.now,
+    width: _width,
+  );
+
   void _onZoom() {
     final controller = widget.controller!;
-    if (controller._fit != _fits) {
-      _fits = controller._fit;
-      setState(() => _viewport = _whole);
+    if (controller._fits != _fits) {
+      _fits = controller._fits;
+      final active = widget.model.activity();
+      setState(
+        () => _viewport = TimelineViewport(start: active.from, end: active.to),
+      );
       return;
     }
-    _zoom(controller.pendingFactor, 0.5);
+    if (controller._nows != _nows) {
+      _nows = controller._nows;
+      // Now near the right edge, keeping the zoom.
+      final span = _shown.span;
+      setState(
+        () => _viewport = clampTimelineViewport(
+          widget.model,
+          widget.now.subtract(span * 0.85),
+          span,
+        ),
+      );
+      return;
+    }
+    _zoom(controller._factor, 0.5);
   }
 
   void _zoom(double factor, double anchor) {
     final whole = widget.model.to.difference(widget.model.from);
-    final span = _viewport.end.difference(_viewport.start);
+    final span = _shown.span;
     final next = Duration(
       microseconds: (span.inMicroseconds * factor)
           .clamp(
@@ -145,38 +224,42 @@ class _TimelineChartState extends State<TimelineChart> {
           )
           .round(),
     );
-    final pivot = _viewport.start.add(
+    final pivot = _shown.start.add(
       Duration(microseconds: (span.inMicroseconds * anchor).round()),
     );
     final start = pivot.subtract(
       Duration(microseconds: (next.inMicroseconds * anchor).round()),
     );
-    setState(() => _viewport = _clamped(start, next));
+    setState(
+      () => _viewport = clampTimelineViewport(widget.model, start, next),
+    );
   }
 
   void _pan(double dx, double width) {
     if (width <= 0) return;
-    final span = _viewport.end.difference(_viewport.start);
+    final span = _shown.span;
     final shift = Duration(
       microseconds: (dx / width * span.inMicroseconds).round(),
     );
-    setState(() => _viewport = _clamped(_viewport.start.add(shift), span));
-  }
-
-  TimelineViewport _clamped(DateTime start, Duration span) {
-    var from = start;
-    if (from.isBefore(widget.model.from)) from = widget.model.from;
-    if (from.add(span).isAfter(widget.model.to)) {
-      from = widget.model.to.subtract(span);
-    }
-    return TimelineViewport(start: from, end: from.add(span));
+    setState(
+      () => _viewport = clampTimelineViewport(
+        widget.model,
+        _shown.start.add(shift),
+        span,
+      ),
+    );
   }
 
   List<_Item> _items() {
     final items = <_Item>[];
     for (final project in widget.model.projects) {
       items.add(_Header(project));
-      final parents = {for (final s in project.sessions) s.parentId};
+      final kids = <String, int>{};
+      for (final session in project.sessions) {
+        if (session.parentId case final parent?) {
+          kids[parent] = (kids[parent] ?? 0) + 1;
+        }
+      }
       final hidden = <String>{};
       for (final session in project.sessions) {
         final parent = session.parentId;
@@ -185,31 +268,17 @@ class _TimelineChartState extends State<TimelineChart> {
           hidden.add(session.id);
           continue;
         }
-        items.add(_Lane(session, hasChildren: parents.contains(session.id)));
+        final children = kids[session.id] ?? 0;
+        items.add(
+          _Lane(
+            session,
+            children: children,
+            folded: _folded.contains(session.id) ? children : 0,
+          ),
+        );
       }
     }
     return items;
-  }
-
-  double _extent(_Item item) => switch (item) {
-    _Header() => TimelineChart.headerHeight,
-    _Lane() => TimelineChart.laneHeight,
-  };
-
-  List<TimelineArrowLine> _arrows(List<_Item> items) {
-    final centers = <String, double>{};
-    var y = 0.0;
-    for (final item in items) {
-      final extent = _extent(item);
-      if (item is _Lane) centers[item.session.id] = y + extent / 2;
-      y += extent;
-    }
-    return [
-      for (final arrow in widget.model.arrows)
-        if (centers[arrow.parentId] case final parentY?)
-          if (centers[arrow.childId] case final childY?)
-            TimelineArrowLine(parentY: parentY, childY: childY, at: arrow.at),
-    ];
   }
 
   void _signal(PointerSignalEvent event, double width, double x) {
@@ -240,15 +309,33 @@ class _TimelineChartState extends State<TimelineChart> {
       style: palette.axisDay,
       minimum: TimelineChart.axisHeight,
     );
+    final title = TextPainter(
+      text: TextSpan(text: 'Ag', style: palette.title),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+    )..layout();
+    final titleHeight = title.height;
+    title.dispose();
+    final headerHeight = Chrome.tabStripOf(context);
     final items = _items();
-    final arrows = _arrows(items);
+    double extent(_Item item) => switch (item) {
+      _Header() => headerHeight,
+      _Lane(:final session) => TimelineRowLayout.heightFor(
+        session,
+        titleHeight,
+      ),
+    };
     return LayoutBuilder(
       key: const ValueKey('timeline-chart'),
       builder: (context, constraints) {
-        final barWidth = math.max(
+        final width = constraints.maxWidth;
+        _width = width;
+        final viewport = _shown;
+        final laneWidth = math.max(
           1.0,
-          constraints.maxWidth - TimelineChart.labelWidth,
+          width - Chrome.timelineGutter - Insets.lg,
         );
+        final stems = _stems(items, extent, viewport, width);
         return Stack(
           key: _stack,
           children: [
@@ -257,20 +344,16 @@ class _TimelineChartState extends State<TimelineChart> {
                 SizedBox(
                   key: const ValueKey('timeline-axis'),
                   height: axisHeight,
-                  child: Row(
-                    children: [
-                      const SizedBox(width: TimelineChart.labelWidth),
-                      Expanded(
-                        child: CustomPaint(
-                          painter: TimelineAxisPainter(
-                            viewport: _viewport,
-                            palette: palette,
-                            now: widget.now,
-                            textScaler: scaler,
-                          ),
-                        ),
-                      ),
-                    ],
+                  width: width,
+                  child: CustomPaint(
+                    painter: TimelineAxisPainter(
+                      viewport: viewport,
+                      palette: palette,
+                      now: widget.now,
+                      left: Chrome.timelineGutter,
+                      right: Insets.lg,
+                      textScaler: scaler,
+                    ),
                   ),
                 ),
                 Expanded(
@@ -278,38 +361,48 @@ class _TimelineChartState extends State<TimelineChart> {
                     controller: _scroll,
                     itemCount: items.length,
                     itemExtentBuilder: (index, _) =>
-                        index < items.length ? _extent(items[index]) : null,
+                        index < items.length ? extent(items[index]) : null,
                     itemBuilder: (context, index) => switch (items[index]) {
                       _Header(:final project) => _ProjectHeader(
                         project: project,
                       ),
-                      _Lane(:final session, :final hasChildren) => _LaneRow(
-                        key: ValueKey('timeline-lane-${session.id}'),
-                        session: session,
-                        hasChildren: hasChildren,
-                        folded: _folded.contains(session.id),
-                        viewport: _viewport,
-                        palette: palette,
-                        now: widget.now,
-                        onFold: () => setState(() {
-                          if (!_folded.remove(session.id)) {
-                            _folded.add(session.id);
-                          }
-                        }),
-                        onOpen: () => widget.onOpen(session),
-                        onSignal: (event, x) => _signal(event, barWidth, x),
-                        onPan: (dx) => _pan(dx, barWidth),
-                        onPinch: (scale, x) =>
-                            _zoom(1 / scale, (x / barWidth).clamp(0, 1)),
-                        onHover: (text, global) {
-                          final box =
-                              _stack.currentContext?.findRenderObject()
-                                  as RenderBox?;
-                          _hover.value = text == null || box == null
-                              ? null
-                              : _Hover(text, box.globalToLocal(global));
-                        },
-                      ),
+                      _Lane(:final session, :final children, :final folded) =>
+                        _LaneRow(
+                          key: ValueKey('timeline-lane-${session.id}'),
+                          session: session,
+                          children: children,
+                          folded: folded,
+                          selected: session.id == widget.selectedId,
+                          waitsOnly: widget.waitsOnly,
+                          agentName: switch ((
+                            session.agent,
+                            widget.agentName,
+                          )) {
+                            (final id?, final name?) => name(id),
+                            _ => null,
+                          },
+                          viewport: viewport,
+                          palette: palette,
+                          now: widget.now,
+                          onFold: () => setState(() {
+                            if (!_folded.remove(session.id)) {
+                              _folded.add(session.id);
+                            }
+                          }),
+                          onSelect: () => widget.onSelect(session),
+                          onSignal: (event, x) => _signal(event, laneWidth, x),
+                          onPan: (dx) => _pan(dx, laneWidth),
+                          onPinch: (scale, x) =>
+                              _zoom(1 / scale, (x / laneWidth).clamp(0, 1)),
+                          onHover: (text, global) {
+                            final box =
+                                _stack.currentContext?.findRenderObject()
+                                    as RenderBox?;
+                            _hover.value = text == null || box == null
+                                ? null
+                                : _Hover(text, box.globalToLocal(global));
+                          },
+                        ),
                     },
                   ),
                 ),
@@ -317,13 +410,11 @@ class _TimelineChartState extends State<TimelineChart> {
             ),
             IgnorePointer(
               child: CustomPaint(
-                size: Size(constraints.maxWidth, constraints.maxHeight),
-                painter: TimelineArrowPainter(
-                  arrows: arrows,
-                  viewport: _viewport,
+                size: Size(width, constraints.maxHeight),
+                painter: TimelineStemPainter(
+                  stems: stems,
                   palette: palette,
                   scroll: _scroll,
-                  left: TimelineChart.labelWidth,
                   top: axisHeight,
                 ),
               ),
@@ -334,10 +425,7 @@ class _TimelineChartState extends State<TimelineChart> {
                 if (hover == null) return const SizedBox.shrink();
                 final left = math.min(
                   hover.position.dx + Insets.md,
-                  math.max(
-                    0.0,
-                    constraints.maxWidth - _HoverCard.maxWidth - Insets.lg,
-                  ),
+                  math.max(0.0, width - DialogWidth.popover - Insets.lg),
                 );
                 return Positioned(
                   left: left,
@@ -351,6 +439,50 @@ class _TimelineChartState extends State<TimelineChart> {
       },
     );
   }
+
+  /// Each shown sub-session's stem, from its parent's bar (or its avatar,
+  /// when both sit stuck at the left edge) down to its own avatar.
+  List<TimelineStem> _stems(
+    List<_Item> items,
+    double Function(_Item item) extent,
+    TimelineViewport viewport,
+    double width,
+  ) {
+    final rows = <String, ({double y, TimelineRowLayout layout})>{};
+    final stems = <TimelineStem>[];
+    var y = 0.0;
+    for (final item in items) {
+      final height = extent(item);
+      if (item is _Lane) {
+        final session = item.session;
+        final layout = TimelineRowLayout.of(
+          session,
+          viewport,
+          width: width,
+          height: height,
+        );
+        rows[session.id] = (y: y, layout: layout);
+        if (rows[session.parentId] case final parent?) {
+          final x = layout.avatar.center.dx;
+          final fromAvatar =
+              x < parent.layout.laneLeft || x <= parent.layout.avatar.right;
+          stems.add(
+            TimelineStem(
+              x: x,
+              top:
+                  parent.y +
+                  (fromAvatar
+                      ? parent.layout.avatar.bottom
+                      : parent.layout.barBottom),
+              bottom: y + layout.avatar.top,
+            ),
+          );
+        }
+      }
+      y += height;
+    }
+    return stems;
+  }
 }
 
 class _ProjectHeader extends StatelessWidget {
@@ -361,20 +493,40 @@ class _ProjectHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final sessions = project.sessions;
+    final live = sessions.where((s) => s.live).length;
+    final waiting = sessions
+        .where((s) => s.stateNow == TimelineState.waiting)
+        .length;
+    final facts = [
+      '${sessions.length} ${sessions.length == 1 ? 'session' : 'sessions'}',
+      if (live > 0) '$live live',
+      if (waiting > 0) '$waiting waiting on you',
+    ].join(' · ');
     return Semantics(
       header: true,
       child: Container(
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+        padding: const EdgeInsets.symmetric(horizontal: Insets.lg),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerLow,
           border: Border(
             top: BorderSide(color: theme.colorScheme.outlineVariant),
           ),
         ),
-        child: Text(
-          '${project.name} · ${project.sessions.length} '
-          '${project.sessions.length == 1 ? 'session' : 'sessions'}',
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: project.name,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              TextSpan(
+                text: ' · $facts',
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.labelLarge,
@@ -389,14 +541,11 @@ class _HoverCard extends StatelessWidget {
 
   final String text;
 
-  /// The widest a hover card is drawn; no chart token says it yet.
-  static const double maxWidth = 300;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: maxWidth),
+      constraints: const BoxConstraints(maxWidth: DialogWidth.popover),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.colorScheme.inverseSurface,
@@ -420,22 +569,23 @@ class _HoverCard extends StatelessWidget {
   }
 }
 
-/// What a screen reader hears for a session's bar.
-String describeSession(TimelineSession session) {
-  String clock(DateTime at) {
-    final local = at.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
-  }
+String _clock(DateTime at) {
+  final local = at.toLocal();
+  return '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+}
 
+/// What a screen reader hears for a session's lane.
+String describeSession(TimelineSession session) {
   final parts = <String>[
     session.title,
     session.projectName,
     if (session.startOnly)
-      'started ${clock(session.start)}, nothing more recorded'
+      'started ${_clock(session.start)}, nothing more recorded'
     else
-      '${clock(session.start)} to '
-          '${session.live ? 'now' : clock(session.end)}',
+      '${_clock(session.start)} to '
+          '${session.live ? 'now' : _clock(session.end)}',
+    if (session.stateNow == TimelineState.waiting) 'waiting on you now',
     if (session.workingTotal > Duration.zero)
       'working ${describeDuration(session.workingTotal)}',
     if (session.waitingTotal > Duration.zero)
@@ -451,13 +601,16 @@ String describeSession(TimelineSession session) {
 class _LaneRow extends StatelessWidget {
   const _LaneRow({
     required this.session,
-    required this.hasChildren,
+    required this.children,
     required this.folded,
+    required this.selected,
+    required this.waitsOnly,
+    required this.agentName,
     required this.viewport,
     required this.palette,
     required this.now,
     required this.onFold,
-    required this.onOpen,
+    required this.onSelect,
     required this.onSignal,
     required this.onPan,
     required this.onPinch,
@@ -466,20 +619,27 @@ class _LaneRow extends StatelessWidget {
   });
 
   final TimelineSession session;
-  final bool hasChildren;
-  final bool folded;
+  final int children;
+  final int folded;
+  final bool selected;
+  final bool waitsOnly;
+  final String? agentName;
   final TimelineViewport viewport;
   final TimelinePalette palette;
   final DateTime now;
   final VoidCallback onFold;
-  final VoidCallback onOpen;
+  final VoidCallback onSelect;
   final void Function(PointerSignalEvent event, double x) onSignal;
   final void Function(double dx) onPan;
   final void Function(double scale, double x) onPinch;
   final void Function(String? text, Offset global) onHover;
 
-  String? _hoverText(double x, double width) {
-    final at = viewport.timeAt(x, width);
+  String? _hoverText(TimelineRowLayout layout, double x) {
+    if (x < layout.laneLeft || x > layout.laneRight) return null;
+    final at = viewport.timeAt(
+      x - layout.laneLeft,
+      layout.laneRight - layout.laneLeft,
+    );
     for (final span in session.spans) {
       if (!at.isBefore(span.from) && at.isBefore(span.to)) {
         return '${session.title}: ${describeSpan(span)}';
@@ -493,105 +653,102 @@ class _LaneRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final scaler = MediaQuery.textScalerOf(context);
-    final opens = !session.deleted;
-    return Row(
-      children: [
-        SizedBox(
-          width: TimelineChart.labelWidth,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: Insets.sm + session.depth * Insets.lg,
-              right: Insets.xs,
-            ),
-            child: Row(
-              children: [
-                if (hasChildren)
-                  InkWell(
-                    onTap: onFold,
-                    child: Semantics(
-                      button: true,
-                      label: folded
-                          ? 'Show what ${session.title} started'
-                          : 'Hide what ${session.title} started',
-                      child: Icon(
-                        folded ? AppIcons.caretRight : AppIcons.caretDown,
-                        size: Chrome.iconAction,
-                      ),
-                    ),
-                  )
-                else
-                  const SizedBox(width: Chrome.iconAction),
-                const SizedBox(width: Insets.xs),
-                Expanded(
-                  child: Text(
-                    session.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontStyle: session.backfilled ? FontStyle.italic : null,
-                      decoration: session.deleted
-                          ? TextDecoration.lineThrough
-                          : null,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              return Semantics(
-                button: opens,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final layout = TimelineRowLayout.of(
+          session,
+          viewport,
+          width: size.width,
+          height: size.height,
+        );
+        final avatar = TimelineAvatar(
+          session: session,
+          size: layout.avatar.width,
+        );
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: Semantics(
+                container: true,
+                button: true,
+                selected: selected,
                 label: describeSession(session),
-                onTap: opens ? onOpen : null,
-                excludeSemantics: true,
+                onTap: onSelect,
                 child: MouseRegion(
-                  cursor: opens
-                      ? SystemMouseCursors.click
-                      : SystemMouseCursors.basic,
+                  cursor: SystemMouseCursors.click,
                   onHover: (event) => onHover(
-                    _hoverText(event.localPosition.dx, width),
+                    _hoverText(layout, event.localPosition.dx),
                     event.position,
                   ),
                   onExit: (event) => onHover(null, event.position),
                   child: Listener(
-                    onPointerSignal: (event) =>
-                        onSignal(event, event.localPosition.dx),
+                    onPointerSignal: (event) => onSignal(
+                      event,
+                      event.localPosition.dx - layout.laneLeft,
+                    ),
                     onPointerPanZoomUpdate: (event) {
                       if (event.scale != 1) {
-                        onPinch(event.scale, event.localPosition.dx);
+                        onPinch(
+                          event.scale,
+                          event.localPosition.dx - layout.laneLeft,
+                        );
                       } else if (event.panDelta.dx != 0) {
                         onPan(-event.panDelta.dx);
                       }
                     },
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: opens ? onOpen : null,
+                      onTap: onSelect,
                       onHorizontalDragUpdate: (details) =>
                           onPan(-details.delta.dx),
                       child: CustomPaint(
-                        size: Size(width, TimelineChart.laneHeight),
-                        painter: TimelineLanePainter(
+                        size: size,
+                        painter: TimelineRowPainter(
                           session: session,
                           viewport: viewport,
                           palette: palette,
                           now: now,
+                          selected: selected,
+                          waitsOnly: waitsOnly,
+                          folded: folded,
+                          agentName: agentName,
                           textScaler: scaler,
                         ),
                       ),
                     ),
                   ),
                 ),
-              );
-            },
-          ),
-        ),
-      ],
+              ),
+            ),
+            Positioned.fromRect(
+              rect: layout.avatar,
+              child: children == 0
+                  ? IgnorePointer(child: avatar)
+                  : Semantics(
+                      container: true,
+                      button: true,
+                      onTap: onFold,
+                      label: folded > 0
+                          ? 'Show what ${session.title} started'
+                          : 'Hide what ${session.title} started',
+                      child: Tooltip(
+                        message: folded > 0
+                            ? 'Show $children sub-sessions'
+                            : 'Fold $children sub-sessions',
+                        child: InkResponse(
+                          key: ValueKey('timeline-fold-${session.id}'),
+                          onTap: onFold,
+                          radius: layout.avatar.width,
+                          child: avatar,
+                        ),
+                      ),
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

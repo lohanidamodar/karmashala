@@ -9,7 +9,8 @@ import 'package:karmashala/src/features/overview/timeline/application/timeline_c
 import 'package:karmashala/src/features/overview/timeline/data/timeline_data.dart';
 import 'package:karmashala/src/features/overview/timeline/presentation/overview_timeline_view.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
-import 'package:karmashala_ui/tokens.dart' show TypeSizes;
+import 'package:karmashala/src/features/overview/timeline/presentation/timeline_painters.dart';
+import 'package:karmashala_ui/tokens.dart' show Chrome, Insets, TypeSizes;
 
 class _FakeTimelineData implements TimelineData {
   final List<ActivityEntry> entries = [];
@@ -55,6 +56,7 @@ void main() {
     String? parent,
     String? detail,
     String? title,
+    String machine = 'win',
   }) => ActivityEntry(
     id: ++ids,
     at: h(hours),
@@ -66,7 +68,15 @@ void main() {
     projectName: project == 'p1' ? 'Alpha' : 'Beta',
     parentSessionId: parent,
     detail: detail,
+    machine: machine,
   );
+
+  // The lanes open on what the seeded day did, padded a quarter hour each
+  // side: 08:45 to 16:15.
+  double xAt(Rect lane, num hours) {
+    final width = lane.width - Chrome.timelineGutter - Insets.lg;
+    return lane.left + Chrome.timelineGutter + (hours - 8.75) / 7.5 * width;
+  }
 
   late _FakeTimelineData data;
   late List<String> opened;
@@ -88,8 +98,20 @@ void main() {
       e(ActivityKind.linked, 10.5, session: 'child', parent: 's1'),
       e(ActivityKind.turnStarted, 10.5, session: 'child'),
       e(ActivityKind.turnEnded, 11.5, session: 'child'),
-      e(ActivityKind.sessionStarted, 13, session: 'b1', project: 'p2'),
-      e(ActivityKind.turnStarted, 13.5, session: 'b1', project: 'p2'),
+      e(
+        ActivityKind.sessionStarted,
+        13,
+        session: 'b1',
+        project: 'p2',
+        machine: 'mac',
+      ),
+      e(
+        ActivityKind.turnStarted,
+        13.5,
+        session: 'b1',
+        project: 'p2',
+        machine: 'mac',
+      ),
       e(ActivityKind.sessionStarted, 14, session: 'gone', project: 'p2'),
       e(ActivityKind.deleted, 15, session: 'gone', project: 'p2'),
     ]);
@@ -191,37 +213,120 @@ void main() {
     expect(find.byKey(const ValueKey('timeline-update-server')), findsNothing);
   });
 
-  testWidgets('the desktop chart at 1440x900: projects as rows, a bar per '
-      'session, and a click opens it', (tester) async {
+  testWidgets('the desktop lanes at 1440x900: projects as groups, a lane per '
+      'session, and a click shows what it did beside them', (tester) async {
     seedDay();
     await pump(tester, const Size(1440, 900));
     expect(find.byKey(const ValueKey('timeline-chart')), findsOneWidget);
     expect(find.textContaining('Alpha · 2 sessions'), findsOneWidget);
-    expect(find.textContaining('Beta · 2 sessions'), findsOneWidget);
+    expect(find.textContaining('Beta · 2 sessions · 1 live'), findsOneWidget);
     for (final id in ['s1', 'child', 'b1', 'gone']) {
       expect(find.byKey(ValueKey('timeline-lane-$id')), findsOneWidget);
+      expect(find.byKey(ValueKey('timeline-avatar-$id')), findsOneWidget);
     }
     expect(find.text('Waiting on you'), findsOneWidget, reason: 'the legend');
 
-    final lane = find.byKey(const ValueKey('timeline-lane-s1'));
-    final box = tester.getRect(lane);
-    // 10:30, inside the turn, on the bar past the label column.
-    await tester.tapAt(
-      Offset(box.left + 240 + (10.5 / 24) * (box.width - 240), box.center.dy),
+    final box = tester.getRect(find.byKey(const ValueKey('timeline-lane-s1')));
+    await tester.tapAt(Offset(xAt(box, 10.5), box.center.dy));
+    await tester.pump();
+    expect(opened, isEmpty, reason: 'a click shows it; Open opens it');
+    expect(find.byKey(const ValueKey('timeline-detail-s1')), findsOneWidget);
+    expect(
+      find.textContaining('Waiting on you 12m (asked to allow write'),
+      findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('timeline-detail-relative-child')),
+      findsOneWidget,
+    );
+    // Docked beside the lanes, not over them.
+    expect(
+      tester.getRect(find.byKey(const ValueKey('timeline-detail-s1'))).left,
+      greaterThanOrEqualTo(
+        tester.getRect(find.byKey(const ValueKey('timeline-lane-s1'))).right,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('timeline-detail-open')));
     expect(opened, ['s1']);
 
-    // A deleted session draws but opens nothing.
+    // A deleted session shows what it did but has nothing to open.
     final gone = tester.getRect(
       find.byKey(const ValueKey('timeline-lane-gone')),
     );
-    await tester.tapAt(
-      Offset(
-        gone.left + 240 + (14.5 / 24) * (gone.width - 240),
-        gone.center.dy,
-      ),
-    );
-    expect(opened, ['s1']);
+    await tester.tapAt(Offset(xAt(gone, 14.5), gone.center.dy));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-detail-gone')), findsOneWidget);
+    expect(find.byKey(const ValueKey('timeline-detail-open')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('timeline-detail-close')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-detail-gone')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a lane carries its title, the times and how long it kept the '
+      'owner waiting, painted on the lane', (tester) async {
+    seedDay();
+    await pump(tester, const Size(1440, 900));
+    final painter = tester
+        .widgetList<CustomPaint>(
+          find.descendant(
+            of: find.byKey(const ValueKey('timeline-lane-s1')),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .map((w) => w.painter)
+        .whereType<TimelineRowPainter>()
+        .single;
+    expect(painter.session.title, 'Session s1');
+    expect(painter.session.waitingTotal, const Duration(minutes: 12));
+    expect(painter.waitsOnly, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('timeline-waits-only')));
+    await tester.pump();
+    final dimmed = tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((w) => w.painter)
+        .whereType<TimelineRowPainter>();
+    expect(dimmed, isNotEmpty);
+    expect(dimmed.every((p) => p.waitsOnly), isTrue);
+  });
+
+  testWidgets('the search and the machine filter narrow the lanes', (
+    tester,
+  ) async {
+    seedDay();
+    await pump(tester, const Size(1440, 900));
+    await tester.enterText(find.byKey(const ValueKey('timeline-search')), 'b1');
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-lane-b1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('timeline-lane-s1')), findsNothing);
+    await tester.enterText(find.byKey(const ValueKey('timeline-search')), '');
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('timeline-projects')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('timeline-machine-mac')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-lane-b1')), findsNothing);
+    expect(find.byKey(const ValueKey('timeline-lane-s1')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Week asks for the seven days ending on the day shown', (
+    tester,
+  ) async {
+    seedDay();
+    await pump(tester, const Size(1440, 900));
+    await tester.tap(find.text('Week'));
+    await tester.pump();
+    await tester.pump();
+    expect(data.asked.last.from, DateTime(2026, 9, 30).toUtc());
+    expect(data.asked.last.to, DateTime(2026, 10, 7).toUtc());
+    await tester.tap(find.text('Day'));
+    await tester.pump();
+    await tester.pump();
+    expect(data.asked.last.from, dayStart.toUtc());
   });
 
   for (final scale in const [1.0, 1.3, 1.6]) {
@@ -255,9 +360,7 @@ void main() {
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: Offset.zero);
-    await mouse.moveTo(
-      Offset(box.left + 240 + (10.1 / 24) * (box.width - 240), box.center.dy),
-    );
+    await mouse.moveTo(Offset(xAt(box, 10.1), box.center.dy));
     await tester.pump();
     expect(
       find.text(
@@ -341,17 +444,43 @@ void main() {
     expect(find.byKey(const ValueKey('timeline-lane-b1')), findsNothing);
   });
 
-  testWidgets('the phone list at 390x844: the day\'s sessions, each with a '
-      'compact bar', (tester) async {
+  for (final (name, size, scale) in [
+    ('390x844', const Size(390, 844), 1.0),
+    ('360 px at 1.6x', const Size(360, 780), 1.6),
+  ]) {
+    testWidgets('the phone at $name: the same lanes on the last hours, and a '
+        'tap shows what it did in a sheet', (tester) async {
+      seedDay();
+      await pump(tester, size, textScale: scale);
+      expect(find.byKey(const ValueKey('timeline-chart')), findsOneWidget);
+      for (final id in ['s1', 'child', 'b1', 'gone']) {
+        expect(find.byKey(ValueKey('timeline-lane-$id')), findsOneWidget);
+      }
+      // Zoom is a pinch here; search lives in the filters.
+      expect(find.byKey(const ValueKey('timeline-zoom-in')), findsNothing);
+      expect(find.byKey(const ValueKey('timeline-search')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('timeline-lane-s1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('timeline-detail-s1')), findsOneWidget);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('timeline-detail-open')),
+      );
+      await tester.tap(find.byKey(const ValueKey('timeline-detail-open')));
+      expect(opened, ['s1']);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('a phone finds a session by name in the filters', (tester) async {
     seedDay();
     await pump(tester, const Size(390, 844));
-    expect(find.byKey(const ValueKey('timeline-chart')), findsNothing);
-    expect(find.byKey(const ValueKey('timeline-phone-list')), findsOneWidget);
-    expect(find.text('Session s1'), findsOneWidget);
-    expect(find.textContaining('waited 12m'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('timeline-phone-s1')));
-    expect(opened, ['s1']);
-    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const ValueKey('timeline-projects')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('timeline-search')), 'b1');
+    await tester.pump();
+    expect(find.byKey(const ValueKey('timeline-lane-s1')), findsNothing);
+    expect(find.byKey(const ValueKey('timeline-lane-b1')), findsOneWidget);
   });
 
   testWidgets('a 150-session day of thousands of turns builds, and builds '
