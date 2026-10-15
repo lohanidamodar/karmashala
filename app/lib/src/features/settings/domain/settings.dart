@@ -86,6 +86,7 @@ class Settings {
     this.themeMode = AppThemeMode.system,
     this.defaultTerminalProfileId,
     this.keepAwake = false,
+    this.windowsAccessibility = false,
     this.closeToTray = false,
     this.autoStart = false,
     this.simulatorSlimming = true,
@@ -200,6 +201,11 @@ class Settings {
   final String? defaultTerminalProfileId;
 
   final bool keepAwake;
+
+  /// Windows only: answer screen readers and other accessibility clients.
+  /// Off by default — the Flutter engine's Windows accessibility bridge can
+  /// crash the app while one reads it (see `WindowsAccessibilityGuard`).
+  final bool windowsAccessibility;
 
   final bool closeToTray;
 
@@ -466,6 +472,7 @@ class Settings {
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
     bool? keepAwake,
+    bool? windowsAccessibility,
     bool? closeToTray,
     bool? autoStart,
     bool? simulatorSlimming,
@@ -550,6 +557,7 @@ class Settings {
     defaultTerminalProfileId:
         defaultTerminalProfileId ?? this.defaultTerminalProfileId,
     keepAwake: keepAwake ?? this.keepAwake,
+    windowsAccessibility: windowsAccessibility ?? this.windowsAccessibility,
     closeToTray: closeToTray ?? this.closeToTray,
     autoStart: autoStart ?? this.autoStart,
     simulatorSlimming: simulatorSlimming ?? this.simulatorSlimming,
@@ -674,6 +682,7 @@ class Settings {
     'themeMode',
     'defaultTerminalProfileId',
     'keepAwake',
+    'windowsAccessibility',
     'closeToTray',
     'autoStart',
     'simulatorSlimming',
@@ -755,6 +764,7 @@ class Settings {
     if (defaultTerminalProfileId != null)
       'defaultTerminalProfileId': defaultTerminalProfileId,
     'keepAwake': keepAwake,
+    'windowsAccessibility': windowsAccessibility,
     'closeToTray': closeToTray,
     'autoStart': autoStart,
     'simulatorSlimming': simulatorSlimming,
@@ -908,6 +918,7 @@ class Settings {
       themeMode: themeMode,
       defaultTerminalProfileId: terminalId is String ? terminalId : null,
       keepAwake: json['keepAwake'] == true,
+      windowsAccessibility: json['windowsAccessibility'] == true,
       closeToTray: json['closeToTray'] == true,
       autoStart: json['autoStart'] == true,
       // `!= false`: absent must read as on, or every install loses slimming.
@@ -1099,6 +1110,7 @@ class Settings {
       other.themeMode == themeMode &&
       other.defaultTerminalProfileId == defaultTerminalProfileId &&
       other.keepAwake == keepAwake &&
+      other.windowsAccessibility == windowsAccessibility &&
       other.closeToTray == closeToTray &&
       other.autoStart == autoStart &&
       other.simulatorSlimming == simulatorSlimming &&
@@ -1175,7 +1187,7 @@ class Settings {
     defaultAgent,
     themeMode,
     defaultTerminalProfileId,
-    keepAwake,
+    Object.hash(keepAwake, windowsAccessibility),
     closeToTray,
     autoStart,
     simulatorSlimming,

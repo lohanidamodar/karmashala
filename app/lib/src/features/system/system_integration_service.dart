@@ -392,6 +392,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
     _want(NativeSetting.launcherHotkey, signature, _desiredHotkeySignature);
     _desiredHotkeySignature = signature;
 
+    await _native.accessibility?.apply(allowed: settings.windowsAccessibility);
     await _reconcile(settings);
     await _refreshMenu(settings);
   }

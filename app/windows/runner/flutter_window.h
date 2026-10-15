@@ -3,6 +3,9 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+#include <flutter/encodable_value.h>
 
 #include <memory>
 
@@ -28,6 +31,16 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // `karmashala/windows_accessibility`: Dart's say on whether accessibility
+  // clients are answered (see `ViewSubclassProc`).
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      accessibility_channel_;
+
+  // Holds WM_GETOBJECT back from the Flutter view until Dart allows it.
+  static LRESULT CALLBACK ViewSubclassProc(HWND hwnd, UINT message,
+                                           WPARAM wparam, LPARAM lparam,
+                                           UINT_PTR id, DWORD_PTR data);
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

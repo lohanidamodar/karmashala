@@ -13,6 +13,8 @@ import 'package:tray_manager/tray_manager.dart' as native;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'windows_accessibility.dart';
+
 /// Window: visibility, focus, close behaviour, size, teardown.
 abstract class WindowAdapter {
   Future<void> setPreventClose(bool value);
@@ -116,6 +118,7 @@ class NativeAdapters {
     required this.hotkey,
     required this.autoStart,
     required this.wakelock,
+    this.accessibility,
   });
 
   /// The plugins as they actually are.
@@ -124,13 +127,18 @@ class NativeAdapters {
       tray = PluginTrayAdapter(),
       hotkey = const PluginHotkeyAdapter(),
       autoStart = const PluginAutoStartAdapter(),
-      wakelock = const PluginWakelockAdapter();
+      wakelock = const PluginWakelockAdapter(),
+      accessibility = WindowsAccessibilityGuard();
 
   final WindowAdapter window;
   final TrayAdapter tray;
   final HotkeyAdapter hotkey;
   final AutoStartAdapter autoStart;
   final WakelockAdapter wakelock;
+
+  /// Screen reader support on Windows, held off unless the setting is on;
+  /// none where nothing native is driven.
+  final WindowsAccessibilityGuard? accessibility;
 }
 
 class PluginWindowAdapter implements WindowAdapter {
@@ -361,9 +369,8 @@ class _NativeTrayMenu {
     return menu;
   }
 
-  native.MenuItemState _stateOf(bool checked) => checked
-      ? native.MenuItemState.checked
-      : native.MenuItemState.unchecked;
+  native.MenuItemState _stateOf(bool checked) =>
+      checked ? native.MenuItemState.checked : native.MenuItemState.unchecked;
 
   void dispose() {
     for (final (item, listenerId) in _registrations) {

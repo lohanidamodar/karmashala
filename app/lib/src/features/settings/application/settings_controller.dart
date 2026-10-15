@@ -136,6 +136,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setWindowsAccessibility(bool value) {
+    state = state.copyWith(windowsAccessibility: value);
+    _save();
+  }
+
   void setCloseToTray(bool value) {
     state = state.copyWith(closeToTray: value);
     _save();

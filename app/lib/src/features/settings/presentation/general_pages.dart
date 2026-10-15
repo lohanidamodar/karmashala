@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -256,6 +257,18 @@ class StartupSection extends ConsumerWidget {
             NativeSetting.keepAwake,
             enabled: settings.keepAwake,
           ),
+          if (defaultTargetPlatform == TargetPlatform.windows)
+            SettingsSwitchRow(
+              key: const ValueKey('settings-windows-accessibility'),
+              label: 'Screen reader support',
+              help:
+                  'Lets screen readers, the touch keyboard and other '
+                  'accessibility tools read Karmashala. Off by default: a bug '
+                  'in Flutter on Windows can crash the app while they do. '
+                  'Turning it off applies after a restart.',
+              value: settings.windowsAccessibility,
+              onChanged: controller.setWindowsAccessibility,
+            ),
           SettingsSwitchRow(
             label: 'Bring sessions agents start to the front',
             help:

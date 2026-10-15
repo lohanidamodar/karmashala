@@ -24,6 +24,12 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['sleep', 'keep awake', 'caffeinate'],
   ),
   SettingsEntry(
+    'Screen reader support',
+    anchor: SettingsAnchor.startup,
+    description: 'Windows: let screen readers and accessibility tools read it.',
+    keywords: ['accessibility', 'narrator', 'screen reader', 'a11y', 'crash'],
+  ),
+  SettingsEntry(
     'Open agent sessions in chat view',
     anchor: SettingsAnchor.sessionView,
     description: 'Terminal sessions show their chat first.',

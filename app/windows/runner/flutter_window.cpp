@@ -1,8 +1,24 @@
 #include "flutter_window.h"
 
+#include <commctrl.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+// Whether the Flutter view answers accessibility clients — screen readers, the
+// touch keyboard, anything asking through UI Automation or MSAA. Off until
+// Dart says otherwise (Settings → Screen reader support): once a client asks,
+// the engine turns semantics on, and its Windows accessibility bridge can
+// erase a child id its old parent no longer lists
+// (`AccessibilityBridge::CreateRemoveReparentedNodesUpdate`, whose check is
+// compiled out in release), and the copy that follows runs off the end of the
+// buffer: the access violations and heap corruption of 2026-10-09 to -15.
+bool g_accessibility_allowed = false;
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -31,6 +47,26 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  accessibility_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "karmashala/windows_accessibility",
+          &flutter::StandardMethodCodec::GetInstance());
+  accessibility_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        const auto* allowed = std::get_if<bool>(call.arguments());
+        if (call.method_name() != "setAllowed" || allowed == nullptr) {
+          result->NotImplemented();
+          return;
+        }
+        g_accessibility_allowed = *allowed;
+        result->Success();
+      });
+  ::SetWindowSubclass(flutter_controller_->view()->GetNativeWindow(),
+                      ViewSubclassProc, 1, 0);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -46,11 +82,29 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  accessibility_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
 
   Win32Window::OnDestroy();
+}
+
+LRESULT CALLBACK FlutterWindow::ViewSubclassProc(HWND hwnd, UINT message,
+                                                 WPARAM wparam, LPARAM lparam,
+                                                 UINT_PTR id, DWORD_PTR data) {
+  switch (message) {
+    case WM_GETOBJECT:
+      // The window's own default object, never the engine's tree.
+      if (!g_accessibility_allowed) {
+        return ::DefWindowProc(hwnd, message, wparam, lparam);
+      }
+      break;
+    case WM_NCDESTROY:
+      ::RemoveWindowSubclass(hwnd, ViewSubclassProc, id);
+      break;
+  }
+  return ::DefSubclassProc(hwnd, message, wparam, lparam);
 }
 
 LRESULT
