@@ -157,7 +157,11 @@ void main() {
     ],
   );
   const alwaysMenu = AgentScreenMenu(
-    prompt: ['Bash command', 'flutter test --exclude-tags=live-ssh,live-wsl'],
+    prompt: [
+      'Bash command',
+      'flutter test --exclude-tags=live-ssh,live-wsl',
+      'Do you want to proceed?',
+    ],
     options: [
       'Yes',
       "Yes, and don't ask again for flutter test commands in /src/ks-r21",

@@ -59,21 +59,15 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
     super.dispose();
   }
 
-  Future<void> _answer({required bool approve}) async {
+  Future<void> _answer(_OpenAnswer answer) async {
     if (_busy) return;
     final answers = ref.read(sessionPromptAnswersProvider);
     final messenger = ScaffoldMessenger.of(context);
     final said = _AnswerSaid.of(context);
     setState(() => _busy = true);
     try {
-      await answers.answer(
-        ApprovalAnswerRequest(
-          sessionId: widget.sessionId,
-          approve: approve,
-          ask: _ask,
-        ),
-      );
-      said?.say(approve ? 'Allowed once.' : 'Denied.');
+      await answers.answer(answer.request);
+      said?.say(answer.said);
     } on SessionPromptRefusal catch (refusal) {
       // Only a refusal is reported: the agent's own screen is the
       // acknowledgement of one that landed.
@@ -232,23 +226,24 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
 
   @override
   Widget build(BuildContext context) {
+    final answers = _openAnswers(
+      widget.sessionId,
+      widget.report,
+      rules: widget.rules,
+      menu: widget.choose == null ? null : widget.menu,
+      menus: widget.menus,
+      ask: _ask,
+    );
     // An ACP agent names its own answers: those, not the board's.
-    final offered = widget.report.toolAsk?.options ?? const [];
-    if (offered.isNotEmpty) {
+    if (widget.report.toolAsk?.options.isNotEmpty ?? false) {
       return _PermissionOptions(
         sessionId: widget.sessionId,
-        report: widget.report,
-        options: offered,
+        answers: answers,
         command: widget.command,
       );
     }
     final theme = Theme.of(context);
-    final approve = widget.rules.approve;
     final deny = widget.rules.deny;
-    final menu = widget.menu;
-    final always = menu == null || widget.choose == null
-        ? null
-        : _alwaysOption(menu, widget.menus);
     final idle = !_busy;
     final touch = _Docked.touchOf(context);
     // The reason is a prompt: a phone without `send_prompt` would deny, then
@@ -260,36 +255,32 @@ class _ToolAskAnswersState extends ConsumerState<_ToolAskAnswers> {
         _DockButtonRow(
           sessionId: widget.sessionId,
           buttons: [
-            if (approve != null)
-              _DockButton(
-                key: const ValueKey('dock-allow-once'),
-                label: 'Allow once',
-                keyHint: _keyName(approve.keys),
-                tooltip: approve.effect,
-                primary: true,
-                onPressed: idle ? () => _answer(approve: true) : null,
-              ),
-            if (always != null)
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: touch ? double.infinity : 320,
+            for (final answer in answers)
+              if (answer.menuOption case final option?)
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: touch ? double.infinity : _dockOptionMaxWidth,
+                  ),
+                  child: _DockButton(
+                    key: const ValueKey('dock-always-allow'),
+                    label: answer.label,
+                    detail: answer.detail,
+                    tooltip: answer.tooltip,
+                    onPressed: idle ? () => _always(option) : null,
+                  ),
+                )
+              else
+                _DockButton(
+                  key: ValueKey(
+                    answer.allows ? 'dock-allow-once' : 'dock-deny',
+                  ),
+                  label: answer.label,
+                  keyHint: answer.terminalKey,
+                  tooltip: answer.tooltip,
+                  primary: answer.primary,
+                  onPressed: idle ? () => _answer(answer) : null,
                 ),
-                child: _DockButton(
-                  key: const ValueKey('dock-always-allow'),
-                  label: always.label,
-                  detail: always.detail,
-                  tooltip: menu!.options[always.index],
-                  onPressed: idle ? () => _always(always.index) : null,
-                ),
-              ),
             if (deny != null) ...[
-              _DockButton(
-                key: const ValueKey('dock-deny'),
-                label: 'Deny',
-                keyHint: _keyName(deny.keys),
-                tooltip: deny.effect,
-                onPressed: idle ? () => _answer(approve: false) : null,
-              ),
               if (saysWhy)
                 _DockButton(
                   key: const ValueKey('dock-deny-say-why'),

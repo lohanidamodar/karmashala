@@ -48,6 +48,7 @@ part 'approval_request_card/secret_request_dock.dart';
 part 'approval_request_card/screen_prompts.dart';
 part 'approval_request_card/dock_layout.dart';
 part 'approval_request_card/answers.dart';
+part 'approval_request_card/open_answers.dart';
 
 const _noLiveTerminal =
     'This session has no live terminal here, so it cannot be answered from '
@@ -77,7 +78,7 @@ class ApprovalRequestCard extends ConsumerWidget {
   final String sessionId;
 
   /// On the Overview's board: a command approval as its command, [where] it
-  /// runs and Allow / Always / Deny / Edit…; a question numbered, with
+  /// runs, Edit… and the dock's own answers; a question numbered, with
   /// Decline and "Reply in words" in sight. Implies [dense].
   final bool board;
 
@@ -147,10 +148,7 @@ class ApprovalRequestCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);
-    // An ACP agent types no keys: its request is answered by option.
-    final rules = descriptor?.acp != null
-        ? AcpLaunchSpec.permissionAnswers
-        : descriptor?.approval ?? const AgentApprovalRules();
+    final rules = _rulesOf(descriptor);
     final agentName = descriptor?.displayName ?? report.agentId;
     // A pane we can type into, or a process this machine's host runs and
     // answers in. Without either — an external terminal, a session whose
@@ -168,13 +166,27 @@ class ApprovalRequestCard extends ConsumerWidget {
           style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
         );
       }
-      return _BoardApprovalAnswers(
+      final answers = _BoardApprovalAnswers(
         sessionId: sessionId,
         report: report,
         summary: summarizeToolAsk(report.toolAsk!),
         where: where,
         onEdit: onEdit,
         onAnswered: onAnswered,
+      );
+      if (report.toolAsk!.options.isNotEmpty) return answers;
+      // As the dock does: a menu that is not the call's prompt — folder
+      // trust, an MCP server's offer — draws as its own options.
+      return _MenuOr(
+        sessionId: sessionId,
+        agentName: agentName,
+        docked: true,
+        menus: descriptor?.menus,
+        dockedAsk: (menu, _) =>
+            (descriptor?.menus?.cancelDeclinesIn(menu) ?? false)
+            ? answers
+            : null,
+        orElse: answers,
       );
     }
 

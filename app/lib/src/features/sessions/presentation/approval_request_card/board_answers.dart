@@ -1,66 +1,50 @@
 part of '../approval_request_card.dart';
 
-/// The three answers the Overview's board gives a command approval, by
-/// button or by key.
+/// The board's three keys for a command approval: Y, A and D.
 enum BoardApproval { allow, always, deny }
 
-/// What answers [report]'s open approval would send for each
-/// [BoardApproval], through the paths the dock uses: an ACP agent's own
-/// options, else the agent's approve and deny keys, and Always by the menu
-/// option that keeps approving. Absent where the prompt offers none.
-Map<BoardApproval, Future<void> Function()> _boardAnswers(
+/// What [report]'s open approval offers, as the dock draws it ([_openAnswers]):
+/// an ACP agent's own options, else the agent's keys and the menu option that
+/// keeps approving — read only off the prompt the call raised.
+List<_OpenAnswer> _boardAnswers(
   ProviderReader read,
   String sessionId,
   AgentStatusReport report,
 ) {
-  final answers = read(sessionPromptAnswersProvider);
-  Future<void> send(ApprovalAnswerRequest request) => answers.answer(request);
-  final offered = report.toolAsk?.options ?? const <AgentToolAskOption>[];
-  if (offered.isNotEmpty) {
-    AgentToolAskOption? kind(String k) =>
-        offered.where((o) => o.kind == k).firstOrNull;
-    final ask = PromptAsk.drawnFrom(report);
-    Future<void> Function() choose(AgentToolAskOption option) =>
-        () => send(
-          ApprovalAnswerRequest(
-            sessionId: sessionId,
-            approve: option.allows,
-            optionId: option.id,
-            ask: ask,
-          ),
-        );
-    return {
-      if (kind('allow_once') case final o?) BoardApproval.allow: choose(o),
-      if (kind('allow_always') case final o?) BoardApproval.always: choose(o),
-      if (kind('reject_once') case final o?) BoardApproval.deny: choose(o),
-    };
-  }
   final descriptor = read(agentRegistryProvider).byId(report.agentId);
-  final rules = descriptor?.approval ?? const AgentApprovalRules();
-  final menu = answers.menuOnScreen(sessionId);
-  final ask = PromptAsk.drawnFrom(
+  final rules = _rulesOf(descriptor);
+  if (report.toolAsk?.options.isNotEmpty ?? false) {
+    return _openAnswers(sessionId, report, rules: rules);
+  }
+  final menus = descriptor?.menus;
+  final onScreen = read(sessionPromptAnswersProvider).menuOnScreen(sessionId);
+  final menu = onScreen != null && (menus?.cancelDeclinesIn(onScreen) ?? false)
+      ? onScreen
+      : null;
+  return _openAnswers(
+    sessionId,
     report,
-    menu: read(promptMenuAtSessionGridProvider)(sessionId) ? menu : null,
+    rules: rules,
+    menu: menu,
+    menus: menus,
+    ask: PromptAsk.drawnFrom(
+      report,
+      menu: read(promptMenuAtSessionGridProvider)(sessionId) ? menu : null,
+    ),
   );
-  final always = menu == null ? null : _alwaysOption(menu, descriptor?.menus);
-  return {
-    if (rules.approve != null)
-      BoardApproval.allow: () => send(
-        ApprovalAnswerRequest(sessionId: sessionId, approve: true, ask: ask),
-      ),
-    if (always != null && menu != null)
-      BoardApproval.always: () => answers.answer(
-        MenuAnswerRequest(
-          sessionId: sessionId,
-          menuId: menu.id,
-          option: always.index,
-        ),
-      ),
-    if (rules.deny != null)
-      BoardApproval.deny: () => send(
-        ApprovalAnswerRequest(sessionId: sessionId, approve: false, ask: ask),
-      ),
-  };
+}
+
+/// Sends [answer]: null when it went, else why not.
+Future<String?> _sendBoardAnswer(
+  ProviderReader read,
+  _OpenAnswer answer,
+) async {
+  try {
+    await read(sessionPromptAnswersProvider).answer(answer.request);
+    return null;
+  } on SessionPromptRefusal catch (refusal) {
+    return approvalRefusalText(refusal);
+  }
 }
 
 /// The status of [sessionId] when it waits on a command approval this machine
@@ -93,7 +77,7 @@ Set<BoardApproval> boardApprovalOffersBy(
   final report = _boardAsk(read, sessionId);
   return report == null
       ? const {}
-      : _boardAnswers(read, sessionId, report).keys.toSet();
+      : _boardKeys(_boardAnswers(read, sessionId, report)).keys.toSet();
 }
 
 /// Answers [sessionId]'s open approval with [kind]: null when it was sent,
@@ -112,24 +96,20 @@ Future<String?> answerBoardApprovalBy(
 ) async {
   final report = _boardAsk(read, sessionId);
   if (report == null) return 'There is no approval open to answer.';
-  final send = _boardAnswers(read, sessionId, report)[kind];
-  if (send == null) {
+  final answer = _boardKeys(_boardAnswers(read, sessionId, report))[kind];
+  if (answer == null) {
     return switch (kind) {
       BoardApproval.always => 'This prompt offers no way to always allow.',
       BoardApproval.deny => 'This prompt names no way to decline.',
       BoardApproval.allow => 'This prompt names no way to allow.',
     };
   }
-  try {
-    await send();
-    return null;
-  } on SessionPromptRefusal catch (refusal) {
-    return approvalRefusalText(refusal);
-  }
+  return _sendBoardAnswer(read, answer);
 }
 
 /// **A command approval on the Overview's board**: the command in two lines
-/// at most, where it runs, and Edit…, Deny, Always and Allow.
+/// at most, why it asks, where it runs, then Edit… and every answer the dock
+/// would offer, in the agent's words and order.
 class _BoardApprovalAnswers extends ConsumerStatefulWidget {
   const _BoardApprovalAnswers({
     required this.sessionId,
@@ -155,11 +135,11 @@ class _BoardApprovalAnswers extends ConsumerStatefulWidget {
 class _BoardApprovalAnswersState extends ConsumerState<_BoardApprovalAnswers> {
   bool _busy = false;
 
-  Future<void> _answer(BoardApproval kind) async {
+  Future<void> _answer(_OpenAnswer answer) async {
     if (_busy) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
-    final refused = await answerBoardApproval(ref, widget.sessionId, kind);
+    final refused = await _sendBoardAnswer(ref.read, answer);
     if (refused != null) {
       messenger.showSnackBar(SnackBar(content: Text(refused)));
     } else {
@@ -174,19 +154,20 @@ class _BoardApprovalAnswersState extends ConsumerState<_BoardApprovalAnswers> {
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
     final summary = widget.summary;
-    final offers = _boardAnswers(
-      ref.read,
-      widget.sessionId,
-      widget.report,
-    ).keys;
+    final sessionId = widget.sessionId;
+    final answers = _boardAnswers(ref.read, sessionId, widget.report);
+    final keys = _boardKeys(answers);
+    BoardApproval? keyOf(_OpenAnswer answer) =>
+        keys.entries.where((e) => identical(e.value, answer)).firstOrNull?.key;
     final idle = !_busy;
     final where = widget.where;
+    final why = _askWhy(widget.report.toolAsk);
     final described = switch (widget.report.toolAsk?.input['description']) {
       final String text when text.trim().isNotEmpty => text.trim(),
       _ => null,
     };
     return Column(
-      key: ValueKey('board-approval:${widget.sessionId}'),
+      key: ValueKey('board-approval:$sessionId'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -212,7 +193,7 @@ class _BoardApprovalAnswersState extends ConsumerState<_BoardApprovalAnswers> {
               message: summary.subject,
               child: Text(
                 summary.subject,
-                key: ValueKey('board-command:${widget.sessionId}'),
+                key: ValueKey('board-command:$sessionId'),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: MonoStyles.small.copyWith(color: scheme.onSurface),
@@ -220,11 +201,24 @@ class _BoardApprovalAnswersState extends ConsumerState<_BoardApprovalAnswers> {
             ),
           ),
         ],
+        if (why.isNotEmpty) ...[
+          const SizedBox(height: Insets.xs),
+          Tooltip(
+            message: why,
+            child: Text(
+              why,
+              key: ValueKey('board-ask-reason:$sessionId'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: density.muted(theme),
+            ),
+          ),
+        ],
         if (where != null && where.isNotEmpty) ...[
           const SizedBox(height: Insets.xs),
           Text(
             where,
-            key: ValueKey('board-where:${widget.sessionId}'),
+            key: ValueKey('board-where:$sessionId'),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: density.muted(theme),
@@ -236,33 +230,36 @@ class _BoardApprovalAnswersState extends ConsumerState<_BoardApprovalAnswers> {
           spacing: Insets.xs,
           runSpacing: Insets.xs,
           children: [
-            if (widget.onEdit != null)
+            // Edit… denies first: only where D has a deny to send.
+            if (widget.onEdit != null && keys.containsKey(BoardApproval.deny))
               TextButton(
-                key: ValueKey('board-edit:${widget.sessionId}'),
+                key: ValueKey('board-edit:$sessionId'),
                 onPressed: idle ? widget.onEdit : null,
                 child: const Text('Edit…'),
               ),
-            if (offers.contains(BoardApproval.deny))
-              _DockButton(
-                key: ValueKey('board-deny:${widget.sessionId}'),
-                label: 'Deny',
-                keyHint: 'D',
-                onPressed: idle ? () => _answer(BoardApproval.deny) : null,
-              ),
-            if (offers.contains(BoardApproval.always))
-              _DockButton(
-                key: ValueKey('board-always:${widget.sessionId}'),
-                label: 'Always',
-                keyHint: 'A',
-                onPressed: idle ? () => _answer(BoardApproval.always) : null,
-              ),
-            if (offers.contains(BoardApproval.allow))
-              _DockButton(
-                key: ValueKey('board-allow:${widget.sessionId}'),
-                label: 'Allow',
-                keyHint: 'Y',
-                primary: true,
-                onPressed: idle ? () => _answer(BoardApproval.allow) : null,
+            for (final answer in answers)
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: _dockOptionMaxWidth,
+                ),
+                child: _DockButton(
+                  key: ValueKey(switch (keyOf(answer)) {
+                    final key? => 'board-${key.name}:$sessionId',
+                    null => 'board-option-${answer.id}:$sessionId',
+                  }),
+                  label: answer.label,
+                  detail: answer.detail,
+                  tooltip: answer.tooltip,
+                  keyHint: switch (keyOf(answer)) {
+                    BoardApproval.allow => 'Y',
+                    BoardApproval.always => 'A',
+                    BoardApproval.deny => 'D',
+                    null => null,
+                  },
+                  primary: answer.primary,
+                  wrap: true,
+                  onPressed: idle ? () => _answer(answer) : null,
+                ),
               ),
           ],
         ),
