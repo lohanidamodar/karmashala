@@ -85,42 +85,42 @@ void main() {
       describeSpan(waits.first),
       'waiting on you 12m (asked to allow write to app/lib/main.dart)',
     );
-    expect(model.projects.single.sessions.single.waitingTotal,
-        const Duration(minutes: 27));
+    expect(
+      model.projects.single.sessions.single.waitingTotal,
+      const Duration(minutes: 27),
+    );
   });
 
-  test('a live session grows to now; a backfilled one ends at its last entry',
-      () {
-    final model = build([
-      e(ActivityKind.sessionStarted, 9),
-      e(ActivityKind.turnStarted, 9.5),
-      e(ActivityKind.sessionStarted, 9, session: 'old', backfilled: true),
-      e(ActivityKind.turnStarted, 9.5, session: 'old', backfilled: true),
-      e(
-        ActivityKind.turnEnded,
-        10,
-        session: 'old',
-        backfilled: true,
-        approximate: true,
-      ),
-    ], now: 14);
-    final byId = {
-      for (final s in model.projects.single.sessions) s.id: s,
-    };
-    expect(byId['s1']!.live, isTrue);
-    expect(byId['s1']!.end, h(14));
-    expect(byId['s1']!.spans.last.state, TimelineState.working);
-    expect(byId['s1']!.spans.last.to, h(14));
-    expect(byId['old']!.live, isFalse);
-    expect(byId['old']!.end, h(10));
-    expect(byId['old']!.spans.last.approximate, isTrue);
-    expect(byId['old']!.backfilled, isTrue);
-  });
+  test(
+    'a live session grows to now; a backfilled one ends at its last entry',
+    () {
+      final model = build([
+        e(ActivityKind.sessionStarted, 9),
+        e(ActivityKind.turnStarted, 9.5),
+        e(ActivityKind.sessionStarted, 9, session: 'old', backfilled: true),
+        e(ActivityKind.turnStarted, 9.5, session: 'old', backfilled: true),
+        e(
+          ActivityKind.turnEnded,
+          10,
+          session: 'old',
+          backfilled: true,
+          approximate: true,
+        ),
+      ], now: 14);
+      final byId = {for (final s in model.projects.single.sessions) s.id: s};
+      expect(byId['s1']!.live, isTrue);
+      expect(byId['s1']!.end, h(14));
+      expect(byId['s1']!.spans.last.state, TimelineState.working);
+      expect(byId['s1']!.spans.last.to, h(14));
+      expect(byId['old']!.live, isFalse);
+      expect(byId['old']!.end, h(10));
+      expect(byId['old']!.spans.last.approximate, isTrue);
+      expect(byId['old']!.backfilled, isTrue);
+    },
+  );
 
   test('a session with only a start is a start marker, not a bar', () {
-    final model = build([
-      e(ActivityKind.sessionStarted, 9, backfilled: true),
-    ]);
+    final model = build([e(ActivityKind.sessionStarted, 9, backfilled: true)]);
     final session = model.projects.single.sessions.single;
     expect(session.startOnly, isTrue);
     expect(session.spans, isEmpty);
@@ -134,7 +134,10 @@ void main() {
       e(ActivityKind.turnEnded, 10, backfilled: true, approximate: true),
     ]);
     final session = model.projects.single.sessions.single;
-    expect(session.spans.where((s) => s.state == TimelineState.waiting), isEmpty);
+    expect(
+      session.spans.where((s) => s.state == TimelineState.waiting),
+      isEmpty,
+    );
     expect(session.markers.single.kind, ActivityKind.waitEnded);
     expect(session.markers.single.at, h(9.75));
   });
@@ -221,10 +224,7 @@ void main() {
       e(ActivityKind.sessionEnded, 12),
     ]);
     final spans = model.projects.single.sessions.single.spans;
-    expect(
-      spans.map((s) => s.state),
-      contains(TimelineState.paused),
-    );
+    expect(spans.map((s) => s.state), contains(TimelineState.paused));
     final paused = spans.singleWhere((s) => s.state == TimelineState.paused);
     expect((paused.from, paused.to), (h(9.5), h(11)));
   });
@@ -234,17 +234,33 @@ void main() {
     for (var s = 0; s < 150; s++) {
       final session = 's$s';
       entries.add(
-        e(ActivityKind.sessionStarted, (s % 20) * 0.5, session: session,
-            project: s.isEven ? 'p1' : 'p2',
-            parent: s > 10 && s % 7 == 0 ? 's${s - 7}' : null),
+        e(
+          ActivityKind.sessionStarted,
+          (s % 20) * 0.5,
+          session: session,
+          project: s.isEven ? 'p1' : 'p2',
+          parent: s > 10 && s % 7 == 0 ? 's${s - 7}' : null,
+        ),
       );
       for (var t = 0; t < 20; t++) {
         final at = (s % 20) * 0.5 + t * 0.15;
         entries
-          ..add(e(ActivityKind.turnStarted, at, session: session,
-              project: s.isEven ? 'p1' : 'p2'))
-          ..add(e(ActivityKind.turnEnded, at + 0.1, session: session,
-              project: s.isEven ? 'p1' : 'p2'));
+          ..add(
+            e(
+              ActivityKind.turnStarted,
+              at,
+              session: session,
+              project: s.isEven ? 'p1' : 'p2',
+            ),
+          )
+          ..add(
+            e(
+              ActivityKind.turnEnded,
+              at + 0.1,
+              session: session,
+              project: s.isEven ? 'p1' : 'p2',
+            ),
+          );
       }
     }
     final watch = Stopwatch()..start();
@@ -252,5 +268,70 @@ void main() {
     watch.stop();
     expect(model.sessionCount, 150);
     expect(watch.elapsedMilliseconds, lessThan(200));
+  });
+
+  test(
+    'a live session says what it is doing now; an ended one says nothing',
+    () {
+      final model = build([
+        e(ActivityKind.sessionStarted, 9),
+        e(ActivityKind.turnStarted, 9),
+        e(ActivityKind.waitBegan, 10, detail: 'approve the plan'),
+        e(ActivityKind.sessionStarted, 9, session: 's2'),
+        e(ActivityKind.turnStarted, 9, session: 's2'),
+        e(ActivityKind.sessionEnded, 10, session: 's2'),
+      ], now: 11);
+      final byId = {for (final s in model.sessions) s.id: s};
+      expect(byId['s1']!.stateNow, TimelineState.waiting);
+      expect(byId['s2']!.stateNow, isNull);
+    },
+  );
+
+  test(
+    'activity is what happened, padded, at least an hour, inside the range',
+    () {
+      final model = build([
+        e(ActivityKind.sessionStarted, 9),
+        e(ActivityKind.sessionEnded, 12),
+        e(ActivityKind.sessionStarted, 13, session: 's2'),
+        e(ActivityKind.sessionEnded, 13.25, session: 's2'),
+      ]);
+      final active = model.activity();
+      expect(active.from, h(8.75));
+      expect(active.to, h(13.5));
+
+      final short = build([
+        e(ActivityKind.sessionStarted, 12),
+        e(ActivityKind.sessionEnded, 12.1),
+      ]).activity(pad: Duration.zero);
+      expect(short.to.difference(short.from), const Duration(hours: 1));
+
+      final edge = build([
+        e(ActivityKind.sessionStarted, 0.05),
+        e(ActivityKind.sessionEnded, 23.95),
+      ]).activity();
+      expect(edge.from, day);
+      expect(edge.to, day.add(const Duration(days: 1)));
+
+      final none = build(const []);
+      expect(none.activity().from, none.from);
+    },
+  );
+
+  test('where keeps the sessions it admits, drops emptied projects and the '
+      'arrows that lost an end', () {
+    final model = build([
+      e(ActivityKind.sessionStarted, 9),
+      e(ActivityKind.sessionStarted, 10, session: 'kid', parent: 's1'),
+      e(ActivityKind.linked, 10, session: 'kid', parent: 's1'),
+      e(ActivityKind.sessionStarted, 11, session: 'b', project: 'p2'),
+    ]);
+    expect(model.arrows, hasLength(1));
+    final kept = model.where((s) => s.id != 's1');
+    expect([for (final s in kept.sessions) s.id], ['kid', 'b']);
+    expect(kept.arrows, isEmpty);
+    final alpha = model.where((s) => s.projectId == 'p1');
+    expect([for (final p in alpha.projects) p.name], ['Alpha']);
+    expect(alpha.arrows, hasLength(1));
   });
 }

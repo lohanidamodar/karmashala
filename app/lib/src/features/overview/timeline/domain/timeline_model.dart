@@ -104,6 +104,10 @@ class TimelineSession {
 
   Duration get waitingTotal => _total(TimelineState.waiting);
   Duration get workingTotal => _total(TimelineState.working);
+
+  /// What it is doing at the right edge while [live]; null once it ended.
+  TimelineState? get stateNow =>
+      live && spans.isNotEmpty ? spans.last.state : null;
 }
 
 /// One project's row.
@@ -154,6 +158,63 @@ class TimelineModel {
 
   int get sessionCount =>
       projects.fold(0, (sum, project) => sum + project.sessions.length);
+
+  Iterable<TimelineSession> get sessions =>
+      projects.expand((project) => project.sessions);
+
+  /// The same range with only the sessions [keep] admits; a project left
+  /// with none is dropped.
+  TimelineModel where(bool Function(TimelineSession session) keep) {
+    final kept = [
+      for (final project in projects)
+        if (project.sessions.where(keep).toList() case final sessions
+            when sessions.isNotEmpty)
+          TimelineProject(
+            id: project.id,
+            name: project.name,
+            sessions: sessions,
+          ),
+    ];
+    final ids = {
+      for (final project in kept) ...project.sessions.map((s) => s.id),
+    };
+    return TimelineModel(
+      from: from,
+      to: to,
+      projects: kept,
+      arrows: [
+        for (final arrow in arrows)
+          if (ids.contains(arrow.parentId) && ids.contains(arrow.childId))
+            arrow,
+      ],
+    );
+  }
+
+  /// The stretch anything happened in, [pad] wider each side and never less
+  /// than [least], kept inside the range; the whole range when it is empty.
+  ({DateTime from, DateTime to}) activity({
+    Duration pad = const Duration(minutes: 15),
+    Duration least = const Duration(hours: 1),
+  }) {
+    DateTime? first, last;
+    for (final session in sessions) {
+      if (first == null || session.start.isBefore(first)) {
+        first = session.start;
+      }
+      if (last == null || session.end.isAfter(last)) last = session.end;
+    }
+    if (first == null || last == null) return (from: from, to: to);
+    var start = first.subtract(pad);
+    var end = last.add(pad);
+    final short = least - end.difference(start);
+    if (short > Duration.zero) {
+      start = start.subtract(short ~/ 2);
+      end = end.add(short ~/ 2);
+    }
+    if (start.isBefore(from)) start = from;
+    if (end.isAfter(to)) end = to;
+    return (from: start, to: end);
+  }
 }
 
 /// The project a session with none recorded is filed under.
@@ -190,9 +251,7 @@ TimelineModel buildTimeline(
 
   final arrows = <TimelineArrow>[
     for (final (parent, child, at) in links)
-      if (sessions.containsKey(parent) &&
-          !at.isBefore(from) &&
-          at.isBefore(to))
+      if (sessions.containsKey(parent) && !at.isBefore(from) && at.isBefore(to))
         TimelineArrow(parentId: parent, childId: child, at: at),
   ];
 
