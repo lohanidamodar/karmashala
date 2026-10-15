@@ -10,6 +10,10 @@ const double _dockGap = 10;
 /// The board's 12.5px button label, a half step above `labelMedium`.
 const double _dockButtonFontSize = 12.5;
 
+/// The widest an option's button grows before its words end; the tooltip
+/// keeps the whole of them.
+const double _dockOptionMaxWidth = 320;
+
 /// **The ask dock** (spec §5, board N1): an amber panel above the pane's
 /// status line saying who asks, where, in the agent's own words, and the
 /// answers one click away — then "Answer in the terminal" for anything the
@@ -183,11 +187,7 @@ class _AskDock extends ConsumerWidget {
         Flexible(child: _WaitingFor(since: report.waitingSince)),
       ],
     );
-    // Why it asks and which subagent, in the agent's words, on one line.
-    final why = [
-      if (ask?.asker case final asker?) 'Asked by $asker',
-      ?ask?.reason,
-    ].join(' · ');
+    final why = _askWhy(ask);
     // Held to a height, the header stays and the body scrolls under it.
     final plain = _FlexColumn(
       // The body's place: after the header, the reason line, and the gap.
@@ -400,6 +400,7 @@ class _DockAnswers extends ConsumerWidget {
     required this.report,
     required this.rules,
     required this.agentName,
+    this.keyCaps = true,
   });
 
   final String sessionId;
@@ -409,9 +410,11 @@ class _DockAnswers extends ConsumerWidget {
   final AgentApprovalRules rules;
   final String agentName;
 
+  /// Whether each button names the terminal key it sends.
+  final bool keyCaps;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final approve = rules.approve;
     final deny = rules.deny;
     final note = rules.isEmpty
         ? '$agentName has not told us which keys answer its prompts, so '
@@ -425,20 +428,13 @@ class _DockAnswers extends ConsumerWidget {
         _DockButtonRow(
           sessionId: sessionId,
           buttons: [
-            if (approve != null)
+            for (final answer in _openAnswers(sessionId, report, rules: rules))
               _DockButton(
-                label: approve.label,
-                keyHint: _keyName(approve.keys),
-                tooltip: approve.effect,
-                primary: true,
-                onPressed: () => _press(context, ref, approve: true),
-              ),
-            if (deny != null)
-              _DockButton(
-                label: deny.label,
-                keyHint: _keyName(deny.keys),
-                tooltip: deny.effect,
-                onPressed: () => _press(context, ref, approve: false),
+                label: answer.label,
+                keyHint: keyCaps ? answer.terminalKey : null,
+                tooltip: answer.tooltip,
+                primary: answer.primary,
+                onPressed: () => _press(context, ref, answer),
               ),
           ],
         ),
@@ -450,21 +446,13 @@ class _DockAnswers extends ConsumerWidget {
 
   Future<void> _press(
     BuildContext context,
-    WidgetRef ref, {
-    required bool approve,
-  }) async {
+    WidgetRef ref,
+    _OpenAnswer answer,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     final said = _AnswerSaid.of(context);
     try {
-      await ref
-          .read(sessionPromptAnswersProvider)
-          .answer(
-            ApprovalAnswerRequest(
-              sessionId: sessionId,
-              approve: approve,
-              ask: PromptAsk.drawnFrom(report),
-            ),
-          );
+      await ref.read(sessionPromptAnswersProvider).answer(answer.request);
     } on SessionPromptRefusal catch (refusal) {
       // Only reported when it did not land: the agent's own screen is the
       // acknowledgement of one that did.
@@ -475,7 +463,7 @@ class _DockAnswers extends ConsumerWidget {
       );
       return;
     }
-    said?.say(approve ? 'Allowed.' : 'Denied.');
+    said?.say(answer.said);
   }
 }
 

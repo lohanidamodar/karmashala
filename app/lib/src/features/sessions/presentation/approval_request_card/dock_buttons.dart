@@ -38,10 +38,6 @@ class _DockMenu extends StatefulWidget {
 class _DockMenuState extends State<_DockMenu> {
   bool _busy = false;
 
-  /// The widest an option's button grows before its words end; the tooltip
-  /// keeps the whole of them.
-  static const _optionMaxWidth = 320.0;
-
   Future<void> _choose(int option) async {
     if (_busy) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -61,7 +57,7 @@ class _DockMenuState extends State<_DockMenu> {
     // Full width on a phone: the stacked column is the width limit there.
     final optionMaxWidth = _Docked.touchOf(context)
         ? double.infinity
-        : _optionMaxWidth;
+        : _dockOptionMaxWidth;
     return _DockColumn(
       children: [
         if (menu.prompt.isNotEmpty) _DockBox(text: menu.prompt.join('\n')),
