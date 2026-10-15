@@ -400,6 +400,7 @@ class _DockAnswers extends ConsumerWidget {
     required this.report,
     required this.rules,
     required this.agentName,
+    this.keyCaps = true,
   });
 
   final String sessionId;
@@ -408,6 +409,9 @@ class _DockAnswers extends ConsumerWidget {
   final AgentStatusReport report;
   final AgentApprovalRules rules;
   final String agentName;
+
+  /// Whether each button names the terminal key it sends.
+  final bool keyCaps;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -427,7 +431,7 @@ class _DockAnswers extends ConsumerWidget {
             for (final answer in _openAnswers(sessionId, report, rules: rules))
               _DockButton(
                 label: answer.label,
-                keyHint: answer.terminalKey,
+                keyHint: keyCaps ? answer.terminalKey : null,
                 tooltip: answer.tooltip,
                 primary: answer.primary,
                 onPressed: () => _press(context, ref, answer),

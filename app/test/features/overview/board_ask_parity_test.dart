@@ -325,6 +325,51 @@ void main() {
       expect((recorder.asked.single as ApprovalAnswerRequest).optionId, 'skip');
     });
   });
+
+  group('an approval with no call named', () {
+    AgentStatusReport keysOnly() => AgentStatusReport(
+      agentId: AgentIds.claudeCode,
+      sessionId: 's1',
+      status: AgentActivityStatus.awaitingApproval,
+      source: AgentStatusSource.hook,
+      observedAt: testTime,
+      waiting: AgentWaitKind.approval,
+      waitingSince: testTime,
+      evidence: const ['Claude needs your permission to use Bash'],
+    );
+
+    testWidgets("the dock's answers, without its terminal key caps", (
+      tester,
+    ) async {
+      final (_, recorder) = await pump(tester, keysOnly());
+      expect(find.text('Claude needs your permission to use Bash'), findsOne);
+      expect(find.textContaining('is waiting for you'), findsNothing);
+      expect(find.text('Enter'), findsNothing);
+      expect(find.text('Esc'), findsNothing);
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+      expect((recorder.asked.single as ApprovalAnswerRequest).approve, isTrue);
+    });
+
+    testWidgets("a menu on screen: each option is its own button", (
+      tester,
+    ) async {
+      final (_, recorder) = await pump(
+        tester,
+        keysOnly(),
+        menu: const AgentScreenMenu(
+          prompt: ['New MCP servers found in this project'],
+          options: ['Use this and all future MCP servers', 'Continue without'],
+          highlighted: 0,
+        ),
+      );
+      expect(find.byKey(const ValueKey('dock-menu-option-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('dock-menu-option-1')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('dock-menu-option-1')));
+      await tester.pumpAndSettle();
+      expect((recorder.asked.single as MenuAnswerRequest).option, 1);
+    });
+  });
 }
 
 class _Recorder implements PromptAnswering {

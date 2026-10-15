@@ -190,6 +190,29 @@ class ApprovalRequestCard extends ConsumerWidget {
       );
     }
 
+    // Where the dock draws the agent's keys, so does the board — without the
+    // dock's key caps, which name the terminal's keys and not the board's.
+    if (board && waiting == AgentWaitKind.approval && canAnswer) {
+      return _MenuOr(
+        sessionId: sessionId,
+        agentName: agentName,
+        docked: true,
+        menus: descriptor?.menus,
+        orElse: _DockColumn(
+          children: [
+            _DockQuote(report: report, agentName: agentName),
+            _DockAnswers(
+              sessionId: sessionId,
+              report: report,
+              rules: rules,
+              agentName: agentName,
+              keyCaps: false,
+            ),
+          ],
+        ),
+      );
+    }
+
     if (docked) {
       final dock = _AskDock(
         sessionId: sessionId,
