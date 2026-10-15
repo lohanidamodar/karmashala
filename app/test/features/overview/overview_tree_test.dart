@@ -35,12 +35,13 @@ MissionSession _s(
   AgentState state, {
   String? parent,
   String project = 'p-ks',
+  String machine = 'windows',
   Duration age = const Duration(minutes: 4),
 }) => (
   id: id,
   title: title,
   project: project,
-  machine: 'windows',
+  machine: machine,
   agent: AgentIds.claudeCode,
   state: state,
   age: age,
@@ -651,6 +652,52 @@ void main() {
     Finder pill(String id) => find.byKey(ValueKey('overview-tree-pill:$id'));
     Finder detail(String id) =>
         find.byKey(ValueKey('overview-tree-detail:$id'));
+
+    testWidgets('a sub-session says where it runs only where that differs '
+        'from its parent, on a phone at large text too', (tester) async {
+      final base = _fixture();
+      for (final (size, scale) in const [
+        (Size(1440, 1400), 1.0),
+        (Size(360, 800), 1.6),
+      ]) {
+        await pump(
+          tester,
+          size: size,
+          textScale: scale,
+          fixture: MissionFixture(
+            sessions: [
+              ...base.sessions,
+              _s(
+                'ks-r32-wsl',
+                'Linux check',
+                AgentState.working,
+                parent: 'ks-r32',
+                machine: 'wsl:arch',
+              ),
+            ],
+            answers: base.answers,
+            glances: base.glances,
+          ),
+        );
+        final apart = find.byKey(
+          const ValueKey('overview-tree-place:ks-r32-wsl'),
+        );
+        await reveal(tester, apart);
+        // The machine alone: the project is its parent's.
+        expect(tester.widget<Text>(apart).data, 'WSL · arch');
+        // Where it is its parent's, nothing is said.
+        expect(
+          find.byKey(const ValueKey('overview-tree-place:ks-r32-sub0')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('overview-tree-place:ks-r32-ask')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull, reason: '$size at $scale');
+        await unmountMission(tester);
+      }
+    });
 
     testWidgets('a family is one tree: the root card with its avatar, its '
         'sub-sessions on branches, and theirs nested a level further', (

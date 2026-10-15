@@ -99,6 +99,31 @@ String watchOverviewCardPlace(WidgetRef ref, OverviewCard card) {
   ].join(' · ');
 }
 
+/// "WSL · arch": where sub-session [card] runs, in only the parts that are
+/// not its [parent]'s — context, project, machine — or '' where it runs
+/// where its parent does. Said whatever the cards' details show: a child run
+/// elsewhere is the exception worth a word.
+String watchOverviewPlaceApart(
+  WidgetRef ref,
+  OverviewCard card,
+  OverviewCard parent,
+) {
+  final facts = ref.watch(overviewFactsProvider);
+  String? labelIn(List<OverviewLaneKey> keys, String? id) =>
+      keys.where((k) => k.id == id).firstOrNull?.label;
+  final context = facts.contextOf(card.entry);
+  final project = facts.projectOf(card.entry);
+  final machine = card.entry.directory?.environmentId;
+  return [
+    if (context != facts.contextOf(parent.entry))
+      labelIn(facts.contexts, context) ?? kOverviewNoContextLabel,
+    if (project != facts.projectOf(parent.entry))
+      ?labelIn(facts.projects, project),
+    if (machine != null && machine != parent.entry.directory?.environmentId)
+      ref.watch(environmentLabelForIdProvider(machine)),
+  ].join(' · ');
+}
+
 /// The agent's display name for [card], or null when it is not known.
 String? watchOverviewAgentName(WidgetRef ref, OverviewCard card) {
   final agentId = ref.watch(overviewFactsProvider).agentOf(card.entry);

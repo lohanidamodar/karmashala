@@ -130,6 +130,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     required Set<String> folded,
     required Color line,
     required Color surface,
+    OverviewCard? parent,
     int depth = 0,
   }) {
     final size = root ? _rootSize : _kidSize;
@@ -145,6 +146,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
               _TreePill(
                 key: ValueKey('overview-tree-node:$id'),
                 node: node,
+                parent: parent,
                 size: size,
                 open: _open.contains(id),
                 line: line,
@@ -214,6 +216,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
               folded: folded,
               line: line,
               surface: surface,
+              parent: node.card,
               depth: depth + 1,
             ),
           )
@@ -582,12 +585,17 @@ class _TreePill extends ConsumerStatefulWidget {
     required this.onOpenChat,
     required this.onMessage,
     required this.onSentSeen,
+    this.parent,
     this.hidden,
     this.sent,
     super.key,
   });
 
   final OverviewTreeNode node;
+
+  /// The session it branches off: where it runs is said only where that
+  /// differs.
+  final OverviewCard? parent;
   final double size;
   final bool open;
   final Color line;
@@ -650,6 +658,9 @@ class _TreePillState extends ConsumerState<_TreePill> {
     }
     final size = widget.size;
     final tuck = size / 2;
+    final apart = widget.parent == null
+        ? ''
+        : watchOverviewPlaceApart(ref, card, widget.parent!);
     final edge = _focused || selected
         ? scheme.primary
         : widget.open
@@ -759,6 +770,26 @@ class _TreePillState extends ConsumerState<_TreePill> {
                                 ),
                               ),
                             ),
+                            if (apart.isNotEmpty) ...[
+                              const SizedBox(width: Insets.xs),
+                              Flexible(
+                                flex: 2,
+                                child: Tooltip(
+                                  message: 'Runs in $apart',
+                                  child: Text(
+                                    apart,
+                                    key: ValueKey(
+                                      'overview-tree-place:${card.id}',
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(width: Insets.xs),
                             OverviewNewBadge(card: card),
                             if (!narrow) ...[
