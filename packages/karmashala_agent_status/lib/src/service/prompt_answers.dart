@@ -35,6 +35,7 @@ class SessionPromptAnswers implements PromptAnswering {
          isAsking: (sessionId) =>
              terminals.statusOf(sessionId)?.hasOpenPrompt ?? false,
          press: terminals.press,
+         statusOf: terminals.statusOf,
          poll: menuPoll,
          patience: menuPatience,
        ),
