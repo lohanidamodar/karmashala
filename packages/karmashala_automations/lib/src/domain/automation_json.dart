@@ -4,6 +4,7 @@ import 'package:karmashala_core/verdicts.dart';
 import 'automation.dart';
 import 'automation_admission.dart';
 import 'automation_check_verdict.dart';
+import 'automation_command.dart';
 import 'automation_run.dart';
 import 'automation_steps.dart';
 import 'automation_trigger.dart';
@@ -69,6 +70,10 @@ Map<String, Object?> automationToJson(Automation a) => {
   'queueLimit': a.queueLimit,
   'proposedBy': ?a.proposedBy,
   'proposedSessionId': ?a.proposedSessionId,
+  // Always written, null included: its absence marks a sender that predates
+  // commands, whose save keeps what is stored.
+  'command': a.command?.toJson(),
+  'folder': folderToJson(a.folder),
 };
 
 AutomationWebhook? _webhook(Object? json) {
@@ -127,6 +132,9 @@ Automation automationFromJson(Map<String, Object?> json) {
     queueLimit: json['queueLimit'] as int? ?? kDefaultQueueLimit,
     proposedBy: json['proposedBy'] as String?,
     proposedSessionId: json['proposedSessionId'] as String?,
+    command: AutomationCommand.fromJson(json['command']),
+    folder: folderFromJson(json['folder']),
+    commandStated: json.containsKey('command'),
   );
 }
 
@@ -149,6 +157,8 @@ Map<String, Object?> automationRunToJson(AutomationRun r) => {
   if (r.stepResults.isNotEmpty)
     'stepResults': [for (final step in r.stepResults) step.toJson()],
   if (r.variables.isNotEmpty) 'variables': r.variables,
+  'exitCode': ?r.exitCode,
+  'output': ?r.output,
 };
 
 /// A string map, forgiving: a value that is not a string is left out.
@@ -177,6 +187,8 @@ AutomationRun automationRunFromJson(Map<String, Object?> json) => AutomationRun(
   stepResults: AutomationStepResult.listFromJson(json['stepResults']),
   prompt: json['prompt'] as String?,
   variables: stringMapFrom(json['variables']),
+  exitCode: json['exitCode'] as int?,
+  output: json['output'] as String?,
 );
 
 Map<String, Object?> checkVerdictToJson(AutomationCheckVerdict v) => {

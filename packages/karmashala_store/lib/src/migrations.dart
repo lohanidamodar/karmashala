@@ -105,4 +105,8 @@ final Map<int, MigrationStep> schemaMigrations = {
   90: _migrateToV90,
   91: _migrateToV91,
   92: _migrateToV92,
+  93: _migrateToV93,
 };
+
+/// The migrations that rebuild a table, run with foreign keys off.
+const Set<int> kMigrationsRebuildingTables = {93};

@@ -6,10 +6,12 @@ import '../domain/automation_copy_rules.dart';
 import '../domain/automation_json.dart' show stringMapFrom;
 import '../service/automation_records.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_core/verdicts.dart';
 import '../domain/automation.dart';
 import '../domain/automation_admission.dart';
 import '../domain/automation_check_verdict.dart';
+import '../domain/automation_command.dart';
 import '../domain/automation_run.dart';
 import '../domain/automation_steps.dart';
 import '../domain/automation_trigger.dart';
@@ -32,12 +34,14 @@ class AutomationDao implements AutomationRecords {
     'disabled_reason, max_runtime_seconds, trigger_event, event_action, '
     'webhook_id, webhook_signature, webhook_model, webhook_worktree, '
     'webhook_per_hour, model_id, run_in_worktree, steps, github, '
-    'runs_per_hour, overlap, queue_limit, proposed_by, proposed_session) '
+    'runs_per_hour, overlap, queue_limit, proposed_by, proposed_session, '
+    'command, folder_environment, folder_path) '
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
-    '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    '?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       automation.id,
-      automation.repositoryId,
+      // A folder automation has no checkout: NULL, which the key allows.
+      automation.repositoryId.isEmpty ? null : automation.repositoryId,
       automation.name,
       ..._scheduleColumns(automation),
       automation.agentInstallationId,
@@ -68,8 +72,8 @@ class AutomationDao implements AutomationRecords {
     'webhook_id = ?, webhook_signature = ?, webhook_model = ?, '
     'webhook_worktree = ?, webhook_per_hour = ?, model_id = ?, '
     'run_in_worktree = ?, steps = ?, github = ?, runs_per_hour = ?, '
-    'overlap = ?, queue_limit = ?, proposed_by = ?, proposed_session = ? '
-    'WHERE id = ?;',
+    'overlap = ?, queue_limit = ?, proposed_by = ?, proposed_session = ?, '
+    'command = ?, folder_environment = ?, folder_path = ? WHERE id = ?;',
     [
       automation.name,
       ..._scheduleColumns(automation),
@@ -114,6 +118,11 @@ class AutomationDao implements AutomationRecords {
     automation.queueLimit,
     automation.proposedBy,
     automation.proposedSessionId,
+    automation.command == null
+        ? null
+        : jsonEncode(automation.command!.toJson()),
+    automation.folder?.environmentId,
+    automation.folder?.path,
   ];
 
   /// Every GitHub automation, paused ones included.
@@ -358,8 +367,9 @@ class AutomationDao implements AutomationRecords {
     'INSERT INTO automation_runs '
     '(id, automation_id, scheduled_for, fired_at, state, reason, '
     'base_checkpoint_id, session_id, finished_at, commits_made, origin, '
-    'event_session_id, started_by, step_results, prompt, variables) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'event_session_id, started_by, step_results, prompt, variables, '
+    'exit_code, output) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       run.id,
       run.automationId,
@@ -377,6 +387,8 @@ class AutomationDao implements AutomationRecords {
       _stepResultsColumn(run),
       run.prompt,
       run.variables.isEmpty ? null : jsonEncode(run.variables),
+      run.exitCode,
+      run.output,
     ],
   );
 
@@ -388,8 +400,8 @@ class AutomationDao implements AutomationRecords {
   @override
   void updateRun(AutomationRun run) => _db.execute(
     'UPDATE automation_runs SET state = ?, reason = ?, base_checkpoint_id = ?, '
-    'session_id = ?, finished_at = ?, commits_made = ?, step_results = ? '
-    'WHERE id = ?;',
+    'session_id = ?, finished_at = ?, commits_made = ?, step_results = ?, '
+    'exit_code = ?, output = ? WHERE id = ?;',
     [
       run.state.name,
       run.reason,
@@ -398,6 +410,8 @@ class AutomationDao implements AutomationRecords {
       run.finishedAt == null ? null : isoFromDate(run.finishedAt!),
       run.commitsMade,
       _stepResultsColumn(run),
+      run.exitCode,
+      run.output,
       run.id,
     ],
   );
@@ -648,7 +662,7 @@ class AutomationDao implements AutomationRecords {
     final seconds = row['max_runtime_seconds'] as int?;
     return Automation(
       id: row['id']! as String,
-      repositoryId: row['repository_id']! as String,
+      repositoryId: row['repository_id'] as String? ?? '',
       name: row['name']! as String,
       // A row naming no schedule at all cannot come out of `insert`; reading
       // one as a one-shot in the past is the reading that fires nothing.
@@ -691,7 +705,25 @@ class AutomationDao implements AutomationRecords {
       queueLimit: row['queue_limit'] as int? ?? kDefaultQueueLimit,
       proposedBy: row['proposed_by'] as String?,
       proposedSessionId: row['proposed_session'] as String?,
+      command: _command(row['command'] as String?),
+      folder: _folder(row),
     );
+  }
+
+  static AutomationCommand? _command(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return AutomationCommand.fromJson(jsonDecode(raw));
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static EnvironmentPath? _folder(Map<String, Object?> row) {
+    final environmentId = row['folder_environment'] as String?;
+    final path = row['folder_path'] as String?;
+    if (environmentId == null || path == null) return null;
+    return EnvironmentPath(environmentId: environmentId, path: path);
   }
 
   AutomationRun _run(Map<String, Object?> row) => AutomationRun(
@@ -718,6 +750,8 @@ class AutomationDao implements AutomationRecords {
     ),
     prompt: row['prompt'] as String?,
     variables: _variables(row['variables'] as String?),
+    exitCode: row['exit_code'] as int?,
+    output: row['output'] as String?,
   );
 
   static Map<String, String> _variables(String? raw) {
