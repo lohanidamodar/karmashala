@@ -4,4 +4,5 @@
 /// them. A widget imports this, never that.
 library;
 
-export 'package:agent_cli/process.dart' show EnvironmentKind, EnvironmentPath;
+export 'package:agent_cli/process.dart'
+    show EnvironmentKind, EnvironmentPath, localHostEnvironmentId;
