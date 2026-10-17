@@ -129,6 +129,10 @@ dependencies:
   # the same rule for the host's socket, so the two cannot disagree about it.
   karmashala_local_ipc:
     path: ../packages/local_ipc
+  # Linux containers as machines: the scripts the server runs on a Docker
+  # host, the parsers for what they print, and a key per container.
+  karmashala_containers:
+    path: ../packages/karmashala_containers
   # The MCP wire and its HTTP binding: the daemon serves agents' tools with the
   # same code the app did, so the two cannot answer differently. Pure Dart.
   karmashala_mcp:

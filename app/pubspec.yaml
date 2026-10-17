@@ -108,6 +108,10 @@ dependencies:
   # Fan-out comparisons as values; the server keeps them.
   karmashala_comparisons:
     path: ../packages/karmashala_comparisons
+  # A container's options, a Docker host's check and a container's state, as
+  # values; the server runs the scripts.
+  karmashala_containers:
+    path: ../packages/karmashala_containers
   # A conversation search's hits and pages, as values; the server keeps the
   # index.
   karmashala_conversations:

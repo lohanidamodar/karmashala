@@ -64,6 +64,10 @@ dependencies:
     path: ../karmashala_checkpoints
   karmashala_comparisons:
     path: ../karmashala_comparisons
+  # A container's options and a Docker host's check: what `containers.*`
+  # carries.
+  karmashala_containers:
+    path: ../karmashala_containers
   # A conversation search's hits and pages, and the index's status.
   karmashala_conversations:
     path: ../karmashala_conversations

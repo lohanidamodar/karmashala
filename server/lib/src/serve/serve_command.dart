@@ -687,6 +687,9 @@ Future<int> _serve(
     // Detection probes the agents added since, not the ones at start.
     registryHolder: agentRegistry,
   )..attach();
+  // A container just made has its agents found as soon as it answers.
+  ssh.detectAgents = (environmentId) =>
+      agentWork.detection.detect(environmentId: environmentId);
   final companion = DaemonCompanion(
     database: database,
     data: data,

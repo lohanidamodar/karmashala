@@ -11,6 +11,7 @@ import '../data/data_service.dart';
 import 'boxes/box_relay.dart';
 import 'boxes/remote_sessions.dart';
 import 'boxes/server_remote_hosts.dart';
+import 'containers/server_containers.dart';
 import 'deploy/box_admin.dart';
 import 'deploy/host_bundles.dart';
 import 'pool/server_ssh.dart';
@@ -57,6 +58,12 @@ class ServerSshDomain {
       readKey: readKey,
       promptWait: promptWait,
     );
+    containers = ServerContainers(
+      data: data,
+      ssh: ssh,
+      dataDirectory: dataDirectory,
+      clock: clock,
+    );
     boxes = ServerRemoteHosts(
       hostOf: ssh.hostOf,
       connectionFor: ssh.pool.forHostId,
@@ -77,6 +84,9 @@ class ServerSshDomain {
 
   /// The connections, runners and connection states.
   late final ServerSsh ssh;
+
+  /// Linux containers made on an SSH host or in WSL, saved as SSH hosts.
+  late final ServerContainers containers;
 
   /// The host on each box, and the copies of its sessions.
   late final ServerRemoteHosts boxes;
@@ -102,7 +112,15 @@ class ServerSshDomain {
       boxes.onHook = (_, hook) => take(hook);
 
   /// Answers every `ssh.*` request from now on.
-  void attach() => _data.sshWork = ServerSshRequests(ssh: ssh, admin: admin);
+  void attach() => _data.sshWork = ServerSshRequests(
+    ssh: ssh,
+    admin: admin,
+    containers: containers,
+  );
+
+  /// How a new container's agents are detected, once detection exists.
+  set detectAgents(Future<void> Function(String environmentId) detect) =>
+      containers.detectAgents = detect;
 
   /// A shell on [hostId] (`sh -c`, whatever the account's login shell) over
   /// the connection already open to it, and the box's address; null when none

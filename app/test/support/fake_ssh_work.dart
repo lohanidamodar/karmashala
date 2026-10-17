@@ -14,6 +14,39 @@ class FakeSshWork {
   SshTestResult Function(SshTest request) onTest = (_) =>
       const SshTestResult(connected: true, message: 'Linux 6.18.0');
 
+  /// Each `containers.*` asked.
+  final containerRequests = <SshWorkRequest<Object?>>[];
+
+  /// While set, a `containers.create` waits for it before it is answered.
+  Completer<void>? createGate;
+
+  /// The server tells every window how a create is going.
+  void tellContainerProgress(ContainerProgress progress) =>
+      _server._tell(null, [progress]);
+
+  /// What a `containers.*` request answers; by default every host can run
+  /// one, a container is running, and a create is refused.
+  Object? Function(SshWorkRequest<Object?> request) onContainer = (request) =>
+      switch (request) {
+        ContainerHostCheck() => const HostCheck(
+          canHost: true,
+          dockerVersion: '27.3.1',
+          architecture: 'x86_64',
+          cores: 8,
+          freeMemoryMb: 16384,
+          freeDiskMb: 80000,
+        ),
+        ContainerStatus() => ContainerState.running,
+        ContainerPower(:final action) =>
+          action == ContainerPowerAction.start
+              ? ContainerState.running
+              : ContainerState.stopped,
+        ContainerCreate() => throw const DataRefused.invalid(
+          'no create is scripted',
+        ),
+        _ => const DataAck(),
+      };
+
   /// Each `ssh.test` asked.
   final tests = <SshTest>[];
 
@@ -50,7 +83,8 @@ class FakeSshWork {
   late SshBoxAnswer<SshRelayReading> Function(SshBoxRelay request) onRelay =
       (request) => SshBoxAnswer.of(
         SshRelayReading(
-          status: request.action == SshRelayAction.stop ||
+          status:
+              request.action == SshRelayAction.stop ||
                   request.action == SshRelayAction.remove
               ? SshRelayStatus.stopped
               : SshRelayStatus.running,
@@ -162,6 +196,15 @@ class FakeSshWork {
     final SshPairPhone r => () {
       pairings.add(r);
       return onPair(r);
+    }(),
+    ContainerHostCheck() ||
+    ContainerCreate() ||
+    ContainerCreateCancel() ||
+    ContainerStatus() ||
+    ContainerPower() ||
+    ContainerDelete() => () {
+      containerRequests.add(request);
+      return onContainer(request);
     }(),
   };
 }

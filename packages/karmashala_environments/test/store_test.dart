@@ -247,6 +247,49 @@ void main() {
       expect(columns, contains('private_key_path'));
     });
 
+    test('round-trips a container host and its jump, through the wire too', () {
+      final container = host().copyWith(
+        id: 'c1',
+        host: '127.0.0.1',
+        port: 41022,
+        viaHostId: 'h1',
+        container: const SshContainer(
+          environmentId: 'ssh:h1',
+          name: 'ks-sandbox',
+          id: 'abc123',
+          image: 'ubuntu:24.04',
+          cpus: 2,
+          memoryMb: 4096,
+          agents: ['claude', 'codex'],
+        ),
+      );
+      dao.upsert(host());
+      dao.upsert(container);
+      expect(dao.getById('c1'), container);
+      expect(dao.getById('h1')!.container, isNull);
+      expect(dao.getById('c1')!.hostKeyName, 'container:c1');
+      expect(dao.getById('h1')!.hostKeyName, 'build.example.com');
+      expect(sshHostFromJson(sshHostToJson(container)), container);
+    });
+
+    test('a host written by an older app reads as a plain host', () {
+      final json = sshHostToJson(host())
+        ..remove('viaHostId')
+        ..remove('container');
+      final read = sshHostFromJson(json);
+      expect(read.viaHostId, isNull);
+      expect(read.container, isNull);
+    });
+
+    test('a container row missing its name is read as a plain host', () {
+      dao.upsert(host());
+      db.execute(
+        "UPDATE ssh_hosts SET container_environment_id = 'ssh:x', "
+        "container_id = 'abc' WHERE id = 'h1';",
+      );
+      expect(dao.getById('h1')!.container, isNull);
+    });
+
     test('upserts in place and deletes; toString never shows the key', () {
       dao.upsert(host());
       dao.upsert(host(name: 'renamed'));

@@ -1,0 +1,26 @@
+name: karmashala_containers
+description: >-
+  Linux containers as machines: the options a container is made with, the
+  scripts that check a Docker host, create a container and set it up, start,
+  stop and delete it, the parsers for what those scripts print, the choice of
+  a free loopback port and the key generated for each container. Builds and
+  reads text only — running it on a host is the server's. Pure Dart.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The OpenSSH private-key format a generated key is written in.
+  dartssh2: ^4.1.0
+  # Ed25519 key derivation from a random seed (dartssh2 uses it to sign).
+  pinenacl: ^0.6.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

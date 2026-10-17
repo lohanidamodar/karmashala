@@ -1203,6 +1203,9 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SshHostPut() || SshHostDelete() || KnownHostTrust() || KnownHostForget() =>
       'a phone may not change this server\'s SSH hosts or trusted host keys; '
           'use a desktop paired with it',
+    ContainerCreate() || ContainerDelete() =>
+      'a phone may not create or delete this server\'s containers; use a '
+          'desktop paired with it',
     ClaudeAccountDelete() || CodexAccountDelete() =>
       'a phone may not delete this server\'s agent accounts; use a desktop '
           'paired with it',

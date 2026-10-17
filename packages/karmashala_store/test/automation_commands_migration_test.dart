@@ -40,7 +40,7 @@ void main() {
   test('an existing automation, its runs and what points at it survive', () {
     final db = atV92();
     addTearDown(db.close);
-    expect(db.schemaVersion, 93);
+    expect(db.schemaVersion, 94);
     final nightly = db
         .query("SELECT * FROM automations WHERE id = 'nightly';")
         .single;

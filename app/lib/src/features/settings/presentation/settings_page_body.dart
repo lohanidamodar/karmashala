@@ -27,6 +27,7 @@ import '../../server/presentation/server_storage_section.dart';
 import '../../snippets/presentation/snippets_settings_page.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
+import '../../containers/presentation/containers_section.dart';
 import '../../stores/presentation/stores_settings_section.dart';
 import 'agent_detection_section.dart';
 import 'agents_and_accounts_page.dart';
@@ -195,6 +196,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.browser => const BrowserConsentSection(),
   SettingsAnchor.executionEnvironments => const EnvironmentsSection(),
   SettingsAnchor.sshHosts => const SshHostsSection(),
+  SettingsAnchor.containers => const ContainersSection(),
   SettingsAnchor.flutterSdk => const FlutterSdkSection(),
   SettingsAnchor.buildTooling => const ToolchainsSection(),
   SettingsAnchor.knownHosts => const KnownHostsSection(),
