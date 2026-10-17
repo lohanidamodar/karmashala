@@ -191,6 +191,7 @@ class _AgentMessageBlock extends StatelessWidget {
     this.onCopyTurn,
     this.turn = const [],
     this.prose,
+    this.toolImages = const [],
     this.sentencePerLine = false,
   });
 
@@ -198,6 +199,9 @@ class _AgentMessageBlock extends StatelessWidget {
   final VoidCallback? onSaveNote;
   final PathLinkCallback? onPathTap;
   final ValueChanged<String>? onLinkTap;
+
+  /// Drawn beside this turn's tool calls, so left out of its words.
+  final List<String> toolImages;
   final Widget? detail;
   final String Function()? onCopyTurn;
   final List<_TurnAction> turn;
@@ -241,7 +245,10 @@ class _AgentMessageBlock extends StatelessWidget {
           color: quiet ? scheme.onSurfaceVariant : null,
           sentencePerLine: sentencePerLine,
         ),
-        TranscriptImageStrip(paths: inlineImagePaths(cleanText)),
+        TranscriptImageStrip(
+          paths: inlineImagePaths(cleanText),
+          drawnElsewhere: toolImages,
+        ),
         ?detail,
       ],
     );

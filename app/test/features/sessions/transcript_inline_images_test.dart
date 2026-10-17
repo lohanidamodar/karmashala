@@ -177,6 +177,41 @@ void main() {
       expect(loader.asked.single.path, '/data/tool-images/abc.png');
     });
 
+    // In one turn the picture stays beside the call that viewed it; the
+    // agent's words before and after it leave it out. A later turn shows it.
+    testWidgets('a turn draws a picture once, beside its tool call', (
+      tester,
+    ) async {
+      await pumpChat(tester, const [
+        ChatMessage(role: 'user', text: 'Look at the trail.'),
+        ChatMessage(role: 'agent', text: "I'll view shots/a.png."),
+        ChatMessage(
+          role: 'tool',
+          text: '',
+          tool: ToolActivity(
+            name: 'view_image',
+            subject: '/repo/shots/a.png',
+            imagePath: 'file:///repo/shots/a.png',
+          ),
+        ),
+        ChatMessage(
+          role: 'agent',
+          text: 'Viewed shots/a.png; see also shots/b.png.',
+        ),
+        ChatMessage(role: 'user', text: 'Again?'),
+        ChatMessage(role: 'agent', text: 'Here it is: shots/a.png'),
+      ]);
+      // Turn one: a.png beside the call, b.png in the words that name it.
+      // Turn two: a.png again, in the agent's words.
+      expect(find.byType(TranscriptImageCard), findsNWidgets(3));
+      expect(
+        find.byKey(const ValueKey('inline-image-/repo/shots/a.png')),
+        findsOne,
+      );
+      expect(find.byKey(const ValueKey('inline-image-shots/b.png')), findsOne);
+      expect(find.byKey(const ValueKey('inline-image-shots/a.png')), findsOne);
+    });
+
     // The owner's message: Codex named C:/tmp/x.png in its output and
     // returned it as file:///C:/tmp/x.png. One picture, drawn once, read once.
     testWidgets('a picture both named and returned is drawn once', (

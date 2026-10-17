@@ -115,11 +115,17 @@ class TranscriptImageStrip extends ConsumerStatefulWidget {
     this.fetch,
     this.maxBytes = kMaxImagePreviewBytes,
     this.details = true,
+    this.drawnElsewhere = const [],
     super.key,
   });
 
   final List<String> paths;
   final List<String> returned;
+
+  /// Pictures another row already draws — the tool calls of this turn,
+  /// beside the act that made them — so this row leaves them out, however
+  /// they are spelled.
+  final List<String> drawnElsewhere;
 
   /// Translates a returned path for this disk, when it is read here.
   final String? Function(String path)? resolveHostPath;
@@ -155,6 +161,7 @@ class _TranscriptImageStripState extends ConsumerState<TranscriptImageStrip> {
     super.didUpdateWidget(old);
     if (!listEquals(old.paths, widget.paths) ||
         !listEquals(old.returned, widget.returned) ||
+        !listEquals(old.drawnElsewhere, widget.drawnElsewhere) ||
         old.maxBytes != widget.maxBytes) {
       _images = null;
     }
@@ -183,11 +190,16 @@ class _TranscriptImageStripState extends ConsumerState<TranscriptImageStrip> {
 
   List<TranscriptImageView> _resolve() {
     final scope = _InlineImageScope.of(context);
+    final elsewhere = {
+      for (final written in widget.drawnElsewhere)
+        ?_imageFor(pathFromFileUri(written), scope: scope, returned: true)?.$1,
+    };
     final byKey = <String, TranscriptImageView>{};
     void add(String written, {required bool returned}) {
       final path = pathFromFileUri(written);
       final image = _imageFor(path, scope: scope, returned: returned);
-      if (image != null) byKey.putIfAbsent(image.$1, () => image.$2);
+      if (image == null || elsewhere.contains(image.$1)) return;
+      byKey.putIfAbsent(image.$1, () => image.$2);
     }
 
     for (final path in widget.returned) {
