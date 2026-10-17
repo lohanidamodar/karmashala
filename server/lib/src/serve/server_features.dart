@@ -114,6 +114,9 @@ const Set<String> kServerFeatures = <String>{
   'automations.runNow',
   // `automationRuns.page`: runs older than a client's copy, a page at a time.
   'automations.runsPage',
+  // An automation's `command` first step and its `folder`, a run's
+  // `exitCode` and `output`, and `automations.tryCommand`.
+  'automations.commands',
   // `projects.createFromFolder` takes `createFolder`, `initGit` and
   // `scan: false`: a missing folder made, and the root recorded alone.
   'projects.createFolder',

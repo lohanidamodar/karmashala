@@ -34,9 +34,13 @@ class DaemonAutomationFiring implements AutomationFiring {
     String note = '',
     AutomationRun? queued,
   }) async {
-    final checkout = facts.repository(automation.repositoryId)?.path;
+    final checkout =
+        automation.folder ?? facts.repository(automation.repositoryId)?.path;
     // A missing checkout is the runner's gate to refuse, in its own words.
-    if (checkout == null || facts.startsAgentsIn(checkout)) {
+    if (checkout == null ||
+        (automation.runsCommand
+            ? facts.runsChecksIn(checkout)
+            : facts.startsAgentsIn(checkout))) {
       await local.fire(automation, scheduledFor, note: note, queued: queued);
       return;
     }

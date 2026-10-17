@@ -7,6 +7,7 @@ import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runner.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:path/path.dart' as p;
 
 import 'daemon_checkout_facts.dart';
 
@@ -36,30 +37,32 @@ class ServerStepCommands implements StepCommandRunner {
     final sessionId = run.sessionId;
     final directory =
         (sessionId == null ? null : sessionOf(sessionId)?.worktree) ??
+        automation.folder ??
         checkout ??
         (throw StateError('The checkout is no longer in the workspace.'));
     final place = facts.rows.environment(directory.environmentId);
     if (place == null || !facts.runsChecksIn(directory)) {
       throw StateError(
-        'This server cannot run commands where this checkout is.',
+        'This server cannot run commands on '
+        '${place?.name ?? directory.environmentId}.',
       );
     }
     final runner =
         facts.remoteRunnerFor(directory) ?? exactRunner(place, _local);
-    final windows = place.kind == EnvironmentKind.windowsNative;
+    final request = commandRequest(
+      automation,
+      place,
+      directory,
+      command: command,
+      environment: environment,
+      timeout: timeout,
+      batchFile: () => File(
+        p.join(Directory.systemTemp.path, 'karmashala-run-${run.id}.cmd'),
+      ),
+    );
     final CommandResult result;
     try {
-      result = await runner.run(
-        CommandRequest(
-          executable: windows ? 'powershell.exe' : 'sh',
-          arguments: windows
-              ? ['-NoProfile', '-NonInteractive', '-Command', command]
-              : ['-c', command],
-          workingDirectory: directory,
-          environment: environment,
-          timeout: timeout,
-        ),
-      );
+      result = await runner.run(request.request);
     } on CommandException catch (error) {
       if (error.message.contains('did not finish within')) {
         return const StepCommandResult(
@@ -69,12 +72,125 @@ class ServerStepCommands implements StepCommandRunner {
         );
       }
       throw StateError('It did not start: ${error.message}');
+    } finally {
+      await request.cleanUp();
     }
     return StepCommandResult(
       exitCode: result.exitCode,
       output: '${result.stdout}${result.stderr}',
     );
   }
+}
+
+/// How [command] is handed to [place]'s shell. Windows runs PowerShell, or
+/// cmd from a batch file when a command automation chose it; elsewhere a
+/// command automation runs in the user's login shell, from [directory] with
+/// `~` read as home, and a step in a checkout runs in `sh`. The command and
+/// the folder cross as arguments, never as a line to parse.
+({CommandRequest request, Future<void> Function() cleanUp}) commandRequest(
+  Automation automation,
+  ExecutionEnvironment place,
+  EnvironmentPath directory, {
+  required String command,
+  required Map<String, String> environment,
+  required Duration timeout,
+  required File Function() batchFile,
+  Map<String, String>? hostEnvironment,
+}) {
+  Future<void> nothing() async {}
+  final shell = automation.command?.shell;
+  if (place.kind == EnvironmentKind.windowsNative) {
+    final folder = EnvironmentPath(
+      environmentId: directory.environmentId,
+      path: homeExpanded(
+        directory.path,
+        (hostEnvironment ?? Platform.environment)['USERPROFILE'],
+      ),
+    );
+    if (shell == AutomationShell.cmd) {
+      final file = batchFile();
+      // Lines run in turn, and !NAME! reads a value without re-parsing it.
+      file.writeAsStringSync(
+        '@echo off\r\nsetlocal EnableDelayedExpansion\r\n'
+        '${command.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n')}\r\n',
+      );
+      return (
+        request: CommandRequest(
+          executable: 'cmd.exe',
+          arguments: ['/d', '/c', 'call', file.path],
+          workingDirectory: folder,
+          environment: environment,
+          timeout: timeout,
+        ),
+        cleanUp: () async {
+          try {
+            await file.delete();
+          } on FileSystemException {
+            // Already gone, or held a moment longer by cmd: temp is temp.
+          }
+        },
+      );
+    }
+    return (
+      request: CommandRequest(
+        executable: 'powershell.exe',
+        arguments: ['-NoProfile', '-NonInteractive', '-Command', command],
+        workingDirectory: folder,
+        environment: environment,
+        timeout: timeout,
+      ),
+      cleanUp: nothing,
+    );
+  }
+  if (automation.runsCommand) {
+    return (
+      request: CommandRequest(
+        executable: 'sh',
+        arguments: [
+          '-c',
+          kLoginShellScript,
+          'karmashala',
+          command,
+          directory.path,
+        ],
+        environment: environment,
+        timeout: timeout,
+      ),
+      cleanUp: nothing,
+    );
+  }
+  return (
+    request: CommandRequest(
+      executable: 'sh',
+      arguments: ['-c', command],
+      workingDirectory: directory,
+      environment: environment,
+      timeout: timeout,
+    ),
+    cleanUp: nothing,
+  );
+}
+
+/// Moves to `$2` (`~` is home), then runs `$1` in the user's login shell.
+const String kLoginShellScript = r'''
+[ -n "${HOME:-}" ] || HOME=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6)
+d=$2
+case $d in "~") d=$HOME ;; "~/"*) d=$HOME/${d#"~/"} ;; esac
+cd -- "$d" || { echo "No such folder: $d" >&2; exit 1; }
+s=${SHELL:-}
+[ -n "$s" ] || s=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)
+[ -x "$s" ] || s=/bin/sh
+exec "$s" -lc "$1"
+''';
+
+/// [path] with a leading `~` read as [home], on Windows.
+String homeExpanded(String path, String? home) {
+  if (home == null || home.isEmpty) return path;
+  if (path == '~') return home;
+  if (path.startsWith('~/') || path.startsWith(r'~\')) {
+    return '$home\\${path.substring(2)}';
+  }
+  return path;
 }
 
 /// A runner for [place] that hands each argument over byte for byte. In WSL

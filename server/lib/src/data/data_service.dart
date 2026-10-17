@@ -1081,6 +1081,9 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       final Object result = switch (asked) {
         AutomationRunNow(:final id) => await work.runNow(id),
         AutomationRunCancel(:final runId) => await work.cancelRun(runId),
+        AutomationCommandTry(:final automation) => await work.tryCommand(
+          automation,
+        ),
       };
       return DataReply(result as R, _service._revision);
     }

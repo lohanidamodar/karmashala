@@ -8,7 +8,12 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
 import 'package:karmashala_automations/automations.dart'
-    show Automation, AutomationEventAction, proposalInboxId;
+    show
+        Automation,
+        AutomationEventAction,
+        describeGap,
+        proposalInboxId,
+        stepEnvironment;
 import 'package:karmashala_automations/webhooks.dart'
     show fillWebhookTemplate, webhookSampleBody, webhookTemplateFields;
 import 'package:karmashala_automations/check_runner.dart';
@@ -31,6 +36,7 @@ import 'package:karmashala_core/util.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AutomationChanged,
+        AutomationCommandTried,
         CheckpointRecorded,
         ChecksRun,
         DataChange,
@@ -178,8 +184,13 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
     );
     checks = checkRunner;
     final preflight = UnattendedPreflight(facts: facts);
+    final commands =
+        stepCommands ??
+        ServerStepCommands(facts: facts, sessionOf: sessions.getById);
+    _commands = commands;
     late final HostedAgentLauncher launcher;
     final runner = _runner = AutomationRunner(
+      commands: commands,
       automations: automations,
       preflight: preflight,
       facts: facts,
@@ -315,9 +326,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       now: now,
       newId: ids,
       onChanged: _changed,
-      commands:
-          stepCommands ??
-          ServerStepCommands(facts: facts, sessionOf: sessions.getById),
+      commands: commands,
       webhooks: stepWebhooks ?? ServerStepWebhooks(),
       pipelines: stepPipelines,
     );
@@ -390,6 +399,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       onChanged: _changed,
       log: _log,
     );
+    runner.finish = settler.finish;
     firstRunPrompts = FirstRunPromptWatch(
       registry: registry,
       interval: firstRunPromptInterval,
@@ -549,7 +559,10 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   }) {
     final at = DateTime.now().toUtc();
     final checkout = facts.repository(automation.repositoryId)?.path;
-    if (checkout != null && !facts.startsAgentsIn(checkout)) {
+    // A command's place is the gate's to judge, in its own words.
+    if (!automation.runsCommand &&
+        checkout != null &&
+        !facts.startsAgentsIn(checkout)) {
       final run = AutomationRun(
         id: newUuid(),
         automationId: automation.id,
@@ -641,8 +654,57 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
             : const {},
       ),
     );
-    await scheduler.drain(automation.repositoryId);
+    await scheduler.drain(automation.placeKey);
     return _automations.runById(queued.id) ?? queued;
+  }
+
+  late final StepCommandRunner _commands;
+
+  /// Runs [automation]'s command once, now, where it would run — a dry run
+  /// on demand. Records no run and touches no failure count.
+  @override
+  Future<AutomationCommandTried> tryCommand(Automation automation) async {
+    final command = automation.command;
+    if (command == null) {
+      throw const DataRefused.invalid('This automation runs no command.');
+    }
+    if (command.refusal case final why?) throw DataRefused.invalid(why);
+    final place =
+        automation.folder ?? facts.repository(automation.repositoryId)?.path;
+    if (place == null) {
+      throw const DataRefused.invalid('Pick where it runs first.');
+    }
+    final timeout = automation.maxRuntime ?? kCommandTimeLimit;
+    final started = _now();
+    final at = started;
+    try {
+      final result = await _commands.run(
+        automation,
+        AutomationRun(
+          id: 'try-${_newId()}',
+          automationId: automation.id,
+          scheduledFor: at,
+          firedAt: at,
+          state: AutomationRunState.running,
+          reason: '',
+        ),
+        command: command.text,
+        environment: stepEnvironment({
+          'automation': automation.name,
+          'project':
+              facts.repository(automation.repositoryId)?.name ?? place.path,
+        }),
+        timeout: timeout,
+      );
+      return AutomationCommandTried(
+        exitCode: result.exitCode,
+        output: capStepOutput(result.output),
+        timedOut: result.timedOut,
+        took: _now().difference(started),
+      );
+    } on StateError catch (error) {
+      throw DataRefused.invalid(error.message);
+    }
   }
 
   /// A waiting run is let go; a running one's session is ended, which
@@ -663,6 +725,15 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
           ),
         );
         _changed();
+      case AutomationRunState.running
+          when _automations.getById(run.automationId)?.runsCommand ?? false:
+        final limit =
+            _automations.getById(run.automationId)?.maxRuntime ??
+            kCommandTimeLimit;
+        throw DataRefused.invalid(
+          'A command stops at its time limit (${describeGap(limit)}); it '
+          'cannot be stopped sooner from here.',
+        );
       case AutomationRunState.running:
         final sessionId = run.sessionId;
         final hosted = sessionId == null ? null : hostSessionIdOf(sessionId);
@@ -688,8 +759,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
   bool checkoutBusy(Automation automation) => _automations.liveRuns().any(
     (run) =>
         run.state == AutomationRunState.running &&
-        _automations.getById(run.automationId)?.repositoryId ==
-            automation.repositoryId,
+        _automations.getById(run.automationId)?.placeKey == automation.placeKey,
   );
 
   /// Each agent this host starts is watched, briefly, for a first-run

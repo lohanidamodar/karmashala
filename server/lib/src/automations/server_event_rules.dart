@@ -170,7 +170,7 @@ class ServerEventRules {
       case AutomationEventAction.startSession:
         // Queued behind the checkout; the scheduler starts it when it is free.
         scheduler.queueEventRun(rule, run);
-        await scheduler.drain(rule.repositoryId);
+        await scheduler.drain(rule.placeKey);
       case AutomationEventAction.messageSession:
         await _message(rule, run, session);
       case AutomationEventAction.notifyOnly:

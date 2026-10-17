@@ -68,6 +68,9 @@ DataRequest<Object?>? _automationsRequestFromJson(
   ),
   AutomationRunNow.name => AutomationRunNow(args.string('id')),
   AutomationRunCancel.name => AutomationRunCancel(args.string('runId')),
+  AutomationCommandTry.name => AutomationCommandTry(
+    args.value('automation', automationFromJson),
+  ),
   _ => null,
 };
 
@@ -194,6 +197,63 @@ final class AutomationRunNow extends AutomationWorkRequest<AutomationRun> {
 
   @override
   Map<String, Object?> argumentsToJson() => {'id': id};
+}
+
+/// How running an automation's command once went.
+class AutomationCommandTried {
+  const AutomationCommandTried({
+    required this.exitCode,
+    required this.output,
+    required this.timedOut,
+    required this.took,
+  });
+
+  /// Null when it was stopped at its time limit.
+  final int? exitCode;
+  final String output;
+  final bool timedOut;
+  final Duration took;
+
+  Map<String, Object?> toJson() => {
+    'exitCode': exitCode,
+    'output': output,
+    'timedOut': timedOut,
+    'tookMs': took.inMilliseconds,
+  };
+
+  static AutomationCommandTried fromJson(Map<String, Object?> json) =>
+      AutomationCommandTried(
+        exitCode: json['exitCode'] as int?,
+        output: json['output'] as String? ?? '',
+        timedOut: json['timedOut'] == true,
+        took: Duration(milliseconds: json['tookMs'] as int? ?? 0),
+      );
+}
+
+/// Runs [automation]'s command once, now, where it would run: a dry run on
+/// demand. Saved or not, it records no run.
+final class AutomationCommandTry
+    extends AutomationWorkRequest<AutomationCommandTried> {
+  const AutomationCommandTry(this.automation);
+
+  static const String name = 'automations.tryCommand';
+
+  final Automation automation;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'automation': automationToJson(automation),
+  };
+
+  @override
+  Object? resultToJson(AutomationCommandTried result) => result.toJson();
+
+  @override
+  AutomationCommandTried resultFromJson(Object? json) =>
+      _decode(kind, () => AutomationCommandTried.fromJson(_object(json, kind)));
 }
 
 /// Stops run [runId]: a waiting one is let go, a running one's session is
