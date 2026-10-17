@@ -17,6 +17,16 @@ installs claim the same version name.
 
 ---
 
+## 1.34.11 — 2026-10-17 (build 78)
+
+- **The Windows app no longer crashes when an accessibility client asks for its tree.** The touch keyboard or a screen reader could trip a bug in Flutter's Windows accessibility bridge, which crashed the app while the host kept running. The app now answers those clients only when Settings → Startup → "Screen reader support" is on. It is off by default, and turning it off applies after a restart.
+- **The dashboard answers an agent's ask with every option the agent offers**, in its own words and with its reason, the same as the session's tab.
+- **A sub-session card says where it runs** (its context, project or machine) when that differs from its parent.
+- **The Timeline is redesigned:**
+  - Each session's title rides its lane, with an avatar where its bar starts, and sub-sessions hang on stems below their parent.
+  - A detail pane shows the selected session: docked beside the lanes on a wide window, a sheet otherwise.
+  - The toolbar has Day and Week, filters, search, "Waits only", zoom, Fit and Now. A phone shows the last three hours.
+
 ## 1.34.10 — 2026-10-14 (build 77)
 
 - **The dashboard on a phone is compact:** one frame per family, the title close to its avatar, a single pick box, and slim message fields and buttons that keep full-size touch targets.
