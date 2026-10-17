@@ -50,7 +50,29 @@ Map<String, Object?> sshHostToJson(SshHost host, {bool withKeyPath = true}) => {
   if (host.defaultDirectory != null)
     'defaultDirectory': environmentPathToJson(host.defaultDirectory!),
   'createdAt': _time(host.createdAt),
+  'viaHostId': ?host.viaHostId,
+  if (host.container != null) 'container': sshContainerToJson(host.container!),
 };
+
+Map<String, Object?> sshContainerToJson(SshContainer container) => {
+  'environmentId': container.environmentId,
+  'name': container.name,
+  'id': container.id,
+  'image': container.image,
+  'cpus': container.cpus,
+  'memoryMb': container.memoryMb,
+  'agents': container.agents,
+};
+
+SshContainer sshContainerFromJson(Map<String, Object?> json) => SshContainer(
+  environmentId: _string(json, 'environmentId'),
+  name: _string(json, 'name'),
+  id: _string(json, 'id'),
+  image: _string(json, 'image'),
+  cpus: _int(json, 'cpus'),
+  memoryMb: _int(json, 'memoryMb'),
+  agents: _strings(json, 'agents'),
+);
 
 SshHost sshHostFromJson(Map<String, Object?> json) => SshHost(
   id: _string(json, 'id'),
@@ -66,6 +88,11 @@ SshHost sshHostFromJson(Map<String, Object?> json) => SshHost(
       ? null
       : environmentPathFromJson(json['defaultDirectory']),
   createdAt: _date(json['createdAt']),
+  viaHostId: _optional(json, 'viaHostId'),
+  container: switch (_map(json['container'])) {
+    null => null,
+    final container => sshContainerFromJson(container),
+  },
 );
 
 Map<String, Object?> knownHostToJson(KnownHostKey key) => {

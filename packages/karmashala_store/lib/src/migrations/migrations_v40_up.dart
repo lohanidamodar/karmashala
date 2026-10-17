@@ -1306,3 +1306,23 @@ void _migrateToV92(Database db) {
     'ON pipeline_runs (state, created_at);',
   );
 }
+
+/// Linux containers Karmashala created, saved as SSH hosts: the host they are
+/// reached through, where their Docker runs, and what they were made with as
+/// JSON. Nullable, so an older server reading the table sees plain hosts.
+void _migrateToV94(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(ssh_hosts);')
+      .map((row) => row['name'] as String)
+      .toSet();
+  for (final column in const [
+    'via_host_id',
+    'container_environment_id',
+    'container_name',
+    'container_id',
+    'container_details',
+  ]) {
+    if (columns.contains(column)) continue;
+    db.execute('ALTER TABLE ssh_hosts ADD COLUMN $column TEXT;');
+  }
+}
