@@ -101,6 +101,10 @@ class AppDatabase {
     final pending = schemaMigrations.keys.where((v) => v > current).toList()
       ..sort();
     for (final version in pending) {
+      // A table rebuild must not cascade its DROP into the rows that point
+      // at it, and the switch only takes effect outside a transaction.
+      final rebuilds = kMigrationsRebuildingTables.contains(version);
+      if (rebuilds) _db.execute('PRAGMA foreign_keys = OFF;');
       _db.execute('BEGIN;');
       try {
         schemaMigrations[version]!(_db);
@@ -109,6 +113,8 @@ class AppDatabase {
       } catch (_) {
         _db.execute('ROLLBACK;');
         rethrow;
+      } finally {
+        if (rebuilds) _db.execute('PRAGMA foreign_keys = ON;');
       }
     }
   }

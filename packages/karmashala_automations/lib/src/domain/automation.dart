@@ -1,6 +1,8 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 
 import 'automation_admission.dart';
+import 'automation_command.dart';
 import 'automation_steps.dart';
 import 'automation_trigger.dart';
 import 'automation_webhook.dart';
@@ -169,12 +171,26 @@ class Automation {
     this.queueLimit = kDefaultQueueLimit,
     this.proposedBy,
     this.proposedSessionId,
+    this.command,
+    this.folder,
+    this.commandStated = true,
   });
 
   final String id;
 
   /// The checkout it runs in. Its environment is where the gate preflights.
+  /// Empty when it runs in a [folder] instead.
   final String repositoryId;
+
+  /// The command its first step runs instead of starting an agent, or null.
+  final AutomationCommand? command;
+
+  /// The folder a command runs in when it names no checkout, or null.
+  final EnvironmentPath? folder;
+
+  /// False when read from a sender that predates commands: a save from it
+  /// keeps the stored command and folder instead of dropping them.
+  final bool commandStated;
 
   /// What the user calls it, so a run row and a refusal name the same thing.
   final String name;
@@ -269,10 +285,20 @@ class Automation {
   /// Whether a run needs an agent of its own. A message goes into a session
   /// that already has one, so that rule names none; a GitHub rule that tells
   /// a branch's session starts one when no session owns the branch.
-  bool get startsAgent => switch (github?.action ?? trigger?.action) {
-    null || AutomationEventAction.startSession => true,
-    AutomationEventAction.messageSession => github != null,
-    AutomationEventAction.notifyOnly => false,
+  bool get startsAgent =>
+      command == null &&
+      switch (github?.action ?? trigger?.action) {
+        null || AutomationEventAction.startSession => true,
+        AutomationEventAction.messageSession => github != null,
+        AutomationEventAction.notifyOnly => false,
+      };
+
+  bool get runsCommand => command != null;
+
+  /// What one run at a time is held to: its checkout, or its folder.
+  String get placeKey => switch (folder) {
+    final folder? => 'folder:${folder.environmentId}:${folder.path}',
+    null => repositoryId,
   };
 
   /// Whether [consecutiveFailures] has reached the limit this was armed with.
@@ -306,9 +332,18 @@ class Automation {
     AutomationOverlap? overlap,
     int? queueLimit,
     bool clearProposed = false,
+    String? repositoryId,
+    AutomationCommand? command,
+    bool clearCommand = false,
+    EnvironmentPath? folder,
+    bool clearFolder = false,
+    bool? commandStated,
   }) => Automation(
     id: id,
-    repositoryId: repositoryId,
+    repositoryId: repositoryId ?? this.repositoryId,
+    command: clearCommand ? null : command ?? this.command,
+    folder: clearFolder ? null : folder ?? this.folder,
+    commandStated: commandStated ?? this.commandStated,
     name: name ?? this.name,
     schedule: schedule ?? this.schedule,
     agentInstallationId: agentInstallationId ?? this.agentInstallationId,

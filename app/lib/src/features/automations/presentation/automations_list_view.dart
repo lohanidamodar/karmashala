@@ -308,7 +308,12 @@ class _CheckoutGroup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final name = repository?.name ?? 'A checkout that is gone';
+    // A folder automation names no checkout: they gather under one heading.
+    final name =
+        repository?.name ??
+        (automations.first.folder != null
+            ? 'In folders'
+            : 'A checkout that is gone');
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.sm),
       child: Column(
@@ -348,7 +353,10 @@ class _CheckoutGroup extends ConsumerWidget {
             cell: (i) => AutomationCard(
               key: ValueKey(automations[i].id),
               automation: automations[i],
-              checkout: repository?.name ?? 'its checkout',
+              checkout:
+                  automations[i].folder?.path ??
+                  repository?.name ??
+                  'its checkout',
             ),
           ),
         ],
@@ -393,7 +401,7 @@ class AutomationCard extends ConsumerWidget {
     );
     final lastRun = last == null
         ? 'Never run'
-        : '${runOutcome(last, checks).label} '
+        : '${runOutcome(last, checks, expectsChecks: automation.steps.checks).label} '
               '${describeAge(last.firedAt, now: now)}';
     final small = theme.textTheme.bodySmall;
     return WorkflowCard(
@@ -445,7 +453,14 @@ class AutomationCard extends ConsumerWidget {
             style: small?.copyWith(
               color: last == null
                   ? scheme.onSurfaceVariant
-                  : runOutcomeColor(context, runOutcome(last, checks)),
+                  : runOutcomeColor(
+                      context,
+                      runOutcome(
+                        last,
+                        checks,
+                        expectsChecks: automation.steps.checks,
+                      ),
+                    ),
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

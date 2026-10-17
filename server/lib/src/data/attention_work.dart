@@ -1,3 +1,4 @@
+import 'package:karmashala_automations/automations.dart' show Automation;
 import 'package:karmashala_automations/runs.dart' show AutomationRun;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
@@ -28,6 +29,10 @@ abstract interface class AutomationWork {
 
   /// Stops run [runId]; throws [DataRefused] when it is not live.
   Future<AutomationRun> cancelRun(String runId);
+
+  /// Runs [automation]'s command once, now, recording no run; throws
+  /// [DataRefused] when it has none or it could not start.
+  Future<AutomationCommandTried> tryCommand(Automation automation);
 }
 
 /// What runs a session's project checks for a client (`checks.run`) — the

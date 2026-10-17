@@ -161,14 +161,16 @@ class AutomationsHandler {
     if (automation.name.trim().isEmpty) {
       throw const DataRefused.invalid('An automation needs a name.');
     }
-    _repository(automation.repositoryId);
     final before = _automations.getById(automation.id);
+    automation = _commandOf(automation, before);
+    if (automation.folder == null) _repository(automation.repositoryId);
     automation = _webhookOf(automation, before);
     automation = _stepsOf(automation, before);
     if (before == null) {
       _automations.insert(automation);
     } else {
-      if (before.repositoryId != automation.repositoryId) {
+      if (before.repositoryId != automation.repositoryId ||
+          (before.folder == null) != (automation.folder == null)) {
         throw const DataRefused.invalid(
           'An automation keeps the checkout it was armed in.',
         );
@@ -194,13 +196,81 @@ class AutomationsHandler {
         'An automation is a webhook or an event rule, not both.',
       );
     }
-    final refusal = webhookTemplateRefusal(automation.prompt);
+    // A command's call is its trigger only: it fills no prompt.
+    final refusal = automation.runsCommand
+        ? null
+        : webhookTemplateRefusal(automation.prompt);
     if (refusal != null) throw DataRefused.invalid(refusal);
     return automation.copyWith(
       webhook: asked.copyWith(
         hookId: kept?.hookId ?? newWebhookHookId(),
         callsPerHour: asked.callsPerHour.clamp(1, kMaxWebhookCallsPerHour),
       ),
+    );
+  }
+
+  /// The command part as the server keeps it. A client that predates
+  /// commands sends none, and its save keeps the stored command, folder and
+  /// checkout rather than turning it into an agent automation with no agent.
+  static Automation _commandOf(Automation automation, Automation? before) {
+    if (!automation.commandStated) {
+      if (before == null) return automation;
+      return automation.copyWith(
+        command: before.command,
+        clearCommand: before.command == null,
+        folder: before.folder,
+        clearFolder: before.folder == null,
+        repositoryId: before.repositoryId,
+        commandStated: true,
+      );
+    }
+    final command = automation.command;
+    if (command == null) {
+      if (automation.folder != null) {
+        throw const DataRefused.invalid(
+          'Only a command runs in a folder; an agent runs in a project.',
+        );
+      }
+      return automation;
+    }
+    if (command.refusal case final why?) throw DataRefused.invalid(why);
+    final folder = automation.folder;
+    if (folder != null) {
+      if (folder.path.trim().isEmpty) {
+        throw const DataRefused.invalid('Say which folder it runs in.');
+      }
+      if (automation.isEventDriven || automation.isGithub) {
+        throw const DataRefused.invalid(
+          'An event or GitHub rule watches a project, so it runs in one.',
+        );
+      }
+      for (final kind in const [
+        AutomationStepKind.check,
+        AutomationStepKind.tell,
+      ]) {
+        if (automation.steps.of(kind) != null) {
+          throw DataRefused.invalid(
+            '"${kind.label}" needs a project; a folder has none.',
+          );
+        }
+      }
+      final pipeline = automation.steps.of(AutomationStepKind.pipeline);
+      if (pipeline != null && pipeline.repositoryId == null) {
+        throw const DataRefused.invalid(
+          'Pick the project its pipeline runs in; a folder has none.',
+        );
+      }
+    }
+    if (automation.steps.of(AutomationStepKind.tell) != null) {
+      throw const DataRefused.invalid(
+        'A command starts no session, so there is no agent to tell.',
+      );
+    }
+    return automation.copyWith(
+      agentInstallationId: '',
+      clearModel: true,
+      worktree: false,
+      repositoryId: folder == null ? null : '',
     );
   }
 

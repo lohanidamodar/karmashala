@@ -1,4 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/schedules.dart';
 import 'package:karmashala_automations/webhooks.dart';
@@ -33,6 +34,7 @@ enum DraftScheduleMode {
 /// What an event rule does first.
 enum EventFirstStep {
   agent('Start an agent', 'Agent'),
+  command('Run a command', 'Command'),
   tell('Tell that session', 'Tell it'),
   nothing('Only notify me', 'Only notify');
 
@@ -42,6 +44,17 @@ enum EventFirstStep {
 
   /// For the segmented control, which a phone has to fit.
   final String short;
+}
+
+/// Where it runs: one of the workspace's checkouts, or any folder on a
+/// machine. Only a command runs in a plain folder.
+enum DraftPlace {
+  project('A project'),
+  folder('Any folder');
+
+  const DraftPlace(this.label);
+
+  final String label;
 }
 
 /// One automation being written: every field the editor shows, plain values
@@ -79,10 +92,32 @@ class AutomationDraft {
     this.steps = AutomationSteps.none,
     this.stopAfterFailures = kDefaultStopAfterFailures,
     this.maxRuntimeMinutes,
+    this.runsCommand = false,
+    this.commandText = '',
+    this.shell = AutomationShell.powershell,
+    this.place = DraftPlace.project,
+    this.environmentId,
+    this.windowsMachine = false,
+    this.folderPath = kHomeFolder,
   });
 
   /// The automation this edits, or null for a new one.
   final Automation? original;
+
+  /// Its first step runs [commandText] instead of starting an agent.
+  final bool runsCommand;
+  final String commandText;
+
+  /// The Windows shell; anywhere else a command runs in the login shell.
+  final AutomationShell shell;
+  final DraftPlace place;
+
+  /// The machine a folder is on, and a project is filtered by.
+  final String? environmentId;
+
+  /// Whether [environmentId] is Windows, where [shell] is a choice.
+  final bool windowsMachine;
+  final String folderPath;
   final String name;
   final String? repositoryId;
   final bool enabled;
@@ -130,21 +165,37 @@ class AutomationDraft {
   bool get isNew => original == null;
 
   /// Whether the run starts an agent of its own (and so names one).
-  bool get namesAgent => switch (trigger) {
-    DraftTrigger.event => startsAgent,
-    DraftTrigger.github => !notifyOnly,
-    _ => true,
-  };
+  bool get namesAgent =>
+      !runsCommand &&
+      switch (trigger) {
+        DraftTrigger.event => startsAgent,
+        DraftTrigger.github => !notifyOnly,
+        _ => true,
+      };
+
+  /// Whether [trigger] watches a project, so never runs in a plain folder.
+  bool get watchesProject =>
+      trigger == DraftTrigger.event || trigger == DraftTrigger.github;
+
+  /// Whether it runs in a folder rather than one of the checkouts.
+  bool get inFolder => place == DraftPlace.folder;
 
   /// The first step of an event rule.
-  EventFirstStep get firstStep => startsAgent
+  EventFirstStep get firstStep => runsCommand
+      ? EventFirstStep.command
+      : startsAgent
       ? EventFirstStep.agent
       : notifyOnly
       ? EventFirstStep.nothing
       : EventFirstStep.tell;
 
+  /// The shell it runs in, as stored.
+  AutomationShell get effectiveShell =>
+      windowsMachine ? shell : AutomationShell.login;
+
   AutomationDraft withFirstStep(EventFirstStep step) => copyWith(
-    startsAgent: step == EventFirstStep.agent,
+    runsCommand: step == EventFirstStep.command,
+    startsAgent: step == EventFirstStep.agent || step == EventFirstStep.command,
     notifyOnly: step == EventFirstStep.nothing,
     steps:
         step == EventFirstStep.nothing &&
@@ -212,6 +263,17 @@ class AutomationDraft {
       steps: a.steps,
       stopAfterFailures: a.stopAfterFailures,
       maxRuntimeMinutes: a.maxRuntime?.inMinutes,
+      runsCommand: a.command != null,
+      commandText: a.command?.text ?? '',
+      shell: switch (a.command?.shell) {
+        null || AutomationShell.login => AutomationShell.powershell,
+        final shell => shell,
+      },
+      place: a.folder == null ? DraftPlace.project : DraftPlace.folder,
+      environmentId: a.folder?.environmentId,
+      windowsMachine:
+          a.command != null && a.command!.shell != AutomationShell.login,
+      folderPath: a.folder?.path ?? kHomeFolder,
     );
   }
 
@@ -249,8 +311,22 @@ class AutomationDraft {
     int? stopAfterFailures,
     int? maxRuntimeMinutes,
     bool clearMaxRuntime = false,
+    bool? runsCommand,
+    String? commandText,
+    AutomationShell? shell,
+    DraftPlace? place,
+    String? environmentId,
+    bool? windowsMachine,
+    String? folderPath,
   }) => AutomationDraft(
     original: original,
+    runsCommand: runsCommand ?? this.runsCommand,
+    commandText: commandText ?? this.commandText,
+    shell: shell ?? this.shell,
+    place: place ?? this.place,
+    environmentId: environmentId ?? this.environmentId,
+    windowsMachine: windowsMachine ?? this.windowsMachine,
+    folderPath: folderPath ?? this.folderPath,
     name: name ?? this.name,
     repositoryId: repositoryId ?? this.repositoryId,
     enabled: enabled ?? this.enabled,
@@ -322,6 +398,13 @@ class AutomationDraft {
   /// agent, model and mode are picked again.
   AutomationDraft withCheckout(String? repositoryId) => AutomationDraft(
     original: original,
+    runsCommand: runsCommand,
+    commandText: commandText,
+    shell: shell,
+    place: place,
+    environmentId: environmentId,
+    windowsMachine: windowsMachine,
+    folderPath: folderPath,
     name: name,
     repositoryId: repositoryId,
     enabled: enabled,
@@ -354,6 +437,13 @@ class AutomationDraft {
   /// This automation as a new one to create, its name marked a copy; a
   /// webhook gets a URL of its own when it is created.
   AutomationDraft asNewCopy() => AutomationDraft(
+    runsCommand: runsCommand,
+    commandText: commandText,
+    shell: shell,
+    place: place,
+    environmentId: environmentId,
+    windowsMachine: windowsMachine,
+    folderPath: folderPath,
     name: '$name (copy)',
     repositoryId: repositoryId,
     trigger: trigger,
@@ -388,8 +478,9 @@ class AutomationDraft {
   /// What is still missing before this can be saved, in words, or null.
   String? get missing {
     if (name.trim().isEmpty) return 'Name it first.';
-    if (repositoryId == null) return 'Pick where it runs.';
+    if (placeProblem case final problem?) return problem;
     if (scheduleProblem case final problem?) return problem;
+    if (runsCommand) return _commandProblem ?? steps.refusal;
     if (namesAgent && installationId == null) return 'Pick an agent.';
     if (trigger == DraftTrigger.event &&
         eventKind == AutomationEventKind.needsYou &&
@@ -411,8 +502,38 @@ class AutomationDraft {
     return steps.refusal;
   }
 
+  /// Why where it runs cannot be used, or null.
+  String? get placeProblem {
+    if (!inFolder) return repositoryId == null ? 'Pick where it runs.' : null;
+    if (!runsCommand) {
+      return 'An agent runs in a project. Pick one, or run a command instead.';
+    }
+    if (watchesProject) {
+      return 'An event or GitHub rule watches a project, so it runs in one.';
+    }
+    if (environmentId == null) return 'Pick the machine it runs on.';
+    if (folderPath.trim().isEmpty) return 'Say which folder it runs in.';
+    return null;
+  }
+
+  String? get _commandProblem {
+    if (AutomationCommand(text: commandText, shell: effectiveShell).refusal
+        case final why?) {
+      return why;
+    }
+    if (steps.of(AutomationStepKind.tell) != null) {
+      return 'A command starts no session, so there is no agent to tell. '
+          'Remove "Tell the agent".';
+    }
+    if (inFolder && steps.of(AutomationStepKind.check) != null) {
+      return 'A folder has no project to check. Remove "Check the result".';
+    }
+    return null;
+  }
+
   AutomationEventAction get _action => switch (firstStep) {
-    EventFirstStep.agent => AutomationEventAction.startSession,
+    EventFirstStep.agent ||
+    EventFirstStep.command => AutomationEventAction.startSession,
     EventFirstStep.tell => AutomationEventAction.messageSession,
     EventFirstStep.nothing => AutomationEventAction.notifyOnly,
   };
@@ -426,7 +547,7 @@ class AutomationDraft {
   /// to read before it is saved; null until it has a checkout and a schedule
   /// it can read.
   Automation? probe({required DateTime now}) {
-    if (repositoryId == null || scheduleProblem != null) return null;
+    if (placeProblem != null || scheduleProblem != null) return null;
     return _build(id: original?.id ?? 'draft', now: now);
   }
 
@@ -434,11 +555,20 @@ class AutomationDraft {
     final before = original;
     return Automation(
       id: before?.id ?? id,
-      repositoryId: repositoryId!,
+      repositoryId: inFolder ? '' : repositoryId!,
+      command: runsCommand
+          ? AutomationCommand(text: commandText.trim(), shell: effectiveShell)
+          : null,
+      folder: inFolder
+          ? EnvironmentPath(
+              environmentId: environmentId!,
+              path: folderPath.trim(),
+            )
+          : null,
       name: name.trim(),
       schedule: _schedule(now),
       agentInstallationId: namesAgent ? installationId ?? '' : '',
-      prompt: prompt.trim(),
+      prompt: runsCommand ? '' : prompt.trim(),
       permissionMode: namesAgent ? permissionMode : null,
       enabled: enabled,
       // Saving is authorising what it now says, so the moment moves.

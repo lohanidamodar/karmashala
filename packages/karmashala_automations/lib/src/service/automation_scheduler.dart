@@ -225,6 +225,8 @@ class AutomationScheduler {
       final automation = _dao.getById(run.automationId);
       final ceiling = automation?.maxRuntime;
       if (automation == null || ceiling == null) continue;
+      // A command is stopped at its ceiling by whatever runs it.
+      if (automation.runsCommand) continue;
       final ranFor = now.difference(run.firedAt);
       if (ranFor <= ceiling) continue;
       _dao.updateRun(
@@ -242,7 +244,7 @@ class AutomationScheduler {
       );
       _dao.recordOutcome(run.automationId, failed: true);
       changed = true;
-      unawaited(drain(automation.repositoryId));
+      unawaited(drain(automation.placeKey));
     }
     return changed;
   }
@@ -253,7 +255,7 @@ class AutomationScheduler {
     final busy = <String>{};
     final waiting = <String>{};
     for (final run in _dao.liveRuns()) {
-      final repositoryId = _dao.getById(run.automationId)?.repositoryId;
+      final repositoryId = _dao.getById(run.automationId)?.placeKey;
       if (repositoryId == null) continue;
       if (run.state == AutomationRunState.running) busy.add(repositoryId);
       if (run.state == AutomationRunState.queued) waiting.add(repositoryId);
@@ -433,7 +435,7 @@ class AutomationScheduler {
       _recordSkipped(automation, scheduledFor, now, overHour);
       return;
     }
-    final busy = _liveInCheckout(automation.repositoryId);
+    final busy = _liveInCheckout(automation.placeKey);
     if (busy != null) {
       _dao.insertRun(
         AutomationRun(
@@ -475,7 +477,7 @@ class AutomationScheduler {
     if (_stopped) return;
     final here = [
       for (final run in _dao.liveRuns())
-        if (_dao.getById(run.automationId)?.repositoryId == repositoryId) run,
+        if (_dao.getById(run.automationId)?.placeKey == repositoryId) run,
     ];
     final running = here.where((r) => r.state == AutomationRunState.running);
     AutomationRun? waiting;
@@ -580,7 +582,7 @@ AutomationRun queueEventRunIn(
     case AdmitStart():
       break;
   }
-  final busy = liveInCheckout(records, automation.repositoryId);
+  final busy = liveInCheckout(records, automation.placeKey);
   final queued = run.copyWith(
     state: AutomationRunState.queued,
     reason: busy == null ? run.reason : queuedReasonIn(records, busy),
@@ -592,7 +594,7 @@ AutomationRun queueEventRunIn(
 /// The run that holds or is waiting on [repositoryId], oldest first.
 AutomationRun? liveInCheckout(AutomationRecords records, String repositoryId) {
   for (final run in records.liveRuns()) {
-    if (records.getById(run.automationId)?.repositoryId == repositoryId) {
+    if (records.getById(run.automationId)?.placeKey == repositoryId) {
       return run;
     }
   }

@@ -24,6 +24,7 @@ extension _AutomationStepFields on _AutomationEditorState {
         EventFirstStep.agent when isGithub && draft.github.kind.isPullRequest =>
           'A new session in a worktree on the pull request\'s branch.',
         EventFirstStep.agent => 'A new session with your prompt.',
+        EventFirstStep.command => 'Your command, with no agent.',
         EventFirstStep.tell when isGithub =>
           'The session on the pull request\'s branch, or a new agent there '
               'when none is.',
@@ -31,16 +32,7 @@ extension _AutomationStepFields on _AutomationEditorState {
         EventFirstStep.nothing => 'Only the steps below run.',
       },
       children: [
-        if (isEvent)
-          CompactSegmented<EventFirstStep>(
-            key: const ValueKey('automation-first-step'),
-            segments: [
-              for (final step in EventFirstStep.values)
-                ButtonSegment(value: step, label: Text(step.short)),
-            ],
-            selected: first,
-            onChanged: (step) => _update(_draft.withFirstStep(step)),
-          ),
+        ?_firstStepPicker(),
         if (draft.namesAgent) ...[
           if (repository == null)
             const EditorNote('Pick a checkout first.')
@@ -506,7 +498,11 @@ extension _AutomationStepFields on _AutomationEditorState {
   Widget _addStepButton() {
     final missing = [
       for (final kind in AutomationStepKind.values)
-        if (_draft.steps.of(kind) == null) kind,
+        if (_draft.steps.of(kind) == null &&
+            // A command starts no session to tell; a folder has no project.
+            !(_draft.runsCommand && kind == AutomationStepKind.tell) &&
+            !(_draft.inFolder && kind == AutomationStepKind.check))
+          kind,
     ];
     return PopupMenuButton<AutomationStepKind>(
       key: const ValueKey('automation-add-step'),

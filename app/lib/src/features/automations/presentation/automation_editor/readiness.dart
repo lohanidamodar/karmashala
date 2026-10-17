@@ -60,13 +60,15 @@ extension _AutomationReadiness on _AutomationEditorState {
             'Pause after failures in a row (0 never pauses)',
             (n) => _draft.copyWith(stopAfterFailures: n ?? 0),
           ),
-          _numberField(
-            _longest,
-            'Longest run, in minutes (empty: no limit)',
-            (n) => n == null || n <= 0
-                ? _draft.copyWith(clearMaxRuntime: true)
-                : _draft.copyWith(maxRuntimeMinutes: n),
-          ),
+          // A command's time limit is on its own card.
+          if (!_draft.runsCommand)
+            _numberField(
+              _longest,
+              'Longest run, in minutes (empty: no limit)',
+              (n) => n == null || n <= 0
+                  ? _draft.copyWith(clearMaxRuntime: true)
+                  : _draft.copyWith(maxRuntimeMinutes: n),
+            ),
           const SizedBox(height: Insets.sm),
           const EditorNote(
             'A run that would break a limit is not started, and shows in '
@@ -118,6 +120,28 @@ extension _AutomationReadiness on _AutomationEditorState {
     required UnattendedRefusal? refusal,
   }) {
     final draft = _draft;
+    if (draft.runsCommand) {
+      final limit = draft.maxRuntimeMinutes == null
+          ? kCommandTimeLimit
+          : Duration(minutes: draft.maxRuntimeMinutes!);
+      return [
+        const ReadyRow(
+          true,
+          'It starts no agent: your command runs with nobody watching.',
+        ),
+        if (refusal != null) ReadyRow(false, refusal.reason),
+        ReadyRow(
+          true,
+          'It is stopped after ${durationWords(limit)} if still running.',
+        ),
+        ReadyRow(
+          true,
+          draft.inFolder
+              ? 'A folder takes no checkpoint, so a run cannot be undone.'
+              : 'A checkpoint is taken first, so a run can be undone.',
+        ),
+      ];
+    }
     if (draft.notifyOnly &&
         (draft.trigger == DraftTrigger.event ||
             draft.trigger == DraftTrigger.github)) {
@@ -187,9 +211,15 @@ extension _AutomationReadiness on _AutomationEditorState {
     if (run == null) return null;
     final checks = ref.read(automationsDataProvider).checksFor(run.id);
     if (key == 'agent') {
-      return StepResultBox(
-        outcome: runOutcome(run, const []),
+      final box = StepResultBox(
+        outcome: runOutcome(run, const [], expectsChecks: _draft.steps.checks),
         detail: run.reason,
+      );
+      final output = run.output;
+      if (output == null || output.trim().isEmpty) return box;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [box, CommandOutputBox(output)],
       );
     }
     if (key == AutomationStepKind.check.storedName) {
@@ -233,6 +263,7 @@ extension _AutomationReadiness on _AutomationEditorState {
       text = switch (runOutcome(
         run,
         ref.read(automationsDataProvider).checksFor(run.id),
+        expectsChecks: _draft.steps.checks,
       )) {
         RunOutcome.running => 'Running now. Each step fills in as it goes.',
         RunOutcome.queued => 'Waiting for its checkout to come free.',

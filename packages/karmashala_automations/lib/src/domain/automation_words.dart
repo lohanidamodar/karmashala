@@ -171,13 +171,16 @@ String automationWords(
 }) {
   final parts = <String>[
     '${triggerWords(automation, now: now)}, in $checkout',
-    switch (automation.github?.action ?? automation.trigger?.action) {
-      AutomationEventAction.notifyOnly => 'start nothing',
-      AutomationEventAction.messageSession when automation.isGithub =>
-        'tell the session on its branch, or start $agent there',
-      AutomationEventAction.messageSession => 'tell that session',
-      _ => 'start $agent${automation.worktree ? ' in a worktree' : ''}',
-    },
+    if (automation.runsCommand)
+      'run a command'
+    else
+      switch (automation.github?.action ?? automation.trigger?.action) {
+        AutomationEventAction.notifyOnly => 'start nothing',
+        AutomationEventAction.messageSession when automation.isGithub =>
+          'tell the session on its branch, or start $agent there',
+        AutomationEventAction.messageSession => 'tell that session',
+        _ => 'start $agent${automation.worktree ? ' in a worktree' : ''}',
+      },
     for (final step in automation.steps.after) _stepWords(step),
   ];
   return parts.join(' → ');

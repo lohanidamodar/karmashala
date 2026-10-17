@@ -89,6 +89,8 @@ class AutomationRun {
     this.stepResults = const [],
     this.prompt,
     this.variables = const {},
+    this.exitCode,
+    this.output,
   });
 
   final String id;
@@ -146,6 +148,13 @@ class AutomationRun {
   /// event's `github.pr.number` and the rest. Empty for most runs.
   final Map<String, String> variables;
 
+  /// How a command first step exited; null when it ran none, or was stopped
+  /// at its time limit.
+  final int? exitCode;
+
+  /// What a command first step printed, its end kept; null when it ran none.
+  final String? output;
+
   Duration? get duration => finishedAt?.difference(firedAt);
 
   AutomationRun copyWith({
@@ -157,6 +166,8 @@ class AutomationRun {
     int? commitsMade,
     DateTime? checksObservedAt,
     List<AutomationStepResult>? stepResults,
+    int? exitCode,
+    String? output,
   }) => AutomationRun(
     id: id,
     automationId: automationId,
@@ -175,6 +186,8 @@ class AutomationRun {
     stepResults: stepResults ?? this.stepResults,
     prompt: prompt,
     variables: variables,
+    exitCode: exitCode ?? this.exitCode,
+    output: output ?? this.output,
   );
 
   @override

@@ -65,7 +65,13 @@ class AutomationFollowUps {
     return {
       ...run.variables,
       'automation': automation.name,
-      'project': _repositoryName(automation.repositoryId),
+      'project':
+          automation.folder?.path ?? _repositoryName(automation.repositoryId),
+      // A command first step's, until a command step after it says its own.
+      if (automation.runsCommand) ...{
+        'steps.command.output': run.output ?? '',
+        'steps.command.exit_code': '${run.exitCode ?? ''}',
+      },
       'run.status': failed ? 'failed' : 'succeeded',
       'steps.agent.output': run.reason,
       'steps.check.output': checks.isEmpty

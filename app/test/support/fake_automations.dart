@@ -258,12 +258,26 @@ class FakeAutomationRows extends AutomationCopyReads {
   /// now is recorded running, started by Run now; a cancel fails it.
   final ranNow = <String>[];
 
-  AutomationRun _work(
+  /// The commands Run it once was asked to run, and what each answers.
+  final tried = <Automation>[];
+  AutomationCommandTried tryAnswer = const AutomationCommandTried(
+    exitCode: 0,
+    output: 'Already up to date.\n',
+    timedOut: false,
+    took: Duration(milliseconds: 1200),
+  );
+
+  Object _work(
     AutomationWorkRequest<Object?> request,
     List<DataChange> changes,
   ) {
+    if (request case AutomationCommandTry(:final automation)) {
+      tried.add(automation);
+      return tryAnswer;
+    }
     final at = DateTime.utc(2026, 10, 7, 9);
     final run = switch (request) {
+      AutomationCommandTry() => throw StateError('answered above'),
       AutomationRunNow(:final id) => () {
         _rule(id);
         ranNow.add(id);

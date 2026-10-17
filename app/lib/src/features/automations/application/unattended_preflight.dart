@@ -78,6 +78,9 @@ final automationRefusalProvider = Provider.family<UnattendedRefusal?, String>((
   ref.watch(automationsRevisionProvider);
   final automation = ref.read(automationsDataProvider).getById(automationId);
   // A message rule starts no agent; its gate is the target session's.
-  if (automation == null || !automation.startsAgent) return null;
+  if (automation == null ||
+      !(automation.startsAgent || automation.runsCommand)) {
+    return null;
+  }
   return ref.read(unattendedPreflightProvider).refusalFor(automation);
 });

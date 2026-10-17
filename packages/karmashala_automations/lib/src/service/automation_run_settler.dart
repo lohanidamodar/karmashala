@@ -107,7 +107,7 @@ class AutomationRunSettler {
     final automation = _dao.getById(run.automationId);
     if (automation == null) return;
     _stopIfFailedOut(automation);
-    unawaited(_drain(automation.repositoryId));
+    unawaited(_drain(automation.placeKey));
   }
 
   void _stopIfFailedOut(Automation automation) {

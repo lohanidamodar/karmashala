@@ -312,6 +312,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('if it fails'), findsOneWidget);
     expect(find.byKey(const ValueKey('automation-text-tell')), findsOneWidget);
+    await tester.ensureVisible(find.text('{{steps.check.output}}').first);
     await tester.tap(find.text('{{steps.check.output}}').first);
     await tester.pumpAndSettle();
     final text = tester

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/records.dart';
@@ -120,6 +121,28 @@ void main() {
       run.copyWith(state: AutomationRunState.failed, reason: 'Cancelled.'),
     );
     expect(cancelled.reason, 'Cancelled.');
+  });
+
+  test('a command tried once answers its exit, output and time', () {
+    final asked = AutomationCommandTry(
+      automation.copyWith(
+        command: const AutomationCommand(text: 'date'),
+        folder: const EnvironmentPath(environmentId: 'wsl', path: '~'),
+        repositoryId: '',
+      ),
+    );
+    final tried = roundTrip(
+      asked,
+      const AutomationCommandTried(
+        exitCode: 3,
+        output: 'no\n',
+        timedOut: false,
+        took: Duration(milliseconds: 1400),
+      ),
+    );
+    expect(tried.exitCode, 3);
+    expect(tried.output, 'no\n');
+    expect(tried.took, const Duration(milliseconds: 1400));
   });
 
   test('every request and its answer', () {

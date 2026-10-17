@@ -26,24 +26,27 @@ enum RunOutcome {
   final String label;
 }
 
-RunOutcome runOutcome(AutomationRun run, List<AutomationCheckVerdict> checks) =>
-    switch (run.state) {
-      AutomationRunState.queued => RunOutcome.queued,
-      AutomationRunState.running => RunOutcome.running,
-      AutomationRunState.failed => RunOutcome.failed,
-      AutomationRunState.missed => RunOutcome.missed,
-      AutomationRunState.unrecognised => RunOutcome.unknown,
-      AutomationRunState.finished =>
-        checks.any((c) => c.verdict != VerificationVerdict.pass)
-            ? RunOutcome.failed
-            : run.stepResults.any(
-                (s) => s.outcome == AutomationStepOutcome.waiting,
-              )
-            ? RunOutcome.waitingOnPipeline
-            : run.checksObservedAt == null && checks.isEmpty
-            ? RunOutcome.checking
-            : RunOutcome.succeeded,
-    };
+/// [expectsChecks] false is a run with no check step: nothing will ever look
+/// at its checks, so finished is the end of it.
+RunOutcome runOutcome(
+  AutomationRun run,
+  List<AutomationCheckVerdict> checks, {
+  bool expectsChecks = true,
+}) => switch (run.state) {
+  AutomationRunState.queued => RunOutcome.queued,
+  AutomationRunState.running => RunOutcome.running,
+  AutomationRunState.failed => RunOutcome.failed,
+  AutomationRunState.missed => RunOutcome.missed,
+  AutomationRunState.unrecognised => RunOutcome.unknown,
+  AutomationRunState.finished =>
+    checks.any((c) => c.verdict != VerificationVerdict.pass)
+        ? RunOutcome.failed
+        : run.stepResults.any((s) => s.outcome == AutomationStepOutcome.waiting)
+        ? RunOutcome.waitingOnPipeline
+        : expectsChecks && run.checksObservedAt == null && checks.isEmpty
+        ? RunOutcome.checking
+        : RunOutcome.succeeded,
+};
 
 String runStatusWords(AutomationRun run, List<AutomationCheckVerdict> checks) =>
     runOutcome(run, checks).label;

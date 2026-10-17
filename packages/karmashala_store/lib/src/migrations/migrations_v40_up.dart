@@ -1306,3 +1306,74 @@ void _migrateToV92(Database db) {
     'ON pipeline_runs (state, created_at);',
   );
 }
+
+/// Automations that run a command, in a checkout or in any folder: the
+/// command and the folder on the row, and a run's exit code and output. A
+/// folder automation names no checkout, so `repository_id` loses NOT NULL,
+/// which SQLite can only do by rebuilding the table, foreign keys off.
+void _migrateToV93(Database db) {
+  final info = db.select('PRAGMA table_info(automations);');
+  final columns = [for (final row in info) row['name'] as String];
+  final keyed = info.any(
+    (row) => row['name'] == 'repository_id' && row['notnull'] == 1,
+  );
+  if (keyed) {
+    final created =
+        db
+                .select(
+                  "SELECT sql FROM sqlite_master WHERE type = 'table' AND "
+                  "name = 'automations';",
+                )
+                .first['sql']
+            as String;
+    final indexes = [
+      for (final row in db.select(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND "
+        "tbl_name = 'automations' AND sql IS NOT NULL;",
+      ))
+        row['sql'] as String,
+    ];
+    final rebuilt = created
+        .replaceFirst(
+          RegExp(r'CREATE TABLE (IF NOT EXISTS )?"?automations"?'),
+          'CREATE TABLE automations_v93',
+        )
+        .replaceFirst(
+          RegExp(r'repository_id\s+TEXT\s+NOT\s+NULL'),
+          'repository_id TEXT',
+        );
+    if (!rebuilt.contains('automations_v93') ||
+        rebuilt.contains(RegExp(r'repository_id\s+TEXT\s+NOT\s+NULL'))) {
+      throw StateError('v93 could not read the automations table to rebuild');
+    }
+    final names = [for (final c in columns) '"$c"'].join(', ');
+    int count(String table) =>
+        db.select('SELECT COUNT(*) AS n FROM $table;').first['n'] as int;
+    db.execute(rebuilt);
+    db.execute(
+      'INSERT INTO automations_v93 ($names) SELECT $names FROM automations;',
+    );
+    if (count('automations_v93') != count('automations')) {
+      throw StateError('v93 did not copy every automation');
+    }
+    db.execute('DROP TABLE automations;');
+    db.execute('ALTER TABLE automations_v93 RENAME TO automations;');
+    for (final index in indexes) {
+      db.execute(index);
+    }
+  }
+  void add(String table, String column, String type) {
+    final have = db
+        .select('PRAGMA table_info($table);')
+        .map((row) => row['name'] as String);
+    if (!have.contains(column)) {
+      db.execute('ALTER TABLE $table ADD COLUMN $column $type;');
+    }
+  }
+
+  add('automations', 'command', 'TEXT');
+  add('automations', 'folder_environment', 'TEXT');
+  add('automations', 'folder_path', 'TEXT');
+  add('automation_runs', 'exit_code', 'INTEGER');
+  add('automation_runs', 'output', 'TEXT');
+}

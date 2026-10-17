@@ -231,14 +231,15 @@ class _Header extends StatelessWidget {
   );
 }
 
-/// The name a checkout goes by in Runs.
-String _projectOf(WidgetRef ref, String repositoryId) =>
-    ref
-        .watch(automationCheckoutsProvider)
-        .where((r) => r.id == repositoryId)
-        .firstOrNull
-        ?.name ??
-    'A checkout that is gone';
+/// The name a checkout goes by in Runs; a folder automation names none.
+String _projectOf(WidgetRef ref, String repositoryId) => repositoryId.isEmpty
+    ? 'None: it runs in a folder'
+    : ref
+              .watch(automationCheckoutsProvider)
+              .where((r) => r.id == repositoryId)
+              .firstOrNull
+              ?.name ??
+          'A checkout that is gone';
 
 /// One run in Runs: its kind, name, status, stage, who started it, when, how
 /// long, its cost and its project — in columns on a wide page, on two lines

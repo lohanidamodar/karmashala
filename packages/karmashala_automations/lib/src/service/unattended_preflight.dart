@@ -79,9 +79,34 @@ class UnattendedPreflight {
     );
   }
 
-  /// Why [automation] may not fire unattended, or `null` when it may.
-  UnattendedRefusal? refusalFor(Automation automation) =>
-      unattendedRefusal(inputFor(automation));
+  /// Why [automation] may not fire unattended, or `null` when it may. A
+  /// command starts no agent, so only where it runs is asked.
+  UnattendedRefusal? refusalFor(Automation automation) => automation.runsCommand
+      ? _placeRefusal(automation)
+      : unattendedRefusal(inputFor(automation));
+
+  UnattendedRefusal? _placeRefusal(Automation automation) {
+    final path =
+        automation.folder ?? _facts.repository(automation.repositoryId)?.path;
+    if (path == null) {
+      return const UnattendedRefusal(
+        UnattendedRefusalKind.environmentUnnamed,
+        'This automation names a checkout that is no longer in the workspace',
+      );
+    }
+    final reach = _facts.reach(path);
+    return switch (reach.reach) {
+      UnattendedReach.reachable => null,
+      UnattendedReach.unnamed => UnattendedRefusal(
+        UnattendedRefusalKind.environmentUnnamed,
+        reach.reason,
+      ),
+      UnattendedReach.unreachable => UnattendedRefusal(
+        UnattendedRefusalKind.environmentUnreachable,
+        reach.reason,
+      ),
+    };
+  }
 
   /// Why [session] may not be resumed unattended, or `null` when it may.
   UnattendedRefusal? refusalForResume(
