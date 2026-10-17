@@ -1,6 +1,7 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import '../data/ssh_work.dart';
+import 'containers/server_containers.dart';
 import 'deploy/box_admin.dart';
 import 'pool/server_ssh.dart';
 
@@ -9,10 +10,15 @@ import 'pool/server_ssh.dart';
 /// answer ([ServerSsh]); the host on a box — deploy, its sessions, its relay,
 /// the port a phone dials and a pairing window ([BoxAdmin]).
 class ServerSshRequests implements SshWork {
-  ServerSshRequests({required this.ssh, required this.admin});
+  ServerSshRequests({
+    required this.ssh,
+    required this.admin,
+    required this.containers,
+  });
 
   final ServerSsh ssh;
   final BoxAdmin admin;
+  final ServerContainers containers;
 
   @override
   List<DataChange> greeting() => ssh.greeting();
@@ -65,6 +71,28 @@ class ServerSshRequests implements SshWork {
             capabilities: capabilities,
             relay: relay,
           ),
+        ContainerHostCheck(:final environmentId) => await containers.check(
+          environmentId,
+        ),
+        ContainerCreate(:final environmentId, :final machineId, :final spec) =>
+          await containers.create(
+            environmentId: environmentId,
+            machineId: machineId,
+            spec: spec,
+          ),
+        ContainerCreateCancel(:final machineId) => await () async {
+          await containers.cancel(machineId);
+          return const DataAck();
+        }(),
+        ContainerStatus(:final hostId) => await containers.status(hostId),
+        ContainerPower(:final hostId, :final action) => await containers.power(
+          hostId,
+          action,
+        ),
+        ContainerDelete(:final hostId, :final withHome) => await () async {
+          await containers.delete(hostId, withHome: withHome);
+          return const DataAck();
+        }(),
       };
 
   String _saved(String hostId) => ssh.hostOf(hostId) == null

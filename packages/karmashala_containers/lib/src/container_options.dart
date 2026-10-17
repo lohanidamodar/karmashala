@@ -135,3 +135,38 @@ String formatMemory(int mb) {
       ? '${rounded.round()} GB'
       : '$rounded GB';
 }
+
+/// [spec] as the wire carries it: the distro and CLIs by name.
+Map<String, Object?> containerSpecToJson(ContainerSpec spec) => {
+  'name': spec.name,
+  'distro': spec.distro.name,
+  'cpus': spec.cpus,
+  'memoryMb': spec.memoryMb,
+  'agents': [for (final cli in spec.agents) cli.name],
+};
+
+/// Throws [FormatException] for a distro or CLI this build does not offer.
+ContainerSpec containerSpecFromJson(Map<String, Object?> json) {
+  final distro = ContainerDistro.values.where((d) => d.name == json['distro']);
+  if (distro.isEmpty) throw FormatException('no distro ${json['distro']}');
+  final agents = <ContainerAgentCli>[];
+  for (final name in (json['agents'] as List? ?? const []).cast<String>()) {
+    agents.add(
+      ContainerAgentCli.byName(name) ??
+          (throw FormatException('no agent CLI $name')),
+    );
+  }
+  final name = json['name'];
+  final cpus = json['cpus'];
+  final memoryMb = json['memoryMb'];
+  if (name is! String || cpus is! int || memoryMb is! int) {
+    throw const FormatException('a container needs a name, cpus and memory');
+  }
+  return ContainerSpec(
+    name: name,
+    distro: distro.first,
+    cpus: cpus,
+    memoryMb: memoryMb,
+    agents: agents,
+  );
+}

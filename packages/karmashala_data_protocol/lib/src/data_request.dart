@@ -23,6 +23,15 @@ import 'package:karmashala_checkpoints/checkpoints.dart'
         checkpointFromJson,
         checkpointToJson;
 import 'package:karmashala_comparisons/comparisons.dart';
+import 'package:karmashala_containers/karmashala_containers.dart'
+    show
+        ContainerSpec,
+        ContainerState,
+        HostCheck,
+        containerSpecFromJson,
+        containerSpecToJson,
+        hostCheckFromJson,
+        hostCheckToJson;
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_verification/verification.dart';
@@ -133,6 +142,7 @@ part 'requests/activity_requests.dart';
 part 'requests/artifacts_requests.dart';
 part 'requests/webhooks_requests.dart';
 part 'requests/pipelines_requests.dart';
+part 'requests/container_requests.dart';
 
 /// One question or change a client asks of a server's data, answered with an
 /// [R] or refused with [DataRefused]. Typed per domain: no SQL crosses.
@@ -324,6 +334,7 @@ DataRequest<Object?> _domainRequestFromJson(String kind, _Arguments args) =>
     _conversationsRequestFromJson(kind, args) ??
     _agentWorkRequestFromJson(kind, args) ??
     _sshRequestFromJson(kind, args) ??
+    _containerRequestFromJson(kind, args) ??
     _gitRequestFromJson(kind, args) ??
     _flutterRequestFromJson(kind, args) ??
     _browserRequestFromJson(kind, args) ??

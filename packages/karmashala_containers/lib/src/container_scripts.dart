@@ -267,3 +267,10 @@ if [ "$WITH_HOME" = 1 ] && docker volume inspect "$VOLUME" >/dev/null 2>&1; then
 fi
 ''',
     ].join('\n');
+
+/// Prints `yes` when the home volume of [containerName] already exists — a
+/// recreate, whose files a failed create must not delete — else `no`.
+String homeVolumeExistsScript(String containerName) => [
+  shellAssign('VOLUME', homeVolumeFor(_guardedName(containerName))),
+  r'docker volume inspect "$VOLUME" >/dev/null 2>&1 && echo yes || echo no',
+].join('\n');

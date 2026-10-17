@@ -121,3 +121,24 @@ HostCheck parseHostCheck(String output, {required String hostName}) {
     freeDiskMb: measured.freeDiskMb,
   );
 }
+
+/// [check] as the wire carries it.
+Map<String, Object?> hostCheckToJson(HostCheck check) => {
+  'canHost': check.canHost,
+  'problem': ?check.problem,
+  'dockerVersion': ?check.dockerVersion,
+  'architecture': ?check.architecture,
+  'cores': ?check.cores,
+  'freeMemoryMb': ?check.freeMemoryMb,
+  'freeDiskMb': ?check.freeDiskMb,
+};
+
+HostCheck hostCheckFromJson(Map<String, Object?> json) => HostCheck(
+  canHost: json['canHost'] == true,
+  problem: json['problem'] as String?,
+  dockerVersion: json['dockerVersion'] as String?,
+  architecture: json['architecture'] as String?,
+  cores: json['cores'] as int?,
+  freeMemoryMb: json['freeMemoryMb'] as int?,
+  freeDiskMb: json['freeDiskMb'] as int?,
+);
