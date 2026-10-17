@@ -1,3 +1,4 @@
+import 'package:dartssh2/dartssh2.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:agent_cli/process.dart';
@@ -73,15 +74,41 @@ class SshConnectionPool {
     host: host,
     verifier: SshHostKeyVerifier(
       knownHosts: knownHosts,
-      host: host.host,
+      host: host.hostKeyName,
       port: host.port,
       clock: clock,
-      onUnknownHostKey: asker?.hostKeyDecisionFor(host),
+      // A container Karmashala just made, reached over its host's loopback, is
+      // pinned on first connect; a key that changes later is still refused.
+      onUnknownHostKey: host.container != null
+          ? (_) => true
+          : asker?.hostKeyDecisionFor(host),
     ),
     passwordPrompt: asker?.password,
     passphrasePrompt: asker?.passphrase,
     keyReader: keyReader,
+    openSocket: host.viaHostId == null ? null : _throughJump,
   );
+
+  /// A channel to [host]'s address forwarded by the connection to the host it
+  /// is reached through, used as the socket of a second SSH session.
+  Future<SSHSocket> _throughJump(SshHost host) async {
+    final viaId = host.viaHostId!;
+    if (viaId == host.id) {
+      throw SshConnectionException(
+        '${host.name} is set to jump through itself.',
+      );
+    }
+    final jump = await forHostId(viaId).client();
+    try {
+      return await jump.forwardLocal(host.host, host.port);
+    } on SSHChannelOpenError catch (e) {
+      throw SshConnectionException(
+        'The jump host would not open a channel to ${host.host}:${host.port}',
+        cause: e,
+        retryable: true,
+      );
+    }
+  }
 
   /// Drops the cached connection for [hostId], closing it.
   Future<void> evict(String hostId) async {

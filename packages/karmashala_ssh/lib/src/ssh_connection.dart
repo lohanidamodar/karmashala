@@ -20,6 +20,13 @@ typedef SshSecretPrompt = FutureOr<String?> Function(SshHost host);
 /// so a future key store can replace the default without changing callers.
 typedef PrivateKeyReader = Future<String> Function(EnvironmentPath path);
 
+/// Opens the byte stream a connection runs SSH over: a TCP socket by default,
+/// or a channel forwarded through another host's connection (a jump).
+typedef SshSocketOpener = Future<SSHSocket> Function(SshHost host);
+
+Future<SSHSocket> _connectTcp(SshHost host, Duration timeout) =>
+    SSHSocket.connect(host.host, host.port, timeout: timeout);
+
 /// Raised when a connection cannot be established or has been lost. [cause]
 /// tells a refused host key ([HostKeyRejected]) from a bad credential.
 class SshConnectionException implements Exception {
@@ -61,6 +68,7 @@ class SshConnection {
     this.passwordPrompt,
     this.passphrasePrompt,
     this.keyReader = readLocalPrivateKey,
+    this.openSocket,
     this.connectTimeout = const Duration(seconds: 15),
     this.maxAttempts = 3,
     int maxConcurrentCommands = 4,
@@ -74,6 +82,9 @@ class SshConnection {
   final SshSecretPrompt? passwordPrompt;
   final SshSecretPrompt? passphrasePrompt;
   final PrivateKeyReader keyReader;
+
+  /// How the transport is opened; null dials [SshHost.host] over TCP.
+  final SshSocketOpener? openSocket;
   final Duration connectTimeout;
 
   /// How many attempts one [client] call makes before giving up, with
@@ -244,7 +255,14 @@ class SshConnection {
     final SSHSocket socket;
     try {
       socket = ResilientSshSocket(
-        await SSHSocket.connect(host.host, host.port, timeout: connectTimeout),
+        await (openSocket?.call(host) ?? _connectTcp(host, connectTimeout)),
+      );
+    } on SshConnectionException catch (e) {
+      // The jump host could not be reached: its own words, still retryable.
+      throw SshConnectionException(
+        'Cannot reach ${host.host}:${host.port}: ${e.message}',
+        cause: e,
+        retryable: e.retryable,
       );
     } on Object catch (e) {
       throw SshConnectionException(
