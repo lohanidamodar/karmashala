@@ -343,6 +343,13 @@ enum SettingsAnchor {
     'pair phone',
     'qr',
   ]),
+  containers(SettingsSectionId.environments, 'Containers', [
+    'container',
+    'containers',
+    'docker',
+    'vm',
+    'sandbox',
+  ]),
   flutterSdk(SettingsSectionId.environments, 'Flutter SDK', [
     'flutter',
     'flutter sdk',

@@ -13,6 +13,8 @@ import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala_artifacts/karmashala_artifacts.dart';
 import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala_comparisons/comparisons.dart';
+import 'package:karmashala_containers/karmashala_containers.dart'
+    show ContainerState, HostCheck;
 import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_terminal_core/profiles.dart' show TerminalProfile;
@@ -538,7 +540,10 @@ class FakeDataServer {
         case TodoChanged(:final todo):
           todos[todo.id] = todo;
         // Not a row: nothing of it is kept.
-        case AcpInstallProgress() || AcpLoginProgress() || ActivityAppended():
+        case AcpInstallProgress() ||
+            AcpLoginProgress() ||
+            ActivityAppended() ||
+            ContainerProgress():
           break;
         case TodoRemoved(:final id):
           todos.remove(id);
@@ -1573,6 +1578,9 @@ class FakeDataLink implements DataEndpoint {
       // Answered when done; a watch this link placed is told to it alone.
       final value = await _server.filesWork._handle(files, this);
       return DataReply(value as R, _server.revision, const []);
+    }
+    if (request is ContainerCreate) {
+      if (_server.sshWork.createGate case final gate?) await gate.future;
     }
     if (request case AcpAuthenticate() || AcpAuthTerminalLogin()) {
       if (_server.agentWork.acpLoginGate case final gate?) {

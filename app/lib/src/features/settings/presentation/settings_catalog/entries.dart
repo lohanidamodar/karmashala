@@ -594,6 +594,14 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['pair phone', 'qr', 'companion', 'phone', 'pairing', 'scan'],
   ),
   SettingsEntry(
+    'Containers',
+    anchor: SettingsAnchor.containers,
+    description:
+        'Linux containers made on an SSH host with Docker or in WSL, '
+        'each a machine.',
+    keywords: ['container', 'docker', 'vm', 'sandbox', 'new machine'],
+  ),
+  SettingsEntry(
     'Flutter SDK',
     anchor: SettingsAnchor.flutterSdk,
     description: 'Which flutter each environment uses.',

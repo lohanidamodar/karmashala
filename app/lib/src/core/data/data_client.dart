@@ -544,6 +544,13 @@ class DataClient {
   Stream<AcpInstallProgress> get acpInstallProgress =>
       _acpInstallProgress.stream;
 
+  final _containerProgress = StreamController<ContainerProgress>.broadcast(
+    sync: true,
+  );
+
+  /// Each step and log line of a container the server is creating.
+  Stream<ContainerProgress> get containerProgress => _containerProgress.stream;
+
   final _acpLoginProgress = StreamController<AcpLoginProgress>.broadcast(
     sync: true,
   );
@@ -1226,6 +1233,8 @@ class DataClient {
           if (!_acpInstallProgress.isClosed) {
             _acpInstallProgress.add(progress);
           }
+        case final ContainerProgress progress:
+          if (!_containerProgress.isClosed) _containerProgress.add(progress);
         case ActivityAppended(:final entries):
           if (!_activityAppended.isClosed) _activityAppended.add(entries);
         case final AttentionChange change:
@@ -1426,6 +1435,7 @@ class DataClient {
     unawaited(_storeChangeNotices.close());
     unawaited(_storesProgress.close());
     unawaited(_acpInstallProgress.close());
+    unawaited(_containerProgress.close());
     unawaited(_acpLoginProgress.close());
     unawaited(_activityAppended.close());
     unawaited(_gitChanges.close());

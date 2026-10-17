@@ -27,7 +27,11 @@ class SshHostsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hosts = ref.watch(sshHostsControllerProvider);
+    // A container has its own section, with its own start, stop and delete.
+    final hosts = [
+      for (final host in ref.watch(sshHostsControllerProvider))
+        if (host.container == null) host,
+    ];
 
     return SettingsSection(
       title: 'SSH HOSTS',
