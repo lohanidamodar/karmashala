@@ -12,6 +12,7 @@ class SessionMenuAnswerer {
     required this.supportFor,
     required this.isAsking,
     required this.press,
+    this.statusOf,
     this.poll = const Duration(milliseconds: 100),
     this.patience = const Duration(seconds: 3),
   });
@@ -29,6 +30,10 @@ class SessionMenuAnswerer {
 
   /// Presses keys in the session's pane; false without one.
   final bool Function(String sessionId, String keys) press;
+
+  /// The session's status, whose quote of the screen names the menu a client
+  /// with no pane of its own was shown ([menuQuotedBy]); null quotes none.
+  final AgentStatusReport? Function(String sessionId)? statusOf;
 
   final Duration poll;
 
@@ -90,6 +95,8 @@ class SessionMenuAnswerer {
     required List<bool> ticks,
   }) async {
     var (support, menu) = _open(sessionId, menuId);
+    // The screen's own name for it from here: [menuId] may be the status's.
+    final screenId = menu.id;
     final submit = menu.submit;
     if (!menu.isChecklist || submit == null) {
       throw const SessionPromptRefusal(
@@ -117,7 +124,7 @@ class SessionMenuAnswerer {
       final deadline = DateTime.now().add(patience);
       while (true) {
         await Future<void>.delayed(poll);
-        final now = _still(sessionId, menuId);
+        final now = _still(sessionId, screenId);
         if (now.checked[row] == ticks[b]) {
           menu = now;
           break;
@@ -137,7 +144,7 @@ class SessionMenuAnswerer {
     }
     await _gone(
       sessionId,
-      menuId,
+      screenId,
       'pressed Enter on "${menu.options[submit]}"',
     );
     return [
@@ -161,7 +168,7 @@ class SessionMenuAnswerer {
         noTerminal: true,
       );
     }
-    await _gone(sessionId, menuId, 'pressed Esc');
+    await _gone(sessionId, menu.id, 'pressed Esc');
   }
 
   /// How the agent draws menus, and the menu named [menuId] — the screen
@@ -183,13 +190,41 @@ class SessionMenuAnswerer {
         stale: true,
       );
     }
-    if (menu.id != menuId) {
+    if (menu.id != menuId && !_quotes(sessionId, menuId, menu, support)) {
       throw const SessionPromptRefusal(
         'the prompt changed since it was shown, so nothing was chosen',
         stale: true,
       );
     }
     return (support, menu);
+  }
+
+  /// Whether [menuId] names [menu] as the session's status quotes it: a
+  /// client with no pane of its own — the board, for a session it started in
+  /// the background — reads the menu off those rows, which can stop short of
+  /// its heading. Only the same choices, under a prompt the screen's ends
+  /// with, are that menu.
+  bool _quotes(
+    String sessionId,
+    String menuId,
+    AgentScreenMenu menu,
+    AgentMenuSupport support,
+  ) {
+    final quoted = menuQuotedBy(statusOf?.call(sessionId), support);
+    if (quoted == null || quoted.id != menuId) return false;
+    if (quoted.isChecklist != menu.isChecklist) return false;
+    if (!_same(quoted.options, menu.options)) return false;
+    final prompt = quoted.prompt;
+    return prompt.length <= menu.prompt.length &&
+        _same(prompt, menu.prompt.sublist(menu.prompt.length - prompt.length));
+  }
+
+  static bool _same(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// The menu named [menuId], still on screen mid-answer.
@@ -266,6 +301,19 @@ class SessionMenuAnswerer {
     }
     return now;
   }
+}
+
+/// The menu [report] quotes off the screen it read, or null: only while it is
+/// an open prompt, and only rows the status source passed on verbatim — a
+/// hook's message has no menu in it. For a client that holds no pane of the
+/// session: the host's status is the one screen it has.
+AgentScreenMenu? menuQuotedBy(
+  AgentStatusReport? report,
+  AgentMenuSupport? support,
+) {
+  if (report == null || support == null || !report.hasOpenPrompt) return null;
+  if (report.evidence.isEmpty) return null;
+  return readScreenMenu(report.evidence, support);
 }
 
 /// Rows read for a menu: more than the status source's twelve, because a menu's

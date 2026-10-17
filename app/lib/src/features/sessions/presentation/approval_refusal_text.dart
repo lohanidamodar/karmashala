@@ -10,7 +10,12 @@ String approvalRefusalText(
 }) => touch && refusal.stale
     ? 'That prompt changed before your answer arrived — nothing was pressed.'
     : refusal.unconfirmed
-    ? '${refusal.message}.'
+    ? '${_unstopped(refusal.message)}.'
     : refusal.noTerminal || refusal.notFound
     ? 'That session is no longer running, so the key was not sent.'
-    : 'Nothing was sent: ${refusal.message}.';
+    : 'Nothing was sent: ${_unstopped(refusal.message)}.';
+
+/// [message] without the full stop an older host ended some refusals with,
+/// so the sentence built around it ends once.
+String _unstopped(String message) =>
+    message.endsWith('.') ? message.substring(0, message.length - 1) : message;

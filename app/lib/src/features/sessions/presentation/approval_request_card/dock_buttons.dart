@@ -187,7 +187,7 @@ class _AnswerInTerminal extends ConsumerWidget {
               borderRadius: BorderRadius.circular(_dockInnerRadius),
             ),
           ),
-          onPressed: () => _openTerminal(ref, sessionId),
+          onPressed: () => _openTerminal(context, ref, sessionId),
           child: const Text('Answer in the terminal'),
         );
 }

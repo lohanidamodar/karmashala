@@ -16,6 +16,7 @@ import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/capabilities/capabilities.dart'
     show capabilitiesProvider, kApprovalNotGranted;
@@ -28,6 +29,7 @@ import '../../explorer/application/agent_state_providers.dart';
 import '../application/ask_resolutions.dart';
 import '../application/session_actions.dart';
 import '../application/session_input.dart';
+import '../application/session_launcher.dart';
 import '../application/secret_requests.dart';
 import '../application/session_prompt_answers.dart';
 import '../application/session_status_providers.dart';
@@ -69,11 +71,17 @@ class ApprovalRequestCard extends ConsumerWidget {
     this.onReplyInWords,
     this.questionController,
     this.onAnswered,
+    this.onOpenTerminal,
     super.key,
   });
 
   /// On the [board]: an answer went, by button or by key.
   final VoidCallback? onAnswered;
+
+  /// What "Answer in the terminal" does from this card, when the place it
+  /// sits has its own way to the session's terminal — the board peeks it.
+  /// Null: the workbench shows it ([openSessionTerminal]).
+  final VoidCallback? onOpenTerminal;
 
   final String sessionId;
 
@@ -124,9 +132,13 @@ class ApprovalRequestCard extends ConsumerWidget {
         .asData
         ?.value;
     final asking = report != null && _asks(report) ? report : null;
-    final card = asking == null
+    final open = onOpenTerminal;
+    final opened = asking == null
         ? const SizedBox.shrink()
         : _open(context, ref, asking);
+    final card = open == null
+        ? opened
+        : _TerminalOpener(open: open, child: opened);
     // Where the desktop shows the other screen, a phone's dock under a thumb
     // would simply vanish (Stage 3 step 4).
     return !touch

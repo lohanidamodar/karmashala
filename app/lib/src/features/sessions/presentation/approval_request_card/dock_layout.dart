@@ -17,7 +17,7 @@ class _TerminalLink extends ConsumerWidget {
           child: _AnswerInTerminal(sessionId: sessionId),
         )
       : TextButton.icon(
-          onPressed: () => _openTerminal(ref, sessionId),
+          onPressed: () => _openTerminal(context, ref, sessionId),
           icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
           label: const Text('Terminal view'),
         );

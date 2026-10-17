@@ -230,17 +230,88 @@ class _Answers extends ConsumerWidget {
 
 /// Reveals the pane so the user can answer anything we could not represent.
 /// Shared by both halves of the card: the terminal is the complete answer.
-void _openTerminal(WidgetRef ref, String sessionId) {
+/// Where the card sits decides how ([_TerminalOpener]): the board peeks the
+/// session's terminal, everywhere else the workbench shows it.
+void _openTerminal(BuildContext context, WidgetRef ref, String sessionId) {
+  final scoped = _TerminalOpener.of(context);
+  if (scoped != null) return scoped();
+  openSessionTerminal(context, ref, sessionId);
+}
+
+/// Brings [sessionId]'s terminal pane into view in the workbench and gives it
+/// the keys. A session the server runs with no pane of ours — one the board
+/// started in the background — gets a pane attached to the server's terminal
+/// first; it used to flip the focused group's face instead, which showed
+/// nothing at all from the board (owner, 2026-10-17). On a phone the
+/// workbench comes up over the tabs.
+void openSessionTerminal(
+  BuildContext context,
+  WidgetRef ref,
+  String sessionId,
+) {
+  final showWorkbench = phoneWorkbenchOpener(context, ref);
   final paneId = ref.read(paneSessionsProvider).paneOf(sessionId);
   if (paneId != null) {
-    ref.read(terminalSessionsControllerProvider.notifier)
-      ..reattachSession(paneId)
-      ..focusPane(paneId);
+    _showTerminalPane(ref.container, paneId);
+    showWorkbench?.call();
+    return;
   }
-  // The group holding that session's pane. An approval is about one
-  // session, so "go to the terminal" means the one running it.
-  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-  paneId == null
-      ? terminals.showTerminalHere()
-      : terminals.showTerminalForPane(paneId);
+  unawaited(
+    _attachTerminal(
+      ref.container,
+      sessionId,
+      ScaffoldMessenger.maybeOf(context),
+      showWorkbench,
+    ),
+  );
+}
+
+Future<void> _attachTerminal(
+  ProviderContainer container,
+  String sessionId,
+  ScaffoldMessengerState? messenger,
+  VoidCallback? showWorkbench,
+) async {
+  void say(String words) =>
+      messenger?.showSnackBar(SnackBar(content: Text(words)));
+  final launcher = container.read(sessionLauncherProvider);
+  try {
+    await launcher.attachHosted(sessionId);
+  } on Object catch (error) {
+    say('The terminal could not be opened: $error');
+    return;
+  }
+  final paneId =
+      container.read(paneSessionsProvider).paneOf(sessionId) ??
+      launcher.livePaneFor(sessionId);
+  if (paneId == null) {
+    say('This session has no terminal open on this machine.');
+    return;
+  }
+  _showTerminalPane(container, paneId);
+  showWorkbench?.call();
+}
+
+/// The pane's tab made active and focused, on its terminal face. The group
+/// holding that pane, not the focused one: an approval is about one session,
+/// so "go to the terminal" means the one running it.
+void _showTerminalPane(ProviderContainer container, String paneId) {
+  container.read(terminalSessionsControllerProvider.notifier)
+    ..reattachSession(paneId)
+    ..focusPane(paneId)
+    ..showTerminalForPane(paneId);
+}
+
+/// How "Answer in the terminal" opens the terminal for the card under it —
+/// see [ApprovalRequestCard.onOpenTerminal].
+class _TerminalOpener extends InheritedWidget {
+  const _TerminalOpener({required this.open, required super.child});
+
+  final VoidCallback open;
+
+  static VoidCallback? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_TerminalOpener>()?.open;
+
+  @override
+  bool updateShouldNotify(_TerminalOpener oldWidget) => false;
 }

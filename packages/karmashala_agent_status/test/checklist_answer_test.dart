@@ -68,6 +68,9 @@ class _Terminals implements PromptTerminals {
   final FakeChecklistPane pane;
   final List<DecisionRecord> recorded = [];
 
+  /// The rows the status quotes off the screen, as its grid source keeps them.
+  List<String> evidence = const [];
+
   @override
   bool exists(String sessionId) => sessionId == 's1';
 
@@ -83,6 +86,7 @@ class _Terminals implements PromptTerminals {
     source: AgentStatusSource.terminalGrid,
     observedAt: DateTime.utc(2026, 10, 8),
     waiting: AgentWaitKind.approval,
+    evidence: evidence,
   );
 
   @override
@@ -299,5 +303,91 @@ void main() {
             )!
             as MenuAnswerRequest;
     expect(dismissed.dismiss, isTrue);
+  });
+
+  group("a client with no pane answers by the status's quote", () {
+    final claude = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
+
+    /// The bottom [rows] of [pane]'s screen, blank rows dropped, as the grid
+    /// source quotes them: four servers push the heading out of twelve.
+    List<String> quote(FakeChecklistPane pane, int rows) {
+      final screen = pane.screen!;
+      return [
+        for (final row in screen.sublist(screen.length - rows))
+          if (row.trim().isNotEmpty) row.trimRight(),
+      ];
+    }
+
+    test(
+      'cut short of its heading, it still names the menu on screen',
+      () async {
+        final (pane, terminals, screenId) = await open(['a', 'b', 'c', 'd']);
+        terminals.evidence = quote(pane, 8);
+        final quoted = menuQuotedBy(terminals.statusOf('s1'), claude.menus)!;
+        expect(
+          quoted.prompt,
+          isNot(contains('4 new MCP servers found in this project')),
+        );
+        expect(quoted.id, isNot(screenId), reason: 'the heading is in the id');
+
+        final answer = await answersOver(terminals).answer(
+          MenuAnswerRequest.checklist(
+            sessionId: 's1',
+            menuId: quoted.id,
+            submit: 4,
+            ticks: const [true, false, true, true],
+          ),
+        );
+        expect(pane.closedWith, [true, false, true, true]);
+        expect(answer.answered, 'Enabled a, c, d');
+      },
+    );
+
+    test('reject all by the quote is Esc alone', () async {
+      final (pane, terminals, _) = await open(['dart', 'marionette']);
+      terminals.evidence = quote(pane, 6);
+      final quoted = menuQuotedBy(terminals.statusOf('s1'), claude.menus)!;
+      await answersOver(
+        terminals,
+      ).answer(MenuAnswerRequest.dismiss(sessionId: 's1', menuId: quoted.id));
+      expect(pane.pressed, ['\x1b']);
+    });
+
+    test('a quote of other choices names no menu: nothing pressed', () async {
+      final (pane, terminals, _) = await open(['dart', 'marionette']);
+      terminals.evidence = quote(FakeChecklistPane(['dart', 'other']), 6);
+      final quoted = menuQuotedBy(terminals.statusOf('s1'), claude.menus)!;
+      await expectLater(
+        answersOver(
+          terminals,
+        ).answer(MenuAnswerRequest.dismiss(sessionId: 's1', menuId: quoted.id)),
+        throwsA(
+          isA<SessionPromptRefusal>().having((r) => r.stale, 'stale', isTrue),
+        ),
+      );
+      expect(pane.pressed, isEmpty);
+    });
+
+    test('a hook message, or no open prompt, quotes no menu', () {
+      final report = AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 's1',
+        status: AgentActivityStatus.awaitingApproval,
+        source: AgentStatusSource.hook,
+        observedAt: DateTime.utc(2026, 10, 17),
+        waiting: AgentWaitKind.approval,
+        evidence: const ['Claude needs your permission to use Bash'],
+      );
+      expect(menuQuotedBy(report, claude.menus), isNull);
+      final idle = AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 's1',
+        status: AgentActivityStatus.idle,
+        source: AgentStatusSource.terminalGrid,
+        observedAt: DateTime.utc(2026, 10, 17),
+        evidence: FakeChecklistPane(['dart', 'marionette']).screen!,
+      );
+      expect(menuQuotedBy(idle, claude.menus), isNull);
+    });
   });
 }

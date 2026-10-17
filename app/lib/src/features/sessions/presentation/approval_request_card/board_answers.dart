@@ -391,8 +391,3 @@ class _BoardEditCommandState extends ConsumerState<BoardEditCommand> {
     );
   }
 }
-
-/// Reveals [sessionId]'s terminal in the workbench, as "Answer in the
-/// terminal" does.
-void openSessionTerminal(WidgetRef ref, String sessionId) =>
-    _openTerminal(ref, sessionId);
