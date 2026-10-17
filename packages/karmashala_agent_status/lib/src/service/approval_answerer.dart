@@ -81,17 +81,28 @@ class SessionApprovalAnswerer {
     if (menu != null &&
         support != null &&
         !(key != null && !approve && support.cancelDeclinesIn(menu))) {
+      final offered = menu.options.map((o) => '"$o"').join(', ');
+      // Enter on a checklist submits whichever boxes happen to be ticked:
+      // only the ticks can answer it, so approve names no option there.
+      if (menu.isChecklist) {
+        final boxes = [for (final b in menu.boxes) '"${menu.options[b]}"'];
+        throw SessionPromptRefusal(
+          'The prompt on screen is a checklist (${_asked(menu)}; boxes '
+          '${boxes.join(', ')}), which "$decision" cannot answer: it does not '
+          'say which boxes to keep, so nothing was pressed. Answer it by its '
+          'boxes, or in the terminal',
+        );
+      }
       final option = approve
           ? support.affirmativeIn(menu)
           : support.negativeIn(menu);
-      final offered = menu.options.map((o) => '"$o"').join(', ');
       if (option == null) {
         throw SessionPromptRefusal(
           'The prompt on screen is a menu (${_asked(menu)}; options $offered) '
           'and none of its options is one ${agentNameFor(sessionId)} is known '
           'to mean "$decision", so nothing was pressed — Enter would confirm '
           'whichever is highlighted, "${menu.options[menu.highlighted]}". '
-          'Answer it in the terminal.',
+          'Answer it in the terminal',
         );
       }
       final chosen = await menus.choose(
@@ -141,11 +152,13 @@ class SessionApprovalAnswerer {
   }
 
   /// The row that asks, for a sentence: the last one with a `?` in it (folder
-  /// trust wraps its question mid-row), else the last row of the prompt.
+  /// trust wraps its question mid-row), else the prompt's heading — its first
+  /// row. The last row is no question: on the project-MCP checklist it is
+  /// the tail of a wrapped notice, "documentation." (owner, 2026-10-17).
   static String _asked(AgentScreenMenu menu) {
     final question = menu.prompt.lastWhere(
       (row) => row.contains('?'),
-      orElse: () => menu.prompt.isEmpty ? '' : menu.prompt.last,
+      orElse: () => menu.prompt.isEmpty ? '' : menu.prompt.first,
     );
     return question.isEmpty ? 'with no prompt' : 'asking "$question"';
   }

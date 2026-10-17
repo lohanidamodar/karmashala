@@ -3,6 +3,7 @@ import 'package:test/test.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
 import 'fixture_menu_screen.dart';
+import 'mcp_checklist_screen.dart';
 
 /// Approve and deny on the prompts the real CLIs draw, replayed from captured
 /// PTY streams into a real grid and read the way the app reads a pane
@@ -32,18 +33,20 @@ void main() {
     rulesFor: (_) => agent.approval,
     agentNameFor: (_) => agent.displayName,
     hasOpenQuestion: (_) => question,
-    pressAnswerKey:
-        (_, keys, {required decidedBy, required decidedBySessionId}) =>
-            screen.press(keys),
-    recordMenuAnswer:
-        (
-          _, {
-          required granted,
-          required option,
-          required effect,
-          required decidedBy,
-          required decidedBySessionId,
-        }) => recorded.add((granted: granted, option: option)),
+    pressAnswerKey: (
+      _,
+      keys, {
+      required decidedBy,
+      required decidedBySessionId,
+    }) => screen.press(keys),
+    recordMenuAnswer: (
+      _, {
+      required granted,
+      required option,
+      required effect,
+      required decidedBy,
+      required decidedBySessionId,
+    }) => recorded.add((granted: granted, option: option)),
   );
 
   final claude = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
@@ -310,6 +313,55 @@ void main() {
           contains('names no way to deny'),
         ),
       ),
+    );
+  });
+
+  group("Claude Code's project-MCP checklist (the owner's screen)", () {
+    setUp(
+      () => screen = FixtureMenuScreen.text(
+        kOwnersMcpChecklist.join('\r\n'),
+        marker: '❯',
+      ),
+    );
+
+    test('it reads as the checklist it is, its heading the question', () {
+      final menu = readScreenMenu(screen.rows(), claude.menus!)!;
+      expect(menu.isChecklist, isTrue);
+      expect(menu.options, ['dart', 'marionette', 'Enable selected']);
+      expect(menu.checked, [true, true, null]);
+      expect(menu.prompt.first, '2 new MCP servers found in this project');
+      expect(menu.prompt.last, 'documentation.');
+    });
+
+    test('approve is refused as a checklist, nothing pressed, the heading '
+        'quoted and the sentence ended once', () async {
+      await expectLater(
+        answererFor(claude).answer('s', approve: true),
+        throwsA(
+          isA<SessionPromptRefusal>().having(
+            (r) => r.message,
+            'message',
+            allOf(
+              contains('is a checklist'),
+              contains('asking "2 new MCP servers found in this project"'),
+              contains('"dart", "marionette"'),
+              isNot(contains('documentation.')),
+              isNot(endsWith('.')),
+            ),
+          ),
+        ),
+      );
+      expect(screen.sent, isEmpty);
+      expect(recorded, isEmpty);
+    });
+
+    test(
+      "deny is the agent's Esc — reject all, which it declares safe",
+      () async {
+        final deny = await answererFor(claude).answer('s', approve: false);
+        expect(screen.sent, ['\x1b']);
+        expect(deny.answered, claude.approval.deny!.label);
+      },
     );
   });
 }
