@@ -93,3 +93,7 @@ EnvironmentPath? folderFromJson(Object? json) {
 
 /// The home folder, which a new folder automation starts in.
 const String kHomeFolder = '~';
+
+/// How long a command first step may run when its automation names no
+/// longest run.
+const Duration kCommandTimeLimit = Duration(minutes: 10);

@@ -1,5 +1,11 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart'
+    show
+        EnvironmentKind,
+        ExecutionEnvironment,
+        environmentLabel,
+        localHostEnvironmentId;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_automations/automations.dart';
@@ -9,12 +15,17 @@ import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala_core/verdicts.dart';
 import 'package:karmashala_automations/webhooks.dart';
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AutomationCommandTried;
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/picking.dart' show pickOneDirectory;
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../environments/application/environments_controller.dart';
+import '../../settings/presentation/path_field_row.dart';
 import '../../agents/application/agent_model_catalog_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/model_picker.dart';
@@ -31,14 +42,18 @@ import 'automation_agent_fields.dart';
 import 'automation_dry_run_dialog.dart';
 import 'automation_run_actions.dart';
 import 'automation_run_status.dart';
+import 'automation_runs_view.dart' show CommandOutputBox;
 import 'automation_editor_parts.dart';
 
+import '../application/turn_on_review.dart' show durationWords;
 import 'turn_on_confirm_dialog.dart' show confirmTurnOn;
 import 'webhook_parts.dart';
 
+part 'automation_editor/command_fields.dart';
 part 'automation_editor/readiness.dart';
 part 'automation_editor/step_fields.dart';
 part 'automation_editor/trigger_fields.dart';
+part 'automation_editor/where_fields.dart';
 
 /// **The one editor** for every kind of automation: its name, what starts it,
 /// the agent and the steps after it, whether it is ready to run with nobody
@@ -99,7 +114,14 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   late final _longest = TextEditingController(
     text: _draft.maxRuntimeMinutes?.toString() ?? '',
   );
+  late final _commandText = TextEditingController(text: _draft.commandText);
+  late final _folder = TextEditingController(text: _draft.folderPath);
   var _saving = false;
+
+  /// Run it once: under way, and what it last said.
+  var _trying = false;
+  AutomationCommandTried? _tried;
+  String? _tryFailure;
   String? _failure;
 
   /// Changes not saved yet: Run now runs what is saved, so it waits.
@@ -131,6 +153,8 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
       _queueLimit,
       _stopAfter,
       _longest,
+      _commandText,
+      _folder,
     ]) {
       c.dispose();
     }
@@ -141,7 +165,32 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     _draft = draft;
     _dirty = true;
     _dry = null;
+    _tried = null;
+    _tryFailure = null;
   });
+
+  /// The machine it runs on: its folder's, its checkout's, else this one.
+  String _machineId(Repository? repository) =>
+      (_draft.inFolder ? _draft.environmentId : null) ??
+      repository?.path.environmentId ??
+      _draft.environmentId ??
+      localHostEnvironmentId;
+
+  /// setState, for the parts: an extension may not call it itself.
+  void _redraw(VoidCallback change) => setState(change);
+
+  /// [_draft] with what the editor knows of its machine, as it is saved.
+  AutomationDraft _placed(
+    List<ExecutionEnvironment> environments,
+    Repository? repository,
+  ) {
+    final id = _machineId(repository);
+    final kind = environments.where((e) => e.id == id).firstOrNull?.kind;
+    return _draft.copyWith(
+      environmentId: id,
+      windowsMachine: kind == EnvironmentKind.windowsNative,
+    );
+  }
 
   void _putStep(
     AutomationStepKind kind, {
@@ -206,6 +255,14 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   Widget build(BuildContext context) {
     final repositories = ref.watch(automationCheckoutsProvider);
     final repository = _repository(repositories);
+    final environments = ref.watch(environmentsControllerProvider);
+    // Only what follows from the machine: idempotent, so no rebuild is owed.
+    _draft = _placed(environments, repository);
+    final machineId = _machineId(repository);
+    final machineName = _machineName(environments, machineId);
+    final place = _draft.inFolder
+        ? '${_draft.folderPath} on $machineName'
+        : repository?.name ?? 'its checkout';
     final registry = ref.watch(agentRegistryProvider);
     final installations = repository == null
         ? const <AgentInstallation>[]
@@ -221,7 +278,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
     final now = ref.watch(clockProvider).nowUtc();
     ref.watch(automationsRevisionProvider);
     final probe = _draft.probe(now: now);
-    final refusal = probe == null || !probe.startsAgent
+    final refusal = probe == null || !(probe.startsAgent || probe.runsCommand)
         ? null
         : ref.watch(unattendedPreflightProvider).refusalFor(probe);
     final readiness = _readiness(
@@ -236,12 +293,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
         : registry.displayNameFor(installation.agentId);
     final summary = probe == null
         ? null
-        : automationWords(
-            probe,
-            checkout: repository?.name ?? 'its checkout',
-            agent: agentName,
-            now: now,
-          );
+        : automationWords(probe, checkout: place, agent: agentName, now: now);
 
     return SingleChildScrollView(
       key: const ValueKey('automation-editor'),
@@ -257,7 +309,7 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
                 missing: missing,
                 ready: ready,
                 probe: probe,
-                checkout: repository?.name ?? 'its checkout',
+                checkout: place,
                 agent: agentName,
               ),
               if (_banner(context) case final banner?) ...[
@@ -276,7 +328,24 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
               const SizedBox(height: Insets.md),
               _starts(context, repositories, repository, now),
               const StepLink(),
-              _agentStep(context, installations, descriptor, repository),
+              _where(
+                context,
+                repositories: repositories,
+                repository: repository,
+                environments: environments,
+                machineId: machineId,
+              ),
+              const StepLink(),
+              if (_draft.runsCommand)
+                _firstCommandStep(
+                  context,
+                  picker: _firstStepPicker(),
+                  windows: _draft.windowsMachine,
+                  machineName: machineName,
+                  probe: probe,
+                )
+              else
+                _agentStep(context, installations, descriptor, repository),
               ..._afterSteps(context),
               const StepLink(),
               Align(
@@ -433,10 +502,10 @@ class _AutomationEditorState extends ConsumerState<AutomationEditor> {
   Future<void> _save() async {
     final controller = ref.read(automationControllerProvider);
     final data = ref.read(automationsDataProvider);
-    final automation = _draft.toAutomation(
-      id: controller.newId(),
-      now: controller.now(),
-    );
+    final automation = _placed(
+      ref.read(environmentsControllerProvider),
+      _repository(ref.read(automationCheckoutsProvider)),
+    ).toAutomation(id: controller.newId(), now: controller.now());
     if (automation == null) return;
     final created = _draft.isNew;
     // Asked on save, not on the switch, so it describes what is armed.

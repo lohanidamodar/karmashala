@@ -308,7 +308,12 @@ class _CheckoutGroup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final name = repository?.name ?? 'A checkout that is gone';
+    // A folder automation names no checkout: they gather under one heading.
+    final name =
+        repository?.name ??
+        (automations.first.folder != null
+            ? 'In folders'
+            : 'A checkout that is gone');
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.sm),
       child: Column(
@@ -348,7 +353,10 @@ class _CheckoutGroup extends ConsumerWidget {
             cell: (i) => AutomationCard(
               key: ValueKey(automations[i].id),
               automation: automations[i],
-              checkout: repository?.name ?? 'its checkout',
+              checkout:
+                  automations[i].folder?.path ??
+                  repository?.name ??
+                  'its checkout',
             ),
           ),
         ],

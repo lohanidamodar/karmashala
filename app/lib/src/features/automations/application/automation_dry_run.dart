@@ -11,6 +11,13 @@ class DryRunStep {
   final String would;
 }
 
+/// The shell a command runs in, for a sentence.
+String shellWords(AutomationShell shell) => switch (shell) {
+  AutomationShell.powershell => 'PowerShell',
+  AutomationShell.cmd => 'cmd',
+  AutomationShell.login => 'your login shell',
+};
+
 /// Each step of [automation] and what it would do now — nothing is started.
 List<DryRunStep> dryRunSteps(
   Automation automation, {
@@ -27,7 +34,15 @@ List<DryRunStep> dryRunSteps(
       : automation.prompt;
   final model = automation.modelId == null ? '' : ' on ${automation.modelId}';
   return [
-    if (automation.trigger?.action == AutomationEventAction.notifyOnly)
+    if (automation.command case final command?)
+      DryRunStep(
+        'agent',
+        'Run a command',
+        'Would ${automation.folder == null ? 'take a checkpoint of $checkout, then ' : ''}'
+            'run in $checkout, in ${shellWords(command.shell)}, with its '
+            'values as environment variables:\n\n${command.text.trim()}',
+      )
+    else if (automation.trigger?.action == AutomationEventAction.notifyOnly)
       const DryRunStep('agent', 'Nothing started', 'Only the steps below run.')
     else if (!automation.startsAgent)
       DryRunStep(

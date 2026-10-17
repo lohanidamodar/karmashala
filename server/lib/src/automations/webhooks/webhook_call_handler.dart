@@ -197,7 +197,11 @@ class WebhookCallHandler {
         automation.copyWith(prompt: fill.prompt),
         'Started by a webhook call${delivery == null ? '' : ' ($delivery)'}.',
       );
-      if (run.sessionId == null) {
+      // A command starts no session: running is what started means for it.
+      final started = automation.runsCommand
+          ? run.state == AutomationRunState.running
+          : run.sessionId != null;
+      if (!started) {
         return reply(
           automation,
           HookStatus.failed,

@@ -196,7 +196,10 @@ class AutomationsHandler {
         'An automation is a webhook or an event rule, not both.',
       );
     }
-    final refusal = webhookTemplateRefusal(automation.prompt);
+    // A command's call is its trigger only: it fills no prompt.
+    final refusal = automation.runsCommand
+        ? null
+        : webhookTemplateRefusal(automation.prompt);
     if (refusal != null) throw DataRefused.invalid(refusal);
     return automation.copyWith(
       webhook: asked.copyWith(

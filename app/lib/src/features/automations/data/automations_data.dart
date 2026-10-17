@@ -79,6 +79,10 @@ class AutomationsData extends AutomationCopyReads {
   Future<AutomationRun> runNow(String id) async =>
       (await _client.send(AutomationRunNow(id))).value;
 
+  /// Runs [automation]'s command once, where it would run; records nothing.
+  Future<AutomationCommandTried> tryCommand(Automation automation) async =>
+      (await _client.send(AutomationCommandTry(automation))).value;
+
   /// Runs older than [before], newest first — past the copy this holds.
   Future<AutomationRunsPageResult> runsPage({
     DateTime? before,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../domain/automation.dart';
+import '../domain/automation_command.dart';
 import '../domain/automation_run.dart';
 import '../domain/automation_steps.dart';
 import '../domain/github_trigger.dart';
@@ -11,10 +12,6 @@ import 'automation_step_io.dart';
 import 'checkout_facts.dart';
 import 'run_base_checkpoint.dart';
 import 'unattended_preflight.dart';
-
-/// How long a command first step may run when its automation names no
-/// longest run.
-const Duration kCommandTimeLimit = Duration(minutes: 10);
 
 /// Settles a run the way a session ending does: its verdict, its checks,
 /// its failure budget, then the queue.

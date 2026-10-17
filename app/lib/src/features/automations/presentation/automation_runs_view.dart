@@ -199,9 +199,12 @@ class _RunTileState extends ConsumerState<RunTile> {
     final now = ref.watch(clockProvider).nowUtc();
     final steps = <_StepLine>[
       _StepLine(
-        title: automation?.startsAgent ?? true
+        title: automation?.runsCommand ?? run.output != null
+            ? 'Run a command'
+            : automation?.startsAgent ?? true
             ? 'Start an agent'
             : 'Tell that session',
+        output: run.output,
         outcome: switch (run.state) {
           AutomationRunState.finished => RunOutcome.succeeded,
           AutomationRunState.failed => RunOutcome.failed,
@@ -329,18 +332,53 @@ class _RunTileState extends ConsumerState<RunTile> {
   }
 }
 
+/// What a command printed, in the code face, scrolling sideways rather than
+/// wrapping a long line out of shape.
+class CommandOutputBox extends StatelessWidget {
+  const CommandOutputBox(this.output, {super.key});
+
+  final String output;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(top: Insets.xs),
+      padding: const EdgeInsets.all(Insets.sm),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SelectableText(
+          output.trimRight(),
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontFamily: kMonoFamily,
+            fontFamilyFallback: kMonoFallback,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StepLine extends StatelessWidget {
   const _StepLine({
     required this.title,
     required this.outcome,
     required this.detail,
     this.skipped = false,
+    this.output,
   });
 
   final String title;
   final RunOutcome outcome;
   final String detail;
   final bool skipped;
+
+  /// What a command printed, drawn as it printed it.
+  final String? output;
 
   @override
   Widget build(BuildContext context) {
@@ -372,6 +410,8 @@ class _StepLine extends StatelessWidget {
                 ),
                 if (detail.isNotEmpty)
                   SelectableText(detail, style: theme.textTheme.bodySmall),
+                if (output case final output? when output.trim().isNotEmpty)
+                  CommandOutputBox(key: const ValueKey('run-output'), output),
               ],
             ),
           ),

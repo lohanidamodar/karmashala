@@ -11,32 +11,15 @@ extension _AutomationTriggerFields on _AutomationEditorState {
   ) {
     final draft = _draft;
     final probe = draft.probe(now: now);
+    final where = draft.inFolder ? draft.folderPath : repository?.name;
     final readBack = [
       if (probe != null) triggerWords(probe, now: now),
-      if (repository != null) 'in ${repository.name}',
+      if (where != null) 'in $where',
     ].join(', ');
     return EditorNode(
       title: 'Starts',
       icon: AppIcons.lightning,
       children: [
-        if (draft.isNew)
-          DropdownButtonFormField<String>(
-            key: const ValueKey('automation-checkout'),
-            initialValue: repository?.id,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Runs in'),
-            hint: const Text('Pick a checkout'),
-            items: [
-              for (final r in repositories)
-                DropdownMenuItem(value: r.id, child: Text(r.name)),
-            ],
-            onChanged: (id) =>
-                _update(_withGithubRepository(_draft.withCheckout(id))),
-          )
-        else
-          EditorNote(
-            'Runs in ${repository?.name ?? 'a checkout that is gone'}.',
-          ),
         CompactSegmented<DraftTrigger>(
           key: const ValueKey('automation-trigger'),
           segments: [
@@ -191,6 +174,8 @@ extension _AutomationTriggerFields on _AutomationEditorState {
   /// prompt is a stranger's text.
   AutomationDraft _withTrigger(AutomationDraft draft, DraftTrigger trigger) {
     var next = draft.copyWith(trigger: trigger);
+    // An event or GitHub rule watches a project, so it runs in one.
+    if (next.watchesProject) next = next.copyWith(place: DraftPlace.project);
     if (trigger == DraftTrigger.github) next = _withGithubRepository(next);
     if (trigger == DraftTrigger.webhook && draft.isNew) {
       final installation = ref

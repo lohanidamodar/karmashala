@@ -56,6 +56,7 @@ TurnOnReview turnOnReview(
   required AgentPermissionSupport? permissions,
   String? proposedBy,
   DateTime? now,
+  String? machine,
 }) {
   final proposer = proposedBy ?? automation.proposedBy;
   return TurnOnReview(
@@ -71,6 +72,7 @@ TurnOnReview turnOnReview(
       checkout: checkout,
       agent: agent,
       permissions: permissions,
+      machine: machine,
     ),
     limits: _limits(automation),
     proposedBy: proposer,
@@ -85,6 +87,7 @@ List<TurnOnLine> _changes(
   required String checkout,
   required String agent,
   required AgentPermissionSupport? permissions,
+  String? machine,
 }) {
   final action = automation.github?.action ?? automation.trigger?.action;
   final where = automation.worktree
@@ -98,7 +101,15 @@ List<TurnOnLine> _changes(
             ? 'Anyone holding its URL and secret can start it.'
             : 'Anyone holding its URL can start it.',
       ),
-    if (action == AutomationEventAction.notifyOnly)
+    if (automation.command case final command?) ...[
+      (label: 'Command', text: command.text.trim()),
+      if (automation.folder case final folder?)
+        (label: 'Folder', text: folder.path)
+      else
+        (label: 'Works in', text: '$checkout directly'),
+      (label: 'Machine', text: machine ?? 'the machine its checkout is on'),
+      (label: 'Shell', text: shellWords(command.shell)),
+    ] else if (action == AutomationEventAction.notifyOnly)
       (label: 'Agent', text: 'Starts no agent.')
     else if (!automation.startsAgent)
       (
@@ -197,7 +208,9 @@ List<TurnOnLine> _limits(Automation automation) {
     (
       label: 'Time limit',
       text: automation.maxRuntime == null
-          ? 'None: a run may take as long as it needs'
+          ? automation.runsCommand
+                ? 'A command is stopped after ${durationWords(kCommandTimeLimit)}'
+                : 'None: a run may take as long as it needs'
           : 'A run is stopped after ${durationWords(automation.maxRuntime!)}',
     ),
     for (final step in automation.steps.after)

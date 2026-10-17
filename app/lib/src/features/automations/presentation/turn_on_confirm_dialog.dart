@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
+import '../application/automation_place.dart';
 import '../application/automation_proposals.dart';
 import '../application/automation_providers.dart';
 import '../application/turn_on_review.dart';
@@ -24,10 +25,7 @@ Future<bool> confirmTurnOn(
   String? proposedBy,
 }) async {
   if (!turnOnNeedsConfirm(automation) && proposedBy == null) return true;
-  final repository = ref
-      .read(automationCheckoutsProvider)
-      .where((r) => r.id == automation.repositoryId)
-      .firstOrNull;
+  final where = automationPlaceOf(ref, automation);
   final registry = ref.read(agentRegistryProvider);
   final installation = ref
       .read(agentInstallationsDataProvider)
@@ -37,11 +35,12 @@ Future<bool> confirmTurnOn(
       : registry.byId(installation.agentId);
   final review = turnOnReview(
     automation,
-    checkout: repository?.name ?? 'its checkout',
+    checkout: where.place,
     agent: descriptor?.displayName ?? 'the agent',
     permissions: descriptor?.launch.permission,
     proposedBy: proposedBy,
     now: ref.read(clockProvider).nowUtc(),
+    machine: where.machine,
   );
   final confirmed = await showDialog<bool>(
     context: context,
