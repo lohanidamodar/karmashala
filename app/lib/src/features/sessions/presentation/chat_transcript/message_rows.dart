@@ -22,11 +22,15 @@ class _MessageRow extends StatefulWidget {
     this.turnActions,
     this.place,
     this.prose,
+    this.toolImages = const [],
     this.sentencePerLine = false,
   });
 
   /// How an agent row is weighted in its turn; null draws it plainly.
   final AgentProse? prose;
+
+  /// The pictures this row's turn draws beside its tool calls.
+  final List<String> toolImages;
   final bool sentencePerLine;
 
   /// What this row's turn may do, and where the row stands in it; either
@@ -83,6 +87,7 @@ class _MessageRowState extends State<_MessageRow> {
         old.turnActions != widget.turnActions ||
         old.place != widget.place ||
         old.prose != widget.prose ||
+        !listEquals(old.toolImages, widget.toolImages) ||
         old.sentencePerLine != widget.sentencePerLine) {
       _tile = null;
     }
@@ -121,6 +126,7 @@ class _MessageRowState extends State<_MessageRow> {
         onCopyTurn: turn == null ? null : () => turn(ordinal),
         turn: _turnHere(message, ordinal),
         prose: widget.prose,
+        toolImages: widget.toolImages,
         sentencePerLine: widget.sentencePerLine,
       ),
     );
@@ -152,11 +158,13 @@ class _ChatMessageTile extends StatelessWidget {
     this.preview,
     this.turn = const [],
     this.prose,
+    this.toolImages = const [],
     this.sentencePerLine = false,
   });
   final ChatMessage message;
   final AgentPlan? previousPlan;
   final AgentProse? prose;
+  final List<String> toolImages;
   final bool sentencePerLine;
 
   /// The turn's actions this row offers.
@@ -241,6 +249,7 @@ class _ChatMessageTile extends StatelessWidget {
       detail: detail,
       turn: turn,
       prose: prose,
+      toolImages: toolImages,
       sentencePerLine: sentencePerLine,
     ),
     kAgentSwitchNoticeRole => _AgentSwitchDivider(message: message),

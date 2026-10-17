@@ -4,7 +4,7 @@ import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
-import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
+import 'package:karmashala/src/features/sessions/presentation/transcript_inline_images.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart'
     show chatMessagesFromTranscript;
 
@@ -125,10 +125,10 @@ void main() {
 
     await tester.pumpWidget(view(chat));
     await tester.pump();
-    final preview = tester.widget<TranscriptImagePreview>(
-      find.byType(TranscriptImagePreview),
+    final strip = tester.widget<TranscriptImageStrip>(
+      find.byType(TranscriptImageStrip),
     );
-    expect(preview.path, '/cache/tool-images/pasted.png');
+    expect(strip.returned, ['/cache/tool-images/pasted.png']);
     expect(
       find.textContaining('why is this cut off?', findRichText: true),
       findsOneWidget,

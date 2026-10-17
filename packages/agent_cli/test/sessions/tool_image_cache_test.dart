@@ -82,15 +82,25 @@ void main() {
 
   test('a cache image that is gone reads as no longer kept; any other '
       'image as no longer on disk', () {
-    final cached = p.join(
-      dir.path,
-      'tool-images',
-      'cbf29ce484222325-12.png',
-    );
+    final cached = p.join(dir.path, 'tool-images', 'cbf29ce484222325-12.png');
     expect(missingImageNote(cached), 'That image is no longer kept.');
     expect(
       missingImageNote(r'C:\repo\shot.png'),
       'That image is no longer on disk.',
     );
+  });
+
+  test('a file URI becomes the path it names; any other text is kept', () {
+    expect(
+      pathFromFileUri('file:///C:/tmp/jholunge-trail-polished.png'),
+      r'C:\tmp\jholunge-trail-polished.png',
+    );
+    expect(pathFromFileUri('file:///home/me/shot.png'), '/home/me/shot.png');
+    expect(
+      pathFromFileUri('file://wsl.localhost/arch/home/me/a%20b.png'),
+      r'\\wsl.localhost\arch\home\me\a b.png',
+    );
+    expect(pathFromFileUri('C:/tmp/shot.png'), 'C:/tmp/shot.png');
+    expect(pathFromFileUri('shots/home.png'), 'shots/home.png');
   });
 }

@@ -1001,6 +1001,14 @@ class Chrome {
   /// One square thumbnail in a strip of several pictures.
   static const imageThumb = 96.0;
 
+  /// The narrowest and widest a picture's card in the chat is drawn: a tall
+  /// portrait shot still gets a card, a panorama does not cross the pane.
+  static const imageCardMinWidth = 280.0;
+  static const imageCardMaxWidth = 560.0;
+
+  /// One picture in the image viewer's filmstrip — a thumb's target too.
+  static const filmstripThumb = 48.0;
+
   /// [tabAppBar] grown with the text scale; under a thumb, never under
   /// [Touch.appBarOf], so its actions keep their 48dp targets.
   static double tabAppBarOf(BuildContext context) {

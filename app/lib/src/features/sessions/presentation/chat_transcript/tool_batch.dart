@@ -54,7 +54,7 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
       if (tool.imagePath case final path?) returned.add(path);
     }
     _named = named.toList();
-    _returned = returned.difference(named).toList();
+    _returned = returned.toList();
   }
 
   Widget _folded() {
@@ -63,24 +63,11 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        TranscriptImageStrip(paths: _named),
-        if (_returned.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: Insets.xs),
-            child: SelectionContainer.disabled(
-              child: Wrap(
-                spacing: Insets.xs,
-                runSpacing: Insets.xs,
-                children: [
-                  for (final path in _returned)
-                    TranscriptImagePreview(
-                      path: path,
-                      resolveHostPath: widget.resolveHostPath,
-                    ),
-                ],
-              ),
-            ),
-          ),
+        TranscriptImageStrip(
+          paths: _named,
+          returned: _returned,
+          resolveHostPath: widget.resolveHostPath,
+        ),
       ],
     );
   }

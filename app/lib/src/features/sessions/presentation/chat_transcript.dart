@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
@@ -37,7 +37,6 @@ import 'chat_cards/plan_update_card.dart';
 import 'tool_activity_row.dart';
 import 'tool_edit_diff_card.dart';
 import 'tool_run.dart';
-import 'transcript_image_preview.dart';
 import 'transcript_inline_images.dart';
 import 'turn_changed_files.dart';
 
@@ -481,6 +480,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView>
     final latestIsLast =
         latest != null && !widget.messages.skip(latest + 1).any(_opensTurn);
     final prose = _proseFor(widget.messages, widget.turn);
+    final toolImages = _toolImagesFor(widget.messages);
 
     // Keyed at the top: the list finds a row by its item's own key.
     Widget rowAt(int offset) {
@@ -502,6 +502,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView>
         turnActions: widget.turnActions,
         place: widget.turnActions == null ? null : _placeOf(ordinal),
         prose: prose[ordinal],
+        toolImages: toolImages[ordinal] ?? const [],
         sentencePerLine: widget.sentencePerLine,
       );
       if (footers[ordinal] case final footer?) {

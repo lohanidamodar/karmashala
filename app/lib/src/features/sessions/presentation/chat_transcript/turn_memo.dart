@@ -1,6 +1,38 @@
-// Per-turn readings the list memoises: footers, prose, turn places and rewind folds.
+// Per-turn readings the list memoises: footers, prose, tool pictures, turn places and rewind folds.
 
 part of '../chat_transcript.dart';
+
+/// **The pictures a turn's tool calls draw**, by the index of each of the
+/// agent's messages in that turn. A picture is drawn beside the call that
+/// made or read it, so the agent's words in the same turn leave it out; a
+/// later turn that names it draws it again.
+Map<int, List<String>> turnToolImages(List<ChatMessage> messages) {
+  final out = <int, List<String>>{};
+  var from = 0;
+  while (from < messages.length) {
+    var to = from + 1;
+    while (to < messages.length && !_opensTurn(messages[to])) {
+      to++;
+    }
+    final drawn = <String>{
+      for (var i = from; i < to; i++)
+        if (isToolRunMember(messages[i]))
+          if (messages[i].tool case final tool?) ...[
+            ?tool.imagePath,
+            ...inlineImagePaths(tool.subject),
+            ...inlineImagePaths(tool.output),
+          ],
+    };
+    if (drawn.isNotEmpty) {
+      final images = List<String>.unmodifiable(drawn);
+      for (var i = from; i < to; i++) {
+        if (messages[i].role == 'agent') out[i] = images;
+      }
+    }
+    from = to;
+  }
+  return out;
+}
 
 mixin _TranscriptTurnMemo on State<ChatTranscriptView> {
   List<ChatMessage>? _footerMessages;
@@ -50,6 +82,16 @@ mixin _TranscriptTurnMemo on State<ChatTranscriptView> {
       _ => false,
     };
     return _prose = agentProse(messages, lastTurnOver: over);
+  }
+
+  List<ChatMessage>? _toolImageMessages;
+  var _toolImages = const <int, List<String>>{};
+
+  /// [turnToolImages], walked again only when the list moved.
+  Map<int, List<String>> _toolImagesFor(List<ChatMessage> messages) {
+    if (identical(messages, _toolImageMessages)) return _toolImages;
+    _toolImageMessages = messages;
+    return _toolImages = turnToolImages(messages);
   }
 
   List<ChatMessage>? _placedMessages;
