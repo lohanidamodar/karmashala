@@ -108,7 +108,11 @@ class _RunTileState extends ConsumerState<RunTile> {
     final automation = ref
         .watch(automationsDataProvider)
         .getById(run.automationId);
-    final outcome = runOutcome(run, widget.checks);
+    final outcome = runOutcome(
+      run,
+      widget.checks,
+      expectsChecks: automation?.steps.checks ?? true,
+    );
     final quiet = theme.textTheme.bodySmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
@@ -252,8 +256,7 @@ class _RunTileState extends ConsumerState<RunTile> {
         run.baseCheckpointId != null;
     // Its checks are still running: Cancel stops them.
     final checking =
-        runOutcome(run, widget.checks) == RunOutcome.checking &&
-        (automation?.steps.checks ?? false);
+        outcome == RunOutcome.checking && (automation?.steps.checks ?? false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Insets.xl + Insets.lg,

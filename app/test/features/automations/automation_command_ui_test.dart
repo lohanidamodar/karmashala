@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/automations/application/automation_draft
 import 'package:karmashala/src/features/automations/application/automation_editor_state.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_editor.dart';
+import 'package:karmashala/src/features/automations/presentation/automation_run_status.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_runs_view.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -204,6 +205,7 @@ void main() {
       armedAt: now,
       command: const AutomationCommand(text: 'git pull'),
       folder: const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '~'),
+      steps: AutomationSteps.none,
     );
     server.automationRows.insert(rule);
     final run = AutomationRun(
@@ -227,6 +229,22 @@ void main() {
     expect(key('run-output'), findsOneWidget);
     expect(find.textContaining('not a git repository'), findsOneWidget);
     expect(tester.takeException(), isNull);
+
+    // A finished run with no check step is done, never "Checking" forever.
+    await pump(
+      tester,
+      RunTile(
+        run: run.copyWith(
+          state: AutomationRunState.finished,
+          reason: 'It exited with 0.',
+          exitCode: 0,
+        ),
+        checks: const [],
+      ),
+      size: const Size(360, 800),
+    );
+    expect(find.text(RunOutcome.succeeded.label), findsOneWidget);
+    expect(find.text(RunOutcome.checking.label), findsNothing);
   });
 
   testWidgets('it fits 360 px and large text, in a folder and a project', (

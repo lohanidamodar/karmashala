@@ -212,7 +212,7 @@ extension _AutomationReadiness on _AutomationEditorState {
     final checks = ref.read(automationsDataProvider).checksFor(run.id);
     if (key == 'agent') {
       final box = StepResultBox(
-        outcome: runOutcome(run, const []),
+        outcome: runOutcome(run, const [], expectsChecks: _draft.steps.checks),
         detail: run.reason,
       );
       final output = run.output;
@@ -263,6 +263,7 @@ extension _AutomationReadiness on _AutomationEditorState {
       text = switch (runOutcome(
         run,
         ref.read(automationsDataProvider).checksFor(run.id),
+        expectsChecks: _draft.steps.checks,
       )) {
         RunOutcome.running => 'Running now. Each step fills in as it goes.',
         RunOutcome.queued => 'Waiting for its checkout to come free.',

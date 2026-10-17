@@ -401,7 +401,7 @@ class AutomationCard extends ConsumerWidget {
     );
     final lastRun = last == null
         ? 'Never run'
-        : '${runOutcome(last, checks).label} '
+        : '${runOutcome(last, checks, expectsChecks: automation.steps.checks).label} '
               '${describeAge(last.firedAt, now: now)}';
     final small = theme.textTheme.bodySmall;
     return WorkflowCard(
@@ -453,7 +453,14 @@ class AutomationCard extends ConsumerWidget {
             style: small?.copyWith(
               color: last == null
                   ? scheme.onSurfaceVariant
-                  : runOutcomeColor(context, runOutcome(last, checks)),
+                  : runOutcomeColor(
+                      context,
+                      runOutcome(
+                        last,
+                        checks,
+                        expectsChecks: automation.steps.checks,
+                      ),
+                    ),
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
