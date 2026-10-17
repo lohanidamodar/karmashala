@@ -153,6 +153,24 @@ void main() {
     expect(messages.every((m) => m.pendingToolUseId == null), isTrue);
   });
 
+  // Codex 0.160 writes the picture it viewed as a URI, and a row that kept
+  // it so drew "That image is no longer on disk." beside the inline card.
+  test('an image viewed by URI is read as the path it names', () async {
+    final messages = await read([
+      exec('call_1', 'await tools.view_image({path: "C:/tmp/shot.png"})'),
+      completed({
+        'type': 'ImageView',
+        'id': 'view-1',
+        'path': 'file:///C:/tmp/shot.png',
+      }),
+      execOutput('call_1'),
+    ]);
+
+    final view = messages.singleWhere((m) => m.tool?.name == 'view_image');
+    expect(view.tool!.imagePath, r'C:\tmp\shot.png');
+    expect(view.tool!.subject, r'C:\tmp\shot.png');
+  });
+
   test('a script that did nothing visible keeps its own answer', () async {
     final messages = await read([
       exec('call_1', 'text(ALL_TOOLS.map((t) => t.name))'),

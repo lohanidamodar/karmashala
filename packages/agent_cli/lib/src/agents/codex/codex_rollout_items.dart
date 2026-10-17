@@ -86,7 +86,8 @@ ToolActivity _fileChange(Map<dynamic, dynamic> item) {
 }
 
 ToolActivity _image(String name, Object? path) {
-  final file = _text(path);
+  final text = _text(path);
+  final file = text == null ? null : pathFromFileUri(text);
   return ToolActivity(
     name: name,
     subject: file,

@@ -72,11 +72,13 @@ int sweepToolImages(
 
 /// What a row says when its image file is gone: a cached tool image was
 /// swept, any other was moved or deleted by somebody.
-String missingImageNote(String path) => _isCachedToolImage(path)
+String missingImageNote(String path) => isCachedToolImage(path)
     ? 'That image is no longer kept.'
     : 'That image is no longer on disk.';
 
-bool _isCachedToolImage(String path) {
+/// Whether [path] is one [spillToolImage] wrote: spelled on the server's
+/// machine, never in the agent's environment.
+bool isCachedToolImage(String path) {
   final parts = path.split(RegExp(r'[\\/]'));
   return parts.length >= 2 &&
       parts[parts.length - 2] == kToolImageFolderName &&
@@ -84,6 +86,23 @@ bool _isCachedToolImage(String path) {
 }
 
 final RegExp _cachedName = RegExp(r'^[0-9a-f]+-\d+\.[a-z]+$');
+
+/// [path] as a file system path: a `file:` URI decoded, anything else as it
+/// is. Codex 0.160 records an `ImageView` as `file:///C:/tmp/shot.png`, and
+/// that spelling opens nowhere.
+String pathFromFileUri(String path) {
+  if (!path.startsWith('file:')) return path;
+  final uri = Uri.tryParse(path);
+  if (uri == null || uri.scheme != 'file') return path;
+  final windows = uri.host.isNotEmpty || _uriDrive.hasMatch(uri.path);
+  try {
+    return uri.toFilePath(windows: windows);
+  } on UnsupportedError {
+    return path;
+  }
+}
+
+final RegExp _uriDrive = RegExp(r'^/[A-Za-z]:');
 
 /// The most base64 one image may be: past it, a row says nothing of it.
 const int kMaxToolImageBase64 = 16 * 1024 * 1024;

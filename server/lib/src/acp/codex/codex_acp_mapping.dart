@@ -1,4 +1,5 @@
-import 'package:agent_cli/stream.dart' show webSearchResultLines;
+import 'package:agent_cli/stream.dart'
+    show pathFromFileUri, webSearchResultLines;
 import 'package:karmashala_acp/karmashala_acp.dart' show JsonMap;
 import 'package:path/path.dart' as p;
 
@@ -548,7 +549,7 @@ JsonMap? codexToolCall(JsonMap item, {required String cwd}) {
       'title': 'View ${item['path']}',
       'kind': 'read',
       'locations': [
-        {'path': _absolute('${item['path']}', cwd)},
+        {'path': _absolute(pathFromFileUri('${item['path']}'), cwd)},
       ],
       'rawInput': {'path': item['path']},
     },
