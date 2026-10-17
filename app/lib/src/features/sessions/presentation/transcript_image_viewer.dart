@@ -395,6 +395,8 @@ class _TranscriptImageViewerState extends ConsumerState<TranscriptImageViewer> {
             onPointerCancel: (event) => _touches.remove(event.pointer),
             child: TranscriptImageActions(
               target: bytes == null ? null : image.target(bytes),
+              // The toolbar holds Copy image and Open; the menu stays.
+              hoverActions: false,
               child: picture,
             ),
           ),

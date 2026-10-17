@@ -425,6 +425,33 @@ void main() {
       expect(find.text('Image copied to clipboard'), findsOne);
     });
 
+    testWidgets(
+      'the viewer keeps the menu but no hover pair over the picture',
+      (tester) async {
+        await pump(tester, chat('The screen is in shots/home.png.'));
+        await tester.tap(
+          find.byKey(const ValueKey('inline-image-shots/home.png')),
+        );
+        await tester.pumpAndSettle();
+        final stage = tester.getCenter(
+          find.descendant(
+            of: find.byType(Dialog),
+            matching: find.byType(InteractiveViewer),
+          ),
+        );
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        addTearDown(mouse.removePointer);
+        await mouse.addPointer(location: stage);
+        await tester.pump();
+        // Its toolbar already has Copy image and Open.
+        expect(find.byKey(const ValueKey('image-hover-copy')), findsNothing);
+        expect(find.byKey(const ValueKey('image-hover-open')), findsNothing);
+
+        await rightClick(tester, stage);
+        expect(menuLabels(tester), contains('Copy image'));
+      },
+    );
+
     testWidgets('long-press on touch opens a sheet, with a light haptic', (
       tester,
     ) async {

@@ -100,12 +100,17 @@ class TranscriptImageActions extends StatefulWidget {
   const TranscriptImageActions({
     required this.target,
     required this.child,
+    this.hoverActions = true,
     super.key,
   });
 
   /// Null while the picture is still loading: nothing to act on yet.
   final TranscriptImageTarget? target;
   final Widget child;
+
+  /// False keeps the menu and Ctrl+C but not Copy and Open on hover: for a
+  /// surface whose own toolbar already offers them.
+  final bool hoverActions;
 
   @override
   State<TranscriptImageActions> createState() => _TranscriptImageActionsState();
@@ -122,7 +127,7 @@ class _TranscriptImageActionsState extends State<TranscriptImageActions> {
     void run(TranscriptTargetAction action) =>
         unawaited(scope.run(context, target, action));
     Widget body = widget.child;
-    if (!UiDensity.of(context).isTouch) {
+    if (widget.hoverActions && !UiDensity.of(context).isTouch) {
       final scheme = Theme.of(context).colorScheme;
       final style = IconButton.styleFrom(
         backgroundColor: scheme.surfaceContainerHigh,
