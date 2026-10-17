@@ -5,4 +5,9 @@
 library;
 
 export 'package:agent_cli/process.dart'
-    show EnvironmentKind, EnvironmentPath, localHostEnvironmentId;
+    show
+        EnvironmentKind,
+        EnvironmentPath,
+        ExecutionEnvironment,
+        environmentLabel,
+        localHostEnvironmentId;

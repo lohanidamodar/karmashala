@@ -1,14 +1,15 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
-import 'package:agent_cli/process.dart'
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_automations/automations.dart';
+
+import '../../environments/application/environment_values.dart'
     show
         EnvironmentKind,
         ExecutionEnvironment,
         environmentLabel,
         localHostEnvironmentId;
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/pipelines.dart' show kPipelineTemplates;
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/unattended.dart';
