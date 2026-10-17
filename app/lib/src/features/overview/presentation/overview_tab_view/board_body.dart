@@ -197,7 +197,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     if (ref.read(overviewSessionPaneProvider(card.id)) != null) {
       _open(card, tab: OverviewPeekTab.terminal);
     } else {
-      openSessionTerminal(ref, card.id);
+      openSessionTerminal(context, ref, card.id);
     }
   }
 

@@ -124,10 +124,39 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
               said: 'Rejected.',
             ),
             onOpenTerminal: _hasTerminal(ref, widget.sessionId)
-                ? () => _openTerminal(ref, widget.sessionId)
+                ? () => _openTerminal(context, ref, widget.sessionId)
                 : null,
           ),
-          _TerminalLink(sessionId: widget.sessionId),
+          // The board's way to the terminal in the dock's words, as under
+          // any other ask it shows.
+          if (widget.docked)
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: _AnswerInTerminal(sessionId: widget.sessionId),
+            )
+          else
+            _TerminalLink(sessionId: widget.sessionId),
+        ],
+      );
+    }
+    // Boxes with no row that submits them: no shape this can answer, so it
+    // is shown as it reads and answered in the terminal — never by a button
+    // that could only be refused.
+    if (menu.isChecklist) {
+      return _DockColumn(
+        children: [
+          _DockBox(
+            text: [
+              ...menu.prompt,
+              for (final option in menu.options) '• $option',
+            ].join('\n'),
+          ),
+          _DockNote(
+            note:
+                '${widget.agentName} drew boxes with no row that submits '
+                'them, so this can only be answered in its terminal.',
+            sessionId: widget.sessionId,
+          ),
         ],
       );
     }
@@ -239,7 +268,7 @@ class _QuestionOr extends ConsumerWidget {
       onReplyInWords: onReplyInWords,
       controller: controller,
       onAnswerInTerminal: _hasTerminal(ref, sessionId)
-          ? () => _openTerminal(ref, sessionId)
+          ? () => _openTerminal(context, ref, sessionId)
           : null,
       onAnswer: (answers, {decline = false, chat = false}) async {
         final said = _AnswerSaid.of(context);

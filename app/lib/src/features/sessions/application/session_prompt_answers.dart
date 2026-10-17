@@ -86,9 +86,24 @@ class AppPromptAnswers implements PromptAnswering {
   Future<PromptEvidence> evidence(String sessionId) =>
       local.evidence(sessionId);
 
+  /// Off this app's pane; else, for a session the host runs that no pane of
+  /// ours shows — one the board started in the background — off the host's
+  /// status, which quotes its screen ([menuQuotedBy]). The host answers it,
+  /// and knows that quote for the menu on its screen. Without it the board
+  /// offered Approve and Deny on a checklist neither can answer (owner,
+  /// 2026-10-17).
   @override
-  AgentScreenMenu? menuOnScreen(String sessionId) =>
-      local.menuOnScreen(sessionId);
+  AgentScreenMenu? menuOnScreen(String sessionId) {
+    final onPane = local.menuOnScreen(sessionId);
+    if (onPane != null) return onPane;
+    final terminals = local.terminals;
+    if (terminals.screen(sessionId) != null) return null;
+    if (hostAnswers(sessionId) == null) return null;
+    return menuQuotedBy(
+      terminals.statusOf(sessionId),
+      terminals.agentOf(sessionId)?.menus,
+    );
+  }
 }
 
 /// How often a surface showing a menu reads the screen again: one menu can

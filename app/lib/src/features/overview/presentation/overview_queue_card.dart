@@ -97,6 +97,16 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
   var _retrying = false;
   String? _retried;
 
+  /// The session's terminal, as the board shows it — its `onTerminal` — else
+  /// the workbench's.
+  void _openTerminal() {
+    final card = widget.card;
+    final onTerminal = widget.onTerminal;
+    onTerminal == null
+        ? openSessionTerminal(context, ref, card.id)
+        : onTerminal(card);
+  }
+
   Future<void> _retry() async {
     setState(() {
       _retrying = true;
@@ -181,9 +191,7 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
             children: [
               OutlinedButton(
                 key: ValueKey('overview-answer-terminal:${card.id}'),
-                onPressed: () =>
-                    (widget.onTerminal ??
-                    (c) => openSessionTerminal(ref, c.id))(card),
+                onPressed: _openTerminal,
                 child: const Text('Answer in terminal'),
               ),
               FilledButton(
@@ -215,6 +223,8 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
             onAnswered: widget.onAnswered == null
                 ? null
                 : () => widget.onAnswered!(card),
+            // Its "Answer in the terminal" goes where the board's own does.
+            onOpenTerminal: _openTerminal,
           ),
           if (_replying) ...[
             const SizedBox(height: Insets.xs),
