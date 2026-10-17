@@ -26,6 +26,11 @@ class ImageViewerController extends ChangeNotifier {
   void _changed() => notifyListeners();
 }
 
+/// The zoom a pan-and-scale [transform] draws at. Not `getMaxScaleOnAxis`:
+/// only x and y are scaled, so below 100% the untouched z axis answered 1 and
+/// a fitted picture read as 100%.
+double _planarScale(Matrix4 transform) => transform.entry(0, 0);
+
 /// How the picture sits in the pane until someone pans or zooms it by hand;
 /// a resize keeps it there. [free] is "where the reader left it".
 enum _Placement { auto, fit, actual, free }
@@ -69,7 +74,7 @@ class _ImageViewerState extends State<ImageViewer> {
   Size _viewport = Size.zero;
   _Placement _placement = _Placement.auto;
 
-  double get _scale => _transform.value.getMaxScaleOnAxis();
+  double get _scale => _planarScale(_transform.value);
 
   @override
   void initState() {
@@ -339,7 +344,7 @@ class _Checkerboard extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final bounds = Offset.zero & size;
     canvas.drawRect(bounds, Paint()..color = light);
-    final scale = transform.value.getMaxScaleOnAxis();
+    final scale = _planarScale(transform.value);
     if (scale <= 0) return;
     final cell = _square / scale;
     final visible = Rect.fromPoints(

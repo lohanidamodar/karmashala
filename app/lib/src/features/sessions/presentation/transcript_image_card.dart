@@ -466,7 +466,9 @@ class _Details extends StatelessWidget {
       icon: Icon(icon),
       iconSize: density.iconSize(Chrome.iconAction),
       padding: EdgeInsets.zero,
-      visualDensity: density.controlDensity,
+      // Standard, so the constraints are the size: compact took 8px off
+      // them and left an 18px target under a pointer.
+      visualDensity: VisualDensity.standard,
       constraints: density.iconConstraints(Chrome.control),
     );
     return Padding(

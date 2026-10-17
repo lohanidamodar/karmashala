@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:flutter/material.dart';
@@ -254,6 +255,19 @@ void main() {
       expect(copied, ['/repo/shot.png']);
     });
 
+    testWidgets('its actions are a full control under a pointer', (
+      tester,
+    ) async {
+      await pumpStrip(tester, ['/a/shot.png']);
+      for (final key in ['inline-image-open', 'inline-image-more']) {
+        expect(
+          tester.getSize(find.byKey(ValueKey(key))),
+          const Size.square(Chrome.control),
+          reason: key,
+        );
+      }
+    });
+
     testWidgets('its actions meet the touch target on a phone', (tester) async {
       await pumpStrip(tester, ['/a/shot.png'], width: 390, touch: true);
       for (final key in ['inline-image-open', 'inline-image-more']) {
@@ -386,6 +400,40 @@ void main() {
         findsOne,
         reason: 'the filmstrip says which is which',
       );
+    });
+
+    testWidgets('a picture taller than the stage opens fitted, and says so', (
+      tester,
+    ) async {
+      final tall = await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawRect(
+          const Rect.fromLTWH(0, 0, 1262, 2050),
+          Paint()..color = const Color.fromRGBO(120, 160, 90, 1),
+        );
+        final picture = await recorder.endRecording().toImage(1262, 2050);
+        final data = await picture.toByteData(format: ui.ImageByteFormat.png);
+        return data!.buffer.asUint8List();
+      });
+      await pumpViewer(tester, [
+        TranscriptImageView(
+          path: '/a/trail.png',
+          copyPath: '/a/trail.png',
+          read: () => Future.value(
+            TranscriptImageRead.loaded(tall!, size: tall.length),
+          ),
+        ),
+      ]);
+      await settleImageReads(tester);
+      await tester.pumpAndSettle();
+      // 2050 px tall on an 808 px stage: well under 100%, and said so. The
+      // label once read the z axis's 1 and said 100% for every fitted shot.
+      final fitted = zoom(tester);
+      expect(int.parse(fitted.replaceAll('%', '')), lessThan(50));
+
+      await tester.tap(find.byKey(const ValueKey('image-viewer-zoom-in')));
+      await tester.pumpAndSettle();
+      expect(zoom(tester), isNot(fitted));
     });
 
     testWidgets('+, - and 0 zoom; Esc closes', (tester) async {
