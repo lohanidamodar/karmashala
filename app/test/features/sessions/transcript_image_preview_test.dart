@@ -8,6 +8,9 @@ import 'package:karmashala/src/features/sessions/presentation/transcript_image_p
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:karmashala/src/features/sessions/presentation/transcript_image_card.dart';
+
+import '../../support/image_reads.dart';
 import '../../support/temp_directory.dart';
 import '../../support/tool_runs.dart';
 
@@ -42,17 +45,20 @@ void main() {
     String path, {
     String? Function(String path)? resolveHostPath,
     int maxBytes = kMaxImagePreviewBytes,
-  }) => tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: TranscriptImagePreview(
-          path: path,
-          resolveHostPath: resolveHostPath,
-          maxBytes: maxBytes,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TranscriptImagePreview(
+            path: path,
+            resolveHostPath: resolveHostPath,
+            maxBytes: maxBytes,
+          ),
         ),
       ),
-    ),
-  );
+    );
+    await settleImageReads(tester);
+  }
 
   testWidgets('an image the agent read is previewed, not just named', (
     tester,
@@ -67,9 +73,8 @@ void main() {
   ) async {
     await pumpPreview(tester, writePng('shot.png').path);
 
-    // Tappable before the decoder has finished: the thumbnail reserves its
-    // frame, so it is a target from the first frame rather than a 0x0 box.
-    await tester.tap(find.byType(InkWell));
+    // The card reserves its frame, so it is a target before the decode ends.
+    await tester.tap(find.byKey(ValueKey('inline-image-${dir.path}/shot.png')));
     await tester.pumpAndSettle();
 
     expect(find.byType(InteractiveViewer), findsOneWidget);
@@ -102,7 +107,7 @@ void main() {
     );
 
     expect(find.byType(Image), findsNothing);
-    expect(find.text('That image is no longer kept.'), findsOneWidget);
+    expect(find.textContaining('is no longer kept'), findsOneWidget);
   });
 
   testWidgets('a WSL path is translated before dart:io is asked to open it', (
@@ -157,8 +162,10 @@ void main() {
     await tester.pump();
     // A finished call is folded under its turn's line: open it to its card.
     await openToolRuns(tester);
+    await settleImageReads(tester);
 
-    expect(find.byType(TranscriptImagePreview), findsOneWidget);
+    // Named in its subject and read by it: one card, not two.
+    expect(find.byType(TranscriptImageCard), findsOneWidget);
     expect(
       find.descendant(
         of: find.byType(ToolActivityBody),
@@ -189,7 +196,7 @@ void main() {
     await tester.pump();
     await openToolRuns(tester);
 
-    expect(find.byType(TranscriptImagePreview), findsNothing);
+    expect(find.byType(TranscriptImageCard), findsNothing);
     expect(
       find.descendant(
         of: find.byType(ToolActivityBody),

@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/media/presentation/session_media_list.da
 import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
 
 import '../../support/window_matrix.dart';
+import '../../support/image_reads.dart';
 import '../../support/temp_directory.dart';
 
 /// The panel the owner asked for: *"a media sidebar that shows all the media
@@ -74,6 +75,7 @@ void main() {
       ),
     );
     await tester.pump();
+    await settleImageReads(tester);
   }
 
   testWidgets('an image the agent read is shown with its file name', (

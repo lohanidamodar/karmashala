@@ -417,7 +417,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(Dialog),
-          matching: find.byKey(const ValueKey('inline-image-copy-image')),
+          matching: find.byKey(const ValueKey('image-viewer-copy-image')),
         ),
       );
       await tester.pumpAndSettle();
@@ -473,7 +473,7 @@ void main() {
       final tile = find.byKey(const ValueKey('inline-image-shots/home.png'));
       Focus.of(
         tester.element(
-          find.descendant(of: tile, matching: find.byType(DecoratedBox)).first,
+          find.descendant(of: tile, matching: find.byType(ColoredBox)).first,
         ),
       ).requestFocus();
       await tester.pump();

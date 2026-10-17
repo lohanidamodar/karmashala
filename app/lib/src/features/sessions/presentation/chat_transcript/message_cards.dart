@@ -78,11 +78,12 @@ class _UserMessageCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // What they pasted, drawn rather than left as "[Image #1]".
-                  for (final path in message.images)
+                  if (message.images.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: Insets.xs),
-                      child: TranscriptImagePreview(
-                        path: path,
+                      child: TranscriptImageStrip(
+                        paths: const [],
+                        returned: message.images,
                         resolveHostPath: resolveHostPath,
                       ),
                     ),

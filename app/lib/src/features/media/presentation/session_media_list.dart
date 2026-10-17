@@ -109,6 +109,7 @@ class SessionMediaTile extends StatelessWidget {
                         ? resolveHostPath
                         : null,
                     fetch: fetch == null ? null : (_) => fetch(item),
+                    details: false,
                   ),
           ),
           const SizedBox(height: Insets.xs),

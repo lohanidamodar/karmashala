@@ -7,7 +7,6 @@ import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'tool_edit_diff_card.dart';
-import 'transcript_image_preview.dart';
 import 'transcript_inline_images.dart';
 
 /// The body of a transcript row that is a tool call: the command, the file, the
@@ -23,8 +22,8 @@ class ToolActivityBody extends StatefulWidget {
 
   final ToolActivity activity;
 
-  /// Translates a path the agent wrote into one this process can open. See
-  /// [TranscriptImagePreview.resolveHostPath].
+  /// Translates a path the agent wrote into one this process can open, for a
+  /// picture read from this disk. See [TranscriptImageStrip.resolveHostPath].
   final String? Function(String path)? resolveHostPath;
 
   /// Where a file path in the subject goes when it is clicked — most paths in a
@@ -68,7 +67,7 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
       _named = {
         ...inlineImagePaths(activity.subject),
         ...inlineImagePaths(activity.output),
-      }.where((path) => path != activity.imagePath).toList();
+      }.toList();
     }
     return _named;
   }
@@ -111,18 +110,13 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
                 ),
             ],
           ),
-        if (imagePath != null) ...[
-          const SizedBox(height: Insets.xs),
-          // A picture, or a line saying why there is none: neither is text
-          // the agent wrote.
-          SelectionContainer.disabled(
-            child: TranscriptImagePreview(
-              path: imagePath,
-              resolveHostPath: widget.resolveHostPath,
-            ),
-          ),
-        ],
-        TranscriptImageStrip(paths: _namedImages()),
+        // The picture it read and the ones it names, each drawn once: a card,
+        // or one saying why there is none. Neither is text the agent wrote.
+        TranscriptImageStrip(
+          paths: _namedImages(),
+          returned: [?imagePath],
+          resolveHostPath: widget.resolveHostPath,
+        ),
         if (widget.activity.edits.isNotEmpty)
           ToolEditDiffCard(
             activity: widget.activity,

@@ -12,7 +12,7 @@ import 'package:karmashala/src/features/sessions/application/file_preview_loader
 import 'package:karmashala/src/features/sessions/domain/file_preview_kind.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/tool_activity_row.dart';
-import 'package:karmashala/src/features/sessions/presentation/transcript_image_preview.dart';
+import 'package:karmashala/src/features/sessions/presentation/transcript_image_card.dart';
 import 'package:karmashala/src/features/sessions/presentation/transcript_inline_images.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:path/path.dart' as p;
@@ -130,8 +130,11 @@ void main() {
       ]);
       expect(find.byType(Image), findsOneWidget);
       expect(find.text('Preview anyway'), findsNothing);
-      expect(find.text('Open'), findsOneWidget);
-      expect(find.text('Copy path'), findsOneWidget);
+      // Card A: the name and size under the picture, then its actions.
+      expect(find.text('home.png'), findsOneWidget);
+      expect(find.text('1 × 1 · 70 B'), findsOneWidget);
+      expect(find.byKey(const ValueKey('inline-image-open')), findsOneWidget);
+      expect(find.byKey(const ValueKey('inline-image-more')), findsOneWidget);
     });
 
     testWidgets('a tool row that names a picture draws it', (tester) async {
@@ -167,7 +170,55 @@ void main() {
           ),
         ),
       ]);
-      expect(find.byType(TranscriptImagePreview), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('inline-image-/data/tool-images/abc.png')),
+        findsOne,
+      );
+      expect(loader.asked.single.path, '/data/tool-images/abc.png');
+    });
+
+    // The owner's message: Codex named C:/tmp/x.png in its output and
+    // returned it as file:///C:/tmp/x.png. One picture, drawn once, read once.
+    testWidgets('a picture both named and returned is drawn once', (
+      tester,
+    ) async {
+      await pumpChat(tester, const [
+        ChatMessage(
+          role: 'tool',
+          text: '',
+          tool: ToolActivity(
+            name: 'view_image',
+            subject: 'C:/tmp/jholunge-trail-polished.png',
+            output: 'wrote C:/tmp/jholunge-trail-polished.png (1262x2050)',
+            imagePath: 'file:///C:/tmp/jholunge-trail-polished.png',
+          ),
+        ),
+      ]);
+      expect(find.byType(TranscriptImageCard), findsOneWidget);
+      expect(find.byKey(const ValueKey('inline-image-strip')), findsNothing);
+      expect(loader.asked, [
+        const EnvironmentPath(
+          environmentId: 'wsl:arch',
+          path: r'/repo/C:\tmp\jholunge-trail-polished.png',
+        ),
+      ]);
+      expect(find.textContaining('no longer on disk'), findsNothing);
+    });
+
+    testWidgets("a cached tool image is read on the server's own machine", (
+      tester,
+    ) async {
+      const cached = r'C:\data\tool-images\cbf29ce484222325-12.png';
+      await pumpChat(tester, const [
+        ChatMessage(
+          role: 'tool',
+          text: '',
+          tool: ToolActivity(name: 'mcp__x__shot', imagePath: cached),
+        ),
+      ]);
+      expect(loader.asked, [
+        const EnvironmentPath(environmentId: 'windows', path: cached),
+      ]);
     });
 
     testWidgets('an opened tool card draws what it names', (tester) async {
@@ -279,13 +330,19 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('inline-image-b.png')));
       await tester.pumpAndSettle();
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      expect(find.text('/repo/b.png'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('image-viewer-name')))
+            .data,
+        'b.png',
+      );
+      expect(find.text('2 of 2'), findsOneWidget);
 
-      await tester.tap(find.text('Copy path'));
+      await tester.tap(find.byKey(const ValueKey('image-viewer-copy')));
       await tester.pump();
       expect(copied, '/repo/b.png');
 
-      await tester.tap(find.text('Open'));
+      await tester.tap(find.byKey(const ValueKey('image-viewer-open')));
       await tester.pumpAndSettle();
       expect(opened, ['b.png']);
       expect(find.byType(InteractiveViewer), findsNothing);
@@ -302,7 +359,10 @@ void main() {
       await pumpChat(tester, const [
         ChatMessage(role: 'agent', text: 'Big one: huge.png'),
       ]);
-      expect(find.textContaining('Too large to preview (17.0 MB)'), findsOne);
+      expect(
+        find.textContaining('is too large to preview (17.0 MB)'),
+        findsOne,
+      );
       expect(find.byType(Image), findsNothing);
     });
 
