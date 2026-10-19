@@ -272,10 +272,20 @@ class SessionPromptAnswers implements PromptAnswering {
     } on ArgumentError catch (error) {
       throw SessionPromptRefusal('${error.message}');
     }
-    await typist.answer(sessionId, open, request.answers);
-    return const SessionApprovalAnswer(
+    final left = await typist.answer(sessionId, open, request.answers);
+    if (left.isEmpty) {
+      return const SessionApprovalAnswer(
+        answered: 'answered',
+        effect: 'Answered the question with the options chosen.',
+      );
+    }
+    final which = left.map((i) => '${i + 1}').join(', ');
+    return SessionApprovalAnswer(
       answered: 'answered',
-      effect: 'Answered the question with the options chosen.',
+      effect:
+          'Answered the rest with the options chosen. '
+          '${left.length == 1 ? 'Question $which was' : 'Questions $which were'} '
+          'already answered in the terminal and kept that answer.',
     );
   }
 

@@ -10,7 +10,13 @@ class FakeQuestionScreen {
     this.set, {
     this.dropAfterTab = true,
     this.continueWord = 'Next',
-  });
+    this.tabBar = true,
+    this.drawQuestion,
+    Map<int, String> answeredBefore = const {},
+    this.tab = 0,
+  }) {
+    chosen.addAll(answeredBefore);
+  }
 
   final AgentQuestionSet set;
   final bool dropAfterTab;
@@ -19,7 +25,13 @@ class FakeQuestionScreen {
   /// `Submit` on 2.1.287 (read off the probe, 2026-10-04).
   final String continueWord;
 
-  int tab = 0;
+  /// Draws `←  ☐ A  ☒ B  ✔ Submit  →` above the question, as 2.1.287 does.
+  final bool tabBar;
+
+  /// How the grid shows a question's words; the words themselves by default.
+  final String Function(String question)? drawQuestion;
+
+  int tab;
   int row = 1; // 1-based; n+1 Type something, n+2 Next.
   final Map<int, Set<int>> ticked = {};
   final Map<int, String> typed = {};
@@ -30,23 +42,44 @@ class FakeQuestionScreen {
   bool _dropNext = false;
   final List<String> keys = [];
 
+  /// Keys that landed somewhere the typist must never send them.
+  final List<String> misplaced = [];
+
   AgentQuestion get _q => set.questions[tab];
+
+  bool get _multi =>
+      set.questions.length > 1 || set.questions.any((x) => x.multiSelect);
+
+  String get _bar {
+    final tabs = [
+      for (final (i, q) in set.questions.indexed)
+        '${chosen.containsKey(i) ? '☒' : '☐'} ${q.header.isEmpty ? 'Q${i + 1}' : q.header}',
+    ];
+    if (!_multi) return ' ${tabs.single}';
+    return '←  ${tabs.join('  ')}  ✔ Submit  →';
+  }
 
   List<String> get rows {
     if (done) return const ['❯ '];
     if (review) {
-      return const [
+      return [
+        if (tabBar) _bar,
         'Review your answers',
+        if (chosen.length < set.questions.length)
+          '⚠ You have not answered all questions',
         'Ready to submit your answers?',
-        '❯ 1. Submit answers',
-        '  2. Cancel',
+        '${row == 1 ? '❯' : ' '} 1. Submit answers',
+        '${row == 2 ? '❯' : ' '} 2. Cancel',
       ];
     }
     final q = _q;
     final n = q.options.length;
     String mark(int r) => r == row ? '❯ ' : '  ';
     return [
-      q.question,
+      if (tabBar) _bar,
+      '',
+      drawQuestion?.call(q.question) ?? q.question,
+      '',
       for (var i = 0; i < n; i++) ...[
         q.multiSelect
             ? '${mark(i + 1)}${i + 1}. [${ticked[tab]?.contains(i) ?? false ? '✔' : ' '}] ${q.options[i].label}'
@@ -67,7 +100,15 @@ class FakeQuestionScreen {
       return true;
     }
     if (review) {
-      if (k == '\r') done = true;
+      if (k == '\r' && row == 1) done = true;
+      if (k == '\r' && row == 2) misplaced.add('Cancel');
+      if (k == '\x1b[B' && row == 1) row = 2;
+      if (k == '\x1b[A' && row == 2) row = 1;
+      if (k == '\x1b[D') {
+        review = false;
+        tab = set.questions.length - 1;
+        row = 1;
+      }
       return true;
     }
     final q = _q;
@@ -75,6 +116,24 @@ class FakeQuestionScreen {
     final last = q.multiSelect ? n + 3 : n + 2;
     final chatRow = q.multiSelect ? n + 3 : n + 2;
     switch (k) {
+      // In the own-words row ← and → move its text cursor.
+      case '\x1b[C' || '\x1b[D' when row == n + 1:
+        misplaced.add(k);
+      case '\x1b[C':
+        if (tab + 1 < set.questions.length) {
+          tab++;
+          row = 1;
+        } else if (_multi) {
+          review = true;
+          row = 1;
+        }
+      case '\x1b[D':
+        if (tab > 0) {
+          tab--;
+          row = 1;
+        }
+      case '\r' when chosen.containsKey(tab):
+        misplaced.add('Enter on answered question ${tab + 1}');
       case '\x1b[B':
         if (row < last) row++;
       case '\x1b[A':
@@ -95,14 +154,13 @@ class FakeQuestionScreen {
                   .map((i) => q.options[i].label)
                   .join(', ')
             : q.options[row - 1].label;
-        final multi =
-            set.questions.length > 1 || set.questions.any((x) => x.multiSelect);
         if (tab + 1 < set.questions.length) {
           tab++;
           row = 1;
           _dropNext = dropAfterTab;
-        } else if (multi) {
+        } else if (_multi) {
           review = true;
+          row = 1;
         } else {
           done = true;
         }
@@ -266,6 +324,202 @@ void main() {
       expect(screen.done, isTrue);
     },
   );
+
+  group('Devanagari, and tabs already answered', () {
+    AgentQuestion nepali(String header, String question) => AgentQuestion(
+      header: header,
+      question: question,
+      ownWords: true,
+      options: const [
+        AgentQuestionOption(label: 'राख्ने'),
+        AgentQuestionOption(label: 'हटाउने'),
+      ],
+    );
+    final puja = AgentQuestionSet(
+      toolUseId: 't',
+      questions: [
+        nepali('नवमी होम', 'नवमीको होम बुकमा छ। राख्ने?'),
+        nepali('पाठ', 'सप्तशती पाठ समाप्ति चरण बुकको नवमीमा छैन। राख्ने?'),
+        nepali('बलि', 'बलि चढाउने विधि दशमीमा सार्ने?'),
+        nepali('खड्ग', 'खड्ग पूजा अष्टमीमै गर्ने?'),
+      ],
+    );
+    // The Karmakanda session's pane as the server's grid held it,
+    // 2026-10-19: "पाठ स" read "पस", and "बुकको न" read "बन".
+    const karmakanda = [
+      '←  ☒ नवमी होम  ☐ पाठ  ☐ बलि  ☐ खड्ग  ✔ Submit  →',
+      '',
+      'सप्तशती पसमाप्ति चरण बनवमीमा छैन। राख्ने?',
+      '',
+      '❯ 1. राख्ने',
+      '  2. हटाउने',
+      '  3. Type something.',
+      '────────────────────────────',
+      '  4. Chat about this',
+      '',
+      'Enter to select · Tab/Arrow keys to navigate · Esc to cancel',
+    ];
+
+    test('the mangled screen reads as question 2, with tab 1 ticked', () {
+      final screen = readQuestionScreen(karmakanda, puja);
+
+      expect(screen.shown, 1);
+      expect(screen.answered, [true, false, false, false]);
+      expect(screen.review, isFalse);
+    });
+
+    test('a question that is not the one drawn does not match it', () {
+      final other = AgentQuestionSet(
+        toolUseId: 't',
+        questions: [
+          nepali('पाठ', 'चण्डी पाठ अष्टमीमा पूरा गर्ने?'),
+          nepali('समय', 'सप्तशती पाठ कति बजे सुरु गर्ने?'),
+        ],
+      );
+
+      expect(readQuestionScreen(karmakanda, other).shown, isNull);
+    });
+
+    test('a screen with no highlight is no question', () {
+      final rows = [
+        for (final row in karmakanda) row.replaceFirst('❯ 1.', '  1.'),
+      ];
+
+      expect(readQuestionScreen(rows, puja).shown, isNull);
+    });
+
+    test('a question the screen cannot be told apart from another is no '
+        'match', () {
+      final twins = AgentQuestionSet(
+        toolUseId: 't',
+        questions: [puja.questions[1], puja.questions[1]],
+      );
+
+      expect(readQuestionScreen(karmakanda, twins).shown, isNull);
+    });
+
+    // Drops a mark and doubles a letter in every question, as the grid did.
+    String mangle(String q) =>
+        q.replaceFirst('ा', '').replaceFirst('न', 'नन').replaceFirst('ु', '');
+
+    test(
+      'answers from tab 2 on, leaving tab 1 as the terminal has it',
+      () async {
+        final screen = FakeQuestionScreen(
+          puja,
+          drawQuestion: mangle,
+          answeredBefore: {0: 'राख्ने'},
+          tab: 1,
+        );
+
+        final left = await typistOn(screen).answer('s', puja, const [
+          AgentQuestionAnswer.option(1),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(1),
+          AgentQuestionAnswer.text('भोलि'),
+        ]);
+
+        expect(left, [0]);
+        expect(screen.chosen, {
+          0: 'राख्ने',
+          1: 'राख्ने',
+          2: 'हटाउने',
+          3: 'भोलि',
+        });
+        expect(screen.done, isTrue);
+        expect(screen.misplaced, isEmpty);
+      },
+    );
+
+    test('goes back to the first unanswered tab, and over answered ones, one '
+        'step at a time', () async {
+      final screen = FakeQuestionScreen(
+        puja,
+        answeredBefore: {1: 'राख्ने'},
+        tab: 3,
+      );
+
+      final left = await typistOn(screen).answer('s', puja, const [
+        AgentQuestionAnswer.option(0),
+        AgentQuestionAnswer.option(0),
+        AgentQuestionAnswer.option(1),
+        AgentQuestionAnswer.option(0),
+      ]);
+
+      expect(left, [1]);
+      expect(screen.chosen, {
+        0: 'राख्ने',
+        1: 'राख्ने',
+        2: 'हटाउने',
+        3: 'राख्ने',
+      });
+      expect(screen.done, isTrue);
+      expect(screen.misplaced, isEmpty);
+    });
+
+    test(
+      'a question of another set on screen is refused before a key',
+      () async {
+        final screen = FakeQuestionScreen(
+          AgentQuestionSet(
+            toolUseId: 'other',
+            questions: [nepali('समय', 'चण्डी पाठ अष्टमीमा पूरा गर्ने?')],
+          ),
+        );
+
+        await expectLater(
+          typistOn(screen).answer('s', puja, const [
+            AgentQuestionAnswer.option(0),
+            AgentQuestionAnswer.option(0),
+            AgentQuestionAnswer.option(0),
+            AgentQuestionAnswer.option(0),
+          ]),
+          throwsA(isA<SessionPromptRefusal>()),
+        );
+        expect(screen.keys, isEmpty);
+      },
+    );
+
+    test('every tab answered already: refused, nothing typed', () async {
+      final screen = FakeQuestionScreen(
+        puja,
+        answeredBefore: {0: 'a', 1: 'b', 2: 'c', 3: 'd'},
+        tab: 3,
+      );
+
+      await expectLater(
+        typistOn(screen).answer('s', puja, const [
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(0),
+        ]),
+        throwsA(
+          isA<SessionPromptRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('already shows answered'),
+          ),
+        ),
+      );
+      expect(screen.keys, isEmpty);
+    });
+
+    test('with no tab bar, a later question on screen is refused', () async {
+      final screen = FakeQuestionScreen(puja, tabBar: false, tab: 1);
+
+      await expectLater(
+        typistOn(screen).answer('s', puja, const [
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(0),
+        ]),
+        throwsA(isA<SessionPromptRefusal>()),
+      );
+      expect(screen.keys, isEmpty);
+    });
+  });
 
   for (final question in [fruit, colours]) {
     test(
