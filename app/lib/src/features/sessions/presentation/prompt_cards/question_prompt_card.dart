@@ -124,6 +124,9 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
 
   bool _busy = false;
 
+  /// Why the last answer was not taken, kept in sight until the next.
+  String? _refused;
+
   final _options = ScrollController();
 
   List<Set<int>> _fresh() => [
@@ -175,6 +178,7 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
       _opened.clear();
       _wholeText.clear();
       _previews.clear();
+      _refused = null;
     }
   }
 
@@ -206,8 +210,10 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
 
   Future<void> _send({bool decline = false, bool chat = false}) async {
     if (_busy) return;
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _refused = null;
+    });
     try {
       await widget.onAnswer(
         decline || chat ? const [] : _answers,
@@ -215,9 +221,11 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
         chat: chat,
       );
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(e is GatewayException ? e.message : '$e')),
-      );
+      // In the card, not a passing snack bar: a refusal can come many seconds
+      // after Send, when nobody is looking for one.
+      if (mounted) {
+        setState(() => _refused = e is GatewayException ? e.message : '$e');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -295,10 +303,56 @@ class _QuestionPromptCardState extends State<QuestionPromptCard> {
                 key: const ValueKey('question-options'),
                 child: options,
               ),
+            if (_refused case final reason?) _refusal(context, reason),
             _actions(context, compact),
           ],
         );
       },
+    );
+  }
+
+  Widget _refusal(BuildContext context, String reason) {
+    final theme = Theme.of(context);
+    final density = UiDensity.of(context);
+    final terminal = widget.onAnswerInTerminal;
+    return Padding(
+      key: const ValueKey('question-refusal'),
+      padding: const EdgeInsets.only(top: Insets.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                AppIcons.warningCircle,
+                size: density.icon,
+                color: theme.colorScheme.error,
+              ),
+              SizedBox(width: density.glyphGap),
+              Expanded(
+                child: Text(
+                  "Couldn't answer from here: $reason",
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (terminal != null)
+            TextButton(
+              key: const ValueKey('question-refusal-terminal'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                visualDensity: density.controlDensity,
+              ),
+              onPressed: terminal,
+              child: const Text('Answer in the terminal'),
+            ),
+        ],
+      ),
     );
   }
 

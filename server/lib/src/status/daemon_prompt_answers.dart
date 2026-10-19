@@ -4,10 +4,13 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:logging/logging.dart';
 
 import 'package:karmashala_host_protocol/protocol.dart';
 import 'daemon_agent_status.dart';
 import 'package:karmashala_session_engine/store.dart';
+
+final _log = Logger('prompt_answers');
 
 /// **Answering the prompts of the agents this host holds**: approve and deny,
 /// a menu's option, a question's answers — typed into the PTY here, read back
@@ -149,6 +152,11 @@ class DaemonPromptAnswers implements PromptTerminals {
         effect: answer.effect,
       );
     } on SessionPromptRefusal catch (refusal) {
+      // Filed in server.log: the card that sent it may be gone by now.
+      _log.warning(
+        '${parsed.sessionId}: ${parsed.runtimeType} refused: '
+        '${refusal.message}',
+      );
       return PromptAnsweredMessage.refused(
         requestId: requestId,
         refusal: refusal.notFound

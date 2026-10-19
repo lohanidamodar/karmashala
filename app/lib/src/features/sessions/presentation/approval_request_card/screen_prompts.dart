@@ -206,6 +206,8 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
   }
 }
 
+final _questionLog = AppLogger.named('questions');
+
 /// The agent's open question, answered with the options picked — or [orElse]
 /// while it cannot be read.
 class _QuestionOr extends ConsumerWidget {
@@ -283,6 +285,10 @@ class _QuestionOr extends ConsumerWidget {
             ),
           );
         } on RemoteApiRefusal catch (refusal) {
+          _questionLog.warning(
+            'question in $sessionId (${question.toolUseId}) not answered: '
+            '${refusal.message}',
+          );
           throw GatewayException(refusal.message);
         }
         said?.say(

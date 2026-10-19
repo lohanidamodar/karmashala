@@ -3,6 +3,7 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/status/daemon_agent_status.dart';
 import 'package:karmashala_host/src/status/daemon_prompt_answers.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 
 /// **A question the host kept no hook for is read off the agent's record.**
@@ -62,4 +63,33 @@ void main() {
   test('with no reader, there is still none', () async {
     expect(await prompts.openQuestion('s1'), isNull);
   });
+
+  test(
+    'a refused answer is filed in the server log, with its reason',
+    () async {
+      final records = <String>[];
+      final listening = Logger.root.onRecord.listen(
+        (record) => records.add('${record.loggerName}: ${record.message}'),
+      );
+      addTearDown(listening.cancel);
+
+      final reply = await prompts.answerFrame(7, {
+        'kind': 'question',
+        'sessionId': 'nobody',
+        'toolUseId': 'toolu_1',
+        'answers': <Object?>[],
+      });
+
+      expect(reply.ok, isFalse);
+      expect(
+        records,
+        contains(
+          allOf(
+            startsWith('prompt_answers: nobody: '),
+            contains('no such session'),
+          ),
+        ),
+      );
+    },
+  );
 }
