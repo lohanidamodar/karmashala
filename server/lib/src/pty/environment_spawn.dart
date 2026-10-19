@@ -21,6 +21,7 @@ PtySpawnRequest spawnRequestIn(
   Set<String> removed = const {},
   int columns = 120,
   int rows = 40,
+  bool clusterWidthFromBase = false,
 }) {
   if (environment == null || environment.kind != EnvironmentKind.wsl) {
     return PtySpawnRequest(
@@ -30,6 +31,7 @@ PtySpawnRequest spawnRequestIn(
       removedEnvironment: removed,
       columns: columns,
       rows: rows,
+      clusterWidthFromBase: clusterWidthFromBase,
     );
   }
   return PtySpawnRequest(
@@ -50,5 +52,6 @@ PtySpawnRequest spawnRequestIn(
     removedEnvironment: removed,
     columns: columns,
     rows: rows,
+    clusterWidthFromBase: clusterWidthFromBase,
   );
 }
