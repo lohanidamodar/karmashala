@@ -211,16 +211,22 @@ class SessionQuestionTypist {
     final deadline = DateTime.now().add(screenPatience);
     var marked = _marked(readScreen(sessionId) ?? const []);
     while (!(marked?.contains(rowWords) ?? false)) {
-      if (marked == null || DateTime.now().isAfter(deadline)) {
+      if (DateTime.now().isAfter(deadline)) {
         throw SessionPromptRefusal(
           'the highlight did not reach "$rowWords", so nothing was chosen '
           '— check the terminal',
         );
       }
-      _press(sessionId, _down);
       final before = marked;
+      if (before == null) {
+        await Future<void>.delayed(poll);
+        marked = _marked(readScreen(sessionId) ?? const []);
+        continue;
+      }
+      _press(sessionId, _down);
       final stepDeadline = DateTime.now().add(stepPatience);
-      while (marked == before && DateTime.now().isBefore(stepDeadline)) {
+      while ((marked == before || marked == null) &&
+          DateTime.now().isBefore(stepDeadline)) {
         await Future<void>.delayed(poll);
         marked = _marked(readScreen(sessionId) ?? const []);
       }
@@ -268,7 +274,8 @@ class SessionQuestionTypist {
       }
       _press(sessionId, from < target ? _right : _left);
       final stepDeadline = DateTime.now().add(stepPatience);
-      while (at() == from && DateTime.now().isBefore(stepDeadline)) {
+      while ((at() == from || at() == null) &&
+          DateTime.now().isBefore(stepDeadline)) {
         await Future<void>.delayed(poll);
         screen = read();
       }
@@ -279,13 +286,12 @@ class SessionQuestionTypist {
   /// first key after it is drawn, and an Enter that is dropped cannot be
   /// pressed again — it may have landed late, on the next tab.
   Future<void> _wake(String sessionId) async {
-    final at = _at(readScreen(sessionId) ?? const []);
-    if (at == null) {
-      throw const SessionPromptRefusal(
-        'the question shows no highlighted row, so nothing was chosen — check '
-        'the terminal',
-      );
-    }
+    await _untilRows(
+      sessionId,
+      (rows) => _at(rows) != null,
+      'one highlighted row',
+    );
+    final at = _at(readScreen(sessionId) ?? const [])!;
     await _moveTo(sessionId, at == 1 ? 2 : at - 1, 'the next row');
     await _moveTo(sessionId, at, 'the row it was on');
   }
@@ -296,16 +302,23 @@ class SessionQuestionTypist {
     final deadline = DateTime.now().add(screenPatience);
     var at = _at(readScreen(sessionId) ?? const []);
     while (at != target) {
-      if (at == null || DateTime.now().isAfter(deadline)) {
+      if (DateTime.now().isAfter(deadline)) {
         throw SessionPromptRefusal(
           'the highlight did not reach "$what", so the answer stopped there '
           '— check the terminal',
         );
       }
-      _press(sessionId, at < target ? _down : _up);
-      final before = at;
+      // A frame caught mid-redraw shows no highlight, or two: no key on it.
+      final from = at;
+      if (from == null) {
+        await Future<void>.delayed(poll);
+        at = _at(readScreen(sessionId) ?? const []);
+        continue;
+      }
+      _press(sessionId, from < target ? _down : _up);
       final stepDeadline = DateTime.now().add(stepPatience);
-      while (at == before && DateTime.now().isBefore(stepDeadline)) {
+      while ((at == from || at == null) &&
+          DateTime.now().isBefore(stepDeadline)) {
         await Future<void>.delayed(poll);
         at = _at(readScreen(sessionId) ?? const []);
       }
@@ -370,13 +383,10 @@ class SessionQuestionTypist {
         kQuestionMatchShare;
   }
 
-  /// The highlighted row's words, or null.
+  /// The highlighted row's words, or null — for none, or two.
   static String? _marked(List<String> rows) {
-    for (final row in rows.reversed) {
-      final trimmed = row.trimLeft();
-      if (trimmed.startsWith('❯ ')) return trimmed.substring(2).trim();
-    }
-    return null;
+    final h = _highlight(rows);
+    return h == null ? null : rows[h].trimLeft().substring(2).trim();
   }
 
   /// Which row is highlighted: its number, or n+2 for `Next`; null when the
@@ -445,18 +455,17 @@ class QuestionScreen {
 /// Two questions passing is no match, and with no highlighted row there is
 /// no question at all.
 QuestionScreen readQuestionScreen(List<String> rows, AgentQuestionSet set) {
-  final h = rows.lastIndexWhere((row) => row.trimLeft().startsWith('❯ '));
-  if (h < 0) return const QuestionScreen();
-  final bar = rows.lastIndexWhere(
-    (row) => _tabMark.hasMatch(row) && !_numbered.hasMatch(row),
-    h,
-  );
+  final last = rows.lastIndexWhere(_isHighlighted);
+  if (last < 0) return const QuestionScreen();
+  final bar = _tabBar(rows, last);
   final answered = bar < 0
       ? null
       : [
           for (final m in _tabMark.allMatches(rows[bar]))
             m[0] == '☒' || m[0] == '[×]',
         ];
+  final h = _highlight(rows);
+  if (h == null) return QuestionScreen(answered: answered);
   if (rows.skip(bar + 1).any((row) => row.contains('1. Submit answers'))) {
     return QuestionScreen(answered: answered, review: true);
   }
@@ -474,6 +483,27 @@ QuestionScreen readQuestionScreen(List<String> rows, AgentQuestionSet set) {
     shown = i;
   }
   return QuestionScreen(shown: shown, answered: answered);
+}
+
+bool _isHighlighted(String row) => row.trimLeft().startsWith('❯ ');
+
+/// The tab bar above row [below], or -1.
+int _tabBar(List<String> rows, int below) => rows.lastIndexWhere(
+  (row) => _tabMark.hasMatch(row) && !_numbered.hasMatch(row),
+  below,
+);
+
+/// The highlighted row of the question, or null. Two under the tab bar is
+/// a grid that drew a redraw one row off (Claude Code 2.1.300 on Devanagari
+/// measured per cluster): which one Claude means cannot be told, so neither.
+int? _highlight(List<String> rows) {
+  final last = rows.lastIndexWhere(_isHighlighted);
+  if (last < 0) return null;
+  final bar = _tabBar(rows, last);
+  if (bar >= 0 && rows.skip(bar + 1).where(_isHighlighted).length > 1) {
+    return null;
+  }
+  return last;
 }
 
 String _letters(String text) => text.replaceAll(_notLetter, '').toLowerCase();

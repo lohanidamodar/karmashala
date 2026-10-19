@@ -45,6 +45,13 @@ class FakeQuestionScreen {
   /// Keys that landed somewhere the typist must never send them.
   final List<String> misplaced = [];
 
+  /// Reads with no highlight after each key, as a frame caught mid-redraw.
+  int blankFrames = 0;
+  int _blank = 0;
+
+  /// A second highlighted row, as a grid that drew a redraw one row off.
+  bool doubleHighlight = false;
+
   AgentQuestion get _q => set.questions[tab];
 
   bool get _multi =>
@@ -60,6 +67,16 @@ class FakeQuestionScreen {
   }
 
   List<String> get rows {
+    final drawn = _draw;
+    if (_blank > 0) {
+      _blank--;
+      return [for (final r in drawn) r.replaceFirst('❯ ', '  ')];
+    }
+    if (doubleHighlight && !review && !done) return [...drawn, '❯ 9. stale'];
+    return drawn;
+  }
+
+  List<String> get _draw {
     if (done) return const ['❯ '];
     if (review) {
       return [
@@ -95,6 +112,7 @@ class FakeQuestionScreen {
 
   bool press(String k) {
     keys.add(k);
+    _blank = blankFrames;
     if (_dropNext) {
       _dropNext = false;
       return true;
@@ -501,6 +519,45 @@ void main() {
             contains('already shows answered'),
           ),
         ),
+      );
+      expect(screen.keys, isEmpty);
+    });
+
+    test('a frame with no highlight after each key is waited out, not '
+        'refused', () async {
+      final screen = FakeQuestionScreen(puja, drawQuestion: mangle)
+        ..blankFrames = 3;
+
+      final left = await typistOn(screen).answer('s', puja, const [
+        AgentQuestionAnswer.option(1),
+        AgentQuestionAnswer.option(0),
+        AgentQuestionAnswer.option(0),
+        AgentQuestionAnswer.option(1),
+      ]);
+
+      expect(left, isEmpty);
+      expect(screen.chosen, {
+        0: 'हटाउने',
+        1: 'राख्ने',
+        2: 'राख्ने',
+        3: 'हटाउने',
+      });
+      expect(screen.done, isTrue);
+      expect(screen.misplaced, isEmpty);
+    });
+
+    test('two highlighted rows under the tab bar: no key is pressed', () async {
+      final screen = FakeQuestionScreen(puja)..doubleHighlight = true;
+
+      expect(readQuestionScreen(screen.rows, puja).shown, isNull);
+      await expectLater(
+        typistOn(screen).answer('s', puja, const [
+          AgentQuestionAnswer.option(1),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(0),
+          AgentQuestionAnswer.option(1),
+        ]),
+        throwsA(isA<SessionPromptRefusal>()),
       );
       expect(screen.keys, isEmpty);
     });
