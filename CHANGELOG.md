@@ -17,6 +17,14 @@ installs claim the same version name.
 
 ---
 
+## 1.34.12 — 2026-10-19 (build 79)
+
+- **One image card in the chat, and one viewer.** A picture the agent names or a tool returns is drawn once, in a framed card with its name, size and actions. It opens in a lightbox with zoom, Fit and 1:1, and a filmstrip when a message has several. A tool picture from a session in WSL or on another machine no longer says it is "no longer on disk".
+- **Claude Code's own menus are answered from the dashboard.** The "new MCP servers" checklist offers "Enable selected" and "Reject all", and quotes its real heading. A menu the app cannot map shows its question and options with no Approve or Deny that could only fail.
+- **"Answer in the terminal" works from the dashboard**: it brings the session's terminal forward or opens one, and says so plainly when the session has no terminal on this machine.
+- **A schedule, or any trigger, can run a command** instead of an agent: PowerShell or cmd on Windows, the login shell in WSL or over SSH. It runs in a project or in any folder you pick, and its exit code and output go into the run's history. A non-zero exit counts as a failure.
+- **Linux containers as machines.** Settings → Machines → Containers creates a container on an SSH machine with Docker or in WSL: a stock distro, CPUs and memory, and the agent CLIs to install. It is reached through its host, never opened to the network, with its own key and a pinned host key. Each one can be started, stopped and deleted.
+
 ## 1.34.11 — 2026-10-17 (build 78)
 
 - **The Windows app no longer crashes when an accessibility client asks for its tree.** The touch keyboard or a screen reader could trip a bug in Flutter's Windows accessibility bridge, which crashed the app while the host kept running. The app now answers those clients only when Settings → Startup → "Screen reader support" is on. It is off by default, and turning it off applies after a restart.
