@@ -17,6 +17,11 @@ installs claim the same version name.
 
 ---
 
+## 1.34.13 — 2026-10-19 (build 80)
+
+- **A terminal Claude session's questions are answered from the chat or the dashboard, in any script.** Several questions asked together, in Devanagari or any other script, are recognised even when Claude redraws them with letters missing. Questions already answered in the terminal are left as they are, and the rest are answered tab by tab, each step seen to land before the next.
+- **A refused answer says why in the card**, beside "Answer in the terminal", and stays until the next Send. It is also written to the logs.
+
 ## 1.34.12 — 2026-10-19 (build 79)
 
 - **One image card in the chat, and one viewer.** A picture the agent names or a tool returns is drawn once, in a framed card with its name, size and actions. It opens in a lightbox with zoom, Fit and 1:1, and a filmstrip when a message has several. A tool picture from a session in WSL or on another machine no longer says it is "no longer on disk".
