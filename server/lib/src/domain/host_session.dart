@@ -42,8 +42,7 @@ class HostSession implements ScreenSession {
        rows = request.rows,
        _lifecycle = const SessionRunning(),
        _screen = Terminal(maxLines: screenScrollbackLines)
-         ..resize(request.columns, request.rows)
-         ..indicClusterWidthFromBase = request.clusterWidthFromBase {
+         ..resize(request.columns, request.rows) {
     final screen = _screen!;
     final facts = ScreenFacts(screen, hostname: hostname);
     screen

@@ -12,7 +12,6 @@ class PtySpawnRequest {
     this.unrecorded = const {},
     this.columns = 80,
     this.rows = 24,
-    this.clusterWidthFromBase = false,
   });
 
   /// argv[0] is the executable: a path, or a bare name the launcher finds on
@@ -40,11 +39,6 @@ class PtySpawnRequest {
   final int columns;
   final int rows;
 
-  /// The program measures an Indic cluster at its first code point's width
-  /// (Claude Code's `string-width`), so the host's screen must too, or its
-  /// redraws drop and double letters there (xterm2 divergence 15).
-  final bool clusterWidthFromBase;
-
   PtySpawnRequest copyWith({int? columns, int? rows}) => PtySpawnRequest(
     argv: argv,
     workingDirectory: workingDirectory,
@@ -53,7 +47,6 @@ class PtySpawnRequest {
     unrecorded: unrecorded,
     columns: columns ?? this.columns,
     rows: rows ?? this.rows,
-    clusterWidthFromBase: clusterWidthFromBase,
   );
 }
 

@@ -670,14 +670,6 @@ class ServerTerminals implements TerminalWork, PaneSource {
           },
           columns: request.columns,
           rows: request.rows,
-          // Measured as the agent lays out its screen, as the app's pane is.
-          clusterWidthFromBase:
-              agent != null &&
-              (AgentRegistry.builtIn
-                      .byId(agent.agentId)
-                      ?.terminal
-                      .clusterWidthFromBase ??
-                  false),
         ),
       );
     } on SessionAlreadyExists {

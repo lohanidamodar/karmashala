@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:karmashala_host/karmashala_host.dart';
@@ -577,65 +576,6 @@ void main() {
 
       expect(env.registry.find('pane-1'), isNull);
       expect(env.launcher.handles.single.signals.single, 15);
-    });
-  });
-
-  group('HostSession screen', () {
-    // Claude Code redraws a row's tail by moving to the column `string-width`
-    // counts — one per Devanagari cluster — and writing from there.
-    Future<String> redrawn(PtySpawnRequest request) async {
-      final env = build();
-      final session = env.registry.open('pane-1', request);
-      env.launcher.handles.single.emit(
-        utf8.encode('सप्तशती पाठ बुकको\x1b[1;8H समाप्ति चरण बुकको नवमीमा'),
-      );
-      await Future<void>.delayed(Duration.zero);
-      return session.tailText(1).single;
-    }
-
-    test('an agent that measures clusters from their first code point keeps '
-        'its Devanagari whole', () async {
-      expect(
-        await redrawn(
-          const PtySpawnRequest(argv: ['claude'], clusterWidthFromBase: true),
-        ),
-        'सप्तशती पाठ समाप्ति चरण बुकको नवमीमा',
-      );
-    });
-
-    test('measured per code point, the same redraw drops letters — what the '
-        "Karmakanda question's screen showed", () async {
-      expect(
-        await redrawn(const PtySpawnRequest(argv: ['claude'])),
-        isNot('सप्तशती पाठ समाप्ति चरण बुकको नवमीमा'),
-      );
-    });
-
-    test(
-      'combining marks and wide characters keep their width either way',
-      () async {
-        for (final fromBase in [false, true]) {
-          final env = build();
-          final session = env.registry.open(
-            'pane-$fromBase',
-            PtySpawnRequest(
-              argv: const ['claude'],
-              clusterWidthFromBase: fromBase,
-            ),
-          );
-          env.launcher.handles.single.emit(utf8.encode('café 日本\x1b[1;10H|'));
-          await Future<void>.delayed(Duration.zero);
-          expect(session.tailText(1).single, 'café 日本|');
-        }
-      },
-    );
-
-    test('the request carries the rule through a resize', () {
-      const request = PtySpawnRequest(
-        argv: ['claude'],
-        clusterWidthFromBase: true,
-      );
-      expect(request.copyWith(columns: 100).clusterWidthFromBase, isTrue);
     });
   });
 }

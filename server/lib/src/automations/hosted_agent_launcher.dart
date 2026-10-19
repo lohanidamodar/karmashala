@@ -738,8 +738,6 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             removed: agentLaunch.removedEnvironment,
             columns: launch.columns,
             rows: launch.rows,
-            clusterWidthFromBase:
-                descriptor?.terminal.clusterWidthFromBase ?? false,
           ),
         );
       }
