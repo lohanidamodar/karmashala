@@ -11,6 +11,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
+import 'flutter_app_forget_dialog.dart';
 
 /// Where each app came from, in the fewest words that still say it.
 String describeAppDiscovery(AppDiscovery discovery) => switch (discovery) {
@@ -58,6 +59,7 @@ class FlutterAppPicker extends ConsumerWidget {
   static const _select = 'select:';
   static const _forget = 'forget:';
   static const _forgetAll = 'forget-all';
+  static const _forgetSome = 'forget-some';
 
   /// Answering, every other one, and the menu entries that list them.
   static List<PopupMenuEntry<String>> itemsFor(
@@ -91,6 +93,12 @@ class FlutterAppPicker extends ConsumerWidget {
             ),
           ),
         const DesktopMenuDivider(),
+        if (groups.quiet.length > 1)
+          DesktopMenuItem<String>(
+            value: _forgetSome,
+            label: 'Choose which to forget…',
+            icon: AppIcons.listChecks,
+          ),
         DesktopMenuItem<String>(
           value: _forgetAll,
           label: 'Forget all not answering',
@@ -111,8 +119,20 @@ class FlutterAppPicker extends ConsumerWidget {
       } else if (value.startsWith(_forget)) {
         await apps.forget(value.substring(_forget.length));
       } else if (value == _forgetAll) {
-        for (final app in flutterAppPickerGroups(registry).quiet) {
+        final quiet = flutterAppPickerGroups(registry).quiet;
+        if (!await confirmForgetAll(context, quiet.length)) return;
+        for (final app in quiet) {
           await apps.forget(app.id);
+        }
+      } else if (value == _forgetSome) {
+        final now = ref.read(clockProvider).nowUtc();
+        final picked = await chooseAppsToForget(
+          context,
+          flutterAppPickerGroups(registry).quiet,
+          detailOf: (app) => describePickerDetail(app, now),
+        );
+        for (final id in picked ?? const <String>{}) {
+          await apps.forget(id);
         }
       }
     } on DataRefused catch (error) {

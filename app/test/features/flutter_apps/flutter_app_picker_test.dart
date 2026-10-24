@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pi
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_console.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import 'package:karmashala_ui/dialogs.dart';
 
 import '../../support/fake_data_server.dart';
 import 'flutter_apps_harness.dart';
@@ -37,9 +38,10 @@ void main() {
     required List<AttachedApp> apps,
     double width = 272,
     double textScale = 1,
+    Size window = const Size(900, 900),
   }) async {
     tester.view
-      ..physicalSize = const Size(900, 900)
+      ..physicalSize = window
       ..devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final (container, fake) = await flutterPaneContainer(apps: apps);
@@ -49,12 +51,15 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          home: MediaQuery(
-            data: MediaQueryData(
-              size: const Size(900, 900),
-              textScaler: TextScaler.linear(textScale),
-            ),
-            child: Scaffold(
+          // Above the navigator, so a dialog and a sheet are scaled too.
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+          home: Builder(
+            builder: (_) => Scaffold(
               body: Align(
                 alignment: Alignment.topLeft,
                 child: SizedBox(
@@ -164,19 +169,130 @@ void main() {
     ]);
   });
 
-  testWidgets('Forget all forgets every one not answering, and only them', (
-    tester,
-  ) async {
-    await pump(tester, apps: manyApps());
-    await openPicker(tester);
-    await tester.tap(find.text('Forget all not answering'));
-    await tester.runAsync(pumpEventQueue);
-    await tester.pumpAndSettle();
-    expect(server.runs.asked.whereType<FlutterForget>().map((r) => r.appId), [
-      '10.0.0.0:5000/hand0=',
-      '10.0.0.1:5000/hand1=',
-      '10.0.0.2:5000/hand2=',
-    ]);
+  Iterable<String> forgotten() =>
+      server.runs.asked.whereType<FlutterForget>().map((r) => r.appId);
+
+  group('Forget all not answering', () {
+    testWidgets('asks first, naming how many', (tester) async {
+      await pump(tester, apps: manyApps());
+      await openPicker(tester);
+      await tester.tap(find.text('Forget all not answering'));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget 3 apps that do not answer?'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.runAsync(pumpEventQueue);
+      await tester.pumpAndSettle();
+      expect(forgotten(), isEmpty);
+    });
+
+    testWidgets('forgets every one not answering, and only them', (
+      tester,
+    ) async {
+      await pump(tester, apps: manyApps());
+      await openPicker(tester);
+      await tester.tap(find.text('Forget all not answering'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget 3'));
+      await tester.runAsync(pumpEventQueue);
+      await tester.pumpAndSettle();
+      expect(forgotten(), [
+        '10.0.0.0:5000/hand0=',
+        '10.0.0.1:5000/hand1=',
+        '10.0.0.2:5000/hand2=',
+      ]);
+    });
+  });
+
+  group('choosing which to forget', () {
+    Future<void> openChooser(WidgetTester tester) async {
+      await openPicker(tester);
+      await tester.tap(find.text('Choose which to forget…'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('forgets only the ones left checked', (tester) async {
+      await pump(tester, apps: manyApps());
+      await openChooser(tester);
+      expect(find.text('Forget 3'), findsOneWidget);
+      await tester.tap(find.text('10.0.0.1:5000').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Forget 2'));
+      await tester.runAsync(pumpEventQueue);
+      await tester.pumpAndSettle();
+      expect(
+        forgotten(),
+        unorderedEquals(['10.0.0.0:5000/hand0=', '10.0.0.2:5000/hand2=']),
+      );
+    });
+
+    testWidgets('with none checked there is nothing to forget', (tester) async {
+      await pump(tester, apps: manyApps());
+      await openChooser(tester);
+      await tester.tap(find.byKey(const ValueKey('forget-select-all')));
+      await tester.pumpAndSettle();
+      final button = tester.widget<DestructiveButton>(
+        find.widgetWithText(DestructiveButton, 'Forget 0'),
+      );
+      expect(button.onPressed, isNull);
+      // And All checks them all again.
+      await tester.tap(find.byKey(const ValueKey('forget-select-all')));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget 3'), findsOneWidget);
+    });
+
+    testWidgets('cancelling forgets nothing', (tester) async {
+      await pump(tester, apps: manyApps());
+      await openChooser(tester);
+      await tester.tap(find.text('Cancel'));
+      await tester.runAsync(pumpEventQueue);
+      await tester.pumpAndSettle();
+      expect(forgotten(), isEmpty);
+    });
+
+    testWidgets('one not answering offers no chooser', (tester) async {
+      await pump(
+        tester,
+        apps: [
+          attachedApp(),
+          attachedApp(
+            id: '10.0.0.1:5000/hand=',
+            label: 'typed',
+            discovery: AppDiscovery.byHand,
+            reachability: AppReachability.unreachable,
+          ),
+        ],
+      );
+      await openPicker(tester);
+      expect(find.text('Choose which to forget…'), findsNothing);
+      expect(find.text('Forget all not answering'), findsOneWidget);
+    });
+
+    for (final scale in [1.0, 1.6]) {
+      testWidgets('fits a 360px phone as a sheet, text x$scale', (
+        tester,
+      ) async {
+        await pump(
+          tester,
+          apps: manyApps(),
+          width: 360,
+          textScale: scale,
+          window: const Size(360, 800),
+        );
+        await openChooser(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.byType(BottomSheet), findsOneWidget);
+        await tester.tap(find.text('10.0.0.0:5000').last);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Forget 2'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Forget 2'));
+        await tester.runAsync(pumpEventQueue);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(forgotten(), hasLength(2));
+      });
+    }
   });
 
   group('when the selected app is dropped', () {
