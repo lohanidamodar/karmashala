@@ -203,4 +203,22 @@ void main() {
     await apps.look();
     expect(registry().apps, isEmpty);
   });
+
+  test('a gone run its daemon named first takes its out-file too', () async {
+    const daemon = 'ws://127.0.0.1:1/d=';
+    const app = 'ws://127.0.0.1:2/both=/ws';
+    writePidFile(11, daemon);
+    serveDaemon(
+      daemon,
+      apps: [
+        {'uri': app},
+      ],
+    );
+    final outFile = File('${outFiles.path}${Platform.pathSeparator}run.uri')
+      ..writeAsStringSync(app);
+    await apps.look();
+    await apps.look();
+    expect(registry().apps, isEmpty);
+    expect(outFile.existsSync(), isFalse);
+  });
 }

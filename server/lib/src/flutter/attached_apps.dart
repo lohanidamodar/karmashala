@@ -401,9 +401,12 @@ class ServerAttachedApps {
       apps: _registry.apps.where((e) => e.id != app.id).toList(),
     );
     await _links.remove(app.id)?.dispose();
-    final path = app.sourcePath;
-    if (app.discovery == AppDiscovery.uriFile && path != null) {
-      await directory.forget(path);
+    // The same run can be named by a daemon before its file is read, so the
+    // file is found by the address in it, not by the row that was dropped.
+    for (final file in await directory.scan()) {
+      if (AttachedApp.idFor(file.uri) == app.id) {
+        await directory.forget(file.path);
+      }
     }
   }
 
