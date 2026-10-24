@@ -17,6 +17,11 @@ installs claim the same version name.
 
 ---
 
+## 1.34.14 — 2026-10-24 (build 81)
+
+- **The Flutter panel picks its app from one row.** Apps that answer come first; ones that stopped answering sit in a muted group below, each with Forget. "Forget all not answering" asks first, and "Choose which to forget…" forgets several at once.
+- **Flutter runs that have ended leave the list on their own.** A run found automatically is dropped once nothing answers on two tries in a row, and its leftover address file is deleted. An address typed by hand stays, marked as not answering, until it is forgotten; at most three are kept.
+
 ## 1.34.13 — 2026-10-19 (build 80)
 
 - **A terminal Claude session's questions are answered from the chat or the dashboard, in any script.** Several questions asked together, in Devanagari or any other script, are recognised even when Claude redraws them with letters missing. Questions already answered in the terminal are left as they are, and the rest are answered tab by tab, each step seen to land before the next.
