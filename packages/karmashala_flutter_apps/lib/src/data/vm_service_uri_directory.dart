@@ -76,8 +76,8 @@ class VmServiceUriDirectory {
     }
   }
 
-  /// Deletes one address file, only when the user asks: it was written by
-  /// someone else's process.
+  /// Deletes one address file: when the user forgets it, or when nothing
+  /// answered on it twice in a row and its run is taken to be gone.
   Future<void> forget(String filePath) async {
     final file = File(filePath);
     if (!file.existsSync()) return;

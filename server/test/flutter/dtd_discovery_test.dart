@@ -186,4 +186,21 @@ void main() {
     await apps.close();
     expect(fake.closed, isTrue);
   });
+
+  test('a run its daemon still names does not come back once gone', () async {
+    const daemon = 'ws://127.0.0.1:1/d=';
+    writePidFile(11, daemon);
+    serveDaemon(
+      daemon,
+      apps: [
+        {'uri': 'ws://127.0.0.1:2/dead=/ws'},
+      ],
+    );
+    await apps.look();
+    expect(registry().apps.single.reachability, AppReachability.unreachable);
+    await apps.look();
+    expect(registry().apps, isEmpty);
+    await apps.look();
+    expect(registry().apps, isEmpty);
+  });
 }
