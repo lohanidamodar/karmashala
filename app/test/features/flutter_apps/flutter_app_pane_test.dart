@@ -146,7 +146,9 @@ void main() {
     );
   });
 
-  testWidgets('lists every app when more than one is running', (tester) async {
+  testWidgets('offers every app in a picker when more than one is running', (
+    tester,
+  ) async {
     await pump(
       tester,
       apps: [
@@ -159,12 +161,15 @@ void main() {
       find.text('2 Flutter apps attached.  ·  checked just now'),
       findsOneWidget,
     );
+    // The first that answers is the one shown; the other is in the menu.
     expect(find.text('windows'), findsOneWidget);
+    expect(find.text('pixel'), findsNothing);
+    expect(find.text('started here · found just now'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('flutter-app-picker')));
+    await tester.pumpAndSettle();
     expect(find.text('pixel'), findsOneWidget);
-    expect(
-      find.textContaining('started here · found just now'),
-      findsNWidgets(2),
-    );
+    expect(find.text('started here · found just now'), findsNWidgets(3));
   });
 
   testWidgets('says a build carries no widget locations rather than nothing', (
