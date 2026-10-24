@@ -8,6 +8,14 @@ import 'package:karmashala_flutter_apps/flutter_apps.dart';
 /// machine whose log announced one (`DeviceAppDiscovery`, forwarded by the
 /// server's own adb), or an address handed to it. Nothing polls; [onChanged]
 /// hears every change of [registry].
+///
+/// **A run found on its own leaves when it is gone for good**: nothing
+/// answered on two tries in a row. The socket closing under us, or a connect
+/// that fails, is one; the second is a single re-try [recheckAfter] later (or
+/// the next look, whichever is first). Its out-file is deleted with it and
+/// its id remembered, so a daemon or a file that still names it does not
+/// bring it back. An address attached by hand is kept, not answering, until
+/// it is forgotten — at most [handAttachedKept] of them.
 class ServerAttachedApps {
   ServerAttachedApps({
     required this.directory,
@@ -16,9 +24,18 @@ class ServerAttachedApps {
     this.connect = connectVmServiceOverWebSocket,
     DateTime Function()? clock,
     this.onChanged,
+    this.recheckAfter = const Duration(seconds: 5),
+    this.handAttachedKept = 3,
     void Function(String message)? log,
   }) : _now = clock ?? _utcNow,
        _log = log ?? _silent;
+
+  /// How long after the first unanswered try the second is made.
+  final Duration recheckAfter;
+
+  /// How many hand-attached addresses that do not answer are kept; the
+  /// oldest goes when one more stops answering.
+  final int handAttachedKept;
 
   /// Where the runs this server starts write their `--vmservice-out-file`.
   final VmServiceUriDirectory directory;
@@ -35,6 +52,13 @@ class ServerAttachedApps {
   FlutterAppRegistry _registry = const FlutterAppRegistry();
   FlutterAppRegistry get registry => _registry;
   set _state(FlutterAppRegistry next) {
+    // A look or a connect that began before a run was dropped must not put
+    // it back.
+    if (_gone.isNotEmpty && next.apps.any((app) => _gone.contains(app.id))) {
+      next = next.copyWith(
+        apps: next.apps.where((app) => !_gone.contains(app.id)).toList(),
+      );
+    }
     _registry = next;
     if (_open) onChanged?.call(next);
   }
@@ -44,6 +68,14 @@ class ServerAttachedApps {
 
   /// Apps a discovery is opening a connection for right now, one each.
   final _connecting = <String>{};
+
+  /// Unanswered tries in a row, per app found on its own.
+  final _misses = <String, int>{};
+  final _rechecks = <String, Timer>{};
+
+  /// Runs dropped as gone. An id carries the run's auth token, so a new run
+  /// is never in here.
+  final _gone = <String>{};
   StreamSubscription<FileSystemEvent>? _watch;
   StreamSubscription<void>? _daemonWatch;
   Future<void>? _looking;
@@ -85,6 +117,7 @@ class ServerAttachedApps {
     };
     for (final file in files) {
       final id = AttachedApp.idFor(file.uri);
+      if (_gone.contains(id)) continue;
       final existing = rows[id];
       if (existing != null && existing.isAttached) {
         rows[id] = existing.copyWith(sourcePath: file.path);
@@ -102,6 +135,7 @@ class ServerAttachedApps {
     }
     for (final found in daemonApps) {
       final id = AttachedApp.idFor(found.app.uri);
+      if (_gone.contains(id)) continue;
       final existing = rows[id];
       if (existing != null && existing.isAttached) continue;
       rows[id] = _rowForDaemonApp(found);
@@ -121,6 +155,13 @@ class ServerAttachedApps {
           !app.isAttached &&
           !named.contains(id),
     );
+    // What nothing names any more cannot come back, so it need not be held.
+    final stillNamed = {
+      ...named,
+      for (final f in files) AttachedApp.idFor(f.uri),
+    };
+    _gone.retainWhere(stillNamed.contains);
+    _misses.removeWhere((id, _) => !rows.containsKey(id));
     _state = _registry.copyWith(
       apps: rows.values.toList(growable: false),
       lookedAt: _now(),
@@ -201,6 +242,7 @@ class ServerAttachedApps {
   void _offerFromDaemon(DtdApp app, DtdInstance daemon) {
     if (!_open) return;
     final row = _rowForDaemonApp((app: app, daemon: daemon));
+    if (_gone.contains(row.id)) return;
     final existing = _registry.byId(row.id);
     if (existing != null && existing.isAttached) return;
     if (!_connecting.add(row.id)) return;
@@ -242,6 +284,8 @@ class ServerAttachedApps {
       );
     }
     final id = AttachedApp.idFor(uri);
+    // Handed over again, so it is asked again.
+    _gone.remove(id);
     final existing = _registry.byId(id);
     if (existing != null && existing.isAttached) return existing;
     final row =
@@ -297,6 +341,8 @@ class ServerAttachedApps {
         restartMethod: link.restartMethod,
         clearDetail: true,
       );
+      _misses.remove(app.id);
+      _rechecks.remove(app.id)?.cancel();
       _replace(attached);
       link.servicesChanged.listen((_) => _refreshServices(app.id));
       return attached;
@@ -309,8 +355,79 @@ class ServerAttachedApps {
         clearServices: true,
       );
       _replace(failed);
+      await _missed(failed);
       return failed;
     }
+  }
+
+  /// One more try nothing answered: a second in a row drops a run found on
+  /// its own, a first books the re-try. A hand-attached address stays.
+  Future<void> _missed(AttachedApp app) async {
+    if (!_open) return;
+    if (app.discovery == AppDiscovery.byHand) {
+      _keepFewHandAttached();
+      return;
+    }
+    final misses = (_misses[app.id] ?? 0) + 1;
+    _misses[app.id] = misses;
+    if (misses >= 2) {
+      await _drop(app);
+      return;
+    }
+    _rechecks.remove(app.id)?.cancel();
+    _rechecks[app.id] = Timer(recheckAfter, () => unawaited(_recheck(app.id)));
+  }
+
+  Future<void> _recheck(String id) async {
+    _rechecks.remove(id);
+    final app = _registry.byId(id);
+    if (!_open || app == null || app.isAttached) return;
+    if (!_connecting.add(id)) return;
+    try {
+      await _connect(app.copyWith(reachability: AppReachability.unchecked));
+    } finally {
+      _connecting.remove(id);
+    }
+  }
+
+  /// A run that is gone for good leaves the list, and its out-file with it —
+  /// left behind, the file would bring the row back on the next look.
+  Future<void> _drop(AttachedApp app) async {
+    _misses.remove(app.id);
+    _rechecks.remove(app.id)?.cancel();
+    _gone.add(app.id);
+    _log('${app.label ?? app.id} is gone: nothing answered twice');
+    _state = _registry.copyWith(
+      apps: _registry.apps.where((e) => e.id != app.id).toList(),
+    );
+    await _links.remove(app.id)?.dispose();
+    // The same run can be named by a daemon before its file is read, so the
+    // file is found by the address in it, not by the row that was dropped.
+    for (final file in await directory.scan()) {
+      if (AttachedApp.idFor(file.uri) == app.id) {
+        await directory.forget(file.path);
+      }
+    }
+  }
+
+  /// Hand-attached addresses that do not answer, newest [handAttachedKept]
+  /// kept: each one was typed, so it stays until forgotten, but not forever.
+  void _keepFewHandAttached() {
+    final dead =
+        _registry.apps
+            .where(
+              (app) =>
+                  app.discovery == AppDiscovery.byHand &&
+                  (app.reachability == AppReachability.unreachable ||
+                      app.reachability == AppReachability.ended),
+            )
+            .toList()
+          ..sort((a, b) => b.observedAt.compareTo(a.observedAt));
+    if (dead.length <= handAttachedKept) return;
+    final over = dead.skip(handAttachedKept).map((app) => app.id).toSet();
+    _state = _registry.copyWith(
+      apps: _registry.apps.where((e) => !over.contains(e.id)).toList(),
+    );
   }
 
   void _refreshServices(String id) {
@@ -335,15 +452,15 @@ class ServerAttachedApps {
     _links.remove(id);
     final app = _registry.byId(id);
     if (!_open || app == null) return;
-    _replace(
-      app.copyWith(
-        reachability: AppReachability.ended,
-        observedAt: _now(),
-        detail: 'The app closed its VM service connection.',
-        clearIsolate: true,
-        clearServices: true,
-      ),
+    final ended = app.copyWith(
+      reachability: AppReachability.ended,
+      observedAt: _now(),
+      detail: 'The app closed its VM service connection.',
+      clearIsolate: true,
+      clearServices: true,
     );
+    _replace(ended);
+    unawaited(_missed(ended));
   }
 
   void _replace(AttachedApp app) {
@@ -420,6 +537,8 @@ class ServerAttachedApps {
 
   /// Closes the server's connection to [id] without touching the app.
   Future<void> detach(String id) async {
+    _misses.remove(id);
+    _rechecks.remove(id)?.cancel();
     await _links.remove(id)?.dispose();
     final app = _registry.byId(id);
     if (app == null) return;
@@ -511,6 +630,10 @@ class ServerAttachedApps {
   /// Lets go of every link and daemon; the apps keep running.
   Future<void> close() async {
     _open = false;
+    for (final timer in _rechecks.values) {
+      timer.cancel();
+    }
+    _rechecks.clear();
     await _watch?.cancel();
     await _daemonWatch?.cancel();
     for (final daemon in _daemons.values.toList()) {

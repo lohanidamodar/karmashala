@@ -12,6 +12,7 @@ import '../application/flutter_app_ui_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show DataRefused;
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import 'flutter_app_picker.dart';
 import 'flutter_console.dart';
 import 'flutter_run_bar.dart';
 
@@ -49,7 +50,7 @@ class _FlutterAppPaneState extends ConsumerState<FlutterAppPane> {
         const Divider(height: 1),
         const FlutterRunBar(),
         if (registry.apps.length > 1) ...[
-          _AppList(registry: registry, selectedId: selectedId),
+          FlutterAppPicker(registry: registry, selectedId: selectedId),
           const Divider(height: 1),
         ],
         if (selected != null) ...[
@@ -102,53 +103,6 @@ class _StatusRow extends ConsumerWidget {
         tooltip: 'Look again',
         visualDensity: VisualDensity.compact,
       ),
-    );
-  }
-}
-
-/// Where each app came from, in the fewest words that still say it.
-String describeAppDiscovery(AppDiscovery discovery) => switch (discovery) {
-  AppDiscovery.uriFile => 'started here',
-  AppDiscovery.toolingDaemon => 'flutter run on this machine',
-  AppDiscovery.deviceLog => 'announced on a device',
-  AppDiscovery.byHand => 'attached by hand',
-};
-
-/// The apps, when there is more than one to choose between.
-class _AppList extends ConsumerWidget {
-  const _AppList({required this.registry, required this.selectedId});
-
-  final FlutterAppRegistry registry;
-  final String? selectedId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final now = ref.watch(clockProvider).nowUtc();
-    return Column(
-      children: [
-        for (final app in registry.apps)
-          ListTile(
-            dense: true,
-            selected: app.id == selectedId,
-            leading: Icon(
-              app.isAttached ? AppIcons.play : AppIcons.linkBreak,
-              size: Chrome.iconAction,
-            ),
-            title: Text(app.label ?? app.id, style: theme.textTheme.bodySmall),
-            // How it was found and how old that reading is, before the address:
-            // those two survive the ellipsis in a 272px panel.
-            subtitle: Text(
-              '${describeAppDiscovery(app.discovery)} · found '
-              '${describeAge(now.difference(app.observedAt))}  ·  '
-              '${app.isAttached ? app.printedUri : app.detail ?? 'nothing answers on ${app.printedUri}'}',
-              style: theme.textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-            onTap: () =>
-                ref.read(selectedFlutterAppIdProvider.notifier).select(app.id),
-          ),
-      ],
     );
   }
 }

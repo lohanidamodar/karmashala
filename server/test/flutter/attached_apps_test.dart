@@ -371,4 +371,140 @@ void main() {
       );
     });
   });
+
+  group('a run that is gone leaves on its own', () {
+    // The re-try comes at once, so a test sees both tries.
+    Future<void> remake({int handAttachedKept = 3}) async {
+      await apps.close();
+      apps = ServerAttachedApps(
+        directory: VmServiceUriDirectory(temp),
+        dtdPidFiles: const DtdPidFiles([]),
+        connect: (uri) async {
+          final fake = reachable[uri.toString()];
+          if (fake == null) throw const SocketException('Connection refused');
+          return fake.client;
+        },
+        clock: () => at,
+        onChanged: told.add,
+        recheckAfter: Duration.zero,
+        handAttachedKept: handAttachedKept,
+      );
+    }
+
+    // Deleting a file is real I/O, not a microtask.
+    Future<void> settle() async {
+      await pumpEventQueue(times: 50);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await pumpEventQueue();
+    }
+
+    test('an ended run started here goes, and its file with it', () async {
+      await remake();
+      const uri = 'ws://127.0.0.1:1/a=/ws';
+      final fake = serve(uri);
+      final file = writeUriFile('windows.uri', uri);
+      await apps.look();
+      expect(registry().attached, hasLength(1));
+      reachable.remove(uri);
+      await fake.close();
+      await settle();
+      expect(registry().apps, isEmpty);
+      expect(file.existsSync(), isFalse);
+      expect(
+        describeRegistry(registry()),
+        'No Flutter app is running that we can see.',
+      );
+    });
+
+    test('a file nothing answers on goes after the second try', () async {
+      await remake();
+      final file = writeUriFile('stale.uri', 'ws://127.0.0.1:9/gone=/ws');
+      await apps.look();
+      await settle();
+      expect(registry().apps, isEmpty);
+      expect(file.existsSync(), isFalse);
+      await apps.look();
+      expect(registry().apps, isEmpty);
+    });
+
+    test('one unanswered try is not enough', () async {
+      // The default re-try is seconds away, so only the look has asked.
+      final file = writeUriFile('stale.uri', 'ws://127.0.0.1:9/gone=/ws');
+      await apps.look();
+      expect(registry().apps.single.reachability, AppReachability.unreachable);
+      expect(file.existsSync(), isTrue);
+    });
+
+    test('a run that answers the re-try stays', () async {
+      await remake();
+      const uri = 'ws://127.0.0.1:1/a=/ws';
+      writeUriFile('windows.uri', uri);
+      await apps.look();
+      expect(registry().apps.single.reachability, AppReachability.unreachable);
+      serve(uri);
+      await settle();
+      expect(registry().apps.single.reachability, AppReachability.attached);
+    });
+
+    test('an attached, answering app is never dropped', () async {
+      await remake();
+      const uri = 'ws://127.0.0.1:1/a=/ws';
+      serve(uri);
+      writeUriFile('windows.uri', uri);
+      for (var i = 0; i < 4; i++) {
+        await apps.look();
+        await settle();
+      }
+      expect(registry().attached, hasLength(1));
+    });
+
+    test('a device-log run that ended goes', () async {
+      await remake();
+      const uri = 'ws://127.0.0.1:40000/tok=/ws';
+      final fake = serve(uri);
+      await apps.attach(uri, deviceSerial: 'emulator-5554');
+      reachable.remove(uri);
+      await fake.close();
+      await settle();
+      expect(registry().apps, isEmpty);
+    });
+
+    test('an address attached by hand is kept, not answering', () async {
+      await remake();
+      const uri = 'ws://127.0.0.1:1/a=/ws';
+      final fake = serve(uri);
+      final app = await apps.attach(uri);
+      reachable.remove(uri);
+      await fake.close();
+      await settle();
+      expect(registry().byId(app.id)!.reachability, AppReachability.ended);
+      expect(
+        describeRegistry(registry()),
+        '1 address is on record and nothing answers on it.',
+      );
+    });
+
+    test('at most a few hand-attached addresses are kept', () async {
+      await apps.close();
+      var minute = 0;
+      apps = ServerAttachedApps(
+        directory: VmServiceUriDirectory(temp),
+        dtdPidFiles: const DtdPidFiles([]),
+        connect: (uri) async => throw const SocketException('refused'),
+        clock: () => at.add(Duration(minutes: minute++)),
+        recheckAfter: Duration.zero,
+        handAttachedKept: 2,
+      );
+      for (final port in [1, 2, 3]) {
+        await expectLater(
+          apps.attach('ws://127.0.0.1:$port/a=/ws'),
+          throwsA(isA<FlutterAppException>()),
+        );
+      }
+      expect(
+        registry().apps.map((app) => app.uri.port),
+        unorderedEquals([2, 3]),
+      );
+    });
+  });
 }
