@@ -368,7 +368,10 @@ jobs:
 
   build-linux:
     needs: [prepare, build-host-linux]
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04 on 2026-10-24, whose clang rejects
+    # hotkey_manager_linux's plugin (-Werror,-Wsometimes-uninitialized). An
+    # older base also keeps the bundle running on older distros.
+    runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
     steps:
@@ -428,7 +431,8 @@ jobs:
   # expect, because bundled copies break themes and drivers.
   build-linux-appimage:
     needs: [prepare, build-linux]
-    runs-on: ubuntu-latest
+    # The same base as build-linux, which made the bundle it packages.
+    runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
