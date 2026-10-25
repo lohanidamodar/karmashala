@@ -45,7 +45,10 @@ void main() {
     final other = folder(shared, '_MEI9999', {'base_library.zip': 50});
     final unrelated = folder(shared, 'something', {kAntigravityAcpMarker: 5});
 
-    final swept = await sweepAcpTempFolders(ownRoot: own, systemTemp: shared);
+    final swept = await sweepAcpTempFoldersApart(
+      ownRoot: own,
+      systemTemp: shared,
+    );
 
     expect(agy.existsSync(), isFalse);
     expect(other.existsSync(), isTrue);
@@ -136,5 +139,23 @@ void main() {
     );
     expect(temp.forEnvironment(wsl), isNull);
     expect(temp.forEnvironment(null), Platform.isWindows ? temp : isNull);
+  });
+
+  test('each data folder has its own short root under TEMP', () {
+    final a = AcpTempFolders.forDataDirectory(
+      r'C:\a\very\long\data',
+      tempBase: own,
+    );
+    final b = AcpTempFolders.forDataDirectory(r'C:\other', tempBase: own);
+    expect(a.root, isNot(b.root));
+    expect(p.dirname(a.root), p.join(own, 'ks-acp'));
+    expect(p.basename(a.root), hasLength(8));
+    expect(
+      AcpTempFolders.forDataDirectory(
+        r'C:\A\Very\Long\Data',
+        tempBase: own,
+      ).root,
+      a.root,
+    );
   });
 }

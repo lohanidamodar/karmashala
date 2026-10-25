@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
@@ -15,6 +16,20 @@ const String _sweepingSuffix = '.karmashala-sweep';
 /// unpacks itself into TEMP and leaves it behind when it is killed.
 class AcpTempFolders {
   AcpTempFolders(this.root);
+
+  /// Under [tempBase] (the system TEMP), named for [dataDirectory] so two
+  /// servers never share one. Kept short: Antigravity's unpacked paths run
+  /// ~105 characters past the folder, and past MAX_PATH it never starts.
+  factory AcpTempFolders.forDataDirectory(
+    String dataDirectory, {
+    String? tempBase,
+  }) => AcpTempFolders(
+    p.join(
+      tempBase ?? Directory.systemTemp.path,
+      'ks-acp',
+      _shortHash(p.normalize(dataDirectory).toLowerCase()),
+    ),
+  );
 
   final String root;
   final Set<String> _live = {};
@@ -83,6 +98,17 @@ final class AcpTempSweep {
   }
 }
 
+/// [sweepAcpTempFolders] on an isolate of its own: listing hundreds of
+/// unpacked agents is minutes of synchronous disk work.
+Future<AcpTempSweep> sweepAcpTempFoldersApart({
+  required String ownRoot,
+  String? systemTemp,
+  Set<String> keep = const {},
+}) => Isolate.run(
+  () =>
+      sweepAcpTempFolders(ownRoot: ownRoot, systemTemp: systemTemp, keep: keep),
+);
+
 /// Removes every folder under [ownRoot] (Karmashala's agent TEMPs), and
 /// every `_MEI*` folder in [systemTemp] holding [kAntigravityAcpMarker],
 /// except those in [keep] (live launches whose agent may not have unpacked). A
@@ -133,6 +159,15 @@ Iterable<Directory> _folders(String? root) {
   } on FileSystemException {
     return const [];
   }
+}
+
+/// FNV-1a, 32 bits, as 8 hex digits.
+String _shortHash(String text) {
+  var hash = 0x811c9dc5;
+  for (final unit in text.codeUnits) {
+    hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+  }
+  return hash.toRadixString(16).padLeft(8, '0');
 }
 
 bool _isAgentLeftover(Directory folder) {

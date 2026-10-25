@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
 import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec;
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
@@ -632,7 +631,7 @@ Future<int> _serve(
   // An ACP agent says its version over the protocol: detection asks each one
   // it finds, in that agent's own environment.
   // A TEMP of its own for each agent started on this Windows machine.
-  final acpTemp = AcpTempFolders(p.join(dataDirectory, 'acp-temp'));
+  final acpTemp = AcpTempFolders.forDataDirectory(dataDirectory);
   final acpVersions = AcpVersionProbe(
     runnerFor: ssh.runners.forEnvironment,
     tempFolders: acpTemp,
@@ -1684,12 +1683,10 @@ Future<int> _serve(
     final root = acpTemp.root;
     final keep = acpTemp.live;
     try {
-      final swept = await Isolate.run(
-        () => sweepAcpTempFolders(
-          ownRoot: root,
-          systemTemp: sharedTemp,
-          keep: keep,
-        ),
+      final swept = await sweepAcpTempFoldersApart(
+        ownRoot: root,
+        systemTemp: sharedTemp,
+        keep: keep,
       );
       if (swept.removed.isNotEmpty || swept.held.isNotEmpty) {
         sink.writeln(swept.describe());
