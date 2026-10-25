@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:agent_cli/process.dart' show CommandRequest, ProcessHandle;
 
+import 'acp_temp_folders.dart';
+
 /// Starts the agent's command again with [extraArguments] after its own: for
 /// a bridge whose protocol picks the conversation on argv (`--resume <id>`).
 typedef AcpRelaunch =
@@ -10,25 +12,50 @@ typedef AcpRelaunch =
 
 /// [request] started through [start]; it and every relaunch of it add their
 /// arguments to [request]'s own, never to another relaunch's. Ending it ends
-/// its whole process tree: a PyInstaller agent's work runs in a child.
+/// its whole process tree: a PyInstaller agent's work runs in a child. With
+/// [temp], each start gets a TEMP of its own, removed once it has exited.
 Future<AcpTransport> startAcpProcess(
   Future<ProcessHandle> Function(CommandRequest request) start,
   CommandRequest request, {
   List<String> extraArguments = const [],
-}) async => AcpTransport.process(
-  await start(
-    CommandRequest(
-      executable: request.executable,
-      arguments: [...request.arguments, ...extraArguments],
-      workingDirectory: request.workingDirectory,
-      runInShell: request.runInShell,
-      environment: request.environment,
-      removedEnvironment: request.removedEnvironment,
-      endsAsTree: true,
-    ),
-  ),
-  relaunch: (extra) => startAcpProcess(start, request, extraArguments: extra),
-);
+  AcpTempFolders? temp,
+}) async {
+  final folder = temp?.create();
+  void release() {
+    if (folder != null) unawaited(temp!.release(folder));
+  }
+
+  final ProcessHandle handle;
+  try {
+    handle = await start(
+      CommandRequest(
+        executable: request.executable,
+        arguments: [...request.arguments, ...extraArguments],
+        workingDirectory: request.workingDirectory,
+        runInShell: request.runInShell,
+        environment: {
+          ...request.environment,
+          if (folder != null) ...AcpTempFolders.variablesOf(folder),
+        },
+        removedEnvironment: request.removedEnvironment,
+        endsAsTree: true,
+      ),
+    );
+  } on Object {
+    release();
+    rethrow;
+  }
+  if (folder != null) {
+    unawaited(
+      handle.exitCode.then((_) => release(), onError: (_) => release()),
+    );
+  }
+  return AcpTransport.process(
+    handle,
+    relaunch: (extra) =>
+        startAcpProcess(start, request, extraArguments: extra, temp: temp),
+  );
+}
 
 /// The agent process as the runtime sees it: its stdio as byte streams, its
 /// stderr as lines, and its exit. Over a [ProcessHandle] in the server; over

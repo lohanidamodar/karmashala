@@ -28,6 +28,7 @@ import 'acp_login_link.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
 import 'acp_session_runtime.dart';
+import 'acp_temp_folders.dart';
 import 'acp_native_bridge.dart';
 import 'acp_terminals.dart';
 import 'acp_titles.dart';
@@ -110,8 +111,12 @@ class AcpRuntimes {
     this.usage,
     this.openLink,
     this.checkoutsOf,
+    this.tempFolders,
     DateTime Function()? now,
   }) : _now = now;
+
+  /// Where an agent on this Windows machine gets its own TEMP; null: none.
+  final AcpTempFolders? tempFolders;
 
   final SessionMessageDao messages;
 
@@ -182,6 +187,7 @@ class AcpRuntimes {
               environment: variables,
               removedEnvironment: start.removed,
             ),
+            temp: tempFolders?.forEnvironment(start.environment),
           ),
         );
         final open = openLink;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec;
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
@@ -71,6 +72,7 @@ import '../acp/acp_runtimes.dart';
 import '../acp/acp_titles.dart';
 import '../acp/acp_transport.dart';
 import '../acp/acp_session_modes.dart';
+import '../acp/acp_temp_folders.dart';
 import '../acp/acp_version_cache.dart';
 import '../acp/acp_version_probe.dart';
 import '../agents/agent_folder_trust.dart';
@@ -629,8 +631,11 @@ Future<int> _serve(
   data.terminalWork = terminals;
   // An ACP agent says its version over the protocol: detection asks each one
   // it finds, in that agent's own environment.
+  // A TEMP of its own for each agent started on this Windows machine.
+  final acpTemp = AcpTempFolders(p.join(dataDirectory, 'acp-temp'));
   final acpVersions = AcpVersionProbe(
     runnerFor: ssh.runners.forEnvironment,
+    tempFolders: acpTemp,
     cache: AcpVersionCache(file: p.join(dataDirectory, 'acp_versions.json')),
     log: sink.writeln,
   );
@@ -642,8 +647,11 @@ Future<int> _serve(
     environments: () => data.environments,
     registry: () => agentRegistry.current,
     choices: AcpAuthChoiceDao(database),
-    spawn: (environment, request) =>
-        startAcpProcess(ssh.runners.forEnvironment(environment).start, request),
+    spawn: (environment, request) => startAcpProcess(
+      ssh.runners.forEnvironment(environment).start,
+      request,
+      temp: acpTemp.forEnvironment(environment),
+    ),
     vault: envVault.overlay,
     openTerminal: (login) {
       final paneId = 'acp-login-${newUuid()}';
@@ -1166,6 +1174,7 @@ Future<int> _serve(
       environment ?? localHostEnvironment(DateTime.now().toUtc()),
     ),
     checkoutsOf: sessionCheckoutsIn(database),
+    tempFolders: acpTemp,
   );
   // The automations' "Run a pipeline" step, given the pipelines once built.
   final stepPipelines = ServerStepPipelines();
@@ -1663,6 +1672,37 @@ Future<int> _serve(
   final failedStartSweep = Timer.periodic(
     const Duration(hours: 1),
     (_) => data.retireStaleFailedStarts(),
+  );
+  // What killed agents left: their own TEMPs, and Antigravity's `_MEI*`
+  // folders in %TEMP% — not from a probe, which keeps off shared state.
+  final sharedTemp =
+      Platform.isWindows &&
+          (environment ?? Platform.environment)['KARMASHALA_PROBE'] != '1'
+      ? Directory.systemTemp.path
+      : null;
+  Future<void> sweepAcpTemp() async {
+    final root = acpTemp.root;
+    final keep = acpTemp.live;
+    try {
+      final swept = await Isolate.run(
+        () => sweepAcpTempFolders(
+          ownRoot: root,
+          systemTemp: sharedTemp,
+          keep: keep,
+        ),
+      );
+      if (swept.removed.isNotEmpty || swept.held.isNotEmpty) {
+        sink.writeln(swept.describe());
+      }
+    } on Object catch (error) {
+      sink.writeln('acp: the temp folder sweep failed: $error');
+    }
+  }
+
+  unawaited(sweepAcpTemp());
+  final acpTempSweep = Timer.periodic(
+    const Duration(days: 1),
+    (_) => unawaited(sweepAcpTemp()),
   );
   // A process starting or ending tells what waits for it: a start-up is a
   // turn whose end delivers; an end leaves nothing running it.
@@ -2402,6 +2442,7 @@ Future<int> _serve(
   toolImageSweep.cancel();
   backups.cancel();
   failedStartSweep.cancel();
+  acpTempSweep.cancel();
   await handoffDelivery.close();
   await sessionQueue.close();
   await turnSettlement.close();
