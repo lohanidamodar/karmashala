@@ -27,6 +27,7 @@ import '../status/daemon_agent_status.dart';
 import 'acp_login_link.dart';
 import 'acp_path_scope.dart';
 import 'acp_runtime_host.dart';
+import 'acp_process_guard.dart';
 import 'acp_session_runtime.dart';
 import 'acp_temp_folders.dart';
 import 'acp_native_bridge.dart';
@@ -112,11 +113,15 @@ class AcpRuntimes {
     this.openLink,
     this.checkoutsOf,
     this.tempFolders,
+    this.processGuard,
     DateTime Function()? now,
   }) : _now = now;
 
   /// Where an agent on this Windows machine gets its own TEMP; null: none.
   final AcpTempFolders? tempFolders;
+
+  /// What ties each agent's process to this server's life; null: nothing.
+  final AcpProcessGuard? processGuard;
 
   final SessionMessageDao messages;
 
@@ -179,7 +184,8 @@ class AcpRuntimes {
         final transport = bridgedAcpTransport(
           start.spec,
           await startAcpProcess(
-            runnerFor(start.environment).start,
+            processGuard?.guarding(runnerFor(start.environment).start) ??
+                runnerFor(start.environment).start,
             CommandRequest(
               executable: start.executable,
               arguments: start.arguments,

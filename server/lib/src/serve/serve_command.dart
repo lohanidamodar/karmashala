@@ -71,6 +71,7 @@ import '../acp/acp_runtimes.dart';
 import '../acp/acp_titles.dart';
 import '../acp/acp_transport.dart';
 import '../acp/acp_session_modes.dart';
+import '../acp/acp_process_guard.dart';
 import '../acp/acp_temp_folders.dart';
 import '../acp/acp_version_cache.dart';
 import '../acp/acp_version_probe.dart';
@@ -628,13 +629,25 @@ Future<int> _serve(
     boxShell: ssh.openShell,
   );
   data.terminalWork = terminals;
+  // Each agent started on this Windows machine gets a TEMP of its own and is
+  // tied to this server's life; those a killed server left are ended first.
+  final acpTemp = AcpTempFolders.forDataDirectory(dataDirectory);
+  final acpGuard = AcpProcessGuard(
+    registryFile: p.join(dataDirectory, 'acp_processes.json'),
+  );
+  final reapedAgents = acpGuard.reapStale();
+  if (reapedAgents.isNotEmpty) {
+    sink.writeln(
+      'acp: ended ${reapedAgents.length} agent process(es) a previous '
+      'server left running: ${reapedAgents.join(', ')}',
+    );
+  }
   // An ACP agent says its version over the protocol: detection asks each one
   // it finds, in that agent's own environment.
-  // A TEMP of its own for each agent started on this Windows machine.
-  final acpTemp = AcpTempFolders.forDataDirectory(dataDirectory);
   final acpVersions = AcpVersionProbe(
     runnerFor: ssh.runners.forEnvironment,
     tempFolders: acpTemp,
+    processGuard: acpGuard,
     cache: AcpVersionCache(file: p.join(dataDirectory, 'acp_versions.json')),
     log: sink.writeln,
   );
@@ -647,7 +660,7 @@ Future<int> _serve(
     registry: () => agentRegistry.current,
     choices: AcpAuthChoiceDao(database),
     spawn: (environment, request) => startAcpProcess(
-      ssh.runners.forEnvironment(environment).start,
+      acpGuard.guarding(ssh.runners.forEnvironment(environment).start),
       request,
       temp: acpTemp.forEnvironment(environment),
     ),
@@ -1174,6 +1187,7 @@ Future<int> _serve(
     ),
     checkoutsOf: sessionCheckoutsIn(database),
     tempFolders: acpTemp,
+    processGuard: acpGuard,
   );
   // The automations' "Run a pipeline" step, given the pipelines once built.
   final stepPipelines = ServerStepPipelines();
@@ -1696,7 +1710,13 @@ Future<int> _serve(
     }
   }
 
-  unawaited(sweepAcpTemp());
+  // A reaped agent's files are let go a moment after it is ended.
+  unawaited(
+    Future<void>.delayed(
+      reapedAgents.isEmpty ? Duration.zero : const Duration(seconds: 3),
+      sweepAcpTemp,
+    ),
+  );
   final acpTempSweep = Timer.periodic(
     const Duration(days: 1),
     (_) => unawaited(sweepAcpTemp()),

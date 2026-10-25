@@ -9,6 +9,7 @@ import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
 import 'acp_arguments.dart';
 import 'acp_native_bridge.dart';
+import 'acp_process_guard.dart';
 import 'acp_temp_folders.dart';
 import 'acp_transport.dart';
 import 'acp_version_cache.dart';
@@ -161,6 +162,7 @@ class AcpVersionProbe {
     AcpVersionCache? cache,
     this.fingerprintOf = acpInstallFingerprint,
     this.tempFolders,
+    this.processGuard,
     void Function(String message)? log,
   }) : cache = cache ?? AcpVersionCache(),
        _log = log;
@@ -173,6 +175,9 @@ class AcpVersionProbe {
 
   /// Where an agent on this Windows machine gets its own TEMP; null: none.
   final AcpTempFolders? tempFolders;
+
+  /// What ties each agent's process to this server's life; null: nothing.
+  final AcpProcessGuard? processGuard;
   final void Function(String message)? _log;
   final Map<String, Future<String?>> _reading = {};
 
@@ -223,7 +228,7 @@ class AcpVersionProbe {
       () async => bridgedAcpTransport(
         spec,
         await startAcpProcess(
-          runner.start,
+          processGuard?.guarding(runner.start) ?? runner.start,
           acpProbeRequest(installation, spec, environment, directory),
           temp: tempFolders?.forEnvironment(environment),
         ),

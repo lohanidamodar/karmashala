@@ -66,6 +66,9 @@ class IoProcessHandle implements ProcessHandle {
     }
   }
 
+  /// The started process's id.
+  int get pid => _process.pid;
+
   @override
   Future<int> get exitCode => _process.exitCode;
 
