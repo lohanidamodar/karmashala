@@ -14,8 +14,9 @@ import 'acp_transport.dart';
 import 'acp_version_cache.dart';
 
 /// How long one agent gets to answer `initialize`: an npx cold start
-/// downloads the package first, and Antigravity unpacks 330 MB (~40 s).
-const Duration kAcpVersionProbeTimeout = Duration(seconds: 90);
+/// downloads the package first, and Antigravity unpacks 330 MB (39-79 s
+/// measured on a loaded machine).
+const Duration kAcpVersionProbeTimeout = Duration(seconds: 180);
 
 /// A short-lived conversation with an ACP agent: the transport [spawn] opens,
 /// `initialize`, then [body] with the peer and the agent's answer, and the
