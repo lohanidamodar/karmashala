@@ -47,6 +47,13 @@ void main() {
     },
   );
 
+  test('every start and relaunch ends as a whole process tree', () async {
+    final runner = FakeCommandRunner();
+    final first = await startAcpProcess(runner.start, request);
+    await first.relaunch!(['--resume', 'abc']);
+    expect(runner.startRequests.map((r) => r.endsAsTree), [true, true]);
+  });
+
   test('a transport over streams has no relaunch unless given one', () {
     expect(
       AcpTransport.streams(

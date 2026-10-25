@@ -24,6 +24,7 @@ export 'src/process/posix_quote.dart';
 export 'src/process/process_handle.dart';
 export 'src/process/process_spawn.dart';
 export 'src/process/process_spawner.dart';
+export 'src/process/process_tree.dart';
 export 'src/process/wsl_command_runner.dart';
 export 'src/process/wsl_distributions.dart';
 export 'src/process/wsl_interop.dart';

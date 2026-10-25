@@ -9,23 +9,23 @@ typedef AcpRelaunch =
     Future<AcpTransport> Function(List<String> extraArguments);
 
 /// [request] started through [start]; it and every relaunch of it add their
-/// arguments to [request]'s own, never to another relaunch's.
+/// arguments to [request]'s own, never to another relaunch's. Ending it ends
+/// its whole process tree: a PyInstaller agent's work runs in a child.
 Future<AcpTransport> startAcpProcess(
   Future<ProcessHandle> Function(CommandRequest request) start,
   CommandRequest request, {
   List<String> extraArguments = const [],
 }) async => AcpTransport.process(
   await start(
-    extraArguments.isEmpty
-        ? request
-        : CommandRequest(
-            executable: request.executable,
-            arguments: [...request.arguments, ...extraArguments],
-            workingDirectory: request.workingDirectory,
-            runInShell: request.runInShell,
-            environment: request.environment,
-            removedEnvironment: request.removedEnvironment,
-          ),
+    CommandRequest(
+      executable: request.executable,
+      arguments: [...request.arguments, ...extraArguments],
+      workingDirectory: request.workingDirectory,
+      runInShell: request.runInShell,
+      environment: request.environment,
+      removedEnvironment: request.removedEnvironment,
+      endsAsTree: true,
+    ),
   ),
   relaunch: (extra) => startAcpProcess(start, request, extraArguments: extra),
 );

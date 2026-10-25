@@ -15,6 +15,7 @@ class CommandRequest {
     this.timeout,
     this.environment = const {},
     this.removedEnvironment = const {},
+    this.endsAsTree = false,
   });
 
   final String executable;
@@ -54,6 +55,10 @@ class CommandRequest {
   /// aliases** (e.g. `wt.exe`, Windows Terminal), which `Process.start` cannot
   /// resolve on its own.
   final bool runInShell;
+
+  /// A started process is ended by closing its stdin, waiting, and then killing
+  /// it with every process it started, never the top one alone.
+  final bool endsAsTree;
 
   @override
   String toString() =>

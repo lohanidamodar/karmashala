@@ -640,9 +640,8 @@ Future<int> _serve(
     environments: () => data.environments,
     registry: () => agentRegistry.current,
     choices: AcpAuthChoiceDao(database),
-    spawn: (environment, request) async => AcpTransport.process(
-      await ssh.runners.forEnvironment(environment).start(request),
-    ),
+    spawn: (environment, request) =>
+        startAcpProcess(ssh.runners.forEnvironment(environment).start, request),
     vault: envVault.overlay,
     openTerminal: (login) {
       final paneId = 'acp-login-${newUuid()}';

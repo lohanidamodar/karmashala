@@ -48,7 +48,10 @@ class LocalCommandRunner implements CommandRunner {
   @override
   Future<ProcessHandle> start(CommandRequest request) async {
     try {
-      return IoProcessHandle(await spawnStreaming(request));
+      return IoProcessHandle(
+        await spawnStreaming(request),
+        endsTree: request.endsAsTree,
+      );
     } on ProcessException catch (e) {
       throw CommandException(
         'Failed to start "${request.executable}" on ${Platform.operatingSystem}',
