@@ -110,6 +110,7 @@ const int kInfinite = 0xFFFFFFFF;
 const int kWaitObject0 = 0x00000000;
 const int kTh32csSnapProcess = 0x00000002;
 const int kProcessTerminate = 0x0001;
+const int kProcessSetQuota = 0x0100;
 const int kProcessQueryLimitedInformation = 0x1000;
 const int kSynchronize = 0x00100000;
 const int kErrorBrokenPipe = 109;
@@ -284,6 +285,19 @@ class Kernel32 {
           .asFunction(),
       resumeThread = lib
           .lookup<NativeFunction<Uint32 Function(IntPtr)>>('ResumeThread')
+          .asFunction(),
+      getProcessTimes = lib
+          .lookup<
+            NativeFunction<
+              Int32 Function(
+                IntPtr,
+                Pointer<Uint64>,
+                Pointer<Uint64>,
+                Pointer<Uint64>,
+                Pointer<Uint64>,
+              )
+            >
+          >('GetProcessTimes')
           .asFunction();
 
   /// Null on a Windows older than 10 1809, so the host can refuse with a
@@ -337,6 +351,16 @@ class Kernel32 {
   final int Function(int, int, Pointer<Void>, int) setInformationJobObject;
   final int Function(int, int) assignProcessToJobObject;
   final int Function(int) resumeThread;
+
+  /// Creation, exit, kernel and user times, as FILETIMEs.
+  final int Function(
+    int,
+    Pointer<Uint64>,
+    Pointer<Uint64>,
+    Pointer<Uint64>,
+    Pointer<Uint64>,
+  )
+  getProcessTimes;
 
   /// Whether this machine can host a pseudoconsole at all.
   bool get providesPseudoConsole => createPseudoConsole != null;

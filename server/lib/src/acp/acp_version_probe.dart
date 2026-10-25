@@ -9,11 +9,15 @@ import 'package:karmashala_host_protocol/protocol.dart' show kHostVersion;
 
 import 'acp_arguments.dart';
 import 'acp_native_bridge.dart';
+import 'acp_process_guard.dart';
+import 'acp_temp_folders.dart';
 import 'acp_transport.dart';
+import 'acp_version_cache.dart';
 
 /// How long one agent gets to answer `initialize`: an npx cold start
-/// downloads the package first.
-const Duration kAcpVersionProbeTimeout = Duration(seconds: 45);
+/// downloads the package first, and Antigravity unpacks 330 MB (39-79 s
+/// measured on a loaded machine).
+const Duration kAcpVersionProbeTimeout = Duration(seconds: 180);
 
 /// A short-lived conversation with an ACP agent: the transport [spawn] opens,
 /// `initialize`, then [body] with the peer and the agent's answer, and the
@@ -147,19 +151,35 @@ CommandRequest acpProbeRequest(
 /// Reads an ACP agent's version for the server's detection: the installation
 /// is started in its environment through that environment's runner
 /// ([acpProbeRequest]), asked `initialize`, and ended. Its `read` is an
-/// `AcpVersionReader`.
+/// `AcpVersionReader`. An installation whose executable is unchanged since
+/// it last answered is not started again ([cache]), and one binary asked
+/// for twice at once is started once.
 class AcpVersionProbe {
   AcpVersionProbe({
     required this.runnerFor,
     this.timeout = kAcpVersionProbeTimeout,
     this.clientVersion = kHostVersion,
+    AcpVersionCache? cache,
+    this.fingerprintOf = acpInstallFingerprint,
+    this.tempFolders,
+    this.processGuard,
     void Function(String message)? log,
-  }) : _log = log;
+  }) : cache = cache ?? AcpVersionCache(),
+       _log = log;
 
   final CommandRunner Function(ExecutionEnvironment environment) runnerFor;
   final Duration timeout;
   final String clientVersion;
+  final AcpVersionCache cache;
+  final AcpInstallFingerprint fingerprintOf;
+
+  /// Where an agent on this Windows machine gets its own TEMP; null: none.
+  final AcpTempFolders? tempFolders;
+
+  /// What ties each agent's process to this server's life; null: nothing.
+  final AcpProcessGuard? processGuard;
   final void Function(String message)? _log;
+  final Map<String, Future<String?>> _reading = {};
 
   Future<String?> read(
     AgentInstallation installation,
@@ -175,12 +195,42 @@ class AcpVersionProbe {
     } on Object {
       return null;
     }
+    final key = AcpVersionCache.keyOf(installation);
+    final fingerprint = await fingerprintOf(installation, environment, runner);
+    if (fingerprint != null) {
+      if (cache.versionFor(installation, fingerprint) case final known?) {
+        return known;
+      }
+    }
+    if (_reading[key] case final inFlight?) return inFlight;
+    final reading = _ask(installation, descriptor, environment, runner, spec);
+    _reading[key] = reading;
+    try {
+      final version = await reading;
+      if (version != null && fingerprint != null) {
+        cache.remember(installation, fingerprint, version);
+      }
+      return version;
+    } finally {
+      if (identical(_reading[key], reading)) unawaited(_reading.remove(key));
+    }
+  }
+
+  Future<String?> _ask(
+    AgentInstallation installation,
+    AgentDescriptor descriptor,
+    ExecutionEnvironment environment,
+    CommandRunner runner,
+    AcpLaunchSpec spec,
+  ) async {
+    final directory = acpProbeDirectory(environment)!;
     final version = await readAcpAgentVersion(
       () async => bridgedAcpTransport(
         spec,
         await startAcpProcess(
-          runner.start,
+          processGuard?.guarding(runner.start) ?? runner.start,
           acpProbeRequest(installation, spec, environment, directory),
+          temp: tempFolders?.forEnvironment(environment),
         ),
       ),
       timeout: timeout,

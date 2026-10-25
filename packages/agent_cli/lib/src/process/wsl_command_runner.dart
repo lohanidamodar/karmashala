@@ -201,7 +201,10 @@ class WslCommandRunner implements CommandRunner {
   Future<ProcessHandle> start(CommandRequest request) async {
     final invocation = _invocationFor(request);
     try {
-      return IoProcessHandle(await spawnStreaming(invocation.hostRequest));
+      return IoProcessHandle(
+        await spawnStreaming(invocation.hostRequest),
+        endsTree: request.endsAsTree,
+      );
     } on ProcessException catch (e) {
       throw CommandException(
         'Failed to start "${request.executable}" in WSL "$distribution"',
