@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
@@ -7,6 +8,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_acp/karmashala_acp.dart' show AgentInfo;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_host/src/acp/acp_transport.dart';
+import 'package:karmashala_host/src/acp/acp_version_cache.dart';
 import 'package:karmashala_host/src/acp/acp_version_probe.dart';
 import 'package:test/test.dart';
 
@@ -211,6 +213,96 @@ void main() {
         runnerFor: (_) => throw StateError('no distribution'),
       );
       expect(await probe.read(installation(), descriptor, wsl), isNull);
+    });
+
+    group('with a version cache', () {
+      late String fingerprint;
+      late FakeCommandRunner runner;
+      AcpVersionProbe probe(AcpVersionCache cache) => AcpVersionProbe(
+        runnerFor: (_) => runner,
+        timeout: const Duration(seconds: 5),
+        cache: cache,
+        fingerprintOf: (_, _, _) async => fingerprint,
+      );
+
+      setUp(() {
+        fingerprint = '100:1';
+        runner = FakeCommandRunner(
+          environmentId: wsl.id,
+          processFactory: (_) => _AgentProcess(
+            FakeAcpAgent(
+              agentInfo: const AgentInfo(name: 'mine', version: '2.3.4'),
+            ),
+          ),
+        );
+      });
+
+      test('an unchanged installation is not started a second time', () async {
+        final cache = AcpVersionCache();
+        final row = installation(leadingArguments: const []);
+        expect(await probe(cache).read(row, descriptor, wsl), '2.3.4');
+        expect(await probe(cache).read(row, descriptor, wsl), '2.3.4');
+        expect(runner.startRequests, hasLength(1));
+      });
+
+      test('a changed executable is asked again', () async {
+        final cache = AcpVersionCache();
+        final row = installation(leadingArguments: const []);
+        await probe(cache).read(row, descriptor, wsl);
+        fingerprint = '200:2';
+        await probe(cache).read(row, descriptor, wsl);
+        expect(runner.startRequests, hasLength(2));
+      });
+
+      test('two reads of one binary at once start it once', () async {
+        final row = installation(leadingArguments: const []);
+        final once = probe(AcpVersionCache());
+        final both = await Future.wait([
+          once.read(row, descriptor, wsl),
+          once.read(row, descriptor, wsl),
+        ]);
+        expect(both, ['2.3.4', '2.3.4']);
+        expect(runner.startRequests, hasLength(1));
+      });
+
+      test('no fingerprint, no cache: it is asked each time', () async {
+        final row = installation(leadingArguments: const []);
+        final blind = AcpVersionProbe(
+          runnerFor: (_) => runner,
+          timeout: const Duration(seconds: 5),
+          cache: AcpVersionCache(),
+          fingerprintOf: (_, _, _) async => null,
+        );
+        await blind.read(row, descriptor, wsl);
+        await blind.read(row, descriptor, wsl);
+        expect(runner.startRequests, hasLength(2));
+      });
+
+      test('it outlives the server through its file', () async {
+        final dir = Directory.systemTemp.createTempSync('acp_versions');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final file = '${dir.path}${Platform.pathSeparator}acp_versions.json';
+        final row = installation(leadingArguments: const []);
+        await probe(AcpVersionCache(file: file)).read(row, descriptor, wsl);
+        await probe(AcpVersionCache(file: file)).read(row, descriptor, wsl);
+        expect(runner.startRequests, hasLength(1));
+      });
+
+      test('a reading through a runner such as npx ages out', () async {
+        var now = t0;
+        final cache = AcpVersionCache(
+          runnerEntryLife: const Duration(hours: 12),
+          now: () => now,
+        );
+        final row = installation();
+        await probe(cache).read(row, descriptor, wsl);
+        now = t0.add(const Duration(hours: 1));
+        await probe(cache).read(row, descriptor, wsl);
+        expect(runner.startRequests, hasLength(1));
+        now = t0.add(const Duration(hours: 13));
+        await probe(cache).read(row, descriptor, wsl);
+        expect(runner.startRequests, hasLength(2));
+      });
     });
   });
 }

@@ -71,6 +71,7 @@ import '../acp/acp_runtimes.dart';
 import '../acp/acp_titles.dart';
 import '../acp/acp_transport.dart';
 import '../acp/acp_session_modes.dart';
+import '../acp/acp_version_cache.dart';
 import '../acp/acp_version_probe.dart';
 import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
@@ -630,6 +631,7 @@ Future<int> _serve(
   // it finds, in that agent's own environment.
   final acpVersions = AcpVersionProbe(
     runnerFor: ssh.runners.forEnvironment,
+    cache: AcpVersionCache(file: p.join(dataDirectory, 'acp_versions.json')),
     log: sink.writeln,
   );
   // Logging in to an ACP agent: a short-lived connection for its methods and
