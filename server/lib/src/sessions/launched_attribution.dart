@@ -3,6 +3,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/session.dart';
 
+import 'session_open_files.dart' show transcriptFileName;
 import 'session_sync_rows.dart';
 import 'store_paths.dart';
 
@@ -15,9 +16,18 @@ const Duration kLaunchedAttributionWindow = Duration(minutes: 2);
 const Duration kLaunchedAttributionSkew = Duration(seconds: 5);
 
 /// Writes the agent's conversation id onto a running session launched for an
-/// agent that takes none (`sessionIdAssignment` unsupported) — and only when
-/// the store's answer is unambiguous: one conversation of that agent, in that
-/// directory, begun in the launch window, held by no other row.
+/// agent that takes none (`sessionIdAssignment` unsupported).
+///
+/// **Its own pane's word first.** A hook fired from the row's pane names the
+/// conversation ([hookNamed]), and on WSL or Linux the row's process holds its
+/// transcript open ([holding]). Either is checked against the store, whose
+/// conversations exclude a subagent's thread — Codex holds those open and may
+/// hook from them, but they belong to the parent. Two sessions started in one
+/// folder together were never told apart without this (2026-10-25 and -26).
+///
+/// Without that evidence, only an unambiguous store answers: one conversation
+/// of that agent, in that directory, begun in the launch window, held by no
+/// other row, and only one row waiting there.
 class LaunchedAttribution {
   LaunchedAttribution({
     required this.rows,
@@ -25,16 +35,28 @@ class LaunchedAttribution {
     this.translator = const PathTranslator(),
     this.window = kLaunchedAttributionWindow,
     this.skew = kLaunchedAttributionSkew,
-  });
+    void Function(String message)? log,
+  }) : _log = log;
 
   final SessionSyncRows rows;
   final AgentRegistry agents;
   final PathTranslator translator;
   final Duration window;
   final Duration skew;
+  final void Function(String message)? _log;
 
   /// sessionId → why nothing was written, in words. Diagnostics only.
   final Map<String, String> _refusals = {};
+
+  /// The refusal last written to the log per row, so a pass every ten seconds
+  /// says it once rather than every time.
+  final Map<String, String> _logged = {};
+
+  /// sessionId → conversations its pane's hooks named.
+  final Map<String, Set<String>> _named = {};
+
+  /// sessionId → names of the transcripts its process holds open.
+  final Map<String, Set<String>> _open = {};
 
   /// Rows given an id, over this attribution's life.
   int attributions = 0;
@@ -44,57 +66,155 @@ class LaunchedAttribution {
 
   String? reasonFor(String sessionId) => _refusals[sessionId];
 
+  /// A hook from [sessionId]'s own pane named [conversationId]. Kept until the
+  /// next scan settles it; a subagent's id is kept too, and never matches.
+  void hookNamed(String sessionId, String conversationId) {
+    if (conversationId.isEmpty) return;
+    final row = rows.sessions.getById(sessionId);
+    if (row == null || (row.externalSessionId ?? '').isNotEmpty) return;
+    (_named[sessionId] ??= {}).add(conversationId);
+  }
+
+  /// What [sessionId]'s process holds open now, as paths: replaces the last.
+  void holding(String sessionId, Set<String> paths) {
+    _open[sessionId] = {for (final path in paths) transcriptFileName(path)};
+  }
+
+  /// The waiting rows, by the environment their agent runs in: whose processes
+  /// are worth looking inside.
+  Map<String, Set<String>> waitingByEnvironment() {
+    final byEnvironment = <String, Set<String>>{};
+    for (final candidate in _waiting(rows.environments())) {
+      byEnvironment
+          .putIfAbsent(candidate.directory.environmentId, () => {})
+          .add(candidate.session.id);
+    }
+    return byEnvironment;
+  }
+
   /// Learns what it can from [detected] — one pass's scan — and writes it.
   /// Returns how many rows gained an id.
   int attribute(List<DetectedSession> detected) {
     final environments = rows.environments();
     final waiting = _waiting(environments);
+    _forgetAllBut({for (final candidate in waiting) candidate.session.id});
     if (waiting.isEmpty) return 0;
     final held = rows.sessions.heldExternalSessionIds();
+    var learned = 0;
+
+    bool write(_Candidate candidate, String id) {
+      if (rows.edit(candidate.session.id, SessionPatch.attribute(id)) == null) {
+        return false;
+      }
+      held.add(id);
+      for (final map in [_refusals, _logged, _named, _open]) {
+        map.remove(candidate.session.id);
+      }
+      attributions++;
+      learned++;
+      return true;
+    }
+
+    // What a row's own pane said settles it, however many share its folder.
+    final settled = <String>{};
+    final unsettled = <_Candidate>[];
+    for (final candidate in waiting) {
+      final evidence = _evidenceFor(candidate, detected, held);
+      if (evidence == null || evidence.isEmpty) {
+        unsettled.add(candidate);
+      } else if (evidence.length == 1) {
+        if (write(candidate, evidence.single.sessionId)) {
+          settled.add(candidate.session.id);
+        }
+      } else {
+        _refusals[candidate.session.id] =
+            'its own pane names ${evidence.length} ${candidate.agentName} '
+            'conversations (${_list(evidence)}), and nothing says which is '
+            'its own.';
+      }
+    }
 
     // Grouped by agent and directory, because that pair is all the store
     // knows: a rollout records where it ran, never which process ran it.
     final byPlace = <String, List<_Candidate>>{};
     for (final candidate in waiting) {
+      if (settled.contains(candidate.session.id)) continue;
       byPlace.putIfAbsent(candidate.placeKey, () => []).add(candidate);
     }
-
-    var learned = 0;
-    for (final group in byPlace.values) {
-      if (group.length > 1) {
-        for (final candidate in group) {
-          _refusals[candidate.session.id] =
-              '${group.length} sessions with no conversation id are running in '
-              '${candidate.directory.path}, and the store records a '
-              'conversation for the directory rather than for a process, so '
-              'there is no way to tell which of them it belongs to.';
-        }
-        continue;
-      }
-      final candidate = group.single;
-      final matches = [
+    for (final candidate in unsettled) {
+      final group = byPlace[candidate.placeKey]!;
+      final nearby = [
         for (final session in detected)
           if (_matches(candidate, session, environments, held)) session,
       ];
-      if (matches.length != 1) {
-        _refusals[candidate.session.id] = matches.isEmpty
-            ? 'No ${candidate.agentName} conversation began in '
+      if (group.length > 1) {
+        final others = [
+          for (final other in group)
+            if (other != candidate) other.session.id,
+        ];
+        _refusals[candidate.session.id] =
+            '${group.length} sessions with no conversation id are running in '
+            '${candidate.directory.path} (with ${others.join(', ')}), the '
+            'store records a conversation for the directory rather than for '
+            'a process, and nothing from its own pane has named one the store '
+            'knows yet. Candidates: '
+            '${nearby.isEmpty ? 'none' : _list(nearby)}.';
+        continue;
+      }
+      if (nearby.length != 1) {
+        _refusals[candidate.session.id] = nearby.isEmpty
+            ? 'no ${candidate.agentName} conversation began in '
                   '${candidate.directory.path} when this session started.'
-            : '${matches.length} ${candidate.agentName} conversations began in '
-                  '${candidate.directory.path} when this session started, and '
-                  'the store cannot say which of them this one is on.';
+            : '${nearby.length} ${candidate.agentName} conversations began in '
+                  '${candidate.directory.path} when this session started '
+                  '(${_list(nearby)}), and the store cannot say which of them '
+                  'this one is on.';
         continue;
       }
-      final id = matches.single.sessionId;
-      if (rows.edit(candidate.session.id, SessionPatch.attribute(id)) == null) {
-        continue;
-      }
-      held.add(id);
-      _refusals.remove(candidate.session.id);
-      attributions++;
-      learned++;
+      write(candidate, nearby.single.sessionId);
+    }
+
+    for (final candidate in waiting) {
+      final id = candidate.session.id;
+      final reason = _refusals[id];
+      if (reason == null || _logged[id] == reason) continue;
+      _logged[id] = reason;
+      _log?.call('session sync: $id is on no conversation yet: $reason');
     }
     return learned;
+  }
+
+  /// The conversations [candidate]'s own pane named or holds open that the
+  /// store knows as its agent's and no other row holds; null when its pane
+  /// has said nothing.
+  List<DetectedSession>? _evidenceFor(
+    _Candidate candidate,
+    List<DetectedSession> detected,
+    Set<String> held,
+  ) {
+    final named = _named[candidate.session.id] ?? const <String>{};
+    final open = _open[candidate.session.id] ?? const <String>{};
+    if (named.isEmpty && open.isEmpty) return null;
+    return [
+      for (final session in detected)
+        if (session.cli == candidate.agentId &&
+            !held.contains(session.sessionId) &&
+            (named.contains(session.sessionId) ||
+                open.contains(transcriptFileName(session.filePath))))
+          session,
+    ];
+  }
+
+  String _list(List<DetectedSession> sessions) => [
+    for (final session in sessions)
+      '${session.sessionId} begun '
+          '${session.startedAt?.toIso8601String() ?? 'at an unknown time'}',
+  ].join('; ');
+
+  void _forgetAllBut(Set<String> waiting) {
+    for (final map in [_named, _open, _refusals, _logged]) {
+      map.removeWhere((id, _) => !waiting.contains(id));
+    }
   }
 
   bool _matches(

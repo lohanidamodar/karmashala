@@ -180,6 +180,61 @@ void main() {
     expect(attribution.attribute([codex(other)]), 0);
   });
 
+  group('its own pane\'s word', () {
+    void twoInOneFolder() {
+      insert(id: 's1');
+      insert(id: 's2', launchOffset: const Duration(milliseconds: 100));
+    }
+
+    test('binds each of two rows started together to its own', () {
+      twoInOneFolder();
+      final attribution = subject()
+        ..hookNamed('s1', other)
+        ..hookNamed('s2', conversation);
+      expect(
+        attribution.attribute([
+          codex(conversation, startOffset: const Duration(seconds: 2)),
+          codex(other, startOffset: const Duration(milliseconds: 2160)),
+        ]),
+        2,
+      );
+      expect(world.row('s1')!.externalSessionId, other);
+      expect(world.row('s2')!.externalSessionId, conversation);
+    });
+
+    test('never binds a subagent thread the store does not list', () {
+      twoInOneFolder();
+      final logs = <String>[];
+      final attribution = LaunchedAttribution(rows: world.rows, log: logs.add)
+        ..hookNamed('s1', 'subagent-thread')
+        ..holding('s2', {'/x/rollout-subagent-thread.jsonl'});
+      expect(attribution.attribute([codex(conversation)]), 0);
+      expect(world.row('s1')!.externalSessionId, isNull);
+      expect(world.row('s2')!.externalSessionId, isNull);
+      expect(logs, hasLength(2));
+      expect(logs.first, contains(conversation));
+
+      // Said once, not every pass.
+      attribution.attribute([codex(conversation)]);
+      expect(logs, hasLength(2));
+    });
+
+    test('a pane holding two conversations is a refusal', () {
+      insert();
+      final attribution = subject()
+        ..holding('s1', {r'C:\store\a.jsonl', r'C:\store\b.jsonl'});
+      expect(attribution.attribute([codex('a'), codex('b')]), 0);
+      expect(attribution.reasonFor('s1'), contains('2'));
+    });
+
+    test('a conversation another row holds is not taken on a hook\'s word', () {
+      insert(id: 's0', externalId: conversation);
+      insert(id: 's1');
+      final attribution = subject()..hookNamed('s1', conversation);
+      expect(attribution.attribute([codex(conversation)]), 0);
+    });
+  });
+
   test('a row with no directory of its own falls back to its checkout', () {
     insert(directory: null);
     expect(subject().attribute([codex(conversation)]), 1);

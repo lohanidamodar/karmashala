@@ -233,6 +233,7 @@ import '../checkpoints/checkpoint_screenshot_tool_set.dart';
 import '../checkpoints/checkpoint_tool_set.dart';
 import '../checkpoints/daemon_checkpoints.dart';
 import '../sessions/daemon_session_sync.dart';
+import '../sessions/session_open_files.dart';
 import '../ssh/ssh_domain.dart';
 import '../status/daemon_agent_status.dart';
 import '../status/daemon_prompt_answers.dart';
@@ -1005,6 +1006,7 @@ Future<int> _serve(
     // The panes are the server's own terminals (slice 5c), read off its own
     // screens; no client reports them.
     panes: terminals,
+    openFiles: sessionOpenFilesOnThisMachine(),
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   terminals.onPanesChanged = sessionSync.panesChanged;
