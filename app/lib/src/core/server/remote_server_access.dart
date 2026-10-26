@@ -104,8 +104,10 @@ class RemoteServerAccess implements HostSessionAccess {
 
   @override
   Future<RemoteChannel> exec(String command) async {
-    // Hung up in the background: every redial waits here for the app to
-    // come back, rather than waking the phone to dial every few seconds.
+    // In the background no dial starts, the grace included: every redial
+    // waits here for the app to come back, rather than waking the phone to
+    // dial every few seconds. A link already up is held, and resumed by its
+    // own keeper, until the grace ends.
     final resting = _resting;
     if (resting != null) await resting.future;
     // A scout still paused has no sightings, and the dial would skip the
@@ -196,21 +198,22 @@ class RemoteServerAccess implements HostSessionAccess {
   var _background = false;
   Timer? _restTimer;
 
-  /// Set while the link is hung up in the background; completed by [wake].
+  /// Set while the app is in the background; completed by [wake].
   Completer<void>? _resting;
 
   /// The app went to the background (a phone; owner's answer 6 of the
   /// Stage 1 plan): the beacon stops at once, the link is held for
-  /// [kBackgroundLinkGrace] so a quick return finds it live, then hung up,
-  /// and nothing is dialled again until [wake].
+  /// [kBackgroundLinkGrace] so a quick return finds it live, then hung up.
+  /// Nothing is dialled from now until [wake] — a link that ended in the
+  /// grace is not redialled either (round 116: the redial raced the grace).
   void rest() {
     if (_closed || _background) return;
     _background = true;
+    _resting = Completer<void>();
     unawaited(_dialer.pauseScouting());
     _restTimer = Timer(kBackgroundLinkGrace, () {
       _restTimer = null;
       if (_closed || !_background) return;
-      _resting = Completer<void>();
       _log.info(
         'In the background for ${kBackgroundLinkGrace.inSeconds}s; hanging '
         'up the link to $hostName until the app returns.',
