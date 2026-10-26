@@ -182,6 +182,11 @@ class ServerSessionStatus {
 
   AgentStatusReport? reportForKey(AgentSessionKey key) => _tracked[key]?.report;
 
+  /// When a workspace row's agent last produced evidence — see
+  /// [_Tracked.evidenceAt] — or null while nothing has said anything.
+  DateTime? evidenceAtForOpenId(String openId) =>
+      _byOpenId[openId]?.evidenceAt;
+
   /// The transcript read for [openId], when one was located.
   String? transcriptPathForOpenId(String openId) =>
       _byOpenId[openId]?.statePath;
@@ -867,4 +872,15 @@ class _Tracked {
 
   SessionStatusEntry entry() =>
       SessionStatusEntry(session: session, report: report);
+
+  /// When the evidence behind [report] was produced, never when a cycle read
+  /// it: the record's own time for a transcript, the hook's arrival for a
+  /// hook, and for a screen — read every cycle, so its report is always
+  /// stamped now — when what it shows last moved. Null for no evidence.
+  DateTime? get evidenceAt => switch (report) {
+    AgentStatusReport(source: AgentStatusSource.none) => null,
+    AgentStatusReport(:final sourceModifiedAt?) => sourceModifiedAt,
+    AgentStatusReport(source: AgentStatusSource.hook) => report.observedAt,
+    _ => changedAt,
+  };
 }

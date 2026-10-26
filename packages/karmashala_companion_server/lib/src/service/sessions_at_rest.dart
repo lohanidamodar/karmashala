@@ -33,6 +33,7 @@ class SessionsAtRest {
     required this.screens,
     required this.hostName,
     this.agentStatusOf,
+    this.lastEvidenceOf,
     this.attentionOf,
     this.usageLimitOf,
     this.agentIdOf,
@@ -74,6 +75,11 @@ class SessionsAtRest {
   /// null when it keeps none: what its agent is doing — idle at its prompt,
   /// or mid-turn — and, without [attentionOf], its attention.
   final AgentStatusReport? Function(String sessionId)? agentStatusOf;
+
+  /// When session [String]'s agent last produced evidence — a hook, its
+  /// record, its screen moving — as the server's status keeps it, or null
+  /// when nothing has. Never the time of a poll.
+  final DateTime? Function(String sessionId)? lastEvidenceOf;
 
   /// What session [String] asks of a person now, as the server's attention
   /// decided it (`needs_approval`, `failed`), or null.
@@ -370,7 +376,7 @@ class SessionsAtRest {
             : AgentRegistry.builtIn.displayNameFor(agentId),
         row.status.name,
       ].join('  ·  '),
-      lastActivityAt: row.createdAt.toUtc().toIso8601String(),
+      lastActivityAt: _lastActivityOf(row).toUtc().toIso8601String(),
       whereabouts: hosted != null && hosted.running
           ? 'running on $hostName'
           : null,
@@ -385,6 +391,15 @@ class SessionsAtRest {
           ),
       usageLimit: usageLimitOf?.call(row.id),
     );
+  }
+
+  /// The newest evidence about [row]: its agent's, else its creation — the one
+  /// fact the store owns, and never later than anything the agent did.
+  DateTime _lastActivityOf(Session row) {
+    final evidence = lastEvidenceOf?.call(row.id);
+    return evidence != null && evidence.isAfter(row.createdAt)
+        ? evidence
+        : row.createdAt;
   }
 
   /// Imported history: read-only here, said outright.
