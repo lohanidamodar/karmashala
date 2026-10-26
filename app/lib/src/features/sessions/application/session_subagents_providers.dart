@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/capabilities/capabilities.dart';
@@ -35,9 +36,8 @@ const Duration kSubagentsRefresh = Duration(seconds: 3);
 Duration? subagentsRefreshAfter(SessionSubagentList list) =>
     _anyLive(list.entries) ? kSubagentsRefresh : null;
 
-bool _anyLive(List<SessionSubagent> entries) => entries.any(
-  (entry) => entry.state.isLive || _anyLive(entry.children),
-);
+bool _anyLive(List<SessionSubagent> entries) =>
+    entries.any((entry) => entry.state.isLive || _anyLive(entry.children));
 
 /// Session [sessionId]'s subagents and child sessions, as the server reads
 /// them (`sessions.subagents`): asked again on a notice of its transcript or
@@ -80,7 +80,9 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
         } on Object {
           // Any other failure ends the spinner too; a later notice asks again.
           if (!disposed) {
-            out.addError(const SessionSubagentsUnavailable(kSubagentsUnreadable));
+            out.addError(
+              const SessionSubagentsUnavailable(kSubagentsUnreadable),
+            );
           }
         } finally {
           asking = false;
@@ -89,7 +91,7 @@ final sessionSubagentsProvider = StreamProvider.autoDispose
               askAgain = false;
               unawaited(ask());
             } else if (after != null) {
-              next = Timer(after, () => unawaited(ask()));
+              next = ForegroundTimer(after, () => unawaited(ask()));
             }
           }
         }

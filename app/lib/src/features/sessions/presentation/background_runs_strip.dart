@@ -4,6 +4,7 @@ import 'package:agent_cli/read.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -51,7 +52,10 @@ class _BackgroundRunsStripState extends ConsumerState<BackgroundRunsStrip> {
       _tick = null;
       if (runs.isEmpty) return const SizedBox.shrink();
     } else {
-      _tick ??= Timer.periodic(kActivityTickInterval, (_) => setState(() {}));
+      _tick ??= ForegroundTimer.periodic(
+        kActivityTickInterval,
+        (_) => setState(() {}),
+      );
     }
     final now = ref.read(clockProvider).nowUtc();
     final byAgentId = ref.watch(

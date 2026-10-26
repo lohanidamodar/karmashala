@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:karmashala_ui/menus.dart'
     show DesktopMenuDetailItem, DesktopMenuItem;
 import '../../../app/widgets/row_menu_sheet.dart';
@@ -235,7 +236,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView>
       return;
     }
     _commandClock.quietly = _clockNow();
-    _commandTick ??= Timer.periodic(
+    _commandTick ??= ForegroundTimer.periodic(
       kActivityTickInterval,
       (_) => _commandClock.tick(_clockNow()),
     );

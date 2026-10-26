@@ -16,6 +16,7 @@ import 'package:karmashala_remote/client.dart' show GatewayException;
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../app/widgets/adaptive_modal.dart';

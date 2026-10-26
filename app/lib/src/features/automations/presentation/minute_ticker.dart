@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 
 import '../../../core/util/clock_provider.dart';
 
@@ -35,7 +36,7 @@ class _MinuteTickerState extends ConsumerState<MinuteTicker> {
           milliseconds: now.millisecond,
           microseconds: now.microsecond,
         );
-    _timer = Timer(untilNext, () {
+    _timer = ForegroundTimer(untilNext, () {
       if (!mounted) return;
       setState(() {});
       _arm();

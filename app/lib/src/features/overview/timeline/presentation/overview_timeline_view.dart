@@ -74,7 +74,7 @@ class _OverviewTimelineViewState extends ConsumerState<OverviewTimelineView> {
     super.initState();
     _now = _clock();
     // Live bars grow at the right edge; a minute is as fine as a bar reads.
-    _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
+    _ticker = ForegroundTimer.periodic(const Duration(seconds: 30), (_) {
       if (_model.sessions.any((s) => s.live)) {
         setState(() => _now = _clock());
       }
