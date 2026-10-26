@@ -1,7 +1,8 @@
 /// Small widgets with no chrome opinion: a keystroke sink, text with live
 /// links, a QR painter, a field that reveals itself on focus, the house
 /// inline spinner, a row that stacks when it is narrow, and the compact
-/// picker, filter funnel and search look, and a diff's `+N −M`.
+/// picker, filter funnel and search look, a diff's `+N −M`, and the timers
+/// that stop while the app is in the background.
 library;
 
 export 'src/inline_spinner.dart';
@@ -16,3 +17,4 @@ export 'src/item_card.dart';
 export 'src/search_field.dart';
 export 'src/compact_controls.dart';
 export 'src/diff_stat.dart';
+export 'src/foreground.dart';

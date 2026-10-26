@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
+import 'foreground.dart';
 
 /// A turning ring drawn in [Motion.statusSteps] discrete steps per
 /// [Motion.statusPeriod], for every indeterminate spinner in the app.
@@ -58,7 +59,8 @@ class SteppedRing extends StatelessWidget {
 
 /// The one clock every [SteppedRing] steps to. A [Timer] rather than a
 /// [Ticker]: it asks for a frame [Motion.statusSteps] times a second, never
-/// every vsync, and runs only while at least one ring is painting.
+/// every vsync, and runs only while at least one ring is painting and the
+/// app is in front.
 class StatusSpinnerClock extends ChangeNotifier {
   StatusSpinnerClock._();
 
@@ -86,7 +88,9 @@ class StatusSpinnerClock extends ChangeNotifier {
     _subscribers++;
     if (_timer == null) {
       debugTimerStarts++;
-      _timer = Timer.periodic(
+      // No frame is drawn in the background, but a bare timer would still
+      // wake the phone twelve times a second for as long as a ring is up.
+      _timer = ForegroundTimer.periodic(
         Motion.statusPeriod ~/ Motion.statusSteps,
         (_) => _tick(),
       );
