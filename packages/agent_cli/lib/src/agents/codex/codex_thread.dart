@@ -33,6 +33,7 @@ class CodexThread {
     this.path,
     this.createdAt,
     this.updatedAt,
+    this.parentThreadId,
   });
 
   /// The row, or `null` when it has no id or no `cwd` to file it under.
@@ -53,6 +54,7 @@ class CodexThread {
       path: path is String && path.isNotEmpty ? path : null,
       createdAt: _epochSeconds(row['createdAt']),
       updatedAt: _epochSeconds(row['updatedAt']),
+      parentThreadId: _parentOf(row),
     );
   }
 
@@ -67,6 +69,27 @@ class CodexThread {
 
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// The thread that spawned this one as a subagent, `''` for a subagent row
+  /// that does not name it, and null for a conversation a person started. A
+  /// `codex fork` names `forkedFromId` but no parent: it is a conversation.
+  final String? parentThreadId;
+
+  bool get isSubagent => parentThreadId != null;
+
+  /// 0.160.0 names the parent in `parentThreadId`; `threadSource` and an
+  /// object `source` say the same for a row that leaves it out.
+  static String? _parentOf(Map<Object?, Object?> row) {
+    final parent = row['parentThreadId'];
+    if (parent is String && parent.isNotEmpty) return parent;
+    final source = row['source'];
+    if (row['threadSource'] == 'subagent' ||
+        (source is String && source.startsWith('subAgent')) ||
+        source is Map) {
+      return '';
+    }
+    return null;
+  }
 
   /// `createdAt`, `updatedAt` and `recencyAt` are epoch **seconds**, not
   /// milliseconds; reading them as milliseconds dates every session to 1970.

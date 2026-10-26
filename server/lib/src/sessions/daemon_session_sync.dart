@@ -21,6 +21,7 @@ import 'pane_source.dart';
 import 'directory_attribution.dart';
 import 'launched_attribution.dart';
 import 'session_adoption.dart';
+import 'session_open_files.dart';
 import 'session_sync_rows.dart';
 import 'store_session_scan.dart';
 import 'title_sync.dart';
@@ -28,6 +29,10 @@ import 'title_sync.dart';
 /// How often the server looks at its agents' stores for what its session
 /// rows are missing — the app's store slot's pace.
 const Duration kSessionSyncInterval = Duration(seconds: 10);
+
+/// How often one machine's processes are looked inside while a session row
+/// there waits for its conversation: a `wsl.exe` start, so not every pass.
+const Duration kOpenFilesInterval = Duration(seconds: 30);
 
 /// **The session rows' agent-side facts, kept by the server** (slice 2b):
 /// the title an agent gave its conversation ([TitleSync]), the conversation
@@ -52,8 +57,11 @@ class DaemonSessionSync {
     Clock clock = const SystemClock(),
     String Function()? newId,
     this.interval = kSessionSyncInterval,
+    this.openFiles,
+    this.openFilesEvery = kOpenFilesInterval,
     void Function(String message)? log,
   }) : rows = SessionSyncRows(database, data, log: log),
+       _clock = clock,
        _log = log {
     final locate = locateStores ?? _machineStores(database);
     _scanner = scan == null
@@ -67,7 +75,7 @@ class DaemonSessionSync {
       agents: agents,
     );
     titles = TitleSync(rows: rows, agents: agents, isRunning: _runsNow);
-    launched = LaunchedAttribution(rows: rows, agents: agents);
+    launched = LaunchedAttribution(rows: rows, agents: agents, log: log);
     directories = DirectoryAttribution(
       rows: rows,
       agents: agents,
@@ -88,6 +96,16 @@ class DaemonSessionSync {
   late final TitleSync titles;
   late final LaunchedAttribution launched;
   late final DirectoryAttribution directories;
+
+  /// Looks inside the machine a waiting row's agent runs on for the
+  /// transcripts its process holds open — the one answer that needs no hook.
+  /// Null looks nowhere.
+  final SessionOpenFiles? openFiles;
+
+  /// How often one environment is looked inside while a row there waits.
+  final Duration openFilesEvery;
+  final Map<String, DateTime> _openFilesAt = {};
+  final Clock _clock;
   final void Function(String message)? _log;
 
   StoreSessionScanner? _scanner;
@@ -153,12 +171,17 @@ class DaemonSessionSync {
       final descriptor = agents.adapterFor(hook.agent)?.descriptor;
       final spec = descriptor?.hooks;
       if (descriptor == null || spec == null) return;
-      // A hook from a pane that runs a row of ours is that row's.
+      final conversationId = hookStringAt(spec.sessionIdPath, hook.body);
+      // A hook from a pane that runs a row of ours is that row's, and names
+      // the conversation it is on when the row has not learned one.
       final pane = hook.sessionHeader;
-      if (pane != null && rows.sessions.getById(pane) != null) return;
+      if (pane != null && rows.sessions.getById(pane) != null) {
+        launched.hookNamed(pane, conversationId);
+        return;
+      }
       adoption.hook(
         agentId: descriptor.id,
-        conversationId: hookStringAt(spec.sessionIdPath, hook.body),
+        conversationId: conversationId,
         cwd: spec.cwdPath.isEmpty ? '' : hookStringAt(spec.cwdPath, hook.body),
       );
     } on Object catch (error) {
@@ -185,6 +208,8 @@ class DaemonSessionSync {
       adoption.armFromScreens(_tails);
       if (directories.wantsStoreSweep) wrote += await directories.attribute();
       if (_closed) return wrote;
+      if (launched.wantsStoreSweep) await _lookInside();
+      if (_closed) return wrote;
       if (adoption.wantsStoreSweep ||
           launched.wantsStoreSweep ||
           titles.wantsStoreSweep) {
@@ -210,6 +235,36 @@ class DaemonSessionSync {
       _tails = const {};
     }
     return wrote;
+  }
+
+  /// Tells [launched] what each waiting row's process holds open, one look per
+  /// environment at most every [openFilesEvery]. A machine that cannot be
+  /// looked inside, or does not answer, leaves it to the hooks.
+  Future<void> _lookInside() async {
+    final look = openFiles;
+    if (look == null) return;
+    final environments = rows.environments();
+    final now = _clock.nowUtc();
+    for (final MapEntry(key: environmentId, value: sessionIds)
+        in launched.waitingByEnvironment().entries) {
+      final environment = environments[environmentId];
+      if (environment == null) continue;
+      final last = _openFilesAt[environmentId];
+      if (last != null && now.difference(last) < openFilesEvery) continue;
+      _openFilesAt[environmentId] = now;
+      try {
+        final open = await look(environment, sessionIds);
+        if (open == null) continue;
+        for (final id in sessionIds) {
+          launched.holding(id, open[id] ?? const {});
+        }
+      } on Object catch (error) {
+        _log?.call(
+          'session sync: could not read what $environmentId sessions hold '
+          'open ($error)',
+        );
+      }
+    }
   }
 
   /// The bottom rows this pass reads, read off the server's own screens:

@@ -241,6 +241,95 @@ void main() {
     );
   });
 
+  group('a subagent thread is never a conversation of its own', () {
+    // The shape Codex 0.160.0 wrote on 2026-10-26: a subagent's rollout
+    // carries its parent's `session_id`, its own `id`, and an object `source`.
+    const parent = '01a1773d-0841-7953-a8c7-9a671e12590c';
+    const child = '01a1773e-45dc-7ab0-ac17-1f916ede0c7c';
+    const cwd = '/home/dlohani/projects/appwrite-ai-workdir';
+
+    void writeMeta(String id, String meta) {
+      File(
+          p.join(
+            tmp.path,
+            '.codex',
+            'sessions',
+            '2026',
+            '10',
+            '26',
+            'rollout-2026-10-26T13-49-10-$id.jsonl',
+          ),
+        )
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          '{"timestamp":"2026-10-26T08:04:11.199Z","type":"session_meta",'
+          '"payload":$meta}\n',
+        );
+    }
+
+    test('the file walk lists the parent and not its fork', () async {
+      writeMeta(
+        parent,
+        '{"session_id":"$parent","id":"$parent",'
+        '"timestamp":"2026-10-26T08:04:10.954Z","cwd":"$cwd",'
+        '"source":"cli","thread_source":"user"}',
+      );
+      writeMeta(
+        child,
+        '{"session_id":"$parent","id":"$child","forked_from_id":"$parent",'
+        '"parent_thread_id":"$parent",'
+        '"timestamp":"2026-10-26T08:05:32.256Z","cwd":"$cwd",'
+        '"source":{"subagent":{"thread_spawn":{"parent_thread_id":"$parent",'
+        '"depth":1}}},"thread_source":"subagent"}',
+      );
+      final sessions = await CodexStoreReader(
+        cache: CodexRolloutCache(),
+      ).read(p.join(tmp.path, '.codex'), 'wsl:archlinux');
+      expect([for (final s in sessions) s.sessionId], [parent]);
+      expect(sessions.single.cwd.path, cwd);
+      expect(sessions.single.cwd.environmentId, 'wsl:archlinux');
+    });
+
+    test('thread/list rows naming a parent are dropped', () async {
+      final home = p.join(tmp.path, '.codex');
+      final server = FakeCodexAppServer.withThreads([
+        row(parent, cwd: cwd, path: '$cwd/p.jsonl'),
+        {
+          ...row(child, cwd: cwd, path: '$cwd/c.jsonl'),
+          'forkedFromId': parent,
+          'parentThreadId': parent,
+          'source': {
+            'subAgent': {
+              'thread_spawn': {'parent_thread_id': parent},
+            },
+          },
+          'threadSource': 'subagent',
+        },
+        {
+          ...row('only-says-source', cwd: cwd, path: '$cwd/s.jsonl'),
+          'threadSource': 'subagent',
+        },
+        // A `codex fork` is a conversation a person has, parent or none.
+        {
+          ...row('a-fork', cwd: cwd, path: '$cwd/f.jsonl'),
+          'forkedFromId': parent,
+        },
+      ], codexHome: home);
+      final reader = _readerFor(server);
+      addTearDown(reader.close);
+
+      final sessions = await reader.read(
+        home,
+        'windows',
+        storeServer: StoreServerLaunch(
+          environment: windows,
+          executable: 'codex',
+        ),
+      );
+      expect([for (final s in sessions) s.sessionId], [parent, 'a-fork']);
+    });
+  });
+
   test('no launch at all is the file walk, unchanged', () async {
     final home = p.join(tmp.path, '.codex');
     writeRollout('u6', cwd: '/w');

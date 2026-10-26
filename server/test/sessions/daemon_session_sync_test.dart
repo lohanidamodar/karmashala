@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
+import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_host/src/pty/fake_pty.dart';
 import 'package:karmashala_host/src/sessions/daemon_session_sync.dart';
 import 'package:karmashala_host/src/sessions/pane_facts.dart';
 import 'package:karmashala_host/src/sessions/pane_source.dart';
+import 'package:karmashala_host/src/sessions/session_open_files.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' show sqlite3;
@@ -42,7 +44,9 @@ void main() {
   DaemonSessionSync sync({
     Future<List<DetectedSession>> Function()? scan,
     Future<List<CliStore>> Function()? locateStores,
+    SessionOpenFiles? openFiles,
   }) => DaemonSessionSync(
+    openFiles: openFiles,
     database: world.db,
     data: world.data,
     registry: SessionRegistry(launcher: FakePtyLauncher()),
@@ -193,6 +197,111 @@ void main() {
       );
 
       expect(world.sessions.getAllByExternalSessionId('cli-abc'), isEmpty);
+    });
+
+    // Two Codex panes started in one folder 0.1 s apart, as `open_new_session`
+    // twice does: the store cannot tell their rollouts apart, their hooks can.
+    test('name the conversation a waiting Codex row is on', () async {
+      world.insert(sessionRow(id: 'first', installation: 'a2'));
+      world.insert(
+        sessionRow(
+          id: 'second',
+          installation: 'a2',
+          launchOffset: const Duration(milliseconds: 100),
+        ),
+      );
+      store.addAll([
+        storeSession(
+          'rollout-a',
+          cli: AgentIds.codex,
+          startedAt: launchedAt.add(const Duration(seconds: 2)),
+        ),
+        storeSession(
+          'rollout-b',
+          cli: AgentIds.codex,
+          startedAt: launchedAt.add(const Duration(milliseconds: 2160)),
+        ),
+      ]);
+      final subject = sync();
+
+      await subject.pass();
+      expect(world.row('first')!.externalSessionId, isNull);
+      expect(
+        world.logs,
+        contains(
+          allOf(
+            contains('first is on no conversation yet'),
+            contains('rollout-a'),
+            contains('rollout-b'),
+          ),
+        ),
+        reason: 'a binding that cannot be decided says so, with candidates',
+      );
+
+      subject
+        ..hook(hook(AgentIds.codex, {'session_id': 'rollout-b'}, pane: 'first'))
+        ..hook(
+          hook(AgentIds.codex, {'session_id': 'rollout-a'}, pane: 'second'),
+        );
+      await subject.pass();
+
+      expect(world.row('first')!.externalSessionId, 'rollout-b');
+      expect(world.row('second')!.externalSessionId, 'rollout-a');
+    });
+
+    test('a waiting row learns its conversation from what its process holds '
+        'open, and never a subagent\'s', () async {
+      world.insert(sessionRow(id: 'first', installation: 'a2'));
+      world.insert(
+        sessionRow(
+          id: 'second',
+          installation: 'a2',
+          launchOffset: const Duration(milliseconds: 100),
+        ),
+      );
+      // The store lists top-level conversations only; the subagent rollouts
+      // the processes also hold are not among them.
+      store.addAll([
+        for (final id in ['079a', '0841'])
+          DetectedSession(
+            cli: AgentIds.codex,
+            sessionId: id,
+            cwd: const EnvironmentPath(
+              environmentId: 'windows',
+              path: repoPath,
+            ),
+            filePath:
+                r'\\wsl.localhost\Ubuntu\home\u\.codex\sessions\2026\10\26'
+                '\\rollout-2026-10-26T13-49-10-$id.jsonl',
+            storeHome: r'\\wsl.localhost\Ubuntu\home\u\.codex',
+            startedAt: launchedAt.add(const Duration(seconds: 2)),
+          ),
+      ]);
+      final looked = <Set<String>>[];
+      final subject = sync(
+        openFiles: (environment, sessionIds) async {
+          looked.add(sessionIds);
+          const dir = '/home/u/.codex/sessions/2026/10/26';
+          return {
+            'first': {
+              '$dir/rollout-2026-10-26T13-53-02-8ede.jsonl',
+              '$dir/rollout-2026-10-26T13-49-10-079a.jsonl',
+            },
+            'second': {
+              '$dir/rollout-2026-10-26T13-50-32-45dc.jsonl',
+              '$dir/rollout-2026-10-26T13-49-10-0841.jsonl',
+            },
+          };
+        },
+      );
+
+      await subject.pass();
+
+      expect(looked, [
+        {'first', 'second'},
+      ]);
+      expect(world.row('first')!.externalSessionId, '079a');
+      expect(world.row('second')!.externalSessionId, '0841');
     });
 
     test('of an agent nobody knows, or out of shape, change nothing', () {
