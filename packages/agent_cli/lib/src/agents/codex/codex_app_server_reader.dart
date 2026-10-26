@@ -108,6 +108,9 @@ class CodexAppServerReader implements StoreSessionReader {
 
     final sessions = <DetectedSession>[];
     for (final thread in list.threads) {
+      // A subagent's thread is part of its parent's conversation, as the walk
+      // has it; listed, it read as a second conversation begun in the folder.
+      if (thread.isSubagent) continue;
       final filePath = _hostPath(thread.path, storeServer.environment);
       // A thread with no rollout this host can open is one the file walk would
       // not have found either, and `filePath` is half of `DetectedSession`'s
