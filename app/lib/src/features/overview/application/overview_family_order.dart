@@ -56,8 +56,13 @@ class OverviewFamilyOrderController extends Notifier<OverviewFamilyOrder> {
     next.insert(index.clamp(0, next.length), id);
     _touched = true;
     state = {...state, laneKey: next};
-    unawaited(_write());
+    // One write at a time, in order, so a quick second move is what stays.
+    final order = state;
+    _writing = _writing.then((_) => _write(order));
+    unawaited(_writing);
   }
+
+  var _writing = Future<void>.value();
 
   /// Moves [id] one place earlier (`step` -1) or later (1) in [drawn].
   void step(String laneKey, List<String> drawn, String id, int step) {
@@ -66,8 +71,7 @@ class OverviewFamilyOrderController extends Notifier<OverviewFamilyOrder> {
     move(laneKey, drawn, id, at + step);
   }
 
-  Future<void> _write() async {
-    final order = state;
+  Future<void> _write(OverviewFamilyOrder order) async {
     try {
       final file = await _file();
       await file.parent.create(recursive: true);

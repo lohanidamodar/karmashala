@@ -649,11 +649,14 @@ class MissionFixture {
   late final _entries = [for (final s in sessions) entry(s)];
   late final _byId = {for (final s in sessions) s.id: s};
 
-  List<AgentStateGroup> get groups => [
+  List<AgentStateGroup> get groups => groupsWith(const {});
+
+  /// [groups] with each session in [flipped] moved to the state it names.
+  List<AgentStateGroup> groupsWith(Map<String, AgentState> flipped) => [
     for (final state in AgentState.values)
       AgentStateGroup(state, [
         for (final e in _entries)
-          if (_byId[e.id]!.state == state) e,
+          if ((flipped[e.id] ?? _byId[e.id]!.state) == state) e,
       ]),
   ];
 
@@ -669,7 +672,9 @@ class MissionFixture {
 
   /// The providers mission control reads, answered from this fixture.
   List<Override> get overrides => [
-    agentStateGroupsProvider.overrideWith((ref) => groups),
+    agentStateGroupsProvider.overrideWith(
+      (ref) => groupsWith(ref.watch(missionStatesProvider)),
+    ),
     workspaceSessionsProvider.overrideWith((ref) => _entries),
     agentsHiddenWorkingCountProvider.overrideWith((ref) => hiddenWorking),
     overviewFactsProvider.overrideWith((ref) => facts),
@@ -712,6 +717,17 @@ class MissionFixture {
     overviewReaderProvider.overrideWithValue(reader),
   ];
 }
+
+/// States a test moves sessions to mid-run, by id; the board follows.
+class MissionStates extends Notifier<Map<String, AgentState>> {
+  @override
+  Map<String, AgentState> build() => const {};
+
+  void flip(String id, AgentState to) => state = {...state, id: to};
+}
+
+final missionStatesProvider =
+    NotifierProvider<MissionStates, Map<String, AgentState>>(MissionStates.new);
 
 /// The Overview's reads, answered from a fixture: nothing reaches a server.
 class FakeOverviewReader implements OverviewReader {
