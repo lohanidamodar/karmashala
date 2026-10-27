@@ -39,6 +39,8 @@ import '../../../features/explorer/application/worktree_choices.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
 import '../../../features/overview/application/overview_prefs.dart';
 import '../../../features/overview/application/overview_resume.dart';
+import '../../../features/overview/application/overview_search.dart'
+    show overviewRevealProvider;
 import '../../../features/overview/presentation/background_launch_notice.dart';
 import '../../../features/overview/presentation/overview_triage.dart'
     show showOverviewKeys;

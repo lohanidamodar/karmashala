@@ -93,6 +93,7 @@ class QuickOpenItem {
     this.onlyWhenSearched = false,
     this.leading,
     this.onResume,
+    this.onShowOnDashboard,
   });
 
   /// Stable across rebuilds, so the selected row survives a refresh in place.
@@ -137,6 +138,10 @@ class QuickOpenItem {
   /// button — where [onSelect] only shows it. A resume sends the conversation
   /// back as context, which costs tokens, so picking a row never does.
   final VoidCallback? onResume;
+
+  /// Brings the Agent dashboard forward on the session the row names —
+  /// Alt+Enter, or the row's button — unfolded, selected and in view.
+  final VoidCallback? onShowOnDashboard;
 }
 
 /// A scored item, with the characters the query matched in its title.

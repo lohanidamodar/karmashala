@@ -70,6 +70,9 @@ extension QuickOpenSessionSources on QuickOpenSources {
               onResume: _stopped(container, session.id)
                   ? () => dismiss(resumeSession(session.id))
                   : null,
+              onShowOnDashboard: session.isArchived
+                  ? null
+                  : () => dismiss(showOnDashboard(session.id)),
             ),
           ));
         }
@@ -143,6 +146,19 @@ extension QuickOpenSessionSources on QuickOpenSources {
       }
       openOverviewTab(ref);
       peekOnDashboard(container, sessionId);
+    };
+  }
+
+  /// "Show on dashboard": the Agent dashboard brought forward on its board,
+  /// the session unfolded, selected and scrolled to once the board is up.
+  void Function() showOnDashboard(String sessionId) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    return () {
+      openOverviewTab(ref);
+      container
+          .read(overviewPrefsProvider.notifier)
+          .setView(OverviewView.board);
+      container.read(overviewRevealProvider.notifier).reveal(sessionId);
     };
   }
 

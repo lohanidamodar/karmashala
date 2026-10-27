@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/overview/application/overview_links.dart
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_search.dart';
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import 'mission_fixture.dart';
@@ -257,6 +258,39 @@ void main() {
       walked.add(selected(c)!);
     }
     expect(walked, containsAll(['d-done', 'f-kid', 'o-root', 'n-ask']));
+    await unmountMission(tester);
+  });
+
+  testWidgets('a session asked for before the board is up is shown once it '
+      'is: unfolded, selected and scrolled to', (tester) async {
+    final onDashboard = ValueNotifier(false);
+    addTearDown(onDashboard.dispose);
+    final c = await pumpMission(
+      tester,
+      fixture: fixture(),
+      prefsDir: dir,
+      size: const Size(900, 500),
+      home: ValueListenableBuilder(
+        valueListenable: onDashboard,
+        builder: (context, on, _) => on
+            ? const OverviewTabView()
+            : const Scaffold(body: Text('another tab')),
+      ),
+    );
+    c.read(overviewFoldedParentsProvider.notifier).toggle('c-root');
+    // As quick open's Show on dashboard asks, from another tab.
+    c.read(overviewRevealProvider.notifier).reveal('c-k6');
+    onDashboard.value = true;
+    await settleMission(tester);
+    await settleMission(tester);
+
+    expect(selected(c), 'c-k6');
+    expect(c.read(overviewFoldedParentsProvider), isEmpty);
+    expect(c.read(overviewRevealProvider), isNull);
+    final pill = byKey('overview-tree-node:c-k6');
+    expect(pill, findsOneWidget);
+    final view = tester.getRect(byKey('overview-hybrid'));
+    expect(view.contains(tester.getCenter(pill)), isTrue);
     await unmountMission(tester);
   });
 }
