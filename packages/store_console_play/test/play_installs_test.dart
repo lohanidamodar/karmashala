@@ -20,6 +20,13 @@ const _deviceOnly =
     'Date,Package Name,Daily Device Installs\n'
     '2024-03-01,com.example.app,10\n';
 
+const _withActive =
+    'Date,Package Name,Daily Device Installs,Daily User Installs,'
+    'Total User Installs,Active Device Installs\n'
+    '2026-10-01,com.example.app,7,5,0,1200\n'
+    '2026-10-03,com.example.app,9,6,0,NA\n'
+    '2026-10-02,com.example.app,8,4,0,1234\n';
+
 void main() {
   group('summariseInstalls', () {
     test('sums the daily columns and keeps the newest lifetime count', () {
@@ -44,6 +51,22 @@ void main() {
       expect(back.userInstalls, 5);
       expect(back.deviceInstalls, 4);
       expect(back.lastDay, DateTime.utc(2026, 8, 31));
+    });
+
+    test('keeps the newest day\'s active devices, a blank day skipped', () {
+      final month = summariseInstalls(ReportTable.parse(_withActive));
+      // The 3rd says NA: the newest day with a count is the 2nd.
+      expect(month.activeDevices, 1234);
+      expect(month.activeDevicesDay, DateTime.utc(2026, 10, 2));
+      final back = MonthInstalls.fromJson(month.toJson());
+      expect(back.activeDevices, 1234);
+      expect(back.activeDevicesDay, DateTime.utc(2026, 10, 2));
+    });
+
+    test('no Active Device Installs column is null, never zero', () {
+      final month = summariseInstalls(ReportTable.parse(_withTotal));
+      expect(month.activeDevices, isNull);
+      expect(month.activeDevicesDay, isNull);
     });
 
     test('a file with no Date column is a shape failure', () {
@@ -118,6 +141,37 @@ void main() {
       expect(total.since, '2026-07');
       expect(total.through, DateTime.utc(2026, 8, 31));
       expect(total.atLeast, isFalse);
+    });
+
+    test('carries the newest month\'s active devices on the total', () {
+      final total = allTimeFromMonths([
+        (
+          DateTime.utc(2026, 8),
+          summariseInstalls(ReportTable.parse(_dailyOnly)),
+        ),
+        (
+          DateTime.utc(2026, 10),
+          summariseInstalls(ReportTable.parse(_withActive)),
+        ),
+      ]);
+      // Total User Installs is 0, so the daily user installs are summed.
+      expect(total.count, 20);
+      expect(total.since, '2026-08');
+      expect(total.activeDevices, 1234);
+      expect(total.activeDevicesDay, DateTime.utc(2026, 10, 2));
+      final back = InstallTotal.fromJson(total.toJson());
+      expect(back.activeDevices, 1234);
+      expect(back.activeDevicesDay, DateTime.utc(2026, 10, 2));
+    });
+
+    test('a newest month without the column gives no active devices', () {
+      final total = allTimeFromMonths([
+        (
+          DateTime.utc(2026, 9),
+          summariseInstalls(ReportTable.parse(_withTotal)),
+        ),
+      ]);
+      expect(total.activeDevices, isNull);
     });
 
     test('a month without a user column counts its device installs', () {

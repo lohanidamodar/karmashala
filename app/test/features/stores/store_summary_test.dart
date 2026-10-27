@@ -221,10 +221,10 @@ void main() {
         (
           title: section.title,
           apps: members.length,
-          rows: [for (final group in members) ...storeSummaryRowsOf(group)],
+          rows: storeSummaryApps(members),
         ),
     ];
-    final open = sections[1].rows.single.group.key;
+    final open = sections[1].rows.single.key;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [clockProvider.overrideWithValue(FixedClock(now))],
@@ -274,7 +274,7 @@ void main() {
         (tester) async {
           setStoreTestSurface(tester, size, scale);
           final opened = <String>[];
-          final rows = storeSummaryRows(groups());
+          final apps = storeSummaryApps(groups());
           await tester.pumpWidget(
             ProviderScope(
               overrides: [clockProvider.overrideWithValue(FixedClock(now))],
@@ -283,7 +283,7 @@ void main() {
                   body: SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
                     child: StoreSummaryTable(
-                      sections: [(title: null, apps: rows.length, rows: rows)],
+                      sections: [(title: null, apps: apps.length, rows: apps)],
                       onOpen: opened.add,
                     ),
                   ),
@@ -307,9 +307,278 @@ void main() {
             size.width >= 1000 ? findsOneWidget : findsNothing,
           );
           await tester.tap(find.text('Moving'));
-          expect(opened, [rows[1].group.key]);
+          expect(opened, [apps.singleWhere((app) => app.name == 'Moving').key]);
         },
       );
     }
   }
+
+  group('one row per app', () {
+    InstallTotal counted(int count, {String? since, int? devices}) =>
+        InstallTotal(
+          count: count,
+          measure: 'user installs',
+          source: InstallTotalSource.reports,
+          since: since,
+          through: DateTime.utc(2026, 9, 28),
+          activeDevices: devices,
+          activeDevicesDay: devices == null ? null : DateTime.utc(2026, 9, 28),
+        );
+
+    StoreAppSnapshot installed(StoreApp app, InstallTotal? total) =>
+        storeSnapshot(
+          app,
+          releases: [storeRelease(ReleaseState.live)],
+        ).withAllTimeInstalls(
+          total == null
+              ? ReadingMissing(
+                  StoreFailure.permission,
+                  'This key may not read sales reports.',
+                  fixtureCheckedAt,
+                )
+              : ReadingValue(total, fixtureCheckedAt),
+        );
+
+    final tideIos = storeApp(
+      StoreKind.appStore,
+      'com.example.tide',
+      name: 'Tide',
+    );
+    final tidePlay = storeApp(
+      StoreKind.googlePlay,
+      'com.example.tide',
+      name: 'Tide',
+    );
+    final parkIos = storeApp(
+      StoreKind.appStore,
+      'com.example.park.ios',
+      name: 'Parkline',
+    );
+    final parkPlay = storeApp(
+      StoreKind.googlePlay,
+      'com.example.parkline',
+      name: 'Parkline',
+    );
+    final ledger = storeApp(
+      StoreKind.googlePlay,
+      'com.example.ledger',
+      name: 'Ledger',
+    );
+
+    List<StoreAppGroup> both({
+      InstallTotal? tideApple,
+      InstallTotal? tideGoogle,
+      InstallTotal? park,
+      InstallTotal? ledgerTotal,
+    }) => groupStoreApps(
+      [tideIos, tidePlay, parkIos, parkPlay, ledger],
+      {
+        tideIos: installed(tideIos, tideApple),
+        tidePlay: installed(tidePlay, tideGoogle),
+        parkIos: installed(parkIos, null),
+        parkPlay: installed(parkPlay, park),
+        ledger: installed(ledger, ledgerTotal),
+      },
+      links: [StoreAppLink(appStoreId: parkIos.id, packageName: parkPlay.id)],
+    );
+
+    StoreSummaryApp named(List<StoreAppGroup> groups, String name) =>
+        storeSummaryApps(groups).singleWhere((app) => app.name == name);
+
+    test('a row per group, combined pairs and one-store apps alike', () {
+      final apps = storeSummaryApps(both());
+      expect(apps.map((app) => app.name), ['Ledger', 'Parkline', 'Tide']);
+      final tide = apps.last;
+      expect(tide.onBoth, isTrue);
+      expect(tide.group.combinedManually, isFalse);
+      // App Store first, then Google Play.
+      expect(tide.stores.map((row) => row.app.store), [
+        StoreKind.appStore,
+        StoreKind.googlePlay,
+      ]);
+      final park = apps[1];
+      expect(park.onBoth, isTrue);
+      expect(park.group.combinedManually, isTrue);
+      expect(park.stores.map((row) => row.app.bundleId), [
+        'com.example.park.ios',
+        'com.example.parkline',
+      ]);
+      expect(apps.first.onBoth, isFalse);
+      expect(apps.first.stores.single.app.store, StoreKind.googlePlay);
+    });
+
+    test('exact counts add up, each labelled with where it starts', () {
+      final tide = named(
+        both(
+          tideApple: counted(600, since: '2025-01'),
+          tideGoogle: counted(1800, since: '2019-03', devices: 480),
+        ),
+        'Tide',
+      );
+      final installs = tide.installs;
+      expect(installs.count, 2400);
+      expect(installs.missing, isEmpty);
+      expect(installs.lifetime, isFalse);
+      expect(
+        summaryInstallsPeriod(installs, tide),
+        'App Store since Jan 2025 · Play since Mar 2019',
+      );
+      expect(tide.activeDevices, 480);
+      // 14 fixture days on each store: 10 + 20 + … + 140.
+      expect(tide.recentInstalls, 2100);
+    });
+
+    test('a store not read is named, the sum never called all time', () {
+      final park = named(
+        both(park: counted(990, since: '2025-04')),
+        'Parkline',
+      );
+      expect(park.installs.count, 990);
+      expect(park.installs.missing, [StoreKind.appStore]);
+      expect(
+        summaryInstallsPeriod(park.installs, park),
+        'Play only, since Apr 2025',
+      );
+    });
+
+    test('a partial App Store sum says the period it covers', () {
+      final tide = named(
+        both(tideApple: counted(61, since: '2025-03')),
+        'Tide',
+      );
+      final period = summaryInstallsPeriod(tide.installs, tide);
+      expect(period, 'App Store only, since Mar 2025');
+      expect(period, isNot(contains('all time')));
+    });
+
+    test('all time only where every store gave its own lifetime count', () {
+      final ledgerApp = named(both(ledgerTotal: counted(120)), 'Ledger');
+      expect(ledgerApp.installs.lifetime, isTrue);
+      expect(summaryInstallsPeriod(ledgerApp.installs, ledgerApp), 'all time');
+      final mixed = named(
+        both(
+          tideApple: counted(5, since: '2026-01'),
+          tideGoogle: counted(9),
+        ),
+        'Tide',
+      );
+      expect(
+        summaryInstallsPeriod(mixed.installs, mixed),
+        'App Store since Jan 2026 · Play all time',
+      );
+    });
+
+    test('a listing band is never added to an exact count', () {
+      final band = InstallTotal.fromBand('10K+')!;
+      final alone = named(both(ledgerTotal: band), 'Ledger');
+      expect(alone.installs.count, isNull);
+      expect(summaryInstallsFigure(alone.installs), '10K+');
+      expect(summaryInstallsPeriod(alone.installs, alone), 'Play listing band');
+      final beside = named(
+        both(
+          tideApple: counted(70, since: '2026-02'),
+          tideGoogle: band,
+        ),
+        'Tide',
+      );
+      expect(beside.installs.count, 70);
+      expect(beside.installs.missing, [StoreKind.googlePlay]);
+    });
+
+    test('no count anywhere is not reported, not zero', () {
+      final ledgerApp = named(both(), 'Ledger');
+      expect(summaryInstallsFigure(ledgerApp.installs), isNull);
+      expect(ledgerApp.activeDevices, isNull);
+    });
+
+    test('recent installs keep to the 30 days up to the newest', () {
+      final app = storeApp(StoreKind.googlePlay, 'com.example.r');
+      final group = groupStoreApps(
+        [app],
+        {
+          app: storeSnapshot(
+            app,
+            downloads: ReadingValue(
+              DownloadSeries(
+                unit: 'Installs',
+                days: [
+                  DailyCount(DateTime.utc(2026, 8, 1), 1000),
+                  DailyCount(DateTime.utc(2026, 9, 1), 4),
+                  DailyCount(DateTime.utc(2026, 9, 30), 6),
+                ],
+              ),
+              fixtureCheckedAt,
+            ),
+          ),
+        },
+      );
+      final row = storeSummaryApps(group).single;
+      expect(row.stores.single.recentInstalls, (count: 10, days: 2));
+      expect(row.recentInstalls, 10);
+    });
+
+    for (final size in kStoreTestSizes) {
+      for (final scale in kStoreTestTextScales) {
+        testWidgets(
+          'combined rows draw at ${size.width.round()} px, text ${scale}x',
+          (tester) async {
+            setStoreTestSurface(tester, size, scale);
+            final apps = storeSummaryApps(
+              both(
+                tideApple: counted(61904, since: '2025-01'),
+                tideGoogle: counted(182410, since: '2019-03', devices: 48200),
+                park: counted(9870, since: '2025-04', devices: 3400),
+                ledgerTotal: InstallTotal.fromBand('1K+'),
+              ),
+            );
+            await tester.pumpWidget(
+              ProviderScope(
+                overrides: [clockProvider.overrideWithValue(FixedClock(now))],
+                child: MaterialApp(
+                  home: Scaffold(
+                    body: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: StoreSummaryTable(
+                        sections: [
+                          (title: null, apps: apps.length, rows: apps),
+                        ],
+                        onOpen: (_) {},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            // One row per app, whatever stores it is on.
+            for (final app in apps) {
+              expect(
+                find.byKey(ValueKey('store-summary-row:${app.key}')),
+                findsOneWidget,
+              );
+            }
+            expect(find.text('Tide'), findsOneWidget);
+            expect(
+              find.byKey(const ValueKey('store-summary-combined')),
+              findsOneWidget,
+            );
+            final tide = apps.singleWhere((app) => app.name == 'Tide');
+            expect(
+              find.byKey(ValueKey('store-summary-devices:${tide.key}')),
+              findsOneWidget,
+            );
+            expect(
+              find.textContaining('Play only, since Apr 2025'),
+              findsOneWidget,
+            );
+            expect(
+              find.text('Active devices'),
+              size.width >= 1000 ? findsOneWidget : findsNothing,
+            );
+          },
+        );
+      }
+    }
+  });
 }

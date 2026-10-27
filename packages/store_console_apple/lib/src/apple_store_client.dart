@@ -13,7 +13,9 @@ import 'sales_ledger.dart';
 import 'sales_report.dart';
 
 const _host = 'api.appstoreconnect.apple.com';
-const _downloadDays = 14;
+/// How many finished days the daily downloads series covers: a month, so the
+/// Stores summary can say what the last 30 days brought.
+const _downloadDays = 30;
 const _maxPages = 20;
 
 /// An icon is never worth holding a refresh up for.

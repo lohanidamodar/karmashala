@@ -64,5 +64,56 @@ void main() {
       await FixtureStoreClient(StoreKind.googlePlay, file).listApps(),
       isEmpty,
     );
+    // No all-time count in the file: said, never a zero.
+    await expectLater(
+      client.allTimeInstalls(app),
+      throwsA(isA<StoreException>()),
+    );
+  });
+
+  test('answers all-time installs and active devices from the file', () async {
+    final dir = Directory.systemTemp.createTempSync('ks-store-fixture-');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}/stores.json');
+    final at = DateTime.utc(2026, 10, 9);
+    const app = StoreApp(
+      store: StoreKind.googlePlay,
+      id: 'com.example.probe',
+      bundleId: 'com.example.probe',
+      name: 'Probe',
+    );
+    file.writeAsStringSync(
+      jsonEncode({
+        'apps': [
+          StoreAppSnapshot(
+            app: app,
+            releases: ReadingValue(const [], at),
+            reviews: ReadingValue(const [], at),
+            rating: ReadingValue(const RatingSummary(average: 4), at),
+            vitals: ReadingMissing(StoreFailure.notSupported, 'No.', at),
+            downloads: ReadingMissing(StoreFailure.notConfigured, 'No.', at),
+            allTimeInstalls: ReadingValue(
+              InstallTotal(
+                count: 900,
+                measure: 'user installs',
+                source: InstallTotalSource.reports,
+                since: '2025-04',
+                activeDevices: 340,
+                activeDevicesDay: DateTime.utc(2026, 10, 7),
+              ),
+              at,
+            ),
+          ).toJson(),
+        ],
+      }),
+    );
+    final total = await FixtureStoreClient(
+      StoreKind.googlePlay,
+      file,
+    ).allTimeInstalls(app);
+    expect(total.count, 900);
+    expect(total.since, '2025-04');
+    expect(total.activeDevices, 340);
+    expect(total.activeDevicesDay, DateTime.utc(2026, 10, 7));
   });
 }

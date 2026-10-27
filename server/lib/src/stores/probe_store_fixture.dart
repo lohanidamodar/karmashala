@@ -18,7 +18,8 @@ File? probeStoreFixture(Map<String, String> environment) {
 }
 
 /// One store answered from a probe's fixture file. Never reaches a network.
-class FixtureStoreClient implements StoreClient, StoreErrorIssueSource {
+class FixtureStoreClient
+    implements StoreClient, StoreErrorIssueSource, StoreInstallTotalSource {
   FixtureStoreClient(this.store, this.file);
 
   @override
@@ -87,6 +88,10 @@ class FixtureStoreClient implements StoreClient, StoreErrorIssueSource {
   @override
   Future<List<StoreErrorIssue>> errorIssues(StoreApp app) async =>
       _value(_of(app).errorIssues);
+
+  @override
+  Future<InstallTotal> allTimeInstalls(StoreApp app) async =>
+      _value(_of(app).allTimeInstalls);
 
   @override
   Future<StoreIconImage?> icon(StoreApp app) async => null;

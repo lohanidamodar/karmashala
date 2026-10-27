@@ -398,6 +398,8 @@ class InstallTotal {
     this.through,
     this.band,
     this.note,
+    this.activeDevices,
+    this.activeDevicesDay,
   });
 
   /// The listing's [band] as a lower bound; null when it is not one this
@@ -437,6 +439,15 @@ class InstallTotal {
   /// Why there is no exact count, when this is a band.
   final String? note;
 
+  /// Devices with the app installed that were online in the 30 days before
+  /// [activeDevicesDay], as the same reports count them: Google Play's
+  /// `Active Device Installs`. Null when the reports have no such column, or
+  /// the store keeps none.
+  final int? activeDevices;
+
+  /// The report day [activeDevices] was counted on, midnight UTC.
+  final DateTime? activeDevicesDay;
+
   /// Whether [count] is a floor rather than the count.
   bool get atLeast => source == InstallTotalSource.listing;
 
@@ -448,6 +459,9 @@ class InstallTotal {
     'through': through?.toUtc().toIso8601String(),
     'band': band,
     'note': note,
+    if (activeDevices != null) 'activeDevices': activeDevices,
+    if (activeDevicesDay != null)
+      'activeDevicesDay': activeDevicesDay!.toUtc().toIso8601String(),
   };
 
   factory InstallTotal.fromJson(Map<String, Object?> json) => InstallTotal(
@@ -458,6 +472,8 @@ class InstallTotal {
     through: _date(json['through']),
     band: json['band'] as String?,
     note: json['note'] as String?,
+    activeDevices: (json['activeDevices'] as num?)?.toInt(),
+    activeDevicesDay: _date(json['activeDevicesDay']),
   );
 }
 

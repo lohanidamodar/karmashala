@@ -272,11 +272,25 @@ void main() {
     testWidgets('each app is listed once, in the same sections, either way '
         '($width)', (tester) async {
       await pump(tester, size: size, kept: StoresLayout.table);
-      // A row per store listing, each once; nothing above the list repeats
-      // them.
-      for (final app in listings) {
+      // A row per app, however many stores it is on, each once; nothing
+      // above the list repeats them.
+      expect(
+        find.byWidgetPredicate(
+          (widget) => switch (widget.key) {
+            ValueKey<String>(:final value) => value.startsWith(
+              'store-summary-row:',
+            ),
+            _ => false,
+          },
+        ),
+        findsNWidgets(4),
+      );
+      for (final name in ['Notes', 'Budget', 'Maps', 'Tasks']) {
         expect(
-          find.byKey(ValueKey('store-summary-row:${app.key}')),
+          find.descendant(
+            of: find.byType(StoreSummaryTable),
+            matching: find.text(name),
+          ),
           findsOneWidget,
         );
       }

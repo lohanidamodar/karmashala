@@ -12,6 +12,8 @@ class MonthInstalls {
     this.totalUsers,
     this.totalUsersDay,
     this.lastDay,
+    this.activeDevices,
+    this.activeDevicesDay,
   });
 
   /// The month's `Daily User Installs`, summed.
@@ -27,12 +29,20 @@ class MonthInstalls {
   /// The newest day with a row.
   final DateTime? lastDay;
 
+  /// The newest `Active Device Installs`: devices with the app installed
+  /// that were online in the 30 days before [activeDevicesDay]. Null when
+  /// the file has no such column.
+  final int? activeDevices;
+  final DateTime? activeDevicesDay;
+
   Map<String, Object?> toJson() => {
     'userInstalls': userInstalls,
     'deviceInstalls': deviceInstalls,
     'totalUsers': totalUsers,
     'totalUsersDay': totalUsersDay?.toUtc().toIso8601String(),
     'lastDay': lastDay?.toUtc().toIso8601String(),
+    'activeDevices': activeDevices,
+    'activeDevicesDay': activeDevicesDay?.toUtc().toIso8601String(),
   };
 
   factory MonthInstalls.fromJson(Map<String, Object?> json) => MonthInstalls(
@@ -41,6 +51,8 @@ class MonthInstalls {
     totalUsers: (json['totalUsers'] as num?)?.toInt(),
     totalUsersDay: _parsed(json['totalUsersDay']),
     lastDay: _parsed(json['lastDay']),
+    activeDevices: (json['activeDevices'] as num?)?.toInt(),
+    activeDevicesDay: _parsed(json['activeDevicesDay']),
   );
 }
 
@@ -59,10 +71,13 @@ MonthInstalls summariseInstalls(ReportTable table) {
   final user = table.column(const ['Daily User Installs']);
   final device = table.column(const ['Daily Device Installs']);
   final total = table.column(const ['Total User Installs']);
+  final active = table.column(const ['Active Device Installs']);
   int? userSum = user == null ? null : 0;
   int? deviceSum = device == null ? null : 0;
   int? totalUsers;
   DateTime? totalUsersDay;
+  int? activeDevices;
+  DateTime? activeDevicesDay;
   DateTime? lastDay;
   int? number(List<String> row, int? at) =>
       at == null ? null : int.tryParse(ReportTable.cell(row, at) ?? '');
@@ -77,6 +92,11 @@ MonthInstalls summariseInstalls(ReportTable table) {
       totalUsers = count;
       totalUsersDay = day;
     }
+    if (number(row, active) case final count?
+        when activeDevicesDay == null || !day.isBefore(activeDevicesDay)) {
+      activeDevices = count;
+      activeDevicesDay = day;
+    }
   }
   return MonthInstalls(
     userInstalls: userSum,
@@ -84,6 +104,8 @@ MonthInstalls summariseInstalls(ReportTable table) {
     totalUsers: totalUsers,
     totalUsersDay: totalUsersDay,
     lastDay: lastDay,
+    activeDevices: activeDevices,
+    activeDevicesDay: activeDevicesDay,
   );
 }
 
@@ -122,6 +144,8 @@ InstallTotal allTimeFromMonths(List<(DateTime, MonthInstalls)> months) {
       measure: 'user installs',
       source: InstallTotalSource.reports,
       through: newest.totalUsersDay,
+      activeDevices: newest.activeDevices,
+      activeDevicesDay: newest.activeDevicesDay,
     );
   }
   var sum = 0;
@@ -158,6 +182,8 @@ InstallTotal allTimeFromMonths(List<(DateTime, MonthInstalls)> months) {
         '${first.year.toString().padLeft(4, '0')}-'
         '${first.month.toString().padLeft(2, '0')}',
     through: through,
+    activeDevices: newest.activeDevices,
+    activeDevicesDay: newest.activeDevicesDay,
   );
 }
 
