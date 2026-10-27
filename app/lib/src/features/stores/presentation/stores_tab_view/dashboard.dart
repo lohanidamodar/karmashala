@@ -165,7 +165,7 @@ class _Overview extends ConsumerWidget {
             (
               title: titled ? section.title : null,
               apps: members.length,
-              rows: [for (final group in members) ...storeSummaryRowsOf(group)],
+              rows: storeSummaryApps(members),
             ),
         ],
         selected: selected,

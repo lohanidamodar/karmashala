@@ -6,6 +6,9 @@ import 'store_groups.dart';
 /// How many days the summary's rating sparkline covers.
 const int kSummaryTrendDays = 30;
 
+/// How many days the summary's recent installs cover.
+const int kSummaryInstallDays = 30;
+
 /// One app on one store as a row of the summary across every app.
 class StoreSummaryRow {
   StoreSummaryRow(this.group, this.entry);
@@ -62,6 +65,31 @@ class StoreSummaryRow {
       reading.checkedAt,
     ).where((review) => !review.answered).length;
   }
+
+  /// What this store counts as every install so far, exact or the listing's
+  /// band; null when it was not read or the store gave none.
+  InstallTotal? get allTime => snapshot?.allTimeInstalls?.valueOrNull;
+
+  /// Installs or first-time downloads on the days reported in the
+  /// [kSummaryInstallDays] up to the newest; null when none were read.
+  ({int count, int days})? get recentInstalls {
+    final days = snapshot?.downloads.valueOrNull?.days;
+    if (days == null || days.isEmpty) return null;
+    final newest = days
+        .map((day) => day.day)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final from = newest.subtract(const Duration(days: kSummaryInstallDays - 1));
+    final counted = [
+      for (final day in days)
+        if (!day.day.isBefore(from)) day.count,
+    ];
+    return (count: counted.fold(0, (sum, n) => sum + n), days: counted.length);
+  }
+
+  /// Devices with the app installed that were online in the last 30 days,
+  /// from Google Play's reports; null on the App Store, which reports none
+  /// here, or when the reports have no such column.
+  int? get activeDevices => allTime?.activeDevices;
 
   /// The stability the store reports; null where it reports none — the App
   /// Store has no crash rate — or it was not read.
@@ -162,4 +190,101 @@ List<(StoreSection, List<StoreAppGroup>)> storeSections(
 /// [group]'s rows, one per store it is on, App Store first.
 List<StoreSummaryRow> storeSummaryRowsOf(StoreAppGroup group) => [
   for (final entry in group.entries) StoreSummaryRow(group, entry),
+];
+
+/// Every install an app's stores have counted, added up only where adding
+/// is honest: exact counts from the stores' reports. A listing's band is a
+/// floor, so it stands alone, and only when no store has an exact count.
+class SummaryInstalls {
+  const SummaryInstalls({
+    required this.counted,
+    required this.missing,
+    this.band,
+  });
+
+  /// Each store's exact count, App Store first.
+  final List<(StoreKind, InstallTotal)> counted;
+
+  /// The listing band shown when no store has an exact count.
+  final (StoreKind, InstallTotal)? band;
+
+  /// Stores the app is on whose count is not in [count]: not read, not
+  /// given, or a band beside an exact count.
+  final List<StoreKind> missing;
+
+  /// The exact counts added up; null when no store has one.
+  int? get count => counted.isEmpty
+      ? null
+      : counted.fold<int>(0, (sum, held) => sum + held.$2.count);
+
+  /// Whether every store counted gave its own lifetime figure rather than a
+  /// sum of the reports read, which starts where they start.
+  bool get lifetime =>
+      counted.isNotEmpty && counted.every((held) => held.$2.since == null);
+}
+
+/// One app as one row of the summary: what each store it is on says, side
+/// by side, and the installs added up where that is honest.
+class StoreSummaryApp {
+  StoreSummaryApp(this.group) : stores = storeSummaryRowsOf(group);
+
+  /// What a click opens.
+  final StoreAppGroup group;
+
+  /// One per store, App Store first.
+  final List<StoreSummaryRow> stores;
+
+  String get key => group.key;
+  String get name => group.name;
+
+  /// Whether the app is on more than one store.
+  bool get onBoth => stores.length > 1;
+
+  bool get changedUnseen => group.changedUnseen;
+
+  SummaryInstalls get installs {
+    final counted = <(StoreKind, InstallTotal)>[];
+    final bands = <(StoreKind, InstallTotal)>[];
+    final missing = <StoreKind>[];
+    for (final store in stores) {
+      final total = store.allTime;
+      if (total == null) {
+        missing.add(store.app.store);
+      } else if (total.atLeast) {
+        bands.add((store.app.store, total));
+      } else {
+        counted.add((store.app.store, total));
+      }
+    }
+    if (counted.isNotEmpty) {
+      return SummaryInstalls(
+        counted: counted,
+        missing: [...missing, for (final (store, _) in bands) store],
+      );
+    }
+    return SummaryInstalls(
+      counted: const [],
+      band: bands.isEmpty ? null : bands.first,
+      missing: [...missing, for (final (store, _) in bands.skip(1)) store],
+    );
+  }
+
+  /// Installs over the last [kSummaryInstallDays] on every store that
+  /// reported them; null when none did.
+  int? get recentInstalls {
+    final counts = [for (final store in stores) ?store.recentInstalls?.count];
+    return counts.isEmpty ? null : counts.fold<int>(0, (sum, n) => sum + n);
+  }
+
+  /// Active devices on every store that counts them — Google Play alone
+  /// today; null when none does.
+  int? get activeDevices {
+    final counts = [for (final store in stores) ?store.activeDevices];
+    return counts.isEmpty ? null : counts.fold<int>(0, (sum, n) => sum + n);
+  }
+}
+
+/// [groups] as the summary's rows, one per app, in [groups]' order.
+List<StoreSummaryApp> storeSummaryApps(Iterable<StoreAppGroup> groups) => [
+  for (final group in groups) StoreSummaryApp(group),
 ];

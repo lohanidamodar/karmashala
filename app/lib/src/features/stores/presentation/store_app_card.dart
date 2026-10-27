@@ -467,7 +467,7 @@ class _Downloads extends StatelessWidget {
 
   final DownloadSeries series;
 
-  /// Wide enough to show fourteen days as a shape, narrow enough for a card.
+  /// Wide enough to show a month of days as a shape, narrow enough for a card.
   static const sparklineWidth = 44.0;
 
   @override

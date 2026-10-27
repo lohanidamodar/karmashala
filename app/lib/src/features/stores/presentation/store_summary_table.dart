@@ -8,6 +8,7 @@ import 'package:store_console/store_console.dart';
 import '../application/store_summary.dart';
 import 'store_app_icon.dart';
 import 'store_badges.dart';
+import 'store_installs.dart';
 import 'store_logo.dart';
 import 'stores_format.dart';
 
@@ -20,20 +21,27 @@ const double kSummarySparklineHeight = 16;
 /// What a reading the store does not give says, never a zero.
 const String kNotReported = 'not reported';
 
+/// What an active-devices figure counts, for its tooltip.
+const String kActiveDevicesMeaning =
+    'Devices with the app installed that were online in the last 30 days, '
+    'from Google Play\'s installs reports. Devices, not people.';
+
 /// One section of the summary: its heading — none when it is the only one —
-/// and its rows.
+/// and its rows, one per app.
 typedef StoreSummarySection = ({
   String? title,
   int apps,
-  List<StoreSummaryRow> rows,
+  List<StoreSummaryApp> rows,
 });
 
-/// **The summary across every app**: a row per app per store — its icon and
-/// platform, what is live, the rating with a month's trend, new and
-/// unanswered reviews, the crash and ANR rate, and whether it changed since
-/// last seen — in the list's sections, a heading row between them. A table
-/// where it is wide, a list of compact rows where not. Tapping a row opens
-/// its app.
+/// **The summary across every app**: a row per app — its icon and the
+/// stores it is on, then a line per store in each cell for what is live, the
+/// rating with a month's trend, new and unanswered reviews and the crash and
+/// ANR rate; the installs added up where that is honest, with the last 30
+/// days under them; Google Play's active devices; and whether it changed
+/// since last seen — in the list's sections, a heading row between them. A
+/// table where it is wide, a list of compact rows where not. Tapping a row
+/// opens its app.
 class StoreSummaryTable extends StatelessWidget {
   const StoreSummaryTable({
     required this.sections,
@@ -66,15 +74,15 @@ class StoreSummaryTable extends StatelessWidget {
             if (children.isNotEmpty) children.add(const Divider(height: 1));
             children.add(_SectionRow(title: title, apps: section.apps));
           }
-          for (final row in section.rows) {
+          for (final app in section.rows) {
             if (children.isNotEmpty) children.add(const Divider(height: 1));
             children.add(
               _SummaryRow(
-                key: ValueKey('store-summary-row:${row.app.key}'),
-                row: row,
+                key: ValueKey('store-summary-row:${app.key}'),
+                app: app,
                 wide: wide,
-                selected: row.group.key == selected,
-                onTap: () => onOpen(row.group.key),
+                selected: app.key == selected,
+                onTap: () => onOpen(app.key),
               ),
             );
           }
@@ -126,7 +134,9 @@ enum _Column {
   app('App', 4),
   live('Live', 3),
   rating('Rating · 30 days', 3),
-  reviews('New reviews', 2),
+  installs('Installs', 3),
+  devices('Active devices', 2),
+  reviews('New reviews', 3),
   stability('Crashes · ANRs', 3);
 
   const _Column(this.title, this.flex);
@@ -154,14 +164,17 @@ class _HeaderRow extends StatelessWidget {
             for (final column in _Column.values)
               Expanded(
                 flex: column.flex,
-                child: Text(
-                  column.title,
-                  style: style,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: Insets.sm),
+                  child: Text(
+                    column.title,
+                    style: style,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-            const SizedBox(width: Chrome.iconAction + Insets.sm),
+            const SizedBox(width: Chrome.iconAction),
           ],
         ),
       ),
@@ -171,14 +184,14 @@ class _HeaderRow extends StatelessWidget {
 
 class _SummaryRow extends StatelessWidget {
   const _SummaryRow({
-    required this.row,
+    required this.app,
     required this.wide,
     required this.selected,
     required this.onTap,
     super.key,
   });
 
-  final StoreSummaryRow row;
+  final StoreSummaryApp app;
   final bool wide;
   final bool selected;
   final VoidCallback onTap;
@@ -188,7 +201,7 @@ class _SummaryRow extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: _spoken(row),
+      label: _spoken(app),
       child: ExcludeSemantics(
         child: InkWell(
           onTap: onTap,
@@ -199,7 +212,7 @@ class _SummaryRow extends StatelessWidget {
                 horizontal: Insets.md,
                 vertical: Insets.sm,
               ),
-              child: wide ? _WideCells(row: row) : _CompactCells(row: row),
+              child: wide ? _WideCells(app: app) : _CompactCells(app: app),
             ),
           ),
         ),
@@ -207,12 +220,30 @@ class _SummaryRow extends StatelessWidget {
     );
   }
 
-  static String _spoken(StoreSummaryRow row) {
+  static String _spoken(StoreSummaryApp app) {
+    final installs = app.installs;
+    final figure = summaryInstallsFigure(installs);
+    final recent = app.recentInstalls;
+    final devices = app.activeDevices;
+    return [
+      app.name,
+      if (app.group.combinedManually) 'combined manually',
+      for (final row in app.stores) _spokenStore(row),
+      if (figure != null)
+        '$figure installs, ${summaryInstallsPeriod(installs, app)}'
+      else
+        'installs $kNotReported',
+      if (recent != null) '$recent in the last 30 days',
+      if (devices != null) '$devices active devices',
+      if (app.changedUnseen) 'changed since last seen',
+    ].join(', ');
+  }
+
+  static String _spokenStore(StoreSummaryRow row) {
     final live = row.live;
     final rating = row.rating;
-    final vitals = row.vitals;
     return [
-      '${row.app.name}, ${row.platform}, ${row.app.store.label}',
+      '${row.app.store.label}, ${row.platform}',
       if (live != null)
         'live ${formatVersion(live)} ${formatReleaseState(live)}'
       else
@@ -222,10 +253,63 @@ class _SummaryRow extends StatelessWidget {
       else
         'rating $kNotReported',
       _reviewsText(row),
-      _stabilityText(vitals, long: true),
-      if (row.changedUnseen) 'changed since last seen',
+      _stabilityText(row.vitals, long: true),
     ].join(', ');
   }
+}
+
+/// The figure the row shows for its installs: the exact counts added up,
+/// else the listing's band; null when no store gave either.
+String? summaryInstallsFigure(SummaryInstalls installs) {
+  if (installs.count case final count?) return formatCompactCount(count);
+  if (installs.band case (_, final band)) return formatInstallFigure(band);
+  return null;
+}
+
+/// What period [installs] covers, under the figure: `all time` only when
+/// every store counted gave its own lifetime figure, else where each sum
+/// starts — `since Mar 2019`, `App Store since Jan 2025 · Play since Mar
+/// 2019` — and which store alone is counted when the other is not.
+String summaryInstallsPeriod(SummaryInstalls installs, StoreSummaryApp app) {
+  String from(InstallTotal total) => switch (total.since) {
+    null => 'all time',
+    final since => 'since ${formatInstallPeriod(since)}',
+  };
+  if (installs.band case (final store, _)) {
+    return '${storeShortLabel(store)} listing band';
+  }
+  final counted = installs.counted;
+  if (counted.isEmpty) return kNotReported;
+  if (counted.length == 1) {
+    final (store, total) = counted.single;
+    return app.onBoth
+        ? '${storeShortLabel(store)} only, ${from(total)}'
+        : from(total);
+  }
+  if (installs.lifetime) return 'all time';
+  return [
+    for (final (store, total) in counted)
+      '${storeShortLabel(store)} ${from(total)}',
+  ].join(' · ');
+}
+
+/// Each store's count in full, for the installs tooltip.
+String _installsDetail(StoreSummaryApp app) {
+  final installs = app.installs;
+  return [
+    for (final (store, total) in installs.counted)
+      describeInstallTotal(total, store),
+    if (installs.band case (final store, final band))
+      describeInstallTotal(band, store),
+    for (final store in installs.missing) '${store.label}: $kNotReported.',
+    if (app.recentInstalls != null)
+      [
+        for (final row in app.stores)
+          if (row.recentInstalls case final recent?)
+            '${row.app.store.label}: ${recent.count} over the last 30 days '
+                '(${recent.days} days reported).',
+      ].join('\n'),
+  ].join('\n');
 }
 
 String _reviewsText(StoreSummaryRow row) {
@@ -253,9 +337,9 @@ String _stabilityText(
 }
 
 class _Name extends StatelessWidget {
-  const _Name({required this.row});
+  const _Name({required this.app});
 
-  final StoreSummaryRow row;
+  final StoreSummaryApp app;
 
   @override
   Widget build(BuildContext context) {
@@ -266,8 +350,8 @@ class _Name extends StatelessWidget {
     return Row(
       children: [
         StoreAppIconView(
-          icon: row.entry.icon ?? row.group.icon,
-          name: row.app.name,
+          icon: app.group.icon,
+          name: app.name,
           size: Chrome.iconTitle + Insets.sm,
         ),
         const SizedBox(width: Insets.sm),
@@ -276,7 +360,7 @@ class _Name extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                row.app.name,
+                app.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -285,11 +369,25 @@ class _Name extends StatelessWidget {
               ),
               Row(
                 children: [
-                  StoreLogo(row.app.store, size: Chrome.iconAction),
-                  const SizedBox(width: Insets.xxs),
+                  for (final row in app.stores) ...[
+                    StoreLogo(row.app.store, size: Chrome.iconAction),
+                    const SizedBox(width: Insets.xxs),
+                  ],
+                  if (app.group.combinedManually) ...[
+                    Tooltip(
+                      message: 'Combined manually',
+                      child: Icon(
+                        AppIcons.linkSimple,
+                        key: const ValueKey('store-summary-combined'),
+                        size: Chrome.iconAction,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: Insets.xxs),
+                  ],
                   Flexible(
                     child: Text(
-                      row.platform,
+                      app.stores.map((row) => row.platform).join(' · '),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: muted,
@@ -300,6 +398,39 @@ class _Name extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// A cell holding a line per store: each behind its store's logo when the
+/// app is on both, the one store's alone when not.
+class _PerStore extends StatelessWidget {
+  const _PerStore({required this.app, required this.cell});
+
+  final StoreSummaryApp app;
+  final Widget Function(StoreSummaryRow row) cell;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!app.onBoth) return cell(app.stores.single);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (i, row) in app.stores.indexed) ...[
+          if (i > 0) const SizedBox(height: Insets.xxs),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: Insets.hair),
+                child: StoreLogo(row.app.store, size: Chrome.iconAction),
+              ),
+              const SizedBox(width: Insets.xs),
+              Expanded(child: cell(row)),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -361,11 +492,13 @@ class _Rating extends StatelessWidget {
       );
     }
     final trend = row.ratingTrend;
-    return Row(
+    return Wrap(
+      spacing: Insets.sm,
+      runSpacing: Insets.xxs,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         RatingFigure(rating: rating),
-        if (trend.length > 1) ...[
-          const SizedBox(width: Insets.sm),
+        if (trend.length > 1)
           Sparkline(
             values: trend,
             color: theme.colorScheme.primary,
@@ -376,8 +509,97 @@ class _Rating extends StatelessWidget {
             area: false,
             semanticsLabel: 'Rating over the last 30 days',
           ),
-        ],
       ],
+    );
+  }
+}
+
+/// The installs cell: the figure, the period it covers, and the last 30
+/// days; on hover each store's count in full.
+class _Installs extends StatelessWidget {
+  const _Installs({required this.app});
+
+  final StoreSummaryApp app;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final installs = app.installs;
+    final figure = summaryInstallsFigure(installs);
+    final recent = app.recentInstalls;
+    if (figure == null && recent == null) return const _Muted(kNotReported);
+    return Tooltip(
+      message: _installsDetail(app),
+      child: Column(
+        key: ValueKey('store-summary-installs:${app.key}'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            figure ?? kNotReported,
+            style: figure == null
+                ? theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  )
+                : theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+          ),
+          if (figure != null) _Muted(summaryInstallsPeriod(installs, app)),
+          if (recent != null) _Muted(_recentText(recent)),
+        ],
+      ),
+    );
+  }
+}
+
+String _recentText(int recent) => '+${formatCompactCount(recent)} in 30 days';
+
+/// Google Play's active devices, with what they count on hover.
+class _Devices extends StatelessWidget {
+  const _Devices({required this.app, this.labelled = false});
+
+  final StoreSummaryApp app;
+
+  /// Whether the figure says `devices` after it, where there is no header.
+  final bool labelled;
+
+  @override
+  Widget build(BuildContext context) {
+    final devices = app.activeDevices;
+    if (devices == null) {
+      return labelled ? const SizedBox.shrink() : const _Muted(kNotReported);
+    }
+    final figure = formatCompactCount(devices);
+    final day = app.stores
+        .map((row) => row.allTime?.activeDevicesDay)
+        .whereType<DateTime>()
+        .firstOrNull;
+    final figureText = Text(
+      labelled ? '$figure active devices' : figure,
+      key: ValueKey('store-summary-devices:${app.key}'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: labelled ? Theme.of(context).colorScheme.onSurfaceVariant : null,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+    return Tooltip(
+      message: [
+        kActiveDevicesMeaning,
+        if (day != null) 'Counted on ${formatReportDay(day)}.',
+      ].join('\n'),
+      child: app.onBoth && !labelled
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const StoreLogo(StoreKind.googlePlay, size: Chrome.iconAction),
+                const SizedBox(width: Insets.xs),
+                Flexible(child: figureText),
+              ],
+            )
+          : figureText,
     );
   }
 }
@@ -403,21 +625,37 @@ class _Muted extends StatelessWidget {
   }
 }
 
-/// The dot that says the app changed since somebody last opened it.
-class _Changed extends StatelessWidget {
-  const _Changed({required this.row});
+class _Reviews extends StatelessWidget {
+  const _Reviews({required this.row});
 
   final StoreSummaryRow row;
 
   @override
+  Widget build(BuildContext context) => _Muted(
+    _reviewsText(row),
+    color: (row.unanswered ?? 0) > 0 ? SemanticColors.of(context).unread : null,
+  );
+}
+
+/// The bell that says the app changed since somebody last opened it.
+class _Changed extends StatelessWidget {
+  const _Changed({required this.app});
+
+  final StoreSummaryApp app;
+
+  @override
   Widget build(BuildContext context) {
-    if (!row.changedUnseen) {
+    if (!app.changedUnseen) {
       return const SizedBox(width: Chrome.iconAction);
     }
-    final attention = row.entry.changes?.attention ?? false;
+    final unseen = [
+      for (final held in app.group.changes)
+        if (!held.seen) held,
+    ];
+    final attention = unseen.any((held) => held.attention);
     final semantic = SemanticColors.of(context);
     return Tooltip(
-      message: row.entry.changes?.sentence ?? 'Changed',
+      message: unseen.map((held) => held.sentence).join('\n'),
       child: Icon(
         AppIcons.bellSimple,
         key: const ValueKey('store-summary-changed'),
@@ -431,78 +669,127 @@ class _Changed extends StatelessWidget {
 }
 
 class _WideCells extends StatelessWidget {
-  const _WideCells({required this.row});
+  const _WideCells({required this.app});
 
-  final StoreSummaryRow row;
+  final StoreSummaryApp app;
 
   @override
   Widget build(BuildContext context) {
-    final unanswered = row.unanswered ?? 0;
+    Widget cell(_Column column, Widget child) => Expanded(
+      flex: column.flex,
+      child: Padding(
+        padding: const EdgeInsets.only(right: Insets.sm),
+        child: child,
+      ),
+    );
     return Row(
       children: [
-        Expanded(
-          flex: _Column.app.flex,
-          child: _Name(row: row),
-        ),
-        Expanded(
-          flex: _Column.live.flex,
-          child: _Live(row: row),
-        ),
-        Expanded(
-          flex: _Column.rating.flex,
-          child: _Rating(row: row),
-        ),
-        Expanded(
-          flex: _Column.reviews.flex,
-          child: _Muted(
-            _reviewsText(row),
-            color: unanswered > 0 ? SemanticColors.of(context).unread : null,
+        cell(_Column.app, _Name(app: app)),
+        cell(
+          _Column.live,
+          _PerStore(
+            app: app,
+            cell: (row) => _Live(row: row),
           ),
         ),
-        Expanded(
-          flex: _Column.stability.flex,
-          child: _Muted(_stabilityText(row.vitals)),
+        cell(
+          _Column.rating,
+          _PerStore(
+            app: app,
+            cell: (row) => _Rating(row: row),
+          ),
         ),
-        const SizedBox(width: Insets.sm),
-        _Changed(row: row),
+        cell(_Column.installs, _Installs(app: app)),
+        cell(_Column.devices, _Devices(app: app)),
+        cell(
+          _Column.reviews,
+          _PerStore(
+            app: app,
+            cell: (row) => _Reviews(row: row),
+          ),
+        ),
+        cell(
+          _Column.stability,
+          _PerStore(
+            app: app,
+            cell: (row) => _Muted(_stabilityText(row.vitals)),
+          ),
+        ),
+        _Changed(app: app),
       ],
     );
   }
 }
 
 class _CompactCells extends StatelessWidget {
-  const _CompactCells({required this.row});
+  const _CompactCells({required this.app});
 
-  final StoreSummaryRow row;
+  final StoreSummaryApp app;
 
   @override
   Widget build(BuildContext context) {
-    final unanswered = row.unanswered ?? 0;
+    final installs = app.installs;
+    final figure = summaryInstallsFigure(installs);
+    final recent = app.recentInstalls;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            Expanded(child: _Name(row: row)),
+            Expanded(child: _Name(app: app)),
             const SizedBox(width: Insets.sm),
-            _Changed(row: row),
+            _Changed(app: app),
           ],
         ),
         const SizedBox(height: Insets.xs),
-        Wrap(
-          spacing: Insets.md,
-          runSpacing: Insets.xs,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _Live(row: row),
-            _Rating(row: row),
-            _Muted(
-              _reviewsText(row),
-              color: unanswered > 0 ? SemanticColors.of(context).unread : null,
-            ),
-            _Muted(_stabilityText(row.vitals, labelled: true)),
-          ],
+        Tooltip(
+          message: _installsDetail(app),
+          child: Wrap(
+            key: ValueKey('store-summary-installs:${app.key}'),
+            spacing: Insets.md,
+            runSpacing: Insets.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _Muted(
+                figure == null
+                    ? 'Installs $kNotReported'
+                    : '$figure installs, '
+                          '${summaryInstallsPeriod(installs, app)}',
+              ),
+              if (recent != null) _Muted(_recentText(recent)),
+            ],
+          ),
         ),
+        if (app.activeDevices != null) _Devices(app: app, labelled: true),
+        for (final row in app.stores) ...[
+          const SizedBox(height: Insets.xs),
+          _StoreLine(row: row, logo: app.onBoth),
+        ],
+      ],
+    );
+  }
+}
+
+/// One store's facts on a narrow row, behind its logo when the app is on
+/// both stores.
+class _StoreLine extends StatelessWidget {
+  const _StoreLine({required this.row, required this.logo});
+
+  final StoreSummaryRow row;
+  final bool logo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: Insets.md,
+      runSpacing: Insets.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (logo) StoreLogo(row.app.store, size: Chrome.iconAction),
+        _Live(row: row),
+        _Rating(row: row),
+        _Reviews(row: row),
+        _Muted(_stabilityText(row.vitals, labelled: true)),
       ],
     );
   }
@@ -520,7 +807,6 @@ class StoreListingFacts extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final trend = row.ratingTrend;
-    final unanswered = row.unanswered ?? 0;
     return Wrap(
       key: ValueKey('store-listing-facts:${row.app.key}'),
       spacing: Insets.md,
@@ -538,10 +824,7 @@ class StoreListingFacts extends StatelessWidget {
             area: false,
             semanticsLabel: 'Rating over the last 30 days',
           ),
-        _Muted(
-          _reviewsText(row),
-          color: unanswered > 0 ? SemanticColors.of(context).unread : null,
-        ),
+        _Reviews(row: row),
         _Muted(_stabilityText(row.vitals, labelled: true)),
       ],
     );
