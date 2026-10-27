@@ -118,9 +118,9 @@ class _Numbers extends ConsumerWidget {
         case ReadingValue(:final value):
           tiles.add(
             StatTile(
-              label: '${value.unit} 14 d',
+              label: '${value.unit} 30 d',
               leading: logo,
-              semanticLabel: spoken('${value.unit} 14 d'),
+              semanticLabel: spoken('${value.unit} 30 d'),
               value: value.days.isEmpty
                   ? null
                   : formatCompactCount(value.total),
