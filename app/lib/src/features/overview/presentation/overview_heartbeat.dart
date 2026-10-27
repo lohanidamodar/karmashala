@@ -9,9 +9,12 @@ import 'overview_counters.dart';
 
 /// **The fleet's heartbeat**, one slim row: Today, whose parts filter the
 /// cards, the facts worth a word, and the last two hours as a sparkline —
-/// folded behind a toggle where the row is narrow.
+/// folded behind a toggle where the row is narrow. Without [today], where
+/// the dashboard's strip already counts it.
 class OverviewHeartbeat extends ConsumerStatefulWidget {
-  const OverviewHeartbeat({super.key});
+  const OverviewHeartbeat({this.today = true, super.key});
+
+  final bool today;
 
   @override
   ConsumerState<OverviewHeartbeat> createState() => _OverviewHeartbeatState();
@@ -39,11 +42,14 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
             waiting: semantic.attention,
           )
         : null;
-    const counters = Wrap(
+    final counters = Wrap(
       spacing: Insets.md,
       runSpacing: Insets.xs,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: [OverviewTodayStrip(), OverviewFactsLine()],
+      children: [
+        if (widget.today) const OverviewTodayStrip(),
+        const OverviewFactsLine(),
+      ],
     );
     return Container(
       key: const ValueKey('overview-heartbeat'),
@@ -69,7 +75,7 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
           return Row(
             children: [
               // Today's parts take the room; the chart keeps its least width.
-              const Flexible(flex: 3, child: counters),
+              Flexible(flex: 3, child: counters),
               const SizedBox(width: Insets.md),
               Expanded(
                 child: ConstrainedBox(
@@ -93,16 +99,18 @@ class _OverviewHeartbeatState extends ConsumerState<OverviewHeartbeat> {
     children: [
       Row(
         children: [
-          const Expanded(
+          Expanded(
             child: SingleChildScrollView(
-              key: ValueKey('overview-triage-line'),
+              key: const ValueKey('overview-triage-line'),
               scrollDirection: Axis.horizontal,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  OverviewTodayStrip(compact: true),
-                  SizedBox(width: Insets.md),
-                  OverviewFactsLine(),
+                  if (widget.today) ...const [
+                    OverviewTodayStrip(compact: true),
+                    SizedBox(width: Insets.md),
+                  ],
+                  const OverviewFactsLine(),
                 ],
               ),
             ),

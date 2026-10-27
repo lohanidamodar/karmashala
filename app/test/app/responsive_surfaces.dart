@@ -31,6 +31,7 @@ import 'package:karmashala/src/features/agents/application/usage_tab_prefs.dart'
 import 'package:karmashala/src/features/agents/data/agent_latest_version_fetcher.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_tab/usage_tab_view.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
+import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
 import 'package:karmashala/src/features/overview/application/overview_glance_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
@@ -201,17 +202,8 @@ Future<void> _tap(WidgetTester tester, Finder finder) async {
   await settleSurface(tester);
 }
 
-/// Taps [finder] on the board, scrolling its lazy list until it is built: a
+/// Taps [finder] on the board, scrolling its list until it is built: a
 /// short window at large text keeps the lanes below the fold.
-/// Scrolls the board until [finder] is drawn, tapping nothing.
-Future<void> _scrollTo(WidgetTester tester, Finder finder) async {
-  if (finder.evaluate().isEmpty) {
-    await tester.scrollUntilVisible(finder, 300, scrollable: hybridList);
-  }
-  await tester.ensureVisible(finder.first);
-  await settleSurface(tester);
-}
-
 Future<void> _tapOnBoard(WidgetTester tester, Finder finder) async {
   if (finder.evaluate().isEmpty) {
     await tester.scrollUntilVisible(finder, 300, scrollable: hybridList);
@@ -223,15 +215,17 @@ Future<void> _tapOnBoard(WidgetTester tester, Finder finder) async {
 /// open: the board keeps it across a resize.
 Future<void> _peek(WidgetTester tester) async {
   if (_byKey('overview-peek').evaluate().isNotEmpty) return;
-  await _tapOnBoard(tester, _byKey('overview-queue-title:ks-r21'));
+  // What waits is in the waiting drawer, over the board.
+  if (_byKey('overview-waiting-drawer').evaluate().isEmpty) {
+    await _tap(tester, _byKey('overview-waiting-toggle'));
+  }
+  await _tap(tester, _byKey('overview-queue-title:ks-r21'));
 }
 
-/// Opens a sub-session on the dashboard's tree, unless the last window left
-/// it open: the tree keeps it across a resize.
+/// Opens a sub-session on the dashboard's tree in the peek, unless the last
+/// window left it open: the board keeps it across a resize.
 Future<void> openDashboardTreePill(WidgetTester tester) async {
-  if (_byKey('overview-tree-detail:ks-r32-sub2').evaluate().isNotEmpty) {
-    return _scrollTo(tester, _byKey('overview-tree-detail:ks-r32-sub2'));
-  }
+  if (_byKey('overview-peek').evaluate().isNotEmpty) return;
   await _tapOnBoard(tester, _byKey('overview-tree-pill:ks-r32-sub2'));
 }
 
@@ -408,6 +402,8 @@ Future<SurfaceBuilder> _mission(
   void Function(ProviderContainer container)? seed,
 }) async {
   final c = (await tester.runAsync(_missionContainer))!;
+  // More unfolded: the heartbeat, glances and lanes under the strip too.
+  c.read(overviewMoreProvider.notifier).toggle();
   seed?.call(c);
   return () => responsiveApp(
     tester,
@@ -1087,8 +1083,8 @@ final responsiveSurfaces = <ResponsiveSurface>[
     (t, b) => _mission(t, b),
     warmUp: (t) => _tapOnBoard(t, _byKey('overview-pipeline-edit:run-1')),
   ),
-  // Round 92: the session tree — each family one tree in a cell of its own,
-  // a sub-session opened inline under its pill.
+  // Round 92: the session tree — each family one card in a cell of its own,
+  // a sub-session opened in the peek from its pill.
   ResponsiveSurface(
     'dash-tree',
     (t, b) => _mission(t, b),

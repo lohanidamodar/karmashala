@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
+import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_queue_card.dart';
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
@@ -203,6 +204,7 @@ void main() {
       prefsDir: dir,
       size: size,
       phone: phone,
+      waiting: true,
       overrides: [
         if (grants != null)
           serverOfferProvider.overrideWithValue(
@@ -231,6 +233,22 @@ void main() {
       find.byKey(ValueKey('overview-queue-card:$id'));
   Finder inCard(String id, Finder f) =>
       find.descendant(of: queueCard(id), matching: f);
+
+  // The drawer's list builds what is near: scroll it to [target].
+  Future<void> inDrawer(WidgetTester tester, Finder target) async {
+    await tester.scrollUntilVisible(
+      target,
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('overview-queue')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.ensureVisible(target);
+    await settleMission(tester);
+  }
 
   testWidgets('a question: numbered options, Send, Decline, Reply in words', (
     tester,
@@ -506,8 +524,7 @@ void main() {
   ) async {
     await pump(tester);
     final retry = find.byKey(const ValueKey('overview-retry:store-reviews'));
-    await tester.ensureVisible(retry);
-    await settleMission(tester);
+    await inDrawer(tester, retry);
     await tester.tap(retry);
     await settleMission(tester);
     expect(sent, [('store-reviews', kOverviewRetryWords)]);
@@ -636,6 +653,10 @@ void main() {
       await press(tester, LogicalKeyboardKey.escape);
       expect(peeked(c), isNull);
       expect(selected(c), second);
+      // The waiting drawer closes next, then the selection clears.
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(c.read(overviewDrawerProvider).open, isFalse);
+      expect(selected(c), second);
       await press(tester, LogicalKeyboardKey.escape);
       expect(selected(c), isNull);
       await unmountMission(tester);
@@ -750,8 +771,7 @@ void main() {
     testWidgets('$name: every kind of ask fits', (tester) async {
       await pump(tester, size: size, phone: phone);
       for (final id in ['ks-r21', 'ask-q', 'term', 'store-reviews']) {
-        await tester.ensureVisible(queueCard(id));
-        await settleMission(tester);
+        await inDrawer(tester, queueCard(id));
       }
       expect(tester.takeException(), isNull);
       await unmountMission(tester);

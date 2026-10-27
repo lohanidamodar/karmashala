@@ -26,17 +26,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   }
 
   /// The ids ↑ and ↓ walk, as drawn.
-  List<String> _order() {
-    final sections = _sections();
-    return [
-      for (final card in [
-        ...sections.queue,
-        ...sections.work,
-        ...sections.ready,
-      ])
-        card.id,
-    ];
-  }
+  List<String> _order() => overviewDrawnOrder(ref);
 
   /// The session [step] places from [id] in [_order], or null past an end.
   String? _stepFrom(String id, int step) {
@@ -51,6 +41,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
 
   OverviewSections _sections() => overviewSectionsOf(
     ref.read(overviewBoardProvider),
+    ref.read(overviewForestProvider),
     waitingSince: (id) =>
         ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
@@ -213,6 +204,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         );
         return;
       }
+      // What waits is answered in the drawer: N brings it out.
+      if (!ref.read(overviewDrawerProvider).open) {
+        ref.read(overviewDrawerProvider.notifier).open();
+      }
       _goTo(next ?? current!);
     }),
     OverviewPickOptionIntent: _Triage<OverviewPickOptionIntent>(
@@ -268,15 +263,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       },
     ),
     OverviewMoveIntent: _Triage<OverviewMoveIntent>((intent) {
-      final sections = _sections();
-      final order = [
-        for (final card in [
-          ...sections.queue,
-          ...sections.work,
-          ...sections.ready,
-        ])
-          card.id,
-      ];
+      final order = _order();
       if (order.isEmpty) return;
       final focus = ref.read(overviewFocusProvider);
       final at = order.indexOf(focus.peeked ?? focus.selected ?? '');
@@ -293,12 +280,19 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         }
         final focus = ref.read(overviewFocusProvider);
         final controller = ref.read(overviewFocusProvider.notifier);
-        focus.peeked != null ? controller.closePeek() : controller.select(null);
+        if (focus.peeked != null) {
+          controller.closePeek();
+        } else if (ref.read(overviewDrawerProvider).open) {
+          ref.read(overviewDrawerProvider.notifier).close();
+        } else {
+          controller.select(null);
+        }
       },
       enabled: (_) {
         final focus = ref.read(overviewFocusProvider);
         return focus.peeked != null ||
             focus.selected != null ||
+            ref.read(overviewDrawerProvider).open ||
             !ref.read(overviewSelectionProvider).isEmpty;
       },
     ),
@@ -318,8 +312,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           .read(overviewSelectionProvider.notifier)
           .selectAll(
             overviewLaneOf(
-              _sections(),
-              ref.read(overviewBoardProvider),
+              ref.read(overviewForestProvider),
               from,
               folded: ref.read(overviewFoldedParentsProvider),
             ),

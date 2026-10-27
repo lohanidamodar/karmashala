@@ -155,18 +155,21 @@ List<PopupMenuEntry<String>> overviewCardExtras(
 }
 
 /// Opens [card]'s menu — the card's own verbs, then the session menu every
-/// other place has — from [anchor], at [at] for a right-click.
+/// other place has — from [anchor], at [at] for a right-click. [more] are a
+/// place's own verbs after the card's, answered by [onMore].
 Future<void> showOverviewCardMenu(
   BuildContext anchor,
   WidgetRef ref,
   OverviewCard card, {
   Offset? at,
+  List<PopupMenuEntry<String>> more = const [],
+  Future<bool> Function(String value)? onMore,
 }) => showOverviewSessionMenu(
   anchor,
   ref,
   card.entry,
   at: at,
-  extras: overviewCardExtras(ref, card),
+  extras: [...overviewCardExtras(ref, card), ...more],
   onExtra: (value) async {
     switch (value) {
       case 'board-pin':
@@ -174,7 +177,7 @@ Future<void> showOverviewCardMenu(
       case 'board-resume':
         await resumeFromDashboard(anchor, ref, card.entry);
       default:
-        return false;
+        return await onMore?.call(value) ?? false;
     }
     return true;
   },

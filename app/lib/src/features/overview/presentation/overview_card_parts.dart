@@ -262,6 +262,20 @@ class OverviewSubSessionRow extends ConsumerWidget {
   }
 }
 
+/// How many messages came since the owner last opened [card] here; 0 when
+/// nothing is new to them.
+int watchOverviewNewCount(WidgetRef ref, OverviewCard card) {
+  final id = card.id;
+  final seen = ref.watch(overviewSeenProvider.select((s) => s[id]));
+  if (seen == null || card.state == AgentState.ended) return 0;
+  final peeked = ref.watch(overviewFocusProvider.select((f) => f.peeked == id));
+  final times =
+      ref.watch(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
+      const <DateTime>[];
+  final count = newSince(seen, times) ?? 0;
+  return peeked ? 0 : count;
+}
+
 /// "3": what came since the owner last opened [card] on this device, from the
 /// read its card already makes. Nothing for one never opened here.
 class OverviewNewBadge extends ConsumerWidget {
@@ -272,18 +286,8 @@ class OverviewNewBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = card.id;
-    final seen = ref.watch(overviewSeenProvider.select((s) => s[id]));
-    if (seen == null || card.state == AgentState.ended) {
-      return const SizedBox.shrink();
-    }
-    final peeked = ref.watch(
-      overviewFocusProvider.select((f) => f.peeked == id),
-    );
-    final times =
-        ref.watch(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
-        const <DateTime>[];
-    final count = newSince(seen, times) ?? 0;
-    if (peeked || count == 0) return const SizedBox.shrink();
+    final count = watchOverviewNewCount(ref, card);
+    if (count == 0) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Tooltip(

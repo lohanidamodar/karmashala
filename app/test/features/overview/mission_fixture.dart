@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/explorer/application/session_diff_stat.d
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
+import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
@@ -744,7 +745,8 @@ class FakeOverviewReader implements OverviewReader {
 }
 
 /// Draws the Overview tab over [fixture] at [size]: the desktop's tab, or
-/// with [phone] the phone's Dashboard tab under a thumb's density.
+/// with [phone] the phone's Dashboard tab under a thumb's density; with
+/// [waiting], the waiting drawer open.
 Future<ProviderContainer> pumpMission(
   WidgetTester tester, {
   required MissionFixture fixture,
@@ -756,6 +758,7 @@ Future<ProviderContainer> pumpMission(
   GlobalKey? boundary,
   List<Override> overrides = const [],
   Widget? home,
+  bool waiting = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -784,6 +787,7 @@ Future<ProviderContainer> pumpMission(
     ],
   );
   addTearDown(container.dispose);
+  if (waiting) container.read(overviewDrawerProvider.notifier).open();
   final base = brightness == Brightness.dark
       ? AppTheme.dark()
       : AppTheme.light();
@@ -833,6 +837,15 @@ Future<void> unmountMission(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(seconds: 1));
 }
+
+/// Opens the waiting drawer from the strip.
+Future<void> openWaiting(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('overview-waiting-toggle')));
+  await settleMission(tester);
+}
+
+/// A family's card on the dashboard, by its root's id.
+Finder familyCard(String id) => find.byKey(ValueKey('overview-family:$id'));
 
 /// The Overview's own list, for a scroll that must not pick a text field's.
 final Finder hybridList = find

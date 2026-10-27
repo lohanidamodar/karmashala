@@ -7,8 +7,8 @@ import 'package:karmashala/src/features/sessions/application/host_lifecycle/host
 
 import 'mission_fixture.dart';
 
-/// **A card's quick End under a thumb**: always drawn on a live session, at
-/// the ⋯'s size, from a 360 px phone at 1.6x text without overflow; never on
+/// **A card's quick End under a thumb**: always drawn on a live session, as
+/// tall as the ⋯, from a 360 px phone at 1.6x text without overflow; never on
 /// an ended one.
 void main() {
   late Directory dir;
@@ -59,12 +59,14 @@ void main() {
       )) {
         expect(slot.opacity, 1, reason: '${slot.key}');
       }
-      // The same target as the ⋯ beside it.
+      // As tall a target as the ⋯ beside it.
       final first = (tester.widget(ends.first).key! as ValueKey<String>).value
           .substring('overview-end:'.length);
       expect(
-        tester.getSize(ends.first),
-        tester.getSize(find.byKey(ValueKey('overview-card-menu:$first'))),
+        tester.getSize(ends.first).height,
+        tester
+            .getSize(find.byKey(ValueKey('overview-card-menu:$first')))
+            .height,
       );
       // No ended session offers one.
       for (final s in fixture.sessions) {

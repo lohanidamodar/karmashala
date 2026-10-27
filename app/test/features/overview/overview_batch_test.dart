@@ -249,6 +249,7 @@ void main() {
       prefsDir: dir,
       size: size,
       phone: phone,
+      waiting: true,
       overrides: [
         sessionActionsProvider.overrideWith(
           (ref) => _SpyActions(ref, sent, archived),
@@ -386,7 +387,7 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('Ctrl+A picks every card in the lane of the selected one', (
+    testWidgets('Ctrl+A picks every family in the lane of the selected one', (
       tester,
     ) async {
       final c = await pump(tester);
@@ -397,9 +398,14 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await settleMission(tester);
-      // The queue's three, not the session at work.
-      expect(c.read(overviewSelectionProvider).ids, {'r21', 'r22', 'r23'});
-      expect(find.text('3 selected'), findsOneWidget);
+      // The lane's families as drawn: the three waiting and the one at work.
+      expect(c.read(overviewSelectionProvider).ids, {
+        'r21',
+        'r22',
+        'r23',
+        'ks-release',
+      });
+      expect(find.text('4 selected'), findsOneWidget);
       await unmountMission(tester);
     });
 
@@ -466,7 +472,12 @@ void main() {
         'none at rest', (tester) async {
       await pump(tester, size: const Size(412, 780), phone: true);
       expect(box('r21'), findsOneWidget);
-      final root = find.byKey(const ValueKey('overview-card:ks-release'));
+      // The drawer closed, the board under it.
+      await tester.tap(find.byKey(const ValueKey('overview-drawer-close')));
+      await settleMission(tester);
+      final root = find.byKey(
+        const ValueKey('overview-family-head:ks-release'),
+      );
       await tester.scrollUntilVisible(root, 200, scrollable: hybridList);
       expect(box('ks-release'), findsNothing);
       expect(treeBox('ks-release'), findsNothing);
@@ -481,7 +492,9 @@ void main() {
       await pump(tester, size: const Size(360, 780), phone: true);
       await pick(tester, 'r21');
       expect(find.text('1 selected'), findsOneWidget);
-      final row = find.byKey(const ValueKey('overview-card:ks-release'));
+      await tester.tap(find.byKey(const ValueKey('overview-drawer-close')));
+      await settleMission(tester);
+      final row = find.byKey(const ValueKey('overview-family-head:ks-release'));
       await tester.scrollUntilVisible(row, 200, scrollable: hybridList);
       await tester.ensureVisible(row);
       await settleMission(tester);

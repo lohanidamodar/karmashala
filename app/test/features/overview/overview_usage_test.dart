@@ -90,8 +90,8 @@ void main() {
       }
     });
 
-    testWidgets('the card and the peek say what was reported, "not recorded" '
-        'otherwise, and warn near a limit', (tester) async {
+    testWidgets('the peek says what was reported, "not recorded" '
+        'otherwise, and warns near a limit', (tester) async {
       final container = await pumpMission(
         tester,
         fixture: MissionFixture.full(),
@@ -123,38 +123,28 @@ void main() {
         ],
       );
 
-      expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('overview-usage:ks-r32')))
-            .data,
-        r'1.2M tokens · $0.42',
+      // The family cards keep a fixed shape: usage is the peek's to say.
+      container.read(overviewFocusProvider.notifier).peek('ks-r32');
+      await settleMission(tester);
+      Finder inPeek(String key) => find.descendant(
+        of: find.byKey(const ValueKey('overview-peek')),
+        matching: find.byKey(ValueKey(key)),
       );
       expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('overview-usage:ks-release')),
-            )
-            .data,
+        tester.widget<Text>(inPeek('overview-usage:ks-r32')).data,
+        r'1.2M tokens · $0.42',
+      );
+      expect(inPeek('overview-limit:ks-r32'), findsNothing);
+
+      container.read(overviewFocusProvider.notifier).peek('ks-release');
+      await settleMission(tester);
+      expect(
+        tester.widget<Text>(inPeek('overview-usage:ks-release')).data,
         'Usage not recorded',
       );
       expect(
-        tester
-            .widget<Text>(
-              find.byKey(const ValueKey('overview-limit:ks-release')),
-            )
-            .data,
+        tester.widget<Text>(inPeek('overview-limit:ks-release')).data,
         '5h limit 92% · resets in 12m',
-      );
-      expect(find.byKey(const ValueKey('overview-limit:ks-r32')), findsNothing);
-
-      container.read(overviewFocusProvider.notifier).peek('ks-r32');
-      await settleMission(tester);
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('overview-peek')),
-          matching: find.text(r'1.2M tokens · $0.42'),
-        ),
-        findsOneWidget,
       );
       expect(tester.takeException(), isNull);
       await unmountMission(tester);

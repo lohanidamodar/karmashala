@@ -102,6 +102,7 @@ void main() {
       size: size,
       phone: phone,
       textScale: textScale,
+      waiting: true,
       overrides: [
         sessionAnswerableProvider.overrideWithValue((_) => true),
         sessionPromptAnswersProvider.overrideWithValue(recorder),

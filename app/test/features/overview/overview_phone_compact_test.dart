@@ -3,15 +3,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
-import 'package:karmashala/src/features/overview/presentation/overview_session_parts.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import 'mission_fixture.dart';
 
-/// **The dashboard's tree on a phone is as compact as the rest of the app**
-/// (owner, 2026-10-14): one frame per card, the title beside its avatar,
-/// one pick box and only while picking, a tight state row, and the
-/// composer and close buttons the size of the app's compact controls with
+/// **The dashboard's families on a phone are as compact as the rest of the
+/// app** (owner, 2026-10-14): one frame per family with its avatar inside,
+/// the title beside it, one pick box and only while picking, the state in
+/// its slot, and footer buttons the size of the app's compact controls with
 /// a thumb's hit area kept.
 void main() {
   late Directory dir;
@@ -48,38 +47,34 @@ void main() {
     await settleMission(tester);
   }
 
+  Finder head(String id) => byKey('overview-family-head:$id');
   Finder titleOf(String id) => find
-      .descendant(
-        of: byKey('overview-card:$id'),
-        matching: byKey('overview-card-title:$id'),
-      )
+      .descendant(of: head(id), matching: byKey('overview-card-title:$id'))
       .first;
 
   // A session alone, at work and ready; a family's root.
   const solos = ['ks-release', 'web-blog', 'beej-ci'];
   const family = 'ks-r32';
 
-  testWidgets('a session alone is one frame: no family frame around its '
-      'card', (tester) async {
+  testWidgets('every family is one frame with its avatar inside, and no '
+      'second bordered card in it', (tester) async {
     await pump(tester);
-    for (final id in solos) {
+    for (final id in [...solos, family]) {
       await reveal(tester, byKey('overview-family:$id'));
       final frame = tester.widget<Container>(byKey('overview-family:$id'));
-      expect(frame.decoration, isNull, reason: id);
-      expect(frame.padding, anyOf(isNull, EdgeInsets.zero), reason: id);
+      expect(frame.decoration, isNotNull, reason: id);
+      expect(
+        find.descendant(
+          of: byKey('overview-family:$id'),
+          matching: byKey('overview-card:$id'),
+        ),
+        findsNothing,
+        reason: id,
+      );
+      final avatar = tester.getRect(byKey('session-avatar:$id'));
+      final card = tester.getRect(byKey('overview-family:$id'));
+      expect(card.contains(avatar.topLeft), isTrue, reason: id);
     }
-    await unmountMission(tester);
-  });
-
-  testWidgets('a family keeps its frame, and its root card inside is not a '
-      'second bordered box', (tester) async {
-    await pump(tester);
-    await reveal(tester, byKey('overview-card:$family'));
-    final frame = tester.widget<Container>(byKey('overview-family:$family'));
-    expect(frame.decoration, isNotNull);
-    final card = tester.widget<Material>(byKey('overview-card:$family'));
-    final shape = card.shape! as RoundedRectangleBorder;
-    expect(shape.side, BorderSide.none);
     await unmountMission(tester);
   });
 
@@ -101,59 +96,31 @@ void main() {
     await unmountMission(tester);
   });
 
-  testWidgets('the state row is one tight row from the title\'s start, ⋯ at '
-      'its end', (tester) async {
+  testWidgets('the state sits on the title\'s row, in its slot at the end; '
+      '⋯ is in the footer under it', (tester) async {
     await pump(tester);
     for (final id in ['ks-release', 'web-blog']) {
-      await reveal(tester, titleOf(id));
+      await reveal(tester, byKey('overview-card-menu:$id'));
       final title = tester.getRect(titleOf(id));
-      final chip = tester.getRect(
-        find
-            .descendant(
-              of: byKey('overview-card:$id'),
-              matching: find.byType(OverviewStatePill),
-            )
-            .first,
-      );
-      final menu = tester.getRect(
-        find
-            .descendant(
-              of: byKey('overview-card:$id'),
-              matching: byKey('overview-card-menu:$id'),
-            )
-            .first,
-      );
-      final card = tester.getRect(byKey('overview-card:$id'));
-      expect(chip.left, closeTo(title.left, 1), reason: id);
-      expect(chip.top, greaterThanOrEqualTo(title.bottom), reason: id);
-      // ⋯ ends the row, at the card's end.
-      expect(menu.center.dy, closeTo(chip.center.dy, 1), reason: id);
-      expect(card.right - menu.right, lessThanOrEqualTo(Insets.md), reason: id);
+      final slot = tester.getRect(byKey('overview-family-state:$id'));
+      final menu = tester.getRect(byKey('overview-card-menu:$id'));
+      final card = tester.getRect(byKey('overview-family:$id'));
+      expect(slot.center.dy, closeTo(title.center.dy, Insets.sm), reason: id);
+      expect(slot.left, greaterThanOrEqualTo(title.left), reason: id);
+      expect(card.right - slot.right, lessThanOrEqualTo(Insets.md), reason: id);
+      expect(menu.top, greaterThan(title.bottom), reason: id);
     }
     await unmountMission(tester);
   });
 
-  testWidgets('the composer and the close buttons are compact to see, a '
-      'thumb\'s target to hit', (tester) async {
+  testWidgets('the footer\'s buttons are compact to see, a thumb\'s target '
+      'to hit', (tester) async {
     await pump(tester);
-    for (final id in ['web-blog', 'ks-release']) {
-      final field = find.descendant(
-        of: byKey('overview-card:$id'),
-        matching: find.byType(InputDecorator),
-      );
-      await reveal(tester, field);
-      expect(
-        tester.getSize(field).height,
-        lessThanOrEqualTo(Touch.compactControl),
-        reason: id,
-      );
-      final send = byKey('overview-composer-send:$id');
-      expect(tester.getSize(send).height, greaterThanOrEqualTo(Touch.target));
-      expect(tester.getSize(send).width, greaterThanOrEqualTo(Touch.target));
-    }
     for (final key in [
-      'overview-done-archive:web-blog',
-      'overview-merge:web-blog',
+      'overview-family-open:web-blog',
+      'overview-family-reply:web-blog',
+      'overview-family-open:ks-release',
+      'overview-end:ks-release',
     ]) {
       await reveal(tester, byKey(key));
       final hit = tester.getSize(byKey(key));
@@ -174,7 +141,7 @@ void main() {
       'long press starts picking', (tester) async {
     final c = await pump(tester);
     for (final id in solos) {
-      await reveal(tester, byKey('overview-card:$id'));
+      await reveal(tester, head(id));
       expect(boxesOf(id), 0, reason: '$id at rest');
     }
     await reveal(tester, titleOf('web-blog'));
@@ -193,14 +160,30 @@ void main() {
     await unmountMission(tester);
   });
 
-  testWidgets('ready cards sit close: one small gap between them', (
+  testWidgets('families in a lane sit close: one small gap between them', (
     tester,
   ) async {
     await pump(tester, size: const Size(412, 3600));
-    final a = tester.getRect(byKey('overview-family:web-blog'));
-    final b = tester.getRect(byKey('overview-family:beej-ci'));
-    final (top, bottom) = a.top < b.top ? (a, b) : (b, a);
-    expect(bottom.top - top.bottom, lessThanOrEqualTo(Insets.sm));
+    final cards = [
+      for (final element
+          in find
+              .byWidgetPredicate(
+                (w) =>
+                    w is Container &&
+                    w.key is ValueKey<String> &&
+                    (w.key! as ValueKey<String>).value.startsWith(
+                      'overview-family:',
+                    ),
+              )
+              .evaluate())
+        tester.getRect(find.byWidget(element.widget)),
+    ]..sort((a, b) => a.top.compareTo(b.top));
+    expect(cards.length, greaterThan(1));
+    final gaps = [
+      for (var i = 1; i < cards.length; i++) cards[i].top - cards[i - 1].bottom,
+    ];
+    // Within a lane one small gap; a lane's header sits between lanes.
+    expect(gaps.reduce((a, b) => a < b ? a : b), lessThanOrEqualTo(Insets.sm));
     await unmountMission(tester);
   });
 
