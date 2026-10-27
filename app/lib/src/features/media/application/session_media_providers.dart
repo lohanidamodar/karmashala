@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:karmashala_ui/primitives.dart' show AppForeground;
 import 'package:riverpod/riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -218,6 +219,8 @@ final sessionMediaProvider = StreamProvider.autoDispose
             yield const [];
           }
           await Future<void>.delayed(kSessionMediaPollInterval);
+          // Not asked in the background: the next listing waits for the app.
+          await AppForeground.instance.whenInFront();
         }
         if (!older) return;
       }

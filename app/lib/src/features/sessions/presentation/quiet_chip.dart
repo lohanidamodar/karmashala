@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart' show showConfirmDialog;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:karmashala_ui/menus.dart' show DesktopMenuItem;
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:karmashala_ui/tokens.dart';
@@ -77,7 +78,7 @@ class _QuietChipState extends ConsumerState<QuietChip> {
       _tick = null;
       return;
     }
-    _tick ??= Timer.periodic(const Duration(minutes: 1), (_) {
+    _tick ??= ForegroundTimer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
   }

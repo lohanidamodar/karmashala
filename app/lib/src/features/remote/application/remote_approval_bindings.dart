@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:karmashala_companion_server/karmashala_companion_server.dart'
     show CompanionPrompts, remoteQuestionOf;
 import 'package:karmashala_remote/remote.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:riverpod/riverpod.dart';
 
 import '../../sessions/application/host_lifecycle/host_agent_statuses.dart';
@@ -42,7 +43,7 @@ final chatOpenQuestionProvider = FutureProvider.autoDispose
       ref.onDispose(host.cancel);
       final open = await AppPromptTerminals(ref).openQuestion(sessionId);
       if (open == null) {
-        final again = Timer(kMenuRereadInterval, ref.invalidateSelf);
+        final again = ForegroundTimer(kMenuRereadInterval, ref.invalidateSelf);
         ref.onDispose(again.cancel);
         return null;
       }

@@ -52,7 +52,7 @@ class _MenuOrState extends ConsumerState<_MenuOr> {
   void initState() {
     super.initState();
     _menu = _read();
-    _timer = Timer.periodic(kMenuRereadInterval, (_) {
+    _timer = ForegroundTimer.periodic(kMenuRereadInterval, (_) {
       final now = _read();
       if (now?.id != _menu?.id || now?.highlighted != _menu?.highlighted) {
         setState(() => _menu = now);

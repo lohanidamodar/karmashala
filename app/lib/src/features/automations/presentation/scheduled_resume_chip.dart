@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
@@ -216,7 +217,7 @@ class _ResumeCountdownState extends ConsumerState<ResumeCountdown> {
     _timer?.cancel();
     final next = untilCountdownChanges(left);
     if (next == null) return;
-    _timer = Timer(next, () {
+    _timer = ForegroundTimer(next, () {
       if (mounted) setState(() {});
     });
   }

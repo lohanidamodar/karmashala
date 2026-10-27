@@ -44,7 +44,10 @@ class _RunningTabViewState extends ConsumerState<RunningTabView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
-    _ticker = Timer.periodic(RunningTabView.refreshInterval, (_) => _refresh());
+    _ticker = ForegroundTimer.periodic(
+      RunningTabView.refreshInterval,
+      (_) => _refresh(),
+    );
     // Coming back to the window is when what runs has most likely moved.
     _lifecycle = AppLifecycleListener(onResume: _refresh, onShow: _refresh);
   }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart' show ForegroundTimer;
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -82,7 +83,10 @@ class _WorkingLineState extends ConsumerState<WorkingLine> {
   /// One timer per line, armed only while it counts. Safe from `build`: it
   /// schedules, it does not set state.
   void _startTicking() {
-    _tick ??= Timer.periodic(kActivityTickInterval, (_) => setState(() {}));
+    _tick ??= ForegroundTimer.periodic(
+      kActivityTickInterval,
+      (_) => setState(() {}),
+    );
   }
 
   void _stopTicking() {

@@ -485,7 +485,7 @@ class _WaitingForState extends State<_WaitingFor> {
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _timer = ForegroundTimer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
