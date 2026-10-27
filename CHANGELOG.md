@@ -17,6 +17,16 @@ installs claim the same version name.
 
 ---
 
+## 1.34.15 — 2026-10-28 (build 82)
+
+- **The dashboard keeps every session in its place.** Families are ordered pinned first, then by your own drag order (kept across restarts), then by start time; a change of state alters only a card's ring, pill and actions, never its position. The Ready and done-today sections and the queue column are gone: what waits on you opens as a drawer over the board, answerable in place, and each lane can archive its done sessions at once.
+- **Find any session on the dashboard.** `/` searches every session, folded and done included, and Enter jumps to it; ←/→ step between families, `[` and `]` between lanes, and U goes to the next new one. Quick open's "Show on dashboard" (Alt+Enter) jumps there too. A phone gets a bottom bar for search, waiting, next new and lanes.
+- **New stays new until you open it.** A session never opened shows New until it is opened or marked seen; leaving the tab no longer clears it.
+- **The Stores table shows one row per app**, with its stores side by side, installs summed from exact counts (labelled "since <month>" where a store has no lifetime figure), Play active devices, and 30 days of downloads.
+- **Antigravity agents no longer leak processes or temp folders on Windows.** Every agent the server starts is tied to it and ends with it, a version check is cached instead of starting an agent each time, and stale agents and temp folders are cleaned up when the server starts and daily.
+- **A terminal Codex session always shows its own conversation**, even when several start in the same folder together; its subagents' threads are never taken for it.
+- **The Android app does less in the background.** Timers and reconnects pause while the app is hidden and resume when it is back, which should cut the battery drain seen while the app was cached.
+
 ## 1.34.14 — 2026-10-24 (build 81)
 
 - **The Flutter panel picks its app from one row.** Apps that answer come first; ones that stopped answering sit in a muted group below, each with Forget. "Forget all not answering" asks first, and "Choose which to forget…" forgets several at once.
