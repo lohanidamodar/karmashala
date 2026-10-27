@@ -112,11 +112,12 @@ final overviewGroupByProvider = Provider.autoDispose<OverviewGroupBy>(
 /// while working and Show archived the way the lists do — filtered and laid
 /// out as this device chose. Recomputed only when those inputs move.
 final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
-  final prefs = ref.watch(overviewPrefsProvider);
+  // The filter alone: a pin or a fold never rebuilds the board.
+  final filter = ref.watch(overviewPrefsProvider.select((p) => p.filter));
   return buildOverviewBoard(
     ref.watch(agentStateGroupsProvider),
     facts: ref.watch(overviewFactsProvider),
-    filter: prefs.filter,
+    filter: filter,
     groupBy: ref.watch(overviewGroupByProvider),
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewOrderProvider),
@@ -279,8 +280,7 @@ final _overviewCountsOrderProvider = Provider.autoDispose<BoardOrderMemo>(
 final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
   ref,
 ) {
-  final prefs = ref.watch(overviewPrefsProvider);
-  final filter = prefs.filter;
+  final filter = ref.watch(overviewPrefsProvider.select((p) => p.filter));
   if (filter.allStates) return ref.watch(overviewBoardProvider);
   return buildOverviewBoard(
     ref.watch(agentStateGroupsProvider),

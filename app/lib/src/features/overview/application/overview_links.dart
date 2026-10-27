@@ -11,6 +11,12 @@ class OverviewFoldedParents extends Notifier<Set<String>> {
   void toggle(String parentId) => state = state.contains(parentId)
       ? ({...state}..remove(parentId))
       : {...state, parentId};
+
+  /// Unfolds every one of [parentIds] that is folded.
+  void open(Iterable<String> parentIds) {
+    final shut = state.intersection(parentIds.toSet());
+    if (shut.isNotEmpty) state = state.difference(shut);
+  }
 }
 
 final overviewFoldedParentsProvider =

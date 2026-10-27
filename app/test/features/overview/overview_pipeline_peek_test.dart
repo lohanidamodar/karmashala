@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/explorer/application/agent_state_providers.dart';
 import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
+import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
 import 'package:karmashala/src/features/overview/application/overview_pipeline_peek.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_today.dart';
@@ -310,19 +311,25 @@ void main() {
       }
     });
 
+    /// The board with More unfolded, where the pipeline lane is.
     Future<ProviderContainer> board(
       WidgetTester tester, {
       bool phone = false,
-    }) => pumpMission(
-      tester,
-      fixture: MissionFixture.full(),
-      prefsDir: dir,
-      phone: phone,
-      size: phone ? const Size(390, 844) : const Size(1440, 900),
-      overrides: [
-        pipelinesProvider.overrideWith(() => _Runs([_gate()])),
-      ],
-    );
+    }) async {
+      final container = await pumpMission(
+        tester,
+        fixture: MissionFixture.full(),
+        prefsDir: dir,
+        phone: phone,
+        size: phone ? const Size(390, 844) : const Size(1440, 900),
+        overrides: [
+          pipelinesProvider.overrideWith(() => _Runs([_gate()])),
+        ],
+      );
+      container.read(overviewMoreProvider.notifier).toggle();
+      await settleMission(tester);
+      return container;
+    }
 
     testWidgets('a card clicked opens the run beside the board, in place of '
         'a session\'s peek', (tester) async {

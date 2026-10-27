@@ -372,6 +372,23 @@ class BoardOrderMemo {
   }
 }
 
+/// The key of the lane [entry] is filed in when the board groups by
+/// [groupBy].
+String overviewLaneKeyOf(
+  WorkspaceSessionEntry entry,
+  OverviewFacts facts,
+  OverviewGroupBy groupBy,
+) =>
+    switch (groupBy) {
+      OverviewGroupBy.project => facts.projectOf(entry),
+      OverviewGroupBy.machine => facts.machineOf(entry),
+      OverviewGroupBy.context => switch (facts.contextOf(entry)) {
+        final id? when facts.contexts.any((c) => c.id == id) => id,
+        _ => null,
+      },
+    } ??
+    kOverviewUnfiledLane;
+
 /// Builds the Board from the Agents lens's [groups]. Every session is a card
 /// in its own state's column, a sub-session naming its parent in view, which
 /// the dashboard's tree draws it under.
@@ -466,15 +483,7 @@ OverviewBoard buildOverviewBoard(
     OverviewGroupBy.context => facts.contexts,
   };
   String laneOf(WorkspaceSessionEntry entry) =>
-      switch (groupBy) {
-        OverviewGroupBy.project => facts.projectOf(entry),
-        OverviewGroupBy.machine => facts.machineOf(entry),
-        OverviewGroupBy.context => switch (facts.contextOf(entry)) {
-          final id? when facts.contexts.any((c) => c.id == id) => id,
-          _ => null,
-        },
-      } ??
-      kOverviewUnfiledLane;
+      overviewLaneKeyOf(entry, facts, groupBy);
 
   final keys = <String, DateTime>{};
   final byLane = <String, Map<BoardColumn, List<(OverviewCard, DateTime)>>>{};

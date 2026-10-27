@@ -99,9 +99,12 @@ class _OverviewLatestMessageState extends ConsumerState<OverviewLatestMessage> {
 /// "2/4 · Write the layout tests" and "+620 −40 · 3 files", each only when
 /// known.
 class OverviewMetaLine extends ConsumerWidget {
-  const OverviewMetaLine({required this.card, super.key});
+  const OverviewMetaLine({required this.card, this.oneLine = false, super.key});
 
   final OverviewCard card;
+
+  /// Every part on one line, each ellipsised, for a row of fixed height.
+  final bool oneLine;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -150,35 +153,48 @@ class OverviewMetaLine extends ConsumerWidget {
     if (step == null && diff.isEmpty && !checked) {
       return const SizedBox.shrink();
     }
+    final parts = [
+      if (step != null)
+        Text(
+          step,
+          key: ValueKey('overview-step:$id'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: muted,
+        ),
+      if (diff.isNotEmpty)
+        Text.rich(
+          TextSpan(children: diff),
+          key: ValueKey('overview-diff:$id'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: muted,
+        ),
+      if (checked)
+        SessionVerdictMark(
+          key: ValueKey('overview-verdict:$id'),
+          sessionId: id,
+        ),
+    ];
+    if (oneLine) {
+      return Row(
+        key: ValueKey('overview-meta:$id'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (i, part) in parts.indexed) ...[
+            if (i > 0) const SizedBox(width: Insets.md),
+            Flexible(child: part),
+          ],
+        ],
+      );
+    }
     // A narrow card — a phone's tree — wraps the parts rather than cut one.
     return Wrap(
       key: ValueKey('overview-meta:$id'),
       spacing: Insets.md,
       runSpacing: Insets.xxs,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        if (step != null)
-          Text(
-            step,
-            key: ValueKey('overview-step:$id'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: muted,
-          ),
-        if (diff.isNotEmpty)
-          Text.rich(
-            TextSpan(children: diff),
-            key: ValueKey('overview-diff:$id'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: muted,
-          ),
-        if (checked)
-          SessionVerdictMark(
-            key: ValueKey('overview-verdict:$id'),
-            sessionId: id,
-          ),
-      ],
+      children: parts,
     );
   }
 }
@@ -262,8 +278,37 @@ class OverviewSubSessionRow extends ConsumerWidget {
   }
 }
 
+/// How many messages came since the owner last opened [card] here, at least
+/// one for a session never opened here; 0 when nothing is new to them.
+int watchOverviewNewCount(WidgetRef ref, OverviewCard card) {
+  final id = card.id;
+  final seen = ref.watch(overviewSeenProvider.select((s) => s[id]));
+  if (card.state == AgentState.ended) return 0;
+  if (seen == null && !ref.watch(overviewSeenReadProvider)) return 0;
+  final peeked = ref.watch(overviewFocusProvider.select((f) => f.peeked == id));
+  if (peeked) return 0;
+  final times =
+      ref.watch(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
+      const <DateTime>[];
+  return newSince(seen, times) ?? (times.isEmpty ? 1 : times.length);
+}
+
+/// Whether [card] is new to the owner, read once for a key rather than
+/// watched for a build.
+bool readOverviewIsNew(WidgetRef ref, OverviewCard card) {
+  final id = card.id;
+  final seen = ref.read(overviewSeenProvider)[id];
+  if (card.state == AgentState.ended) return false;
+  if (ref.read(overviewFocusProvider).peeked == id) return false;
+  if (seen == null) return ref.read(overviewSeenReadProvider);
+  final times =
+      ref.read(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
+      const <DateTime>[];
+  return (newSince(seen, times) ?? 0) > 0;
+}
+
 /// "3": what came since the owner last opened [card] on this device, from the
-/// read its card already makes. Nothing for one never opened here.
+/// read its card already makes; "New" for one never opened here.
 class OverviewNewBadge extends ConsumerWidget {
   const OverviewNewBadge({required this.card, super.key});
 
@@ -272,22 +317,15 @@ class OverviewNewBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = card.id;
-    final seen = ref.watch(overviewSeenProvider.select((s) => s[id]));
-    if (seen == null || card.state == AgentState.ended) {
-      return const SizedBox.shrink();
-    }
-    final peeked = ref.watch(
-      overviewFocusProvider.select((f) => f.peeked == id),
+    final count = watchOverviewNewCount(ref, card);
+    if (count == 0) return const SizedBox.shrink();
+    final never = ref.watch(
+      overviewSeenProvider.select((s) => !s.containsKey(id)),
     );
-    final times =
-        ref.watch(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
-        const <DateTime>[];
-    final count = newSince(seen, times) ?? 0;
-    if (peeked || count == 0) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Tooltip(
-      message: '$count new since you last looked',
+      message: never ? 'Never opened here' : '$count new since you last looked',
       child: Container(
         key: ValueKey('overview-new:$id'),
         padding: const EdgeInsets.symmetric(
@@ -299,7 +337,8 @@ class OverviewNewBadge extends ConsumerWidget {
           borderRadius: BorderRadius.circular(Radii.pill),
         ),
         child: Text(
-          '$count',
+          never ? 'New' : '$count',
+          maxLines: 1,
           style: theme.textTheme.labelSmall?.copyWith(
             color: scheme.onPrimary,
             fontWeight: FontWeight.w700,

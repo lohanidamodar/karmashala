@@ -34,13 +34,13 @@ void main() {
     contextOfProject: const {'p-ks': 'c-apps', 'p-beej': 'c-web'},
   );
 
-  /// The header line of the card for `ks-r32`, a karmashala session on
-  /// Windows filed under Apps.
+  /// The header line of the waiting card for `ks-r21`, a karmashala session
+  /// on Windows filed under Apps: the drawer's cards say where they run.
   String placeOf(WidgetTester tester) {
     final texts = tester
         .widgetList<Text>(
           find.descendant(
-            of: find.byKey(const ValueKey('overview-card:ks-r32')),
+            of: find.byKey(const ValueKey('overview-card:ks-r21')),
             matching: find.byType(Text),
           ),
         )
@@ -55,7 +55,12 @@ void main() {
   testWidgets('every part shows by default, and each toggle hides its own', (
     tester,
   ) async {
-    final c = await pumpMission(tester, fixture: filed(), prefsDir: dir);
+    final c = await pumpMission(
+      tester,
+      fixture: filed(),
+      prefsDir: dir,
+      waiting: true,
+    );
     expect(placeOf(tester), 'Apps · karmashala · Windows');
 
     final prefs = c.read(overviewPrefsProvider.notifier);
@@ -104,7 +109,12 @@ void main() {
   testWidgets('a part every card in view shares is dropped by itself', (
     tester,
   ) async {
-    final c = await pumpMission(tester, fixture: filed(), prefsDir: dir);
+    final c = await pumpMission(
+      tester,
+      fixture: filed(),
+      prefsDir: dir,
+      waiting: true,
+    );
     // Only karmashala, all of it on one context: project and context say
     // nothing; its sessions run on more than one machine.
     _onlyProject(c, 'p-ks');
@@ -129,7 +139,12 @@ void main() {
   testWidgets('with no card in view, nothing is "the same on every card"', (
     tester,
   ) async {
-    final c = await pumpMission(tester, fixture: filed(), prefsDir: dir);
+    final c = await pumpMission(
+      tester,
+      fixture: filed(),
+      prefsDir: dir,
+      waiting: true,
+    );
     c.read(overviewPrefsProvider.notifier).setProjects(const {});
     await settleMission(tester);
     expect(c.read(overviewCardDetailsProvider).same, isEmpty);
@@ -139,7 +154,12 @@ void main() {
   testWidgets('a part the person hid is not also counted as the same', (
     tester,
   ) async {
-    final c = await pumpMission(tester, fixture: filed(), prefsDir: dir);
+    final c = await pumpMission(
+      tester,
+      fixture: filed(),
+      prefsDir: dir,
+      waiting: true,
+    );
     _onlyProject(c, 'p-ks');
     c
         .read(overviewPrefsProvider.notifier)

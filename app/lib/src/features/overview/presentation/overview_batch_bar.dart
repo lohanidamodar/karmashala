@@ -12,7 +12,9 @@ import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_batch.dart';
 import '../application/overview_batch_actions.dart';
 import '../application/overview_board.dart';
+import '../application/overview_family_order.dart';
 import '../application/overview_links.dart';
+import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_quick_message.dart';
 import '../application/overview_tiles.dart';
@@ -33,17 +35,23 @@ List<OverviewCard> overviewSelectedCards(WidgetRef ref) {
   ];
 }
 
-/// The ids ↑ and ↓ walk, and a Shift-click spans: as the board draws them.
+/// The ids ↑ and ↓ walk, and a Shift-click spans: as the board draws them,
+/// a pinned session on no tree first, as its strip is drawn first.
 List<String> overviewDrawnOrder(WidgetRef ref) {
   final statusOf = ref.read(sessionStatusLookupProvider);
+  final board = ref.read(overviewBoardProvider);
   final sections = overviewSectionsOf(
-    ref.read(overviewBoardProvider),
+    board,
+    ref.read(overviewForestProvider),
     waitingSince: (id) => statusOf(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
   );
+  final families = [for (final card in sections.families) card.id];
+  final drawn = families.toSet();
   return [
-    for (final card in [...sections.queue, ...sections.work, ...sections.ready])
-      card.id,
+    for (final id in ref.read(overviewPrefsProvider).pinned)
+      if (!drawn.contains(id) && overviewCardOf(board, id) != null) id,
+    ...families,
   ];
 }
 

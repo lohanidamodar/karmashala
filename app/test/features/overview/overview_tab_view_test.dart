@@ -37,7 +37,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
-import 'mission_fixture.dart' show FakeOverviewReader, hybridList;
+import 'mission_fixture.dart' show FakeOverviewReader, hybridList, openWaiting;
 
 /// **The Overview tab, drawn** over the real data path: the counters and a
 /// tile per project at desktop and phone sizes, the counters filtering, the
@@ -204,13 +204,15 @@ void main() {
     return container;
   }
 
-  Finder card(String id) => find.byKey(ValueKey('overview-card:$id'));
+  Finder card(String id) => find.byKey(ValueKey('overview-family:$id'));
 
-  Future<void> openDone(WidgetTester tester) async {
-    final fold = find.byKey(const ValueKey('overview-done-fold'));
-    await tester.ensureVisible(fold);
+  /// Brings [id]'s family into view and opens it in the peek.
+  Future<void> peekFamily(WidgetTester tester, String id) async {
+    final head = find.byKey(ValueKey('overview-family-head:$id'));
+    await tester.scrollUntilVisible(head, 200, scrollable: hybridList);
+    await tester.ensureVisible(head);
     await settle(tester);
-    await tester.tap(fold);
+    await tester.tap(head);
     await settle(tester);
   }
 
@@ -222,12 +224,13 @@ void main() {
     ('1024×768', const Size(1024, 768)),
     ('390×844', const Size(390, 844)),
   ]) {
-    testBoard('$name: the heartbeat, what waits on you, then what works', (
+    testBoard('$name: the strip, then every family in its lane', (
       tester,
     ) async {
       await pump(tester, size);
 
       expect(find.byKey(const ValueKey('overview-hybrid')), findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-strip')), findsOneWidget);
       // Today's parts with something in them; nothing is stuck.
       for (final part in OverviewTodayPart.values) {
         expect(
@@ -235,25 +238,18 @@ void main() {
           part == OverviewTodayPart.stuck ? findsNothing : findsOneWidget,
         );
       }
+      // Each session is a family in its place, whatever its state.
       expect(card('ask'), findsOneWidget);
-      // A phone draws the same trees, each root a card.
-      Finder atWork(String id) => card(id);
-      expect(atWork('busy'), findsOneWidget);
-      expect(atWork('idle'), findsOneWidget);
-      // Done today folds under a line; what ended before today is not drawn.
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('overview-done-fold')),
-        200,
-        scrollable: hybridList,
-      );
-      expect(find.text('2 done today'), findsOneWidget);
-      await openDone(tester);
-      expect(find.byKey(const ValueKey('overview-done:done')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('overview-done:beta-done')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const ValueKey('overview-done:old')), findsNothing);
+      expect(card('busy'), findsOneWidget);
+      expect(card('idle'), findsOneWidget);
+      // What ended today stays in its lane; what ended before is not drawn.
+      final done = card('done');
+      await tester.scrollUntilVisible(done, 200, scrollable: hybridList);
+      expect(done, findsOneWidget);
+      final betaDone = card('beta-done');
+      await tester.scrollUntilVisible(betaDone, 200, scrollable: hybridList);
+      expect(betaDone, findsOneWidget);
+      expect(card('old'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
@@ -283,7 +279,7 @@ void main() {
     expect(c.read(overviewPrefsProvider).filter.columns, {BoardColumn.working});
     expect(card('busy'), findsOneWidget);
     expect(card('ask'), findsNothing);
-    expect(find.byKey(const ValueKey('overview-done-fold')), findsNothing);
+    expect(card('done'), findsNothing);
     // The other parts keep their numbers.
     expect(find.bySemanticsLabel(RegExp(r'^1 needs you, ')), findsOneWidget);
     expect(
@@ -318,7 +314,7 @@ void main() {
     await settle(tester);
 
     expect(find.text('Projects: Alpha'), findsOneWidget);
-    expect(find.text('1 done today'), findsOneWidget);
+    expect(card('beta-done'), findsNothing);
     await tester.tap(
       find.descendant(
         of: find.byKey(const ValueKey('overview-active-filter:projects')),
@@ -328,7 +324,9 @@ void main() {
     await settle(tester);
     expect(c.read(overviewPrefsProvider).filter.projects, isNull);
     expect(find.byKey(const ValueKey('overview-active-filters')), findsNothing);
-    expect(find.text('2 done today'), findsOneWidget);
+    final betaDone = card('beta-done');
+    await tester.scrollUntilVisible(betaDone, 200, scrollable: hybridList);
+    expect(betaDone, findsOneWidget);
   });
 
   testBoard("a waiting card peeks into the session's own chat and its asks", (
@@ -359,14 +357,7 @@ void main() {
     // chat spun for ever.
     final c = await pump(tester, const Size(1440, 900));
     expect(c.read(chatTranscriptPollingProvider), isFalse);
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('overview-done-fold')),
-      200,
-      scrollable: hybridList,
-    );
-    await openDone(tester);
-    await tester.tap(find.byKey(const ValueKey('overview-done:done')));
-    await settle(tester);
+    await peekFamily(tester, 'done');
     expect(find.byKey(const ValueKey('overview-peek:done')), findsOneWidget);
 
     expect(c.read(chatTranscriptPollingProvider), isTrue);
@@ -382,14 +373,7 @@ void main() {
     tester,
   ) async {
     await pump(tester, const Size(1440, 900));
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('overview-done-fold')),
-      200,
-      scrollable: hybridList,
-    );
-    await openDone(tester);
-    await tester.tap(find.byKey(const ValueKey('overview-done:done')));
-    await settle(tester);
+    await peekFamily(tester, 'done');
 
     // Resume keeps it here (below); Open is the lists' own open.
     expect(find.byKey(const ValueKey('overview-peek-resume')), findsOneWidget);
@@ -417,7 +401,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settle(tester);
 
-    // The queue is drawn before the work, so up from the first card is it.
+    // Families sit by when they started: up from "busy" is "ask".
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await settle(tester);
@@ -716,14 +700,7 @@ void main() {
       });
 
       Future<void> peekPaused(WidgetTester tester) async {
-        await tester.scrollUntilVisible(
-          byKey('overview-done-fold'),
-          200,
-          scrollable: hybridList,
-        );
-        await openDone(tester);
-        await tester.tap(byKey('overview-done:paused'));
-        await settle(tester);
+        await peekFamily(tester, 'paused');
         expect(byKey('overview-peek:paused'), findsOneWidget);
       }
 
@@ -766,13 +743,11 @@ void main() {
 
       testBoard('a card\'s ⋯ offers Resume', (tester) async {
         final c = await pump(tester, const Size(1440, 900));
-        await tester.scrollUntilVisible(
-          byKey('overview-done-fold'),
-          200,
-          scrollable: hybridList,
-        );
-        await openDone(tester);
-        await tester.tap(byKey('overview-card-menu:paused'));
+        final menu = byKey('overview-card-menu:paused');
+        await tester.scrollUntilVisible(menu, 200, scrollable: hybridList);
+        await tester.ensureVisible(menu);
+        await settle(tester);
+        await tester.tap(menu);
         await settle(tester);
         await tester.tap(find.text('Resume').last);
         await settle(tester);
@@ -1035,40 +1010,55 @@ void main() {
       await settle(tester);
     }
 
-    testBoard('is on live cards only, hidden until the card is hovered', (
-      tester,
+    /// Pins [id], so the pinned strip draws its card with its End.
+    Future<void> pin(
+      WidgetTester tester,
+      ProviderContainer c,
+      String id,
     ) async {
+      c.read(overviewPrefsProvider.notifier).togglePin(id);
+      await settle(tester);
+    }
+
+    testBoard("a working family's Stop is always there; the drawer's End "
+        'shows under a hover', (tester) async {
       await pump(tester, const Size(1440, 900));
-      for (final id in ['ask', 'busy', 'idle']) {
-        expect(end(id), findsOneWidget, reason: id);
-      }
-      await openDone(tester);
+      // The family's primary slot: Stop while it works, nothing to end else.
+      expect(end('busy'), findsOneWidget);
+      expect(tester.widget<OutlinedButton>(end('busy')).onPressed, isNotNull);
+      expect(end('idle'), findsNothing);
+      expect(end('ask'), findsNothing);
       // Ended: no process to end.
       expect(end('done'), findsNothing);
-      expect(shown(tester, 'busy'), 0);
 
-      await hover(tester, card('busy'));
-      expect(shown(tester, 'busy'), 1);
-      expect(shown(tester, 'idle'), 0);
+      // What waits has its End on its card in the drawer, under a hover.
+      await openWaiting(tester);
+      expect(end('ask'), findsOneWidget);
+      expect(shown(tester, 'ask'), 0);
+      await hover(tester, find.byKey(const ValueKey('overview-card:ask')));
+      expect(shown(tester, 'ask'), 1);
     });
 
     testBoard('shows while the keyboard is in it', (tester) async {
       await pump(tester, const Size(1440, 900));
-      expect(shown(tester, 'idle'), 0);
+      await openWaiting(tester);
+      expect(shown(tester, 'ask'), 0);
       Focus.of(
         tester.element(
-          find.descendant(of: end('idle'), matching: find.byType(Icon)),
+          find.descendant(of: end('ask'), matching: find.byType(Icon)),
         ),
       ).requestFocus();
       await settle(tester);
-      expect(shown(tester, 'idle'), 1);
+      expect(shown(tester, 'ask'), 1);
     });
 
     testBoard('a session whose state nobody read asks first, as rows do', (
       tester,
     ) async {
-      await pump(tester, const Size(1440, 900));
-      await hover(tester, card('idle'));
+      final c = await pump(tester, const Size(1440, 900));
+      await pin(tester, c, 'idle');
+      final pinned = find.byKey(const ValueKey('overview-pinned-card:idle'));
+      await hover(tester, pinned);
       await tester.tap(end('idle'));
       await settle(tester);
       expect(find.byType(AlertDialog), findsOneWidget);
@@ -1082,6 +1072,7 @@ void main() {
       tester,
     ) async {
       await pump(tester, const Size(1440, 900));
+      await openWaiting(tester);
       final queued = find.byKey(const ValueKey('overview-card:ask'));
       await hover(tester, queued);
       await tester.tap(end('ask'));
@@ -1104,7 +1095,6 @@ void main() {
       tester,
     ) async {
       await pump(tester, const Size(1440, 900));
-      await hover(tester, card('busy'));
       await tester.tap(end('busy'));
       await settle(tester);
       expect(find.text('End "Chat busy"?'), findsOneWidget);
@@ -1135,8 +1125,11 @@ void main() {
         label: 'idle',
         source: AgentStatusSource.terminalGrid,
       );
-      await settle(tester);
-      await hover(tester, card('idle'));
+      await pin(tester, c, 'idle');
+      await hover(
+        tester,
+        find.byKey(const ValueKey('overview-pinned-card:idle')),
+      );
       await tester.tap(end('idle'));
       await settle(tester);
       expect(find.byType(AlertDialog), findsNothing);

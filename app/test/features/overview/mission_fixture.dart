@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/explorer/application/session_diff_stat.d
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
+import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
@@ -648,11 +649,14 @@ class MissionFixture {
   late final _entries = [for (final s in sessions) entry(s)];
   late final _byId = {for (final s in sessions) s.id: s};
 
-  List<AgentStateGroup> get groups => [
+  List<AgentStateGroup> get groups => groupsWith(const {});
+
+  /// [groups] with each session in [flipped] moved to the state it names.
+  List<AgentStateGroup> groupsWith(Map<String, AgentState> flipped) => [
     for (final state in AgentState.values)
       AgentStateGroup(state, [
         for (final e in _entries)
-          if (_byId[e.id]!.state == state) e,
+          if ((flipped[e.id] ?? _byId[e.id]!.state) == state) e,
       ]),
   ];
 
@@ -668,7 +672,9 @@ class MissionFixture {
 
   /// The providers mission control reads, answered from this fixture.
   List<Override> get overrides => [
-    agentStateGroupsProvider.overrideWith((ref) => groups),
+    agentStateGroupsProvider.overrideWith(
+      (ref) => groupsWith(ref.watch(missionStatesProvider)),
+    ),
     workspaceSessionsProvider.overrideWith((ref) => _entries),
     agentsHiddenWorkingCountProvider.overrideWith((ref) => hiddenWorking),
     overviewFactsProvider.overrideWith((ref) => facts),
@@ -712,6 +718,17 @@ class MissionFixture {
   ];
 }
 
+/// States a test moves sessions to mid-run, by id; the board follows.
+class MissionStates extends Notifier<Map<String, AgentState>> {
+  @override
+  Map<String, AgentState> build() => const {};
+
+  void flip(String id, AgentState to) => state = {...state, id: to};
+}
+
+final missionStatesProvider =
+    NotifierProvider<MissionStates, Map<String, AgentState>>(MissionStates.new);
+
 /// The Overview's reads, answered from a fixture: nothing reaches a server.
 class FakeOverviewReader implements OverviewReader {
   FakeOverviewReader({
@@ -744,7 +761,8 @@ class FakeOverviewReader implements OverviewReader {
 }
 
 /// Draws the Overview tab over [fixture] at [size]: the desktop's tab, or
-/// with [phone] the phone's Dashboard tab under a thumb's density.
+/// with [phone] the phone's Dashboard tab under a thumb's density; with
+/// [waiting], the waiting drawer open.
 Future<ProviderContainer> pumpMission(
   WidgetTester tester, {
   required MissionFixture fixture,
@@ -756,6 +774,7 @@ Future<ProviderContainer> pumpMission(
   GlobalKey? boundary,
   List<Override> overrides = const [],
   Widget? home,
+  bool waiting = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -784,6 +803,7 @@ Future<ProviderContainer> pumpMission(
     ],
   );
   addTearDown(container.dispose);
+  if (waiting) container.read(overviewDrawerProvider.notifier).open();
   final base = brightness == Brightness.dark
       ? AppTheme.dark()
       : AppTheme.light();
@@ -833,6 +853,20 @@ Future<void> unmountMission(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(seconds: 1));
 }
+
+/// Opens the waiting drawer from the strip, or a phone's bottom bar.
+Future<void> openWaiting(WidgetTester tester) async {
+  final strip = find.byKey(const ValueKey('overview-waiting-toggle'));
+  await tester.tap(
+    strip.evaluate().isNotEmpty
+        ? strip
+        : find.byKey(const ValueKey('overview-bar-waiting')),
+  );
+  await settleMission(tester);
+}
+
+/// A family's card on the dashboard, by its root's id.
+Finder familyCard(String id) => find.byKey(ValueKey('overview-family:$id'));
 
 /// The Overview's own list, for a scroll that must not pick a text field's.
 final Finder hybridList = find

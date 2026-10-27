@@ -8,11 +8,14 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_search.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
@@ -255,5 +258,42 @@ void main() {
     await type(tester, 'Match');
 
     expect(find.textContaining('active 5h ago'), findsOneWidget);
+  });
+
+  testWidgets('Show on dashboard: Alt+Enter asks the board to show it', (
+    tester,
+  ) async {
+    session('s1', title: 'Rebuild the index');
+    final c = await open(tester);
+    await type(tester, 'Rebuild');
+    expect(find.byTooltip('Show on dashboard (Alt+Enter)'), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QuickOpen), findsNothing);
+    expect(c.read(overviewPrefsProvider).view, OverviewView.board);
+    // Kept until the board is up to unfold, select and scroll to it.
+    expect(c.read(overviewRevealProvider)?.id, 's1');
+  });
+
+  testWidgets('an archived session has no Show on dashboard', (tester) async {
+    db.server.sessionRows.insert(
+      Session(
+        id: 'old',
+        repositoryId: 'r1',
+        agentInstallationId: 'a1',
+        title: 'Retired work',
+        useWorktree: false,
+        status: SessionStatus.completed,
+        createdAt: now,
+        archivedAt: now,
+      ),
+    );
+    await open(tester);
+    await type(tester, 'Retired');
+    expect(find.byTooltip('Show on dashboard (Alt+Enter)'), findsNothing);
   });
 }

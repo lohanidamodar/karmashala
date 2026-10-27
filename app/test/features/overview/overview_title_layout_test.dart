@@ -11,9 +11,9 @@ import 'package:karmashala/src/features/sessions/application/host_lifecycle/host
 
 import 'mission_fixture.dart';
 
-/// **A card's title stays readable** on a phone: never squeezed below its
-/// first [kOverviewTitleKeeps] characters — the chip, End and ⋯ move to the
-/// next line first — and the state chip never ends mid-word.
+/// **A waiting card's title stays readable** on a phone: never squeezed
+/// below its first [kOverviewTitleKeeps] characters — the chip, End and ⋯
+/// move to the next line first — and the state chip never ends mid-word.
 void main() {
   late Directory dir;
 
@@ -70,6 +70,8 @@ void main() {
           tester,
           fixture: MissionFixture.full(),
           prefsDir: dir,
+          // The waiting drawer's cards carry the title block.
+          waiting: true,
           size: Size(width, 800),
           phone: true,
           textScale: scale,
@@ -79,8 +81,11 @@ void main() {
           ],
         );
 
-        final titles = find.byWidgetPredicate(
-          (w) => keyed(w, 'overview-card-title:'),
+        final titles = find.descendant(
+          of: find.byKey(const ValueKey('overview-waiting-drawer')),
+          matching: find.byWidgetPredicate(
+            (w) => keyed(w, 'overview-card-title:'),
+          ),
         );
         expect(titles, findsWidgets);
         for (final element in titles.evaluate()) {
@@ -143,6 +148,7 @@ void main() {
       tester,
       fixture: MissionFixture.full(),
       prefsDir: dir,
+      waiting: true,
       overrides: [sessionRunningOnHostProvider.overrideWithValue((_) => true)],
     );
     final blocks = tester.renderObjectList<RenderOverviewTitleBlock>(
@@ -162,6 +168,7 @@ void main() {
       tester,
       fixture: MissionFixture.full(),
       prefsDir: dir,
+      waiting: true,
       size: const Size(360, 800),
       phone: true,
       textScale: 1.6,

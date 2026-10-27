@@ -1,50 +1,52 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/phone_routes.dart';
 import '../../../app/shell/phone_shell.dart' show PhoneTabsScope;
 import '../../sessions/application/session_status_providers.dart';
+import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../application/overview_board.dart';
+import '../application/overview_drawer.dart';
+import '../application/overview_family_order.dart';
 import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
+import '../application/overview_search.dart';
+import '../application/overview_tiles.dart' show overviewCardOf;
 import '../application/overview_tree.dart';
-import 'overview_card_links.dart';
-import 'overview_cards.dart';
+import 'overview_card_parts.dart';
 import 'overview_filters.dart';
-import 'overview_heartbeat.dart';
 import 'overview_glances.dart';
+import 'overview_heartbeat.dart';
+import 'overview_phone_bar.dart';
+import 'overview_pins.dart';
 import 'overview_pipeline_lane.dart';
+import 'overview_queue_card.dart';
+import 'overview_strip.dart';
 import 'overview_tree.dart';
 import 'overview_waiting_lane.dart';
-import 'overview_pins.dart';
-import 'overview_queue_card.dart';
-import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 
-/// What the Overview draws, in reading order: each session once, as the
-/// keys walk them.
+/// What the Overview draws, in reading order.
 typedef OverviewSections = ({
+  /// What waits on you, asks before failures and oldest wait first: the
+  /// waiting drawer's order, which N walks.
   List<OverviewCard> queue,
 
-  /// The families at work, root first, lane by lane.
-  List<OverviewCard> work,
-
-  /// Done with their turn, ready to close: the Done lane's families.
-  List<OverviewCard> ready,
-  List<OverviewCard> done,
+  /// Every family's sessions as drawn, lane by lane, each once: the order
+  /// J and K walk.
+  List<OverviewCard> families,
 });
 
-/// [board]'s sessions as the Overview lays them out: what waits on you, asks
-/// before failures and oldest wait first; the families at work, lane by lane
-/// and most urgent first; the families ready to close, newest first; and what
-/// ended today on no family's tree, newest first. A sub-session that waits on
-/// you is in the queue, answerable, and on its family's tree; it is walked
-/// once, in the queue. A [folded] family's sub-sessions are not drawn.
+/// [board]'s sessions as the Overview lays them out: [forest]'s families in
+/// their fixed places, a [folded] family's sub-sessions not drawn, and what
+/// waits on you in the drawer's order.
 OverviewSections overviewSectionsOf(
-  OverviewBoard board, {
+  OverviewBoard board,
+  OverviewForest forest, {
   required DateTime? Function(String id) waitingSince,
   Set<String> folded = const {},
 }) {
@@ -60,47 +62,31 @@ OverviewSections overviewSectionsOf(
     final byWait = since(a).compareTo(since(b));
     return byWait != 0 ? byWait : a.id.compareTo(b.id);
   });
-  final seen = {for (final card in queue) card.id};
-  List<OverviewCard> walk(Iterable<OverviewTreeNode> trees) => [
-    for (final tree in trees)
-      for (final card in overviewDrawnOf(tree, folded))
-        if (seen.add(card.id)) card,
-  ];
-  final forest = overviewForestOf(board);
+  final seen = <String>{};
   return (
     queue: queue,
-    work: walk([for (final (_, trees) in forest.work) ...trees]),
-    ready: walk(forest.ready),
-    done: nestUnderParents(
-      [
-        for (final lane in board.lanes)
-          for (final card in lane.doneToday)
-            if (!forest.placed.contains(card.id)) card,
-      ]..sort((a, b) => b.entry.activityAt.compareTo(a.entry.activityAt)),
-    ),
+    families: [
+      for (final (_, trees) in forest.lanes)
+        for (final tree in trees)
+          for (final card in overviewDrawnOf(tree, folded))
+            if (seen.add(card.id)) card,
+    ],
   );
 }
 
-/// The ids of the lane [id] is drawn in — waiting on you, one lane at work,
-/// or ready to close — in drawn order; every drawn session when it is in
-/// none.
+/// The ids of the lane [id] is drawn in, in drawn order; every drawn session
+/// when it is in none.
 List<String> overviewLaneOf(
-  OverviewSections sections,
-  OverviewBoard board,
+  OverviewForest forest,
   String? id, {
   Set<String> folded = const {},
 }) {
-  final queued = {for (final card in sections.queue) card.id};
-  List<String> ids(Iterable<OverviewTreeNode> trees) => [
-    for (final tree in trees)
-      for (final card in overviewDrawnOf(tree, folded))
-        if (!queued.contains(card.id)) card.id,
-  ];
-  final forest = overviewForestOf(board);
   final lanes = [
-    [for (final card in sections.queue) card.id],
-    for (final (_, trees) in forest.work) ids(trees),
-    ids(forest.ready),
+    for (final (_, trees) in forest.lanes)
+      [
+        for (final tree in trees)
+          for (final card in overviewDrawnOf(tree, folded)) card.id,
+      ],
   ];
   for (final lane in lanes) {
     if (lane.contains(id)) return lane;
@@ -128,10 +114,9 @@ Map<String, int> overviewDepthsIn(List<OverviewCard> cards) {
   return {for (final card in cards) card.id: depthOf(card.id)};
 }
 
-/// **The Overview, hybrid**: the fleet's heartbeat on top, what waits on you
-/// on the left — answerable in place — and the families at work on the
-/// right, each a tree in a cell of its own. On a phone, the queue first,
-/// then the families.
+/// **The Overview, hybrid**: a slim strip on top, the lane chips under it,
+/// then every family in its fixed place, lane by lane. What waits on you is
+/// in the waiting drawer, over the board, so opening it moves nothing.
 class OverviewHybrid extends ConsumerStatefulWidget {
   const OverviewHybrid({
     required this.onOpen,
@@ -160,22 +145,138 @@ class OverviewHybrid extends ConsumerStatefulWidget {
 }
 
 class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
-  var _doneOpen = false;
-
-  /// Each family's key: a re-sort that moves it to another slot, row or
-  /// lane keeps its state, a draft in its composer among it.
+  /// Each family's key, so a family keeps its state wherever it is drawn.
   final _treeKeys = <String, GlobalKey>{};
+
+  /// Each lane's header, for its chip to scroll to and to light the chip of
+  /// the lane on screen.
+  final _laneKeys = <String, GlobalKey>{};
+
+  /// Each lane chip's focus, for the phone bar's Lanes to reach.
+  final _chipFocus = <String, FocusNode>{};
+  final _scroll = ScrollController();
+  final _viewport = GlobalKey();
+  String? _laneOnScreen;
+  var _lanes = const <String>[];
 
   /// The most families across.
   static const _maxAcross = 3;
 
-  /// The queue's column beside the work, and the least room for both.
-  // No layout token names a side column's width yet.
-  static const _queueWidth = 380.0;
-  static const _sideBySide = WidthClass.expandedMin;
+  @override
+  void initState() {
+    super.initState();
+    // A session asked for before the board was up, from quick open.
+    if (ref.read(overviewRevealProvider) case final asked?) _reveal(asked);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    for (final node in _chipFocus.values) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Brings [asked] into view: its family unfolded, it selected — or peeked,
+  /// while a peek is open — and scrolled to.
+  void _reveal(({String id, int ask}) asked) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final id = asked.id;
+      final forest = ref.read(overviewForestProvider);
+      ref
+          .read(overviewFoldedParentsProvider.notifier)
+          .open(overviewAncestorsIn(forest, id));
+      final focus = ref.read(overviewFocusProvider);
+      final card = overviewCardOf(ref.read(overviewBoardProvider), id);
+      if (card != null && focus.peeked != null && focus.peeked != id) {
+        widget.onOpen(card);
+      } else {
+        ref.read(overviewFocusProvider.notifier).select(id);
+      }
+      ref.read(overviewRevealProvider.notifier).done(asked.ask);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollTo(id);
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  /// Scrolls [id]'s row, or its family, into view.
+  void _scrollTo(String id) {
+    final root = overviewFamilyOf(ref.read(overviewForestProvider), id);
+    final family = _treeKeys[root?.tree.card.id]?.currentContext;
+    if (family is! Element) return;
+    Element? row;
+    if (root!.tree.card.id != id) {
+      final key = ValueKey('overview-tree-node:$id');
+      void visit(Element element) {
+        if (row != null) return;
+        if (element.widget.key == key) {
+          row = element;
+          return;
+        }
+        element.visitChildElements(visit);
+      }
+
+      family.visitChildElements(visit);
+    }
+    unawaited(
+      Scrollable.ensureVisible(
+        row ?? family,
+        duration: Motion.of(context).base,
+        alignment: 0.5,
+      ),
+    );
+  }
+
+  /// Lights the chip of the last lane whose header has reached the top.
+  void _trackLane() {
+    final view = _viewport.currentContext?.findRenderObject();
+    if (view is! RenderBox || !view.hasSize) return;
+    String? on;
+    for (final key in _lanes) {
+      final box = _laneKeys[key]?.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.attached || !box.hasSize) continue;
+      final top = box.localToGlobal(Offset.zero, ancestor: view).dy;
+      if (on == null || top <= Insets.xl) on = key;
+    }
+    if (on != _laneOnScreen && mounted) setState(() => _laneOnScreen = on);
+  }
+
+  void _goToLane(String key) {
+    final target = _laneKeys[key]?.currentContext;
+    if (target == null) return;
+    setState(() => _laneOnScreen = key);
+    unawaited(
+      Scrollable.ensureVisible(target, duration: Motion.of(context).base),
+    );
+  }
+
+  /// The phone bar's Lanes: the chip of the lane on screen brought into
+  /// view and given the focus.
+  void _showLanes() {
+    final lane = _laneOnScreen ?? _lanes.firstOrNull;
+    final node = lane == null ? null : _chipFocus[lane];
+    final chip = node?.context;
+    if (node == null || chip == null) return;
+    node.requestFocus();
+    unawaited(
+      Scrollable.ensureVisible(
+        chip,
+        duration: Motion.of(context).base,
+        alignment: 0.5,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(overviewRevealProvider, (_, asked) {
+      if (asked != null) _reveal(asked);
+    });
     final board = ref.watch(overviewBoardProvider);
     final statusOf = ref.read(sessionStatusLookupProvider);
     for (final lane in board.lanes) {
@@ -184,99 +285,126 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       }
     }
     final folded = ref.watch(overviewFoldedParentsProvider);
+    final forest = ref.watch(overviewForestProvider);
     final sections = overviewSectionsOf(
       board,
+      forest,
       waitingSince: (id) => statusOf(id)?.waitingSince,
       folded: folded,
     );
-    final forest = overviewForestOf(board);
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
-    final pinned = watchOverviewPinned(ref).isNotEmpty;
+    final pinned = watchOverviewPinned(ref);
+    final pinnedIds = {for (final card in pinned) card.id};
     final allStates = ref.watch(
       overviewPrefsProvider.select((p) => p.filter.allStates),
     );
+    final drawer = ref.watch(overviewDrawerProvider.select((d) => d.open));
+    final more = ref.watch(overviewMoreProvider);
+    final highlight = ref.watch(overviewHighlightProvider);
     final theme = Theme.of(context);
     final muted = UiDensity.of(context).muted(theme);
     final onOpen = widget.onOpen;
+    _lanes = [for (final (lane, _) in forest.lanes) lane.key];
+    _laneKeys.removeWhere((key, _) => !_lanes.contains(key));
+    _chipFocus.removeWhere((key, node) {
+      if (_lanes.contains(key)) return false;
+      node.dispose();
+      return true;
+    });
+    final searchSheet = ref.watch(overviewSearchSheetProvider);
+    final fresh = [
+      for (final card in overviewForestMembers(forest))
+        if (watchOverviewNewCount(ref, card) > 0) card,
+    ].length;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _trackLane());
+
+    // The families New or Pinned leave out: they dim in place. Read here,
+    // in build, where a watch is kept.
+    bool lit(OverviewTreeNode node) => switch (highlight) {
+      OverviewHighlight.none => true,
+      OverviewHighlight.pinned => node.drawn.any(
+        (c) => pinnedIds.contains(c.id),
+      ),
+      OverviewHighlight.fresh => node.drawn.any(
+        (c) => watchOverviewNewCount(ref, c) > 0,
+      ),
+    };
+    // A search dims the families with no match; a match never moves.
+    final searching = ref.watch(overviewSearchProvider.select((s) => s.active));
+    final matches = searching
+        ? {for (final card in watchOverviewSearchMatches(ref, forest)) card.id}
+        : null;
+    final dimmed = {
+      for (final (_, trees) in forest.lanes)
+        for (final tree in trees)
+          if (!lit(tree) ||
+              (matches != null &&
+                  !tree.drawn.any((c) => matches.contains(c.id))))
+            tree.card.id,
+    };
 
     return LayoutBuilder(
       builder: (context, box) {
         final scaler = MediaQuery.textScalerOf(context);
-        // A phone draws the same trees, its avatars a step smaller.
+        // A phone draws the same families, its avatars a step smaller.
         final phone = box.maxWidth < WidthClass.mediumMin;
-        final gutter = phone ? Insets.lg : Insets.xl;
+        final wide =
+            box.maxWidth >=
+            WidthClass.scaleBreakpoint(WidthClass.expandedMin, scaler);
+        final gutter = phone ? Insets.sm : Insets.xl;
         // Between families: a list's step on a phone.
         final gap = phone ? Insets.sm : Insets.md;
         final inner = box.maxWidth - gutter * 2;
-        final sideBySide =
-            sections.queue.isNotEmpty &&
-            inner >= WidthClass.scaleBreakpoint(_sideBySide, scaler);
-        final workWidth = sideBySide ? inner - _queueWidth - Insets.xl : inner;
         final cell = WidthClass.scaleBreakpoint(Chrome.familyCellMin, scaler);
-        final across = ((workWidth + Insets.md) / (cell + Insets.md))
-            .floor()
-            .clamp(1, _maxAcross);
+        final across = ((inner + Insets.md) / (cell + Insets.md)).floor().clamp(
+          1,
+          _maxAcross,
+        );
         final drawn = <String>{};
-        Widget tree(OverviewTreeNode node, {bool ready = false}) {
+        Widget tree(OverviewTreeNode node, String laneKey, List<String> roots) {
           final id = node.card.id;
-          return OverviewFamilyTree(
+          final family = OverviewFamilyTree(
             // A global key twice in a frame throws; a second draw goes without.
             key: drawn.add(id)
                 ? _treeKeys.putIfAbsent(id, GlobalKey.new)
                 : ValueKey('overview-tree:$id'),
             node: node,
             onOpen: onOpen,
-            ready: ready,
             compact: phone,
+            wide: wide,
+            laneKey: laneKey,
+            laneRoots: roots,
+            matches: matches,
+          );
+          final shown = AnimatedOpacity(
+            opacity: dimmed.contains(id) ? StateLayers.dimmedOpacity : 1,
+            duration: Motion.of(context).fast,
+            child: family,
+          );
+          return DragTarget<String>(
+            onWillAcceptWithDetails: (drag) =>
+                drag.data != id && roots.contains(drag.data),
+            onAcceptWithDetails: (drag) => ref
+                .read(overviewFamilyOrderProvider.notifier)
+                .move(laneKey, roots, drag.data, roots.indexOf(id)),
+            builder: (context, over, _) => Container(
+              foregroundDecoration: over.isEmpty
+                  ? null
+                  : BoxDecoration(
+                      color: StateLayers.dropTarget(theme.colorScheme),
+                      borderRadius: BorderRadius.circular(Radii.lg),
+                    ),
+              child: shown,
+            ),
           );
         }
 
-        final queue = Column(
-          key: const ValueKey('overview-queue'),
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EyebrowLabel(
-              'Waiting on you · ${sections.queue.length}',
-              padding: const EdgeInsets.only(bottom: Insets.sm),
-            ),
-            for (final card in sections.queue)
-              Padding(
-                padding: const EdgeInsets.only(bottom: Insets.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OverviewParentLink(card: card),
-                    OverviewFamilyHover(
-                      card: card,
-                      child: OverviewQueueCard(
-                        key: ValueKey('overview-queue-card:${card.id}'),
-                        card: card,
-                        onOpen: onOpen,
-                        onEdit: widget.onEdit,
-                        onTerminal: widget.onTerminal,
-                        onAnswered: widget.onAnswered,
-                        questionController: widget.questionControllerOf?.call(
-                          card.id,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        );
         final work = Column(
           key: const ValueKey('overview-work'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            EyebrowLabel(
-              'At work · ${sections.work.length}',
-              padding: const EdgeInsets.only(bottom: Insets.sm),
-            ),
-            if (forest.work.isEmpty)
+            if (forest.lanes.isEmpty)
               Text(
                 allStates
                     ? 'Nothing is running or ready right now.'
@@ -285,116 +413,154 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 style: muted,
               )
             else
-              for (final (lane, trees) in forest.work) ...[
-                Padding(
-                  key: ValueKey('overview-work-group:${lane.key}'),
-                  padding: const EdgeInsets.only(
-                    top: Insets.xs,
-                    bottom: Insets.sm,
-                  ),
-                  child: Text(
-                    '${lane.label} · ${trees.length}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+              for (final (lane, trees) in forest.lanes) ...[
+                OverviewLaneHeader(
+                  key: _laneKeys.putIfAbsent(lane.key, GlobalKey.new),
+                  lane: lane,
+                  trees: trees,
                 ),
                 ..._grid(
-                  [for (final node in trees) tree(node)],
+                  [
+                    for (final node in trees)
+                      tree(node, lane.key, [for (final t in trees) t.card.id]),
+                  ],
                   across,
                   gap: gap,
                 ),
               ],
-            if (forest.ready.isNotEmpty) ...[
-              EyebrowLabel(
-                'Done · ready to close · ${sections.ready.length}',
-                key: const ValueKey('overview-ready'),
-                padding: const EdgeInsets.only(
-                  top: Insets.md,
-                  bottom: Insets.sm,
-                ),
-              ),
-              ..._grid(
-                [for (final node in forest.ready) tree(node, ready: true)],
-                across,
-                gap: gap,
-              ),
-            ],
           ],
         );
-        final done = sections.done;
-        final depths = overviewDepthsIn(done);
         _treeKeys.removeWhere((id, _) => !drawn.contains(id));
 
-        return ListView(
+        final list = SingleChildScrollView(
           key: const ValueKey('overview-hybrid'),
-          padding: EdgeInsets.fromLTRB(gutter, Insets.md, gutter, Insets.xxl),
-          children: [
-            const OverviewHeartbeat(),
-            const OverviewGlances(),
-            const OverviewWaitingLane(),
-            const OverviewPipelineLane(),
-            if (hasFilters)
-              const Padding(
-                padding: EdgeInsets.only(top: Insets.md),
-                child: OverviewActiveFilterChips(),
-              ),
-            const SizedBox(height: Insets.lg),
-            if (pinned) ...[
-              OverviewPinnedStrip(onOpen: onOpen),
-              const SizedBox(height: Insets.lg),
-            ],
-            if (sideBySide)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: _queueWidth, child: queue),
-                  const SizedBox(width: Insets.xl),
-                  Expanded(child: work),
-                ],
-              )
-            else ...[
-              if (sections.queue.isNotEmpty) ...[
-                queue,
-                const SizedBox(height: Insets.sm),
+          controller: _scroll,
+          padding: EdgeInsets.fromLTRB(gutter, Insets.sm, gutter, Insets.xxl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (more) ...[
+                const OverviewHeartbeat(today: false),
+                const OverviewGlances(),
+                const OverviewWaitingLane(),
+                const OverviewPipelineLane(),
+                const SizedBox(height: Insets.md),
+              ],
+              if (hasFilters) ...[
+                const OverviewActiveFilterChips(),
+                const SizedBox(height: Insets.md),
+              ],
+              if (pinned.isNotEmpty) ...[
+                OverviewPinnedStrip(onOpen: onOpen),
+                const SizedBox(height: Insets.lg),
               ],
               work,
-            ],
-            if (done.isNotEmpty) ...[
-              const SizedBox(height: Insets.lg),
-              _FoldLine(
-                label: '${done.length} done today',
-                open: _doneOpen,
-                onTap: () => setState(() => _doneOpen = !_doneOpen),
-              ),
-              if (_doneOpen)
-                for (final card in done)
-                  OverviewFamilyHover(
-                    card: card,
-                    radius: Radii.sm,
-                    child: OverviewDoneRow(
-                      card: card,
-                      onOpen: onOpen,
-                      depth: depths[card.id] ?? 0,
-                    ),
+              // The phone's Dashboard took Sessions' tab; the list is a tap
+              // away from here as well as from More.
+              if (PhoneTabsScope.contains(context))
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    key: const ValueKey('overview-all-sessions'),
+                    onPressed: () => ref
+                        .read(phoneShellRouterProvider)
+                        .current
+                        ?.showMore(PhoneMoreEntry.sessions),
+                    icon: const Icon(AppIcons.chatCircleDots),
+                    label: const Text('All sessions'),
                   ),
-            ],
-            // The phone's Dashboard took Sessions' tab; the list is a tap
-            // away from here as well as from More.
-            if (PhoneTabsScope.contains(context))
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: TextButton.icon(
-                  key: const ValueKey('overview-all-sessions'),
-                  onPressed: () => ref
-                      .read(phoneShellRouterProvider)
-                      .current
-                      ?.showMore(PhoneMoreEntry.sessions),
-                  icon: const Icon(AppIcons.chatCircleDots),
-                  label: const Text('All sessions'),
                 ),
+            ],
+          ),
+        );
+
+        final waiting = OverviewWaitingDrawer(
+          queue: sections.queue,
+          forest: forest,
+          onOpen: onOpen,
+          sheet: phone,
+          onEdit: widget.onEdit,
+          onTerminal: widget.onTerminal,
+          onAnswered: widget.onAnswered,
+          questionControllerOf: widget.questionControllerOf,
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(gutter, Insets.md, gutter, 0),
+              child: OverviewTopStrip(
+                waiting: sections.queue.length,
+                queue: sections.queue,
+                phone: phone,
+              ),
+            ),
+            if (forest.lanes.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  Insets.sm,
+                  gutter,
+                  Insets.xs,
+                ),
+                child: OverviewLaneChips(
+                  lanes: forest.lanes,
+                  onScreen: _laneOnScreen,
+                  onTap: _goToLane,
+                  focusNodeOf: (lane) => _chipFocus.putIfAbsent(
+                    lane,
+                    () => FocusNode(debugLabel: 'overview-lane-chip:$lane'),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, area) => Stack(
+                  key: _viewport,
+                  children: [
+                    Positioned.fill(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (note) {
+                          if (note.metrics.axis == Axis.vertical) {
+                            _trackLane();
+                          }
+                          return false;
+                        },
+                        child: list,
+                      ),
+                    ),
+                    if (searchSheet && phone)
+                      Positioned.fill(
+                        child: OverviewSearchSheet(queue: sections.queue),
+                      )
+                    else if (drawer && phone)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: area.maxHeight * Chrome.waitingSheetShare,
+                        child: waiting,
+                      )
+                    else if (drawer)
+                      Positioned(
+                        top: Insets.xs,
+                        right: Insets.sm,
+                        bottom: Insets.sm,
+                        width: Chrome.waitingDrawerWidth.clamp(
+                          0.0,
+                          area.maxWidth - Insets.sm * 2,
+                        ),
+                        child: waiting,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (phone)
+              OverviewPhoneBar(
+                waiting: sections.queue.length,
+                fresh: fresh,
+                onLanes: _showLanes,
               ),
           ],
         );
@@ -425,61 +591,4 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         ),
       ),
   ];
-}
-
-/// "4 done today ▸".
-class _FoldLine extends StatelessWidget {
-  const _FoldLine({
-    required this.label,
-    required this.open,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool open;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    return Semantics(
-      button: true,
-      expanded: open,
-      label: label,
-      excludeSemantics: true,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: InkWell(
-          key: const ValueKey('overview-done-fold'),
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(Radii.sm),
-          child: TouchTarget(
-            child: Padding(
-              padding: const EdgeInsets.all(Insets.xs),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge?.copyWith(color: muted),
-                    ),
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Icon(
-                    open ? AppIcons.caretDown : AppIcons.caretRight,
-                    size: UiDensity.of(context).iconSmall,
-                    color: muted,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

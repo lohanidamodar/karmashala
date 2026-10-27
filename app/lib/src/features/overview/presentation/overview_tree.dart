@@ -1,70 +1,75 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/truncated_text.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../sessions/application/session_status_providers.dart';
-import '../../sessions/presentation/approval_request_card.dart';
+import '../../explorer/application/agent_states.dart';
+import '../../sessions/presentation/end_session_action.dart';
 import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
+import '../application/overview_drawer.dart';
+import '../application/overview_family_order.dart';
 import '../application/overview_links.dart';
+import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
-import '../application/overview_quick_message.dart';
 import '../application/overview_reads.dart';
+import '../application/overview_seen.dart';
 import '../application/overview_tree.dart';
 import 'overview_batch_bar.dart';
 import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
-import 'overview_cards.dart';
 import 'overview_done_card.dart';
 import 'overview_end_button.dart';
-import 'overview_queue_card.dart' show overviewAskKind, OverviewAskKind;
-import 'overview_queue_card.dart' show overviewMachineAndBranch;
-import 'overview_quick_composer.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 import 'session_avatar.dart';
 
-/// **A family on the dashboard, as a tree**: the root's avatar with its card
-/// attached, and a stem down from it with each sub-session branching off on
-/// a rounded elbow — an avatar and a pill, opening inline below when clicked.
-/// A sub-session's own sub-sessions branch off it the same way. The root
-/// card is a working card, or a done one when [ready]; [compact] draws the
-/// phone's smaller avatars.
+/// **A family on the dashboard**: one card of fixed slots — the parent's
+/// avatar and header, its sub-sessions on a stem in spawn order, and a
+/// footer — that a change of state never resizes. [compact] draws the
+/// phone's smaller avatars; [wide] adds the agent and start time.
 class OverviewFamilyTree extends ConsumerStatefulWidget {
   const OverviewFamilyTree({
     required this.node,
     required this.onOpen,
-    this.ready = false,
     this.compact = false,
+    this.wide = false,
+    this.laneKey,
+    this.laneRoots = const [],
+    this.matches,
     super.key,
   });
 
+  /// What the dashboard's search matches, null while it is empty: a family
+  /// holding a match unfolds whole, and its other rows dim.
+  final Set<String>? matches;
+
   final OverviewTreeNode node;
   final ValueChanged<OverviewCard> onOpen;
-  final bool ready;
   final bool compact;
+  final bool wide;
+
+  /// The lane it sits in and that lane's roots as drawn, for Move earlier
+  /// and later and the drag that reorders them.
+  final String? laneKey;
+  final List<String> laneRoots;
+
+  /// The sub-session rows drawn before the rest fold into one.
+  static const shownRows = 4;
 
   @override
   ConsumerState<OverviewFamilyTree> createState() => _OverviewFamilyTreeState();
 }
 
 class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
-  /// The sub-sessions opened inline.
-  final _open = <String>{};
-
-  /// The one sub-session with a composer under its pill, from its hover.
-  String? _composing;
-
-  /// What became of the last message sent from under a pill, until it
-  /// answers.
-  final _sent = <String, _Awaiting>{};
-
-  /// The root's composer, kept as its card turns from working to done.
-  final _rootComposer = GlobalKey();
+  /// The rows past [OverviewFamilyTree.shownRows] are drawn too.
+  var _showAll = false;
 
   double get _rootSize =>
       widget.compact ? Chrome.sessionAvatarCompact : Chrome.sessionAvatar;
@@ -78,32 +83,186 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final root = widget.node.card;
-    final folded = ref.watch(overviewFoldedParentsProvider);
-    final line = sessionRingColor(
-      context,
-      root.state,
-    ).withValues(alpha: SemanticColors.surfaceEdgeAlpha);
-    // On a phone, one frame: a session alone is its card, unframed; a
-    // family keeps its frame, and its root card draws none of its own.
-    final framed = !widget.compact || widget.node.children.isNotEmpty;
-    final surface = framed
-        ? scheme.surfaceContainerLowest
-        : Theme.of(context).scaffoldBackgroundColor;
-    final pad = widget.compact ? Insets.sm : Insets.lg;
+    final node = widget.node;
+    final root = node.card;
+    final matches = widget.matches ?? const <String>{};
+    final found = node.drawn.any((c) => matches.contains(c.id));
+    // A match below the root, folded away or past the cap, is drawn.
+    final opened = found && node.descendants.any((c) => matches.contains(c.id));
+    final watched = ref.watch(overviewFoldedParentsProvider);
+    final folded = opened
+        ? watched.difference({for (final c in node.drawn) c.id})
+        : watched;
+    final focused = ref.watch(
+      overviewFocusProvider.select((f) => f.peeked ?? f.selected),
+    );
+    final selected = ref.watch(
+      overviewFocusProvider.select((f) => f.selected == root.id),
+    );
+    final line = scheme.outlineVariant;
+    final surface = scheme.surfaceContainerLowest;
+    final pad = widget.compact ? Insets.sm : Insets.md;
+
+    final below = overviewDrawnOf(node, folded).skip(1).toList();
+    final shut = node.children.isNotEmpty && folded.contains(root.id);
+    const cap = OverviewFamilyTree.shownRows;
+    final long = below.length > cap + 1;
+    // A session picked past the cap is never left out of view.
+    final pickedPast = below.skip(cap).any((c) => c.id == focused);
+    final capped = long && !_showAll && !pickedPast && !opened;
+    final hidden = <OverviewCard>[];
+    var budget = capped ? cap : below.length;
+
+    Widget subtree(
+      OverviewTreeNode node, {
+      required bool isRoot,
+      OverviewCard? parent,
+      int depth = 0,
+    }) {
+      final size = isRoot ? _rootSize : _kidSize;
+      final id = node.card.id;
+      final under = node.descendants.toList();
+      final inner = !isRoot && under.isNotEmpty && folded.contains(id);
+      Widget head = isRoot
+          ? _rootHead(node, surface)
+          : _TreePill(
+              key: ValueKey('overview-tree-node:$id'),
+              node: node,
+              parent: parent,
+              size: size,
+              halo: surface,
+              hidden: inner ? under : null,
+              onOpen: () => widget.onOpen(node.card),
+            );
+      if (found && !matches.contains(id)) {
+        head = Opacity(opacity: StateLayers.dimmedOpacity, child: head);
+      }
+      if (under.isNotEmpty) {
+        head = _withKnob(
+          head,
+          id: id,
+          size: size,
+          count: under.length,
+          shut: isRoot ? shut : inner,
+        );
+      }
+      final branches = <(Key?, Widget)>[];
+      if (isRoot && shut) {
+        branches.add((
+          null,
+          _SummaryRow(
+            key: ValueKey('overview-tree-strip:$id'),
+            textKey: ValueKey('overview-tree-folded-summary:$id'),
+            lead: overviewSubSessionCount(under.length),
+            cards: under,
+            height: _kidSize,
+            open: false,
+            onTap: () =>
+                ref.read(overviewFoldedParentsProvider.notifier).toggle(id),
+          ),
+        ));
+      } else if (!inner) {
+        for (final kid in node.children) {
+          if (budget <= 0) {
+            hidden.addAll(overviewDrawnOf(kid, folded));
+            continue;
+          }
+          budget--;
+          branches.add((
+            ValueKey('overview-tree-branch:${kid.card.id}'),
+            subtree(kid, isRoot: false, parent: node.card, depth: depth + 1),
+          ));
+        }
+      }
+      if (isRoot && !shut && long && (hidden.isNotEmpty || _showAll)) {
+        branches.add((
+          null,
+          _SummaryRow(
+            key: ValueKey('overview-tree-more:$id'),
+            textKey: ValueKey('overview-tree-more-line:$id'),
+            lead: hidden.isEmpty ? 'Show fewer' : '${hidden.length} more',
+            cards: hidden,
+            height: _kidSize,
+            open: hidden.isEmpty,
+            onTap: () => setState(() => _showAll = hidden.isNotEmpty),
+          ),
+        ));
+      }
+      final stemAt = size / 2 - Chrome.treeLine / 2;
+      final elbowAt = Insets.sm + _kidSize / 2;
+      // Past the deepest step in, a sub-session hangs straight under its
+      // parent.
+      final flat = depth >= Chrome.treeIndentDepth;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CustomPaint(
+            painter: branches.isEmpty
+                ? null
+                : _StemPainter(x: size / 2, from: size, color: line),
+            child: head,
+          ),
+          if (branches.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(left: flat ? 0 : stemAt),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (i, (key, branch)) in branches.indexed)
+                    CustomPaint(
+                      key: key,
+                      painter: flat
+                          ? _RunPainter(
+                              x: size / 2,
+                              last: i == branches.length - 1,
+                              to: Insets.sm,
+                              color: line,
+                            )
+                          : _ElbowPainter(
+                              last: i == branches.length - 1,
+                              elbowAt: elbowAt,
+                              reach: _elbow,
+                              color: line,
+                            ),
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: Insets.sm,
+                          left: flat ? 0 : _elbow,
+                        ),
+                        child: branch,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
+
+    final tree = subtree(node, isRoot: true);
     return Semantics(
       container: true,
-      label: widget.node.children.isEmpty
+      label: node.children.isEmpty
           ? root.entry.title
           : '${root.entry.title} and its sub-sessions',
       child: Container(
         key: ValueKey('overview-family:${root.id}'),
-        padding: framed ? EdgeInsets.all(pad) : null,
-        decoration: framed
+        padding: EdgeInsets.all(pad),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(Radii.lg),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        // The keyboard's ring is drawn over the edge, so it moves nothing.
+        foregroundDecoration: selected
             ? BoxDecoration(
-                color: surface,
                 borderRadius: BorderRadius.circular(Radii.lg),
-                border: Border.all(color: scheme.outlineVariant),
+                border: Border.all(
+                  color: scheme.primary,
+                  width: StateLayers.focusRingWidth * 2,
+                ),
               )
             : null,
         child: Column(
@@ -111,168 +270,17 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
           mainAxisSize: MainAxisSize.min,
           children: [
             OverviewParentLink(card: root),
-            _subtree(
-              widget.node,
-              root: true,
-              folded: folded,
-              line: line,
-              surface: surface,
+            tree,
+            const SizedBox(height: Insets.xs),
+            _FamilyFooter(
+              node: node,
+              onOpen: widget.onOpen,
+              laneKey: widget.laneKey,
+              laneRoots: widget.laneRoots,
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _subtree(
-    OverviewTreeNode node, {
-    required bool root,
-    required Set<String> folded,
-    required Color line,
-    required Color surface,
-    OverviewCard? parent,
-    int depth = 0,
-  }) {
-    final size = root ? _rootSize : _kidSize;
-    final id = node.card.id;
-    final below = node.descendants.toList();
-    final shut = below.isNotEmpty && folded.contains(id);
-    Widget head = root
-        ? _rootHead(node, surface)
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _TreePill(
-                key: ValueKey('overview-tree-node:$id'),
-                node: node,
-                parent: parent,
-                size: size,
-                open: _open.contains(id),
-                line: line,
-                halo: surface,
-                hidden: shut ? below : null,
-                sent: _sent[id],
-                onSentSeen: () => setState(() => _sent.remove(id)),
-                onToggle: () => setState(() {
-                  if (!_open.remove(id)) _open.add(id);
-                  if (_composing == id) _composing = null;
-                }),
-                onOpenChat: () => widget.onOpen(node.card),
-                onMessage: () => setState(() {
-                  _composing = _composing == id ? null : id;
-                  _open.remove(id);
-                  _sent.remove(id);
-                }),
-              ),
-              if (_composing == id)
-                _TreeComposer(
-                  card: node.card,
-                  tuck: size / 2,
-                  line: line,
-                  onClose: () => setState(() => _composing = null),
-                  onSent: (sent) {
-                    final read = ref.read(overviewLastAnswerProvider(id));
-                    final now = ref.read(clockProvider).nowUtc();
-                    setState(() {
-                      _composing = null;
-                      _sent[id] = _Awaiting(
-                        sent,
-                        at: now,
-                        before: read.isLoading || read.hasError
-                            ? null
-                            : read.value,
-                      );
-                    });
-                  },
-                ),
-              if (_open.contains(id))
-                _TreeDetail(
-                  card: node.card,
-                  tuck: size / 2,
-                  line: line,
-                  onOpen: widget.onOpen,
-                ),
-            ],
-          );
-    if (below.isNotEmpty) {
-      head = _withKnob(
-        head,
-        id: id,
-        size: size,
-        count: below.length,
-        shut: shut,
-      );
-    }
-    // A fold hides what is below; a family's root keeps a strip saying what.
-    final branches = <(Key?, Widget)>[
-      if (!shut)
-        for (final kid in node.children)
-          (
-            ValueKey('overview-tree-branch:${kid.card.id}'),
-            _subtree(
-              kid,
-              root: false,
-              folded: folded,
-              line: line,
-              surface: surface,
-              parent: node.card,
-              depth: depth + 1,
-            ),
-          )
-      else if (root)
-        (null, _FoldedStrip(rootId: id, below: below, height: _kidSize)),
-    ];
-    final stemAt = size / 2 - Chrome.treeLine / 2;
-    final elbowAt = Insets.md + _kidSize / 2;
-    // Past the deepest step in, a sub-session hangs straight under its parent.
-    final flat = depth >= Chrome.treeIndentDepth;
-    // The head keeps one ancestry folded or not, or its composers' state goes.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CustomPaint(
-          painter: branches.isEmpty
-              ? null
-              : _StemPainter(x: size / 2, from: size, color: line),
-          child: head,
-        ),
-        if (branches.isNotEmpty)
-          Padding(
-            padding: EdgeInsets.only(left: flat ? 0 : stemAt),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (i, (key, branch)) in branches.indexed)
-                  CustomPaint(
-                    key: key,
-                    painter: flat
-                        ? _RunPainter(
-                            x: size / 2,
-                            last: i == branches.length - 1,
-                            to: Insets.md,
-                            color: line,
-                          )
-                        : _ElbowPainter(
-                            last: i == branches.length - 1,
-                            elbowAt: elbowAt,
-                            reach: _elbow,
-                            color: line,
-                          ),
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        top: Insets.md,
-                        left: flat ? 0 : _elbow,
-                      ),
-                      child: branch,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 
@@ -307,59 +315,517 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     );
   }
 
-  /// The root's avatar with its card attached, tucked behind it.
+  /// The parent's avatar inside the card, its header beside it.
   Widget _rootHead(OverviewTreeNode node, Color surface) {
     final card = node.card;
     final size = _rootSize;
-    final tuck = size / 2;
-    final below = node.descendants.toList();
-    final bare = widget.compact && node.children.isNotEmpty;
-    // The parent always takes a message of its own, a family or not.
-    final footer = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (below.isNotEmpty) ...[
-          OverviewFamilyFooter(root: card, below: below),
-          const SizedBox(height: Insets.xs),
-        ],
-        OverviewQuickComposer(key: _rootComposer, card: card),
-      ],
-    );
-    final Widget body = widget.ready
-        ? OverviewDoneCard(
-            key: ValueKey('overview-ready-card:${card.id}'),
-            card: card,
-            onOpen: widget.onOpen,
-            leading: tuck,
-            footer: footer,
-            family: below,
-            compact: widget.compact,
-            bare: bare,
-          )
-        : OverviewWorkCard(
-            key: ValueKey('overview-work-card:${card.id}'),
-            card: card,
-            onOpen: widget.onOpen,
-            leading: tuck,
-            footer: footer,
-            compact: widget.compact,
-            bare: bare,
-          );
     return _RootHead(
       node: node,
       size: size,
       halo: surface,
-      child: Padding(
-        padding: EdgeInsets.only(left: tuck),
-        child: OverviewFamilyHover(card: card, child: body),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: size),
+        child: Padding(
+          padding: EdgeInsets.only(left: size + Insets.sm),
+          child: OverviewFamilyHover(
+            card: card,
+            child: _FamilyHeader(
+              node: node,
+              onOpen: widget.onOpen,
+              wide: widget.wide,
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-/// A family root's avatar over its card's edge, the pick box on the
-/// avatar's face as a pill's is: while picking, or under a pointer over it.
+/// How many of [node]'s sub-sessions have finished their turn: ready or
+/// ended, as its avatar's ring counts them.
+int overviewFinishedBelow(OverviewTreeNode node) => node.descendants
+    .where((c) => c.state == AgentState.ready || c.state == AgentState.ended)
+    .length;
+
+/// The height of [lines] lines of [style] under the ambient text scale.
+double overviewLinesHeight(BuildContext context, TextStyle? style, int lines) {
+  final painter = TextPainter(
+    text: TextSpan(text: 'Ag', style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final height = painter.height * lines;
+  painter.dispose();
+  return height;
+}
+
+/// A family's header: its title, new count, pin and state in a fixed slot;
+/// "2/4 finished" with, on [wide], the agent and start; then two lines of
+/// what it last said or asks.
+class _FamilyHeader extends ConsumerWidget {
+  const _FamilyHeader({
+    required this.node,
+    required this.onOpen,
+    required this.wide,
+  });
+
+  final OverviewTreeNode node;
+  final ValueChanged<OverviewCard> onOpen;
+  final bool wide;
+
+  /// The most of the meta line "2/4 finished" and the agent take, wide.
+  static const _metaShare = 0.5;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final card = node.card;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final touch = density.isTouch;
+    final muted = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    final pinned = ref.watch(
+      overviewPrefsProvider.select((p) => p.pinned.contains(card.id)),
+    );
+    final agent = watchOverviewAgentName(ref, card);
+    final place = watchOverviewCardPlace(ref, card);
+    final kids = node.descendants.length;
+    final started = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(card.entry.createdAt.toLocal()));
+    final meta = [
+      if (kids > 0) '${overviewFinishedBelow(node)}/$kids finished',
+      if (wide) ...[?agent, 'started $started'],
+    ].join(' · ');
+    final titleStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    final slot = WidthClass.scaleBreakpoint(
+      Chrome.familyStateSlot,
+      MediaQuery.textScalerOf(context),
+    );
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        key: ValueKey('overview-family-head:${card.id}'),
+        borderRadius: BorderRadius.circular(Radii.sm),
+        onTap: () {
+          if (!overviewPickSelects(ref, card, touch: touch)) onOpen(card);
+        },
+        onLongPress: () => overviewPickSelects(ref, card, long: true),
+        onSecondaryTapUp: (details) => showOverviewFamilyMenu(
+          context,
+          ref,
+          node,
+          at: details.globalPosition,
+        ),
+        child: OverviewHoverScope(
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final stateWidth = slot.clamp(0.0, box.maxWidth / 3);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          label: [
+                            card.entry.title,
+                            card.state.label,
+                            ?agent,
+                            if (place.isNotEmpty) place,
+                          ].join(', '),
+                          excludeSemantics: true,
+                          child: TruncatedText(
+                            card.entry.title,
+                            textKey: ValueKey('overview-card-title:${card.id}'),
+                            triggerMode: TooltipTriggerMode.manual,
+                            style: titleStyle,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Insets.xs),
+                      OverviewNewBadge(card: card),
+                      if (pinned) ...[
+                        const SizedBox(width: Insets.xs),
+                        Icon(
+                          AppIcons.pushPinFill,
+                          key: ValueKey('overview-family-pinned:${card.id}'),
+                          size: density.iconSmall,
+                          color: scheme.primary,
+                          semanticLabel: 'Pinned',
+                        ),
+                      ],
+                      const SizedBox(width: Insets.xs),
+                      SizedBox(
+                        key: ValueKey('overview-family-state:${card.id}'),
+                        width: stateWidth,
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: OverviewStatePill(card: card),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // One fixed line: wide, the plan step, diff and check
+                  // follow, each cut short rather than wrapping.
+                  SizedBox(
+                    height: overviewLinesHeight(context, muted, 1),
+                    child: ClipRect(
+                      child: Row(
+                        children: [
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: wide
+                                  ? box.maxWidth * _metaShare
+                                  : box.maxWidth,
+                            ),
+                            child: Text(
+                              meta,
+                              key: ValueKey('overview-family-meta:${card.id}'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: muted,
+                            ),
+                          ),
+                          if (wide) ...[
+                            if (meta.isNotEmpty)
+                              const SizedBox(width: Insets.md),
+                            Expanded(
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: OverviewMetaLine(
+                                  card: card,
+                                  oneLine: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: Insets.xxs),
+                  _SayLines(card: card),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Exactly two lines: what [card] asks, in the attention colour, or the
+/// latest thing it said, or what it is doing while it has said nothing.
+class _SayLines extends ConsumerWidget {
+  const _SayLines({required this.card});
+
+  final OverviewCard card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodySmall;
+    final asks = card.column == BoardColumn.needsYou && !card.heldBySubSessions;
+    final said = ref.watch(overviewLastAnswerProvider(card.id)).value?.text;
+    final Widget body;
+    if (asks) {
+      body = Text(
+        watchOverviewLine(ref, card),
+        key: ValueKey('overview-family-ask:${card.id}'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: style?.copyWith(color: SemanticColors.of(context).attention),
+      );
+    } else if (said != null) {
+      body = OverviewLatestMessage(sessionId: card.id);
+    } else {
+      body = Text(
+        watchOverviewLine(ref, card),
+        key: ValueKey('overview-tree-line:${card.id}'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: style?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      );
+    }
+    return SizedBox(
+      height: overviewLinesHeight(context, style, 2),
+      child: ClipRect(
+        child: Align(alignment: AlignmentDirectional.topStart, child: body),
+      ),
+    );
+  }
+}
+
+/// A family's footer, one fixed height: Open chat, ⋯, and one primary slot
+/// of fixed width — Review N asks, Reply, Stop or Archive.
+class _FamilyFooter extends ConsumerWidget {
+  const _FamilyFooter({
+    required this.node,
+    required this.onOpen,
+    required this.laneKey,
+    required this.laneRoots,
+  });
+
+  final OverviewTreeNode node;
+  final ValueChanged<OverviewCard> onOpen;
+  final String? laneKey;
+  final List<String> laneRoots;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final card = node.card;
+    final density = UiDensity.of(context);
+    final compact = density.compactButton;
+    final slot = WidthClass.scaleBreakpoint(
+      Chrome.familyPrimarySlot,
+      MediaQuery.textScalerOf(context),
+    );
+    final drag = !density.isTouch && laneKey != null && laneRoots.length > 1;
+    Widget label(String text) =>
+        Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
+    final asks = overviewWaitingIn(node);
+    final Widget primary;
+    if (asks > 0) {
+      primary = FilledButton(
+        key: ValueKey('overview-family-review:${card.id}'),
+        style: compact,
+        onPressed: () =>
+            ref.read(overviewDrawerProvider.notifier).open(family: card.id),
+        child: label('Review $asks ${asks == 1 ? 'ask' : 'asks'}'),
+      );
+    } else if (card.state == AgentState.ready) {
+      primary = FilledButton.tonal(
+        key: ValueKey('overview-family-reply:${card.id}'),
+        style: compact,
+        onPressed: () => onOpen(card),
+        child: label('Reply'),
+      );
+    } else if (card.state == AgentState.ended) {
+      final family = node.children.isNotEmpty;
+      final left = overviewFamilyToArchive(node);
+      primary = OverviewArchiveGate(
+        sessionId: card.id,
+        builder: (resuming) => OutlinedButton(
+          key: ValueKey(
+            family
+                ? 'overview-archive-family:${card.id}'
+                : 'overview-done-archive:${card.id}',
+          ),
+          style: compact,
+          onPressed: resuming || left.isEmpty
+              ? null
+              : () => unawaited(archiveFamilyFromDashboard(context, ref, node)),
+          child: label('Archive'),
+        ),
+      );
+    } else {
+      final live = sessionHasLiveProcess(ref, card.id);
+      primary = OutlinedButton(
+        key: ValueKey('overview-end:${card.id}'),
+        style: compact,
+        onPressed: live
+            ? () => unawaited(endFromDashboard(context, ref, card))
+            : null,
+        child: label('Stop'),
+      );
+    }
+    return SizedBox(
+      height: Touch.target,
+      child: LayoutBuilder(
+        builder: (context, box) => Row(
+          children: [
+            if (drag) _DragHandle(card: card),
+            Flexible(
+              child: TextButton(
+                key: ValueKey('overview-family-open:${card.id}'),
+                style: compact,
+                onPressed: () => onOpen(card),
+                // A phone's card has room for the verb alone.
+                child: label(
+                  box.maxWidth < WidthClass.mediumMin ? 'Open' : 'Open chat',
+                ),
+              ),
+            ),
+            Builder(
+              builder: (button) => IconButton(
+                key: ValueKey('overview-card-menu:${card.id}'),
+                tooltip: 'More',
+                visualDensity: density.controlDensity,
+                padding: EdgeInsets.zero,
+                constraints: density.iconConstraints(Chrome.control),
+                iconSize: density.iconSize(Chrome.iconSmall),
+                icon: const Icon(AppIcons.dotsThree),
+                onPressed: () => showOverviewFamilyMenu(
+                  button,
+                  ref,
+                  node,
+                  laneKey: laneKey,
+                  laneRoots: laneRoots,
+                ),
+              ),
+            ),
+            const Spacer(),
+            SizedBox(
+              key: ValueKey('overview-family-primary:${card.id}'),
+              width: slot.clamp(0.0, box.maxWidth / 2),
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The ⋮⋮ a family is dragged by to another place in its lane.
+class _DragHandle extends StatelessWidget {
+  const _DragHandle({required this.card});
+
+  final OverviewCard card;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final icon = Icon(
+      AppIcons.dotsSixVertical,
+      size: density.iconSize(Chrome.iconSmall),
+      color: scheme.onSurfaceVariant,
+    );
+    return Draggable<String>(
+      key: ValueKey('overview-family-drag:${card.id}'),
+      data: card.id,
+      feedback: Material(
+        elevation: Elevations.popup,
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(Radii.md),
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.sm),
+          child: Text(card.entry.title, style: theme.textTheme.bodyMedium),
+        ),
+      ),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Tooltip(
+          message: 'Drag to move it in its lane',
+          child: SizedBox(
+            width: Chrome.control,
+            height: Chrome.control,
+            child: Center(child: icon),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// [node]'s menu — the card's own verbs, its place in the lane, Mark seen,
+/// Merge and Hand back where they apply, then the shared session menu.
+Future<void> showOverviewFamilyMenu(
+  BuildContext anchor,
+  WidgetRef ref,
+  OverviewTreeNode node, {
+  String? laneKey,
+  List<String> laneRoots = const [],
+  Offset? at,
+}) {
+  final card = node.card;
+  final at0 = laneRoots.indexOf(card.id);
+  final movable = laneKey != null && at0 >= 0 && laneRoots.length > 1;
+  final merge = overviewMergeOffer(ref, card);
+  final parent = overviewHandBackParent(ref, card);
+  return showOverviewCardMenu(
+    anchor,
+    ref,
+    card,
+    at: at,
+    more: [
+      if (movable) ...[
+        DesktopMenuItem(
+          key: const ValueKey('overview-card-menu:earlier'),
+          value: 'board-earlier',
+          label: 'Move earlier',
+          icon: AppIcons.arrowUp,
+          enabled: at0 > 0,
+        ),
+        DesktopMenuItem(
+          key: const ValueKey('overview-card-menu:later'),
+          value: 'board-later',
+          label: 'Move later',
+          icon: AppIcons.arrowDown,
+          enabled: at0 < laneRoots.length - 1,
+        ),
+      ],
+      DesktopMenuItem(
+        key: const ValueKey('overview-card-menu:seen'),
+        value: 'board-seen',
+        label: 'Mark seen',
+        icon: AppIcons.eye,
+      ),
+      if (card.entry.native != null)
+        DesktopMenuItem(
+          key: const ValueKey('overview-card-menu:merge'),
+          value: 'board-merge',
+          label: 'Merge',
+          icon: AppIcons.gitMerge,
+          enabled: merge != null && merge.isEnabled,
+        ),
+      if (parent != null)
+        DesktopMenuItem(
+          key: const ValueKey('overview-card-menu:hand-back'),
+          value: 'board-hand-back',
+          label: 'Hand back to ${parent.entry.title}',
+          icon: AppIcons.arrowBendDownRight,
+        ),
+    ],
+    onMore: (value) async {
+      switch (value) {
+        case 'board-earlier' || 'board-later':
+          ref
+              .read(overviewFamilyOrderProvider.notifier)
+              .step(
+                laneKey!,
+                laneRoots,
+                card.id,
+                value == 'board-earlier' ? -1 : 1,
+              );
+        case 'board-seen':
+          final now = ref.read(clockProvider).nowUtc();
+          final seen = ref.read(overviewSeenProvider.notifier);
+          for (final member in node.drawn) {
+            seen.markSeen(member.id, now);
+          }
+        case 'board-merge' when merge != null:
+          await mergeFromDashboard(anchor, ref, card, merge);
+        case 'board-hand-back' when parent != null:
+          await handBackFromDashboard(anchor, ref, card, parent);
+        default:
+          return false;
+      }
+      return true;
+    },
+  );
+}
+
+/// A family's parent avatar at the card's top left, the pick box on its
+/// face as a pill's is: while picking, or under a pointer over it.
 class _RootHead extends ConsumerStatefulWidget {
   const _RootHead({
     required this.node,
@@ -372,7 +838,7 @@ class _RootHead extends ConsumerStatefulWidget {
   final double size;
   final Color halo;
 
-  /// The card, tucked behind the avatar.
+  /// The header, beside the avatar.
   final Widget child;
 
   @override
@@ -481,113 +947,18 @@ class _AvatarPickBox extends ConsumerWidget {
   }
 }
 
-/// A message sent from under a pill, and the answer read when it went.
-class _Awaiting {
-  _Awaiting(this.sent, {required this.at, this.before});
-
-  final QuickMessageSent sent;
-  final DateTime at;
-
-  /// Null while no read had settled; the first one since is taken instead.
-  LastAnswer? before;
-}
-
-/// "4 of 5 done · 1 working" and the fold under a family's root card:
-/// folded, only the root stays, saying how many are away.
-class OverviewFamilyFooter extends ConsumerWidget {
-  const OverviewFamilyFooter({
-    required this.root,
-    required this.below,
-    super.key,
-  });
-
-  final OverviewCard root;
-  final List<OverviewCard> below;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final folded = ref.watch(
-      overviewFoldedParentsProvider.select((s) => s.contains(root.id)),
-    );
-    final count = overviewSubSessionCount(below.length);
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: Insets.sm,
-      children: [
-        Text(
-          overviewFamilySummary(below),
-          key: ValueKey('overview-family-summary:${root.id}'),
-          style: theme.textTheme.labelSmall?.copyWith(color: muted),
-        ),
-        Semantics(
-          button: true,
-          expanded: !folded,
-          label: folded ? 'Show $count' : 'Fold $count',
-          excludeSemantics: true,
-          child: InkWell(
-            key: ValueKey('overview-children-fold:${root.id}'),
-            onTap: () => ref
-                .read(overviewFoldedParentsProvider.notifier)
-                .toggle(root.id),
-            borderRadius: BorderRadius.circular(Radii.sm),
-            child: TouchTarget(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Insets.xs,
-                  vertical: Insets.xxs,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      folded ? AppIcons.caretRight : AppIcons.caretDown,
-                      size: UiDensity.of(context).iconSmall,
-                      color: muted,
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Flexible(
-                      child: Text(
-                        count,
-                        key: ValueKey('overview-children-line:${root.id}'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: muted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// **A sub-session on the tree**: its avatar and a pill with its title, its
-/// state and age, and its latest line. A pointer over it slides the pill,
-/// lights the avatar's ring, puts the pick box on the avatar's face and
-/// Message and Open chat over the state; a click, Enter or Space opens it
-/// below. Nothing in it changes size.
+/// **A sub-session on the tree**, one fixed-height row: its avatar, its
+/// title, its state in a fixed slot and one line of preview. A tap, Enter
+/// or Space opens it in the peek; a pointer over it slides it and lights
+/// its avatar.
 class _TreePill extends ConsumerStatefulWidget {
   const _TreePill({
     required this.node,
     required this.size,
-    required this.open,
-    required this.line,
     required this.halo,
-    required this.onToggle,
-    required this.onOpenChat,
-    required this.onMessage,
-    required this.onSentSeen,
+    required this.onOpen,
     this.parent,
     this.hidden,
-    this.sent,
     super.key,
   });
 
@@ -597,22 +968,11 @@ class _TreePill extends ConsumerStatefulWidget {
   /// differs.
   final OverviewCard? parent;
   final double size;
-  final bool open;
-  final Color line;
   final Color halo;
-  final VoidCallback onToggle;
-  final VoidCallback onOpenChat;
-
-  /// The hover's Message: a composer under the pill.
-  final VoidCallback onMessage;
+  final VoidCallback onOpen;
 
   /// What its fold hides, said in place of its latest line.
   final List<OverviewCard>? hidden;
-
-  /// A message sent from under the pill, said in place of its latest line
-  /// until the session answers; then [onSentSeen].
-  final _Awaiting? sent;
-  final VoidCallback onSentSeen;
 
   @override
   ConsumerState<_TreePill> createState() => _TreePillState();
@@ -623,7 +983,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
   var _pressed = false;
   var _focused = false;
 
-  /// The keys are on the pill, its pick box or its hover actions.
+  /// The keys are on the pill or its pick box.
   var _within = false;
 
   @override
@@ -644,18 +1004,6 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final selecting = ref.watch(
       overviewSelectionProvider.select((s) => !s.isEmpty),
     );
-    if (widget.sent case final awaiting?) {
-      ref.listen(overviewLastAnswerProvider(card.id), (_, now) {
-        if (now.isLoading || now.hasError || !now.hasValue) return;
-        final said = now.requireValue;
-        if (said.answers(sentAt: awaiting.at, before: awaiting.before)) {
-          widget.onSentSeen();
-        } else {
-          // The first read since it went, when none had been read before.
-          awaiting.before ??= said;
-        }
-      });
-    }
     final size = widget.size;
     final tuck = size / 2;
     final apart = widget.parent == null
@@ -663,26 +1011,21 @@ class _TreePillState extends ConsumerState<_TreePill> {
         : watchOverviewPlaceApart(ref, card, widget.parent!);
     final edge = _focused || selected
         ? scheme.primary
-        : widget.open
-        ? widget.line
         : hovered
         ? scheme.outline
         : scheme.outlineVariant;
-    const round = Radius.circular(Radii.lg);
-    const flat = Radius.circular(Radii.sm);
     final minHeight = touch && Touch.target > size ? Touch.target : size;
+    final slot = WidthClass.scaleBreakpoint(
+      Chrome.familyStateSlot,
+      MediaQuery.textScalerOf(context),
+    );
 
     final pill = Material(
       color: hovered ? scheme.surfaceContainer : scheme.surfaceContainerLow,
       elevation: hovered ? Elevations.popup : 0,
       shadowColor: scheme.shadow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: round,
-          topRight: round,
-          bottomLeft: widget.open ? flat : round,
-          bottomRight: widget.open ? flat : round,
-        ),
+        borderRadius: BorderRadius.circular(Radii.lg),
         side: BorderSide(
           color: edge,
           width: _focused || selected ? StateLayers.focusRingWidth * 2 : 1,
@@ -700,14 +1043,14 @@ class _TreePillState extends ConsumerState<_TreePill> {
           key: ValueKey('overview-tree-pill:${card.id}'),
           onTap: () {
             if (!overviewPickSelects(ref, card, touch: touch)) {
-              widget.onToggle();
+              widget.onOpen();
             }
           },
           onLongPress: () => overviewPickSelects(ref, card, long: true),
-          onSecondaryTapUp: (details) => showOverviewCardMenu(
+          onSecondaryTapUp: (details) => showOverviewFamilyMenu(
             context,
             ref,
-            card,
+            node,
             at: details.globalPosition,
           ),
           onHighlightChanged: (on) => setState(() => _pressed = on),
@@ -724,29 +1067,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
                 ),
                 child: LayoutBuilder(
                   builder: (context, box) {
-                    // Narrow, the state takes a line of its own so the
-                    // title keeps its words.
-                    final narrow =
-                        box.maxWidth <
-                        WidthClass.scaleBreakpoint(
-                          Chrome.familyCellMin / 2,
-                          MediaQuery.textScalerOf(context),
-                        );
-                    final along = narrow
-                        ? AlignmentDirectional.centerStart
-                        : AlignmentDirectional.centerEnd;
-                    final chip = Align(
-                      alignment: along,
-                      child: touch
-                          ? OverviewStatePill(card: card)
-                          : _HoverTail(
-                              card: card,
-                              active: active,
-                              alignment: along,
-                              onMessage: widget.onMessage,
-                              onOpenChat: widget.onOpenChat,
-                            ),
-                    );
+                    final stateWidth = slot.clamp(0.0, box.maxWidth / 3);
                     return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -792,13 +1113,20 @@ class _TreePillState extends ConsumerState<_TreePill> {
                             ],
                             const SizedBox(width: Insets.xs),
                             OverviewNewBadge(card: card),
-                            if (!narrow) ...[
-                              const SizedBox(width: Insets.xs),
-                              Flexible(flex: 2, child: chip),
-                            ],
+                            const SizedBox(width: Insets.xs),
+                            SizedBox(
+                              width: stateWidth,
+                              child: Align(
+                                alignment: AlignmentDirectional.centerEnd,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: AlignmentDirectional.centerEnd,
+                                  child: OverviewStatePill(card: card),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                        if (narrow) chip,
                         if (widget.hidden case final hidden?)
                           Row(
                             children: [
@@ -822,12 +1150,6 @@ class _TreePillState extends ConsumerState<_TreePill> {
                               ),
                             ],
                           )
-                        else if (widget.sent case final sent?)
-                          OverviewSentStatus(
-                            key: ValueKey('overview-tree-sent:${card.id}'),
-                            sessionId: card.id,
-                            sent: sent.sent,
-                          )
                         else
                           _LatestLine(card: card),
                       ],
@@ -842,64 +1164,61 @@ class _TreePillState extends ConsumerState<_TreePill> {
     );
 
     final pickable = selecting || active;
-    return Semantics(
-      expanded: widget.open,
-      child: OverviewFamilyHover(
-        card: card,
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
-          child: Focus(
-            canRequestFocus: false,
-            skipTraversal: true,
-            onFocusChange: (on) => setState(() => _within = on),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(left: tuck),
-                  child: AnimatedContainer(
+    return OverviewFamilyHover(
+      card: card,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onFocusChange: (on) => setState(() => _within = on),
+          child: Stack(
+            children: [
+              Padding(
+                padding: EdgeInsets.only(left: tuck),
+                child: AnimatedContainer(
+                  duration: motion.fast,
+                  curve: Motion.standard,
+                  transform: Matrix4.translationValues(
+                    hovered ? Insets.tight : 0,
+                    0,
+                    0,
+                  ),
+                  child: AnimatedScale(
+                    scale: _pressed ? Motion.pressScale : 1,
                     duration: motion.fast,
-                    curve: Motion.standard,
-                    transform: Matrix4.translationValues(
-                      hovered ? Insets.tight : 0,
-                      0,
-                      0,
-                    ),
-                    child: AnimatedScale(
-                      scale: _pressed ? Motion.pressScale : 1,
-                      duration: motion.fast,
-                      child: pill,
-                    ),
+                    child: pill,
                   ),
                 ),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                width: size,
+                height: size,
+                child: IgnorePointer(
+                  child: SessionAvatar(
+                    card: card,
+                    size: size,
+                    progress: overviewDoneShare(node),
+                    waiting: overviewWaitingIn(node),
+                    halo: widget.halo,
+                    glow: hovered,
+                  ),
+                ),
+              ),
+              if (pickable)
+                // A thumb's target from the avatar's corner, inside the
+                // pill's bounds; the knob, drawn later, keeps its own.
                 Positioned(
                   left: 0,
                   top: 0,
-                  width: size,
-                  height: size,
-                  child: IgnorePointer(
-                    child: SessionAvatar(
-                      card: card,
-                      size: size,
-                      progress: overviewDoneShare(node),
-                      waiting: overviewWaitingIn(node),
-                      halo: widget.halo,
-                      glow: hovered,
-                    ),
-                  ),
+                  width: minHeight,
+                  height: minHeight,
+                  child: _AvatarPickBox(card: card, size: size),
                 ),
-                if (pickable)
-                  // A thumb's target from the avatar's corner, inside the
-                  // pill's bounds; the knob, drawn later, keeps its own.
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    width: minHeight,
-                    height: minHeight,
-                    child: _AvatarPickBox(card: card, size: size),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -907,75 +1226,116 @@ class _TreePillState extends ConsumerState<_TreePill> {
   }
 }
 
-/// A pill's tail: its state, with its hover actions laid over it while
-/// [active]. Always the size of both, so a hover moves nothing.
-class _HoverTail extends StatelessWidget {
-  const _HoverTail({
-    required this.card,
-    required this.active,
-    required this.alignment,
-    required this.onMessage,
-    required this.onOpenChat,
+/// One row for the sub-sessions not drawn — a folded family's, or those past
+/// the cap: their avatars stacked and "N more · K asks · J new". A tap
+/// unfolds them; [open] says the row folds them back.
+class _SummaryRow extends ConsumerStatefulWidget {
+  const _SummaryRow({
+    required this.textKey,
+    required this.lead,
+    required this.cards,
+    required this.height,
+    required this.open,
+    required this.onTap,
+    super.key,
   });
 
-  final OverviewCard card;
-  final bool active;
-  final AlignmentGeometry alignment;
-  final VoidCallback onMessage;
-  final VoidCallback onOpenChat;
+  final Key textKey;
+  final String lead;
+  final List<OverviewCard> cards;
+  final double height;
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  ConsumerState<_SummaryRow> createState() => _SummaryRowState();
+}
+
+class _SummaryRowState extends ConsumerState<_SummaryRow> {
+  var _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final motion = Motion.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    Widget action(String key, String tip, IconData icon, VoidCallback? on) =>
-        IconButton(
-          key: ValueKey('$key:${card.id}'),
-          tooltip: tip,
-          onPressed: on,
-          padding: EdgeInsets.zero,
-          iconSize: density.iconSmall,
-          constraints: const BoxConstraints.tightFor(
-            width: Chrome.control,
-            height: Chrome.control,
+    final touch = density.isTouch;
+    final fanned = _hovered && !touch;
+    final cards = widget.cards;
+    final asks = cards
+        .where((c) => c.column == BoardColumn.needsYou && !c.heldBySubSessions)
+        .length;
+    final fresh = cards.where((c) => watchOverviewNewCount(ref, c) > 0).length;
+    final summary = [
+      widget.lead,
+      if (asks > 0) '$asks ${asks == 1 ? 'ask' : 'asks'}',
+      if (fresh > 0) '$fresh new',
+    ].join(' · ');
+    return Semantics(
+      button: true,
+      expanded: widget.open,
+      label: summary,
+      excludeSemantics: true,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Material(
+          color: fanned ? scheme.surfaceContainer : scheme.surfaceContainerLow,
+          shape: StadiumBorder(
+            side: BorderSide(
+              color: fanned ? scheme.outline : scheme.outlineVariant,
+            ),
           ),
-          icon: Icon(icon),
-        );
-    return Stack(
-      alignment: alignment,
-      children: [
-        AnimatedOpacity(
-          opacity: active ? 0 : 1,
-          duration: motion.fast,
-          child: ExcludeSemantics(
-            excluding: active,
-            child: OverviewStatePill(card: card),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onTap,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: touch && Touch.target > widget.height
+                    ? Touch.target
+                    : widget.height,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.xs,
+                  Insets.xs,
+                  Insets.md,
+                  Insets.xs,
+                ),
+                child: Row(
+                  children: [
+                    if (cards.isNotEmpty) ...[
+                      _AvatarStack(
+                        cards: cards,
+                        size: Chrome.stackAvatar,
+                        fanned: fanned,
+                      ),
+                      const SizedBox(width: Insets.sm),
+                    ],
+                    Expanded(
+                      child: Text(
+                        summary,
+                        key: widget.textKey,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Insets.sm),
+                    Icon(
+                      widget.open ? AppIcons.caretUp : AppIcons.caretDown,
+                      size: density.iconSmall,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-        Visibility(
-          visible: active,
-          maintainSize: true,
-          maintainAnimation: true,
-          maintainState: true,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              action(
-                'overview-tree-message',
-                'Message',
-                AppIcons.chatCircle,
-                onMessage,
-              ),
-              action(
-                'overview-tree-chat',
-                'Open chat',
-                AppIcons.arrowSquareOut,
-                onOpenChat,
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -1035,108 +1395,6 @@ class _FoldKnob extends ConsumerWidget {
                     color: scheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A folded family's sub-sessions as one strip on the root's elbow: their
-/// avatars stacked, what they are, and Show. A pointer fans the stack out.
-class _FoldedStrip extends ConsumerStatefulWidget {
-  const _FoldedStrip({
-    required this.rootId,
-    required this.below,
-    required this.height,
-  });
-
-  final String rootId;
-  final List<OverviewCard> below;
-  final double height;
-
-  @override
-  ConsumerState<_FoldedStrip> createState() => _FoldedStripState();
-}
-
-class _FoldedStripState extends ConsumerState<_FoldedStrip> {
-  var _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final touch = UiDensity.of(context).isTouch;
-    final fanned = _hovered && !touch;
-    final summary = overviewFoldedSummary(widget.below);
-    return Semantics(
-      button: true,
-      expanded: false,
-      label: 'Show ${overviewSubSessionCount(widget.below.length)}',
-      value: summary,
-      excludeSemantics: true,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: Material(
-          color: fanned ? scheme.surfaceContainer : scheme.surfaceContainerLow,
-          shape: StadiumBorder(
-            side: BorderSide(
-              color: fanned ? scheme.outline : scheme.outlineVariant,
-            ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            key: ValueKey('overview-tree-strip:${widget.rootId}'),
-            onTap: () => ref
-                .read(overviewFoldedParentsProvider.notifier)
-                .toggle(widget.rootId),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: touch && Touch.target > widget.height
-                    ? Touch.target
-                    : widget.height,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Insets.xs,
-                  Insets.xs,
-                  Insets.md,
-                  Insets.xs,
-                ),
-                child: Row(
-                  children: [
-                    _AvatarStack(
-                      cards: widget.below,
-                      size: Chrome.stackAvatar,
-                      fanned: fanned,
-                    ),
-                    const SizedBox(width: Insets.sm),
-                    Expanded(
-                      child: Text(
-                        summary,
-                        key: ValueKey(
-                          'overview-tree-folded-summary:${widget.rootId}',
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: Insets.sm),
-                    Text(
-                      'Show',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ),
@@ -1238,142 +1496,6 @@ class _LatestLine extends ConsumerWidget {
       overflow: TextOverflow.ellipsis,
       style: theme.textTheme.bodySmall?.copyWith(
         color: theme.colorScheme.onSurfaceVariant,
-      ),
-    );
-  }
-}
-
-/// The hover's Message: a composer for one sub-session, attached under its
-/// pill. Esc closes it, and so does a send.
-class _TreeComposer extends StatelessWidget {
-  const _TreeComposer({
-    required this.card,
-    required this.tuck,
-    required this.line,
-    required this.onClose,
-    required this.onSent,
-  });
-
-  final OverviewCard card;
-  final double tuck;
-  final Color line;
-  final VoidCallback onClose;
-  final ValueChanged<QuickMessageSent> onSent;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Padding(
-      padding: EdgeInsets.only(left: tuck + Insets.sm),
-      child: Container(
-        key: ValueKey('overview-tree-composer:${card.id}'),
-        padding: const EdgeInsets.all(Insets.sm),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          border: Border.all(color: line),
-          borderRadius: const BorderRadius.vertical(
-            bottom: Radius.circular(Radii.lg),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            OverviewQuickComposer(
-              card: card,
-              autofocus: true,
-              onEscape: onClose,
-              onSent: onSent,
-            ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              'Enter sends · Shift+Enter new line · Esc closes',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A sub-session opened on the tree: all it last said, its step and diff, a
-/// waiting question answered in place, a message to it, and its actions —
-/// Archive, Hand back, Open chat, End and the session menu.
-class _TreeDetail extends ConsumerWidget {
-  const _TreeDetail({
-    required this.card,
-    required this.tuck,
-    required this.line,
-    required this.onOpen,
-  });
-
-  final OverviewCard card;
-  final double tuck;
-  final Color line;
-  final ValueChanged<OverviewCard> onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final report = ref.watch(agentSessionStatusProvider(card.id)).asData?.value;
-    final asks =
-        card.column == BoardColumn.needsYou &&
-        !card.heldBySubSessions &&
-        overviewAskKind(card, report) == OverviewAskKind.inPlace;
-    return Padding(
-      padding: EdgeInsets.only(left: tuck + Insets.sm),
-      child: Container(
-        key: ValueKey('overview-tree-detail:${card.id}'),
-        padding: const EdgeInsets.all(Insets.md),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          border: Border.all(color: line),
-          borderRadius: const BorderRadius.vertical(
-            bottom: Radius.circular(Radii.lg),
-          ),
-        ),
-        child: OverviewHoverScope(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OverviewLatestMessage(sessionId: card.id, maxLines: 6),
-              const SizedBox(height: Insets.xs),
-              OverviewMetaLine(card: card),
-              if (asks) ...[
-                const SizedBox(height: Insets.sm),
-                ApprovalRequestCard(
-                  sessionId: card.id,
-                  board: true,
-                  where: overviewMachineAndBranch(ref, card),
-                ),
-              ],
-              const SizedBox(height: Insets.sm),
-              OverviewQuickComposer(card: card),
-              const SizedBox(height: Insets.sm),
-              OverviewCloseActions(
-                card: card,
-                merge: false,
-                extra: [
-                  FilledButton.tonal(
-                    key: ValueKey('overview-tree-open:${card.id}'),
-                    style: UiDensity.of(context).compactButton,
-                    onPressed: () => onOpen(card),
-                    child: const Text('Open chat'),
-                  ),
-                  OverviewEndButton(card: card),
-                  OverviewCardMenu(card: card),
-                ],
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

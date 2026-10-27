@@ -119,11 +119,11 @@ void main() {
     expect(find.text('Detach from parent'), findsNothing, reason: 'no parent');
     await dismiss(tester);
 
-    // A right-click on the card opens the same menu.
-    final card = tester.getRect(
-      find.byKey(const ValueKey('overview-card:$id')),
-    );
-    await tester.tapAt(card.center, buttons: kSecondaryButton);
+    // A right-click on the family's header opens the same menu.
+    final head = find.byKey(const ValueKey('overview-family-head:$id'));
+    await tester.ensureVisible(head);
+    await settleMission(tester);
+    await tester.tapAt(tester.getRect(head).center, buttons: kSecondaryButton);
     await settleMission(tester);
     expect(shared(tester), values);
     await dismiss(tester);

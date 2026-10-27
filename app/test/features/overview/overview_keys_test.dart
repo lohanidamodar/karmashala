@@ -55,6 +55,23 @@ void main() {
     expect(rows.singleWhere((r) => r.does == 'Next session').keys, ['↓', 'J']);
   });
 
+  test('the family, lane, new and search keys are on the sheet', () {
+    final rows = overviewBoundKeyRows();
+    List<String> keysOf(String does) =>
+        rows.singleWhere((r) => r.does == does).keys;
+    expect(keysOf('Next family'), ['→']);
+    expect(keysOf('Previous family'), ['←']);
+    expect(keysOf('First family of the next lane'), [']']);
+    expect(keysOf('First family of the previous lane'), ['[']);
+    expect(keysOf('Next new session'), ['U']);
+    expect(keysOf('Search the titles and latest lines'), ['/']);
+    final search = overviewKeyRows().where((r) => r.group == 'In the search');
+    expect(
+      [for (final r in search) r.does],
+      ['Step through the matches', 'Go to the match', 'Clear the search'],
+    );
+  });
+
   test('a key bound later is listed without editing the list', () {
     final rows = overviewBoundKeyRows({
       ...overviewTriageShortcuts,

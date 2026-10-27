@@ -65,6 +65,30 @@ class OverviewSelectLaneIntent extends Intent {
   const OverviewSelectLaneIntent();
 }
 
+/// ← / →: the previous or next family.
+class OverviewFamilyIntent extends Intent {
+  const OverviewFamilyIntent({required this.forward});
+
+  final bool forward;
+}
+
+/// [ / ]: the first family of the previous or next lane.
+class OverviewLaneIntent extends Intent {
+  const OverviewLaneIntent({required this.forward});
+
+  final bool forward;
+}
+
+/// U: the next session that is new to you.
+class OverviewNextNewIntent extends Intent {
+  const OverviewNextNewIntent();
+}
+
+/// /: the search field.
+class OverviewSearchIntent extends Intent {
+  const OverviewSearchIntent();
+}
+
 /// The Overview board's keys. Bare letters, so they live on the board alone
 /// and never in the app-wide keymap, where a shell or a field would want them.
 final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
@@ -108,6 +132,14 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
   const SingleActivator(LogicalKeyboardKey.keyK): const OverviewMoveIntent(
     down: false,
   ),
+  const SingleActivator(LogicalKeyboardKey.arrowRight):
+      const OverviewFamilyIntent(forward: true),
+  const SingleActivator(LogicalKeyboardKey.arrowLeft):
+      const OverviewFamilyIntent(forward: false),
+  const CharacterActivator(']'): const OverviewLaneIntent(forward: true),
+  const CharacterActivator('['): const OverviewLaneIntent(forward: false),
+  const SingleActivator(LogicalKeyboardKey.keyU): const OverviewNextNewIntent(),
+  const CharacterActivator('/'): const OverviewSearchIntent(),
   const SingleActivator(LogicalKeyboardKey.escape):
       const OverviewDismissIntent(),
   const SingleActivator(LogicalKeyboardKey.keyR): const OverviewResumeIntent(),
@@ -120,56 +152,72 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
 
 /// What [intent] does, and the group the keys sheet files it under; null for
 /// an intent this list has not been told about, which a test refuses.
-({String group, String does})? describeOverviewIntent(Intent intent) =>
-    switch (intent) {
-      OverviewNextWaitingIntent() => (
-        group: 'Move',
-        does: 'Next item waiting on you — in the peek when it is open',
-      ),
-      OverviewMoveIntent(down: true) => (group: 'Move', does: 'Next session'),
-      OverviewMoveIntent(down: false) => (
-        group: 'Move',
-        does: 'Previous session',
-      ),
-      OverviewDismissIntent() => (
-        group: 'Move',
-        does: 'Close the peek, or clear the selection',
-      ),
-      OverviewPickOptionIntent() => (
-        group: 'Answer',
-        does: 'Pick an option of the selected question',
-      ),
-      OverviewSendIntent() => (
-        group: 'Answer',
-        does: 'Send the picked answer, or open the selected session',
-      ),
-      OverviewApproveIntent(answer: BoardApproval.allow) => (
-        group: 'Answer',
-        does: 'Allow the selected command',
-      ),
-      OverviewApproveIntent(answer: BoardApproval.always) => (
-        group: 'Answer',
-        does: 'Always allow the selected command',
-      ),
-      OverviewApproveIntent(answer: BoardApproval.deny) => (
-        group: 'Answer',
-        does: 'Deny the selected command',
-      ),
-      OverviewTerminalIntent() => (
-        group: 'Answer',
-        does: 'Open the terminal of a terminal-only prompt',
-      ),
-      OverviewSelectLaneIntent() => (
-        group: 'Sessions',
-        does: 'Pick every card in this lane for a batch action',
-      ),
-      OverviewResumeIntent() => (
-        group: 'Sessions',
-        does: 'Resume a stopped or ended session',
-      ),
-      OverviewShowKeysIntent() => (group: 'Help', does: 'Show these keys'),
-      _ => null,
-    };
+({String group, String does})? describeOverviewIntent(
+  Intent intent,
+) => switch (intent) {
+  OverviewNextWaitingIntent() => (
+    group: 'Move',
+    does: 'Next item waiting on you — in the peek when it is open',
+  ),
+  OverviewMoveIntent(down: true) => (group: 'Move', does: 'Next session'),
+  OverviewMoveIntent(down: false) => (group: 'Move', does: 'Previous session'),
+  OverviewFamilyIntent(forward: true) => (group: 'Move', does: 'Next family'),
+  OverviewFamilyIntent(forward: false) => (
+    group: 'Move',
+    does: 'Previous family',
+  ),
+  OverviewLaneIntent(forward: true) => (
+    group: 'Move',
+    does: 'First family of the next lane',
+  ),
+  OverviewLaneIntent(forward: false) => (
+    group: 'Move',
+    does: 'First family of the previous lane',
+  ),
+  OverviewNextNewIntent() => (group: 'Move', does: 'Next new session'),
+  OverviewSearchIntent() => (
+    group: 'Move',
+    does: 'Search the titles and latest lines',
+  ),
+  OverviewDismissIntent() => (
+    group: 'Move',
+    does: 'Close the peek, clear the search, or clear the selection',
+  ),
+  OverviewPickOptionIntent() => (
+    group: 'Answer',
+    does: 'Pick an option of the selected question',
+  ),
+  OverviewSendIntent() => (
+    group: 'Answer',
+    does: 'Send the picked answer, or open the selected session',
+  ),
+  OverviewApproveIntent(answer: BoardApproval.allow) => (
+    group: 'Answer',
+    does: 'Allow the selected command',
+  ),
+  OverviewApproveIntent(answer: BoardApproval.always) => (
+    group: 'Answer',
+    does: 'Always allow the selected command',
+  ),
+  OverviewApproveIntent(answer: BoardApproval.deny) => (
+    group: 'Answer',
+    does: 'Deny the selected command',
+  ),
+  OverviewTerminalIntent() => (
+    group: 'Answer',
+    does: 'Open the terminal of a terminal-only prompt',
+  ),
+  OverviewSelectLaneIntent() => (
+    group: 'Sessions',
+    does: 'Pick every card in this lane for a batch action',
+  ),
+  OverviewResumeIntent() => (
+    group: 'Sessions',
+    does: 'Resume a stopped or ended session',
+  ),
+  OverviewShowKeysIntent() => (group: 'Help', does: 'Show these keys'),
+  _ => null,
+};
 
 /// [activator] as a keycap reads: "↓", "Esc", "?", "Ctrl K". The nine
 /// option keys and their keypad twins read as one "1–9".
@@ -192,6 +240,8 @@ String overviewKeyCap(ShortcutActivator activator, Intent intent) {
         switch (trigger) {
           LogicalKeyboardKey.arrowDown => '↓',
           LogicalKeyboardKey.arrowUp => '↑',
+          LogicalKeyboardKey.arrowLeft => '←',
+          LogicalKeyboardKey.arrowRight => '→',
           LogicalKeyboardKey.escape => 'Esc',
           LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter => 'Enter',
           _ => trigger.keyLabel.toUpperCase(),
@@ -210,6 +260,7 @@ const List<String> kOverviewKeyGroups = [
   'Answer',
   'Sessions',
   'Help',
+  'In the search',
   'In a quick message',
   'With the mouse',
 ];
@@ -242,9 +293,12 @@ List<OverviewKeyRow> overviewBoundKeyRows([
   ];
 }
 
-/// Keys the dashboard answers outside [overviewTriageShortcuts]: in a card's
-/// quick message box, and with the mouse.
+/// Keys the dashboard answers outside [overviewTriageShortcuts]: in its
+/// search, in a card's quick message box, and with the mouse.
 const List<OverviewKeyRow> kOverviewOtherKeys = [
+  (group: 'In the search', keys: ['↑', '↓'], does: 'Step through the matches'),
+  (group: 'In the search', keys: ['Enter'], does: 'Go to the match'),
+  (group: 'In the search', keys: ['Esc'], does: 'Clear the search'),
   (group: 'In a quick message', keys: ['Enter'], does: 'Send it'),
   (group: 'In a quick message', keys: ['Shift Enter'], does: 'A new line'),
   (group: 'In a quick message', keys: ['Esc'], does: 'Clear it'),

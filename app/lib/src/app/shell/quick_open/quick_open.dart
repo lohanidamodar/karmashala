@@ -562,6 +562,17 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
         return KeyEventResult.handled;
       }
     }
+    // Alt+Enter shows the session the row names on the Agent dashboard.
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+        HardwareKeyboard.instance.isAltPressed &&
+        _flat.isNotEmpty) {
+      if (_flat[_selected].item.onShowOnDashboard case final show?) {
+        show();
+        return KeyEventResult.handled;
+      }
+    }
     // Backspace on an empty box goes back a step. A press, not a repeat: a held
     // key that has just emptied the query must not carry on up the stack.
     if (event is KeyDownEvent &&
@@ -720,6 +731,13 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
               final resume? => () {
                 setState(() => _selected = index);
                 resume();
+              },
+              null => null,
+            },
+            onShowOnDashboard: switch (result.item.onShowOnDashboard) {
+              final show? => () {
+                setState(() => _selected = index);
+                show();
               },
               null => null,
             },

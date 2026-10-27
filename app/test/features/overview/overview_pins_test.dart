@@ -96,10 +96,10 @@ void main() {
         findsOneWidget,
       );
       final stripTop = tester.getTopLeft(strip).dy;
-      final queueTop = tester
-          .getTopLeft(find.byKey(const ValueKey('overview-queue')))
+      final lanesTop = tester
+          .getTopLeft(find.byKey(const ValueKey('overview-work')))
           .dy;
-      expect(stripTop, lessThan(queueTop));
+      expect(stripTop, lessThan(lanesTop));
       await unmountMission(tester);
     });
 

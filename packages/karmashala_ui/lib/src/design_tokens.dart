@@ -285,6 +285,10 @@ class StateLayers {
   /// Content kept for reading but no longer in force: a rewound turn.
   static const rewoundOpacity = 0.55;
 
+  /// What a highlight leaves out, still in its place: the dashboard's New
+  /// and Pinned dim the rest.
+  static const dimmedOpacity = 0.4;
+
   /// A pointer over something interactive. Ink, not the accent.
   static Color hover(ColorScheme scheme) =>
       scheme.onSurface.withValues(alpha: hoverAlpha);
@@ -922,6 +926,19 @@ class Chrome {
 
   /// The narrowest cell a family takes on the dashboard's grid, at 1x text.
   static const familyCellMin = 560.0;
+
+  /// A family card's fixed slots, at 1x text: its state pill and its one
+  /// primary action, so a change of state never moves what sits beside them.
+  static const familyStateSlot = 112.0;
+  static const familyPrimarySlot = 128.0;
+
+  /// The dashboard's waiting drawer docked over the board, and its share of
+  /// the height as a phone's bottom sheet.
+  static const waitingDrawerWidth = 380.0;
+  static const waitingSheetShare = 0.7;
+
+  /// The dashboard strip's search field, at 1x text.
+  static const stripSearchWidth = 220.0;
 
   /// The dashboard's chat beside its board: it opens [peekWidth] wide and a
   /// drag keeps it between [peekMinWidth] and [peekMaxWidth].

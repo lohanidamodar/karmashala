@@ -163,19 +163,20 @@ void main() {
           reason: part.name,
         );
       }
-      // One line: a chip's height, not two.
+      // One line in the strip: a chip's height, not two.
       expect(
-        tester.getSize(byKey('overview-triage-line')).height,
+        tester.getSize(byKey('overview-strip-counts')).height,
         lessThanOrEqualTo(
           tester.getSize(byKey('overview-today:running')).height,
         ),
       );
+      // What ended today keeps its place in its lane.
       await tester.scrollUntilVisible(
-        byKey('overview-done-fold'),
+        familyCard('ks-r29'),
         300,
         scrollable: hybridList,
       );
-      expect(byKey('overview-done-fold'), findsOneWidget);
+      expect(familyCard('ks-r29'), findsOneWidget);
       await unmountMission(tester);
     });
 

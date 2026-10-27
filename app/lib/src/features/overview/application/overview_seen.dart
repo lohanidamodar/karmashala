@@ -40,6 +40,8 @@ class OverviewSeenController extends Notifier<Map<String, DateTime>> {
       if (ref.mounted) state = {...kept, if (_touched) ...state};
     } on Object {
       // Nothing kept yet, or unreadable: nothing has been looked at.
+    } finally {
+      if (ref.mounted) ref.read(overviewSeenReadProvider.notifier).done();
     }
   }
 
@@ -73,6 +75,19 @@ final overviewSeenProvider =
     NotifierProvider<OverviewSeenController, Map<String, DateTime>>(
       OverviewSeenController.new,
     );
+
+/// Whether the looks kept on this device have been read: until then a
+/// session with none is not taken for one never opened.
+class OverviewSeenRead extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void done() => state = true;
+}
+
+final overviewSeenReadProvider = NotifierProvider<OverviewSeenRead, bool>(
+  OverviewSeenRead.new,
+);
 
 /// How many of [times] came after [seen]; null when the session was never
 /// looked at here, which is not "nothing new".

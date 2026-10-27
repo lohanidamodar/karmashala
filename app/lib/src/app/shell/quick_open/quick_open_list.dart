@@ -391,6 +391,7 @@ class QuickOpenRow extends StatefulWidget {
     this.onOpenBeside,
     this.besideTooltip = 'Open to the side',
     this.onResume,
+    this.onShowOnDashboard,
     this.leading,
     super.key,
   });
@@ -436,6 +437,10 @@ class QuickOpenRow extends StatefulWidget {
   /// where a tap only shows it. Drawn like [onOpenBeside]'s button.
   final VoidCallback? onResume;
 
+  /// Shows the session the row names on the Agent dashboard — Alt+Enter
+  /// does the same. Drawn like [onOpenBeside]'s button.
+  final VoidCallback? onShowOnDashboard;
+
   /// The most of the row a [detail] may take.
   static const _detailShare = 0.4;
 
@@ -461,6 +466,7 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
       :detailIsShortcut,
       :onOpenBeside,
       :onResume,
+      :onShowOnDashboard,
     ) = widget;
     final shown = _hovered || selected;
     final beside = onOpenBeside == null || !shown
@@ -473,6 +479,14 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
             tooltip: 'Resume (Shift+Enter)',
             icon: AppIcons.play,
             onPressed: onResume,
+          );
+    final dashboard = onShowOnDashboard == null || !shown
+        ? null
+        : _BesideButton(
+            key: const ValueKey('quick-open-show-on-dashboard'),
+            tooltip: 'Show on dashboard (Alt+Enter)',
+            icon: AppIcons.squaresFour,
+            onPressed: onShowOnDashboard,
           );
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -522,7 +536,11 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
               ),
               padding: EdgeInsets.only(
                 left: Insets.sm,
-                right: trailing == null && beside == null && resume == null
+                right:
+                    trailing == null &&
+                        beside == null &&
+                        resume == null &&
+                        dashboard == null
                     ? Insets.sm
                     : Insets.xs,
               ),
@@ -580,6 +598,10 @@ class _QuickOpenRowState extends State<QuickOpenRow> {
                     if (resume != null) ...[
                       const SizedBox(width: Insets.xs),
                       resume,
+                    ],
+                    if (dashboard != null) ...[
+                      const SizedBox(width: Insets.xs),
+                      dashboard,
                     ],
                     if (beside != null) ...[
                       const SizedBox(width: Insets.xs),

@@ -26,17 +26,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   }
 
   /// The ids ↑ and ↓ walk, as drawn.
-  List<String> _order() {
-    final sections = _sections();
-    return [
-      for (final card in [
-        ...sections.queue,
-        ...sections.work,
-        ...sections.ready,
-      ])
-        card.id,
-    ];
-  }
+  List<String> _order() => overviewDrawnOrder(ref);
 
   /// The session [step] places from [id] in [_order], or null past an end.
   String? _stepFrom(String id, int step) {
@@ -51,6 +41,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
 
   OverviewSections _sections() => overviewSectionsOf(
     ref.read(overviewBoardProvider),
+    ref.read(overviewForestProvider),
     waitingSince: (id) =>
         ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
@@ -148,6 +139,16 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     }
   }
 
+  /// The session the keys are on: the peeked one, else the selected one.
+  String? _focused() {
+    final focus = ref.read(overviewFocusProvider);
+    return focus.peeked ?? focus.selected;
+  }
+
+  /// Unfolds, selects and scrolls to [id]; in the peek while one is open.
+  void _reveal(String id) =>
+      ref.read(overviewRevealProvider.notifier).reveal(id);
+
   /// The waiting item after [from], round the queue; null when none other.
   String? _nextWaiting(String? from) {
     final queue = [for (final card in _sections().queue) card.id];
@@ -213,6 +214,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         );
         return;
       }
+      // What waits is answered in the drawer: N brings it out.
+      if (!ref.read(overviewDrawerProvider).open) {
+        ref.read(overviewDrawerProvider.notifier).open();
+      }
       _goTo(next ?? current!);
     }),
     OverviewPickOptionIntent: _Triage<OverviewPickOptionIntent>(
@@ -268,15 +273,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       },
     ),
     OverviewMoveIntent: _Triage<OverviewMoveIntent>((intent) {
-      final sections = _sections();
-      final order = [
-        for (final card in [
-          ...sections.queue,
-          ...sections.work,
-          ...sections.ready,
-        ])
-          card.id,
-      ];
+      final order = _order();
       if (order.isEmpty) return;
       final focus = ref.read(overviewFocusProvider);
       final at = order.indexOf(focus.peeked ?? focus.selected ?? '');
@@ -293,14 +290,72 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         }
         final focus = ref.read(overviewFocusProvider);
         final controller = ref.read(overviewFocusProvider.notifier);
-        focus.peeked != null ? controller.closePeek() : controller.select(null);
+        if (focus.peeked != null) {
+          controller.closePeek();
+        } else if (ref.read(overviewSearchSheetProvider)) {
+          ref.read(overviewSearchSheetProvider.notifier).close();
+        } else if (ref.read(overviewSearchProvider).active) {
+          ref.read(overviewSearchProvider.notifier).clear();
+        } else if (ref.read(overviewDrawerProvider).open) {
+          ref.read(overviewDrawerProvider.notifier).close();
+        } else {
+          controller.select(null);
+        }
       },
       enabled: (_) {
         final focus = ref.read(overviewFocusProvider);
         return focus.peeked != null ||
             focus.selected != null ||
+            ref.read(overviewSearchSheetProvider) ||
+            ref.read(overviewSearchProvider).active ||
+            ref.read(overviewDrawerProvider).open ||
             !ref.read(overviewSelectionProvider).isEmpty;
       },
+    ),
+    OverviewFamilyIntent: _Triage<OverviewFamilyIntent>((intent) {
+      final forest = ref.read(overviewForestProvider);
+      final roots = [
+        for (final (_, trees) in forest.lanes)
+          for (final tree in trees) tree.card.id,
+      ];
+      if (roots.isEmpty) return;
+      final here = overviewFamilyOf(forest, _focused())?.tree.card.id;
+      final at = roots.indexOf(here ?? '');
+      final next = at < 0
+          ? (intent.forward ? 0 : roots.length - 1)
+          : (at + (intent.forward ? 1 : -1)).clamp(0, roots.length - 1);
+      _reveal(roots[next]);
+    }),
+    OverviewLaneIntent: _Triage<OverviewLaneIntent>((intent) {
+      final lanes = ref.read(overviewForestProvider).lanes;
+      if (lanes.isEmpty) return;
+      final here = overviewFamilyOf(
+        ref.read(overviewForestProvider),
+        _focused(),
+      )?.lane;
+      final next = here == null
+          ? (intent.forward ? 0 : lanes.length - 1)
+          : (here + (intent.forward ? 1 : -1)).clamp(0, lanes.length - 1);
+      _reveal(lanes[next].$2.first.card.id);
+    }),
+    OverviewNextNewIntent: _Triage<OverviewNextNewIntent>((_) {
+      final members = overviewForestMembers(
+        ref.read(overviewForestProvider),
+      ).toList();
+      final at = members.indexWhere((c) => c.id == _focused());
+      for (var i = 1; i <= members.length; i++) {
+        final card = members[(at + i) % members.length];
+        if (card.id != _focused() && readOverviewIsNew(ref, card)) {
+          _reveal(card.id);
+          return;
+        }
+      }
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text('Nothing is new to you')));
+    }),
+    OverviewSearchIntent: _Triage<OverviewSearchIntent>(
+      (_) => ref.read(overviewSearchProvider.notifier).focus(),
     ),
     OverviewShowKeysIntent: _Triage<OverviewShowKeysIntent>(
       (_) => showOverviewKeys(context),
@@ -318,8 +373,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           .read(overviewSelectionProvider.notifier)
           .selectAll(
             overviewLaneOf(
-              _sections(),
-              ref.read(overviewBoardProvider),
+              ref.read(overviewForestProvider),
               from,
               folded: ref.read(overviewFoldedParentsProvider),
             ),
