@@ -27,16 +27,20 @@ import 'overview_session_parts.dart';
 /// **The dashboard's slim strip**: Today's counts, the search field, New and
 /// Pinned (which dim the rest), Waiting N (the drawer) and More (the
 /// heartbeat, glances and lanes under it). Narrow, the controls wrap under
-/// the counts.
+/// the counts. On a [phone] the bottom bar holds search, New, Pinned and
+/// Waiting, so the strip keeps the counts and More.
 class OverviewTopStrip extends ConsumerWidget {
   const OverviewTopStrip({
     required this.waiting,
     this.queue = const [],
+    this.phone = false,
     super.key,
   });
 
   /// How many wait on the owner: the Waiting button's count.
   final int waiting;
+
+  final bool phone;
 
   /// What waits on the owner, in the drawer's order: the search lists it
   /// first while it is empty.
@@ -63,37 +67,48 @@ class OverviewTopStrip extends ConsumerWidget {
           scrollDirection: Axis.horizontal,
           child: OverviewTodayStrip(compact: true),
         );
+        final moreToggle = OverviewStripToggle(
+          key: const ValueKey('overview-more-toggle'),
+          label: more ? 'More ▾' : 'More ▸',
+          selected: more,
+          onTap: ref.read(overviewMoreProvider.notifier).toggle,
+        );
+        if (phone) {
+          return Row(
+            key: const ValueKey('overview-strip'),
+            children: [
+              const Expanded(child: counts),
+              const SizedBox(width: Insets.xs),
+              moreToggle,
+            ],
+          );
+        }
         final controls = <Widget>[
           SizedBox(
             width: searchWidth,
             child: OverviewSearchBox(queue: queue),
           ),
-          _StripToggle(
+          OverviewStripToggle(
             key: const ValueKey('overview-strip-new'),
             label: 'New',
             selected: highlight == OverviewHighlight.fresh,
             onTap: () => lit.toggle(OverviewHighlight.fresh),
           ),
-          _StripToggle(
+          OverviewStripToggle(
             key: const ValueKey('overview-strip-pinned'),
             label: 'Pinned',
             icon: AppIcons.pushPin,
             selected: highlight == OverviewHighlight.pinned,
             onTap: () => lit.toggle(OverviewHighlight.pinned),
           ),
-          _StripToggle(
+          OverviewStripToggle(
             key: const ValueKey('overview-waiting-toggle'),
             label: 'Waiting $waiting',
             selected: drawer,
             hot: waiting > 0,
             onTap: ref.read(overviewDrawerProvider.notifier).toggle,
           ),
-          _StripToggle(
-            key: const ValueKey('overview-more-toggle'),
-            label: more ? 'More ▾' : 'More ▸',
-            selected: more,
-            onTap: ref.read(overviewMoreProvider.notifier).toggle,
-          ),
+          moreToggle,
         ];
         if (wide) {
           return Row(
@@ -129,8 +144,8 @@ class OverviewTopStrip extends ConsumerWidget {
 
 /// One of the strip's toggles: lit while [selected]; [hot] tints it while
 /// something waits.
-class _StripToggle extends StatelessWidget {
-  const _StripToggle({
+class OverviewStripToggle extends StatelessWidget {
+  const OverviewStripToggle({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -206,12 +221,16 @@ class OverviewLaneChips extends StatelessWidget {
     required this.lanes,
     required this.onScreen,
     required this.onTap,
+    this.focusNodeOf,
     super.key,
   });
 
   final List<(OverviewLane, List<OverviewTreeNode>)> lanes;
   final String? onScreen;
   final ValueChanged<String> onTap;
+
+  /// Each chip's focus, by lane key, so the phone's Lanes can reach one.
+  final FocusNode Function(String lane)? focusNodeOf;
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
@@ -226,6 +245,7 @@ class OverviewLaneChips extends StatelessWidget {
             trees: trees,
             selected: lane.key == onScreen,
             onTap: () => onTap(lane.key),
+            focusNode: focusNodeOf?.call(lane.key),
           ),
         ],
       ],
@@ -239,12 +259,14 @@ class _LaneChip extends ConsumerWidget {
     required this.trees,
     required this.selected,
     required this.onTap,
+    this.focusNode,
   });
 
   final OverviewLane lane;
   final List<OverviewTreeNode> trees;
   final bool selected;
   final VoidCallback onTap;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -279,6 +301,7 @@ class _LaneChip extends ConsumerWidget {
         child: InkWell(
           borderRadius: radius,
           onTap: onTap,
+          focusNode: focusNode,
           child: ConstrainedBox(
             constraints: BoxConstraints(
               minHeight: density.isTouch ? Touch.target : Chrome.control,
@@ -730,16 +753,7 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
       sections = const [];
       _ids = [for (final card in matches) card.id];
     } else if (_focus.hasFocus) {
-      final asks = {for (final card in widget.queue) card.id};
-      final fresh = [
-        for (final card in overviewForestMembers(forest))
-          if (!asks.contains(card.id) && watchOverviewNewCount(ref, card) > 0)
-            card,
-      ];
-      sections = [
-        if (widget.queue.isNotEmpty) ('Needs you', widget.queue),
-        if (fresh.isNotEmpty) ('New', fresh),
-      ];
+      sections = watchOverviewSearchHints(ref, forest, widget.queue);
       _ids = [
         for (final (_, cards) in sections)
           for (final card in cards) card.id,
@@ -760,7 +774,7 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
               child: Align(
                 alignment: AlignmentDirectional.topStart,
                 child: TextFieldTapRegion(
-                  child: _SearchList(
+                  child: OverviewSearchResults(
                     sections: sections,
                     current: search.current,
                     onPick: _go,
@@ -788,18 +802,38 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
   }
 }
 
-/// What an empty search lists: each section's sessions, the one the keys
-/// are on lit.
-class _SearchList extends StatelessWidget {
-  const _SearchList({
+/// What an empty search lists: what needs you ([queue]), then what is new.
+List<(String, List<OverviewCard>)> watchOverviewSearchHints(
+  WidgetRef ref,
+  OverviewForest forest,
+  List<OverviewCard> queue,
+) {
+  final asks = {for (final card in queue) card.id};
+  final fresh = [
+    for (final card in overviewForestMembers(forest))
+      if (!asks.contains(card.id) && watchOverviewNewCount(ref, card) > 0) card,
+  ];
+  return [
+    if (queue.isNotEmpty) ('Needs you', queue),
+    if (fresh.isNotEmpty) ('New', fresh),
+  ];
+}
+
+/// What a search lists: each section's sessions, the one the keys are on
+/// lit. A dropdown under the field, or on a phone's [sheet] a plain list.
+class OverviewSearchResults extends StatelessWidget {
+  const OverviewSearchResults({
     required this.sections,
     required this.current,
     required this.onPick,
+    this.sheet = false,
+    super.key,
   });
 
   final List<(String, List<OverviewCard>)> sections;
   final String? current;
   final ValueChanged<String> onPick;
+  final bool sheet;
 
   @override
   Widget build(BuildContext context) {
@@ -807,6 +841,60 @@ class _SearchList extends StatelessWidget {
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
     final screen = MediaQuery.sizeOf(context);
+    final rows = [
+      for (final (title, cards) in sections) ...[
+        EyebrowLabel(
+          title,
+          padding: const EdgeInsets.fromLTRB(
+            Insets.md,
+            Insets.xs,
+            Insets.md,
+            Insets.xxs,
+          ),
+        ),
+        for (final card in cards)
+          InkWell(
+            key: ValueKey('overview-search-hint:$title:${card.id}'),
+            onTap: () => onPick(card.id),
+            child: Container(
+              color: card.id == current
+                  ? StateLayers.selected(scheme)
+                  : Colors.transparent,
+              constraints: BoxConstraints(
+                minHeight: density.isTouch ? Touch.target : Chrome.menuRow,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      card.entry.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(width: Insets.sm),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: OverviewStatePill(card: card),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    ];
+    if (sheet) {
+      return ListView(
+        key: const ValueKey('overview-search-sheet-list'),
+        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        children: rows,
+      );
+    }
     final width = WidthClass.scaleBreakpoint(
       Chrome.waitingDrawerWidth,
       MediaQuery.textScalerOf(context),
@@ -830,55 +918,7 @@ class _SearchList extends StatelessWidget {
         child: ListView(
           shrinkWrap: true,
           padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-          children: [
-            for (final (title, cards) in sections) ...[
-              EyebrowLabel(
-                title,
-                padding: const EdgeInsets.fromLTRB(
-                  Insets.md,
-                  Insets.xs,
-                  Insets.md,
-                  Insets.xxs,
-                ),
-              ),
-              for (final card in cards)
-                InkWell(
-                  key: ValueKey('overview-search-hint:$title:${card.id}'),
-                  onTap: () => onPick(card.id),
-                  child: Container(
-                    color: card.id == current
-                        ? StateLayers.selected(scheme)
-                        : Colors.transparent,
-                    constraints: BoxConstraints(
-                      minHeight: density.isTouch
-                          ? Touch.target
-                          : Chrome.menuRow,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            card.entry.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ),
-                        const SizedBox(width: Insets.sm),
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: AlignmentDirectional.centerEnd,
-                            child: OverviewStatePill(card: card),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ],
+          children: rows,
         ),
       ),
     );

@@ -49,6 +49,21 @@ final overviewDrawerProvider =
       OverviewDrawerController.new,
     );
 
+/// Whether the phone's search sheet is open over the board.
+class OverviewSearchSheetController extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void open() => state = true;
+
+  void close() => state = false;
+}
+
+final overviewSearchSheetProvider =
+    NotifierProvider<OverviewSearchSheetController, bool>(
+      OverviewSearchSheetController.new,
+    );
+
 /// What the strip's New and Pinned light up: the rest dims, nothing hides.
 enum OverviewHighlight { none, fresh, pinned }
 

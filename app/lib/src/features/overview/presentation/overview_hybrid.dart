@@ -22,6 +22,7 @@ import 'overview_card_parts.dart';
 import 'overview_filters.dart';
 import 'overview_glances.dart';
 import 'overview_heartbeat.dart';
+import 'overview_phone_bar.dart';
 import 'overview_pins.dart';
 import 'overview_pipeline_lane.dart';
 import 'overview_queue_card.dart';
@@ -150,6 +151,9 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   /// Each lane's header, for its chip to scroll to and to light the chip of
   /// the lane on screen.
   final _laneKeys = <String, GlobalKey>{};
+
+  /// Each lane chip's focus, for the phone bar's Lanes to reach.
+  final _chipFocus = <String, FocusNode>{};
   final _scroll = ScrollController();
   final _viewport = GlobalKey();
   String? _laneOnScreen;
@@ -168,6 +172,9 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   @override
   void dispose() {
     _scroll.dispose();
+    for (final node in _chipFocus.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -248,6 +255,23 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     );
   }
 
+  /// The phone bar's Lanes: the chip of the lane on screen brought into
+  /// view and given the focus.
+  void _showLanes() {
+    final lane = _laneOnScreen ?? _lanes.firstOrNull;
+    final node = lane == null ? null : _chipFocus[lane];
+    final chip = node?.context;
+    if (node == null || chip == null) return;
+    node.requestFocus();
+    unawaited(
+      Scrollable.ensureVisible(
+        chip,
+        duration: Motion.of(context).base,
+        alignment: 0.5,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(overviewRevealProvider, (_, asked) {
@@ -282,6 +306,16 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     final onOpen = widget.onOpen;
     _lanes = [for (final (lane, _) in forest.lanes) lane.key];
     _laneKeys.removeWhere((key, _) => !_lanes.contains(key));
+    _chipFocus.removeWhere((key, node) {
+      if (_lanes.contains(key)) return false;
+      node.dispose();
+      return true;
+    });
+    final searchSheet = ref.watch(overviewSearchSheetProvider);
+    final fresh = [
+      for (final card in overviewForestMembers(forest))
+        if (watchOverviewNewCount(ref, card) > 0) card,
+    ].length;
     WidgetsBinding.instance.addPostFrameCallback((_) => _trackLane());
 
     // The families New or Pinned leave out: they dim in place. Read here,
@@ -317,7 +351,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         final wide =
             box.maxWidth >=
             WidthClass.scaleBreakpoint(WidthClass.expandedMin, scaler);
-        final gutter = phone ? Insets.lg : Insets.xl;
+        final gutter = phone ? Insets.sm : Insets.xl;
         // Between families: a list's step on a phone.
         final gap = phone ? Insets.sm : Insets.md;
         final inner = box.maxWidth - gutter * 2;
@@ -458,6 +492,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
               child: OverviewTopStrip(
                 waiting: sections.queue.length,
                 queue: sections.queue,
+                phone: phone,
               ),
             ),
             if (forest.lanes.isNotEmpty)
@@ -472,6 +507,10 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   lanes: forest.lanes,
                   onScreen: _laneOnScreen,
                   onTap: _goToLane,
+                  focusNodeOf: (lane) => _chipFocus.putIfAbsent(
+                    lane,
+                    () => FocusNode(debugLabel: 'overview-lane-chip:$lane'),
+                  ),
                 ),
               ),
             Expanded(
@@ -490,7 +529,11 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                         child: list,
                       ),
                     ),
-                    if (drawer && phone)
+                    if (searchSheet && phone)
+                      Positioned.fill(
+                        child: OverviewSearchSheet(queue: sections.queue),
+                      )
+                    else if (drawer && phone)
                       Positioned(
                         left: 0,
                         right: 0,
@@ -513,6 +556,12 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 ),
               ),
             ),
+            if (phone)
+              OverviewPhoneBar(
+                waiting: sections.queue.length,
+                fresh: fresh,
+                onLanes: _showLanes,
+              ),
           ],
         );
       },

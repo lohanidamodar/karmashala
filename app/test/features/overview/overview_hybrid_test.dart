@@ -1437,7 +1437,13 @@ void main() {
       phone: true,
     );
     expect(find.byKey(const ValueKey('overview-queue')), findsNothing);
-    expect(find.text('Waiting 0'), findsOneWidget);
+    // A phone's Waiting is in the bottom bar, with no count while none waits.
+    expect(
+      tester
+          .getSemantics(find.byKey(const ValueKey('overview-bar-waiting')))
+          .label,
+      'Waiting',
+    );
     expect(find.byKey(const ValueKey('overview-none-at-work')), findsNothing);
     expect(find.textContaining('Archive done · '), findsWidgets);
     await openWaiting(tester);

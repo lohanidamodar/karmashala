@@ -292,6 +292,8 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         final controller = ref.read(overviewFocusProvider.notifier);
         if (focus.peeked != null) {
           controller.closePeek();
+        } else if (ref.read(overviewSearchSheetProvider)) {
+          ref.read(overviewSearchSheetProvider.notifier).close();
         } else if (ref.read(overviewSearchProvider).active) {
           ref.read(overviewSearchProvider.notifier).clear();
         } else if (ref.read(overviewDrawerProvider).open) {
@@ -304,6 +306,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         final focus = ref.read(overviewFocusProvider);
         return focus.peeked != null ||
             focus.selected != null ||
+            ref.read(overviewSearchSheetProvider) ||
             ref.read(overviewSearchProvider).active ||
             ref.read(overviewDrawerProvider).open ||
             !ref.read(overviewSelectionProvider).isEmpty;

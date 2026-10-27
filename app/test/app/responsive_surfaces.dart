@@ -217,7 +217,11 @@ Future<void> _peek(WidgetTester tester) async {
   if (_byKey('overview-peek').evaluate().isNotEmpty) return;
   // What waits is in the waiting drawer, over the board.
   if (_byKey('overview-waiting-drawer').evaluate().isEmpty) {
-    await _tap(tester, _byKey('overview-waiting-toggle'));
+    final strip = _byKey('overview-waiting-toggle');
+    await _tap(
+      tester,
+      strip.evaluate().isNotEmpty ? strip : _byKey('overview-bar-waiting'),
+    );
   }
   await _tap(tester, _byKey('overview-queue-title:ks-r21'));
 }

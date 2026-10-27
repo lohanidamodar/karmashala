@@ -838,9 +838,14 @@ Future<void> unmountMission(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 1));
 }
 
-/// Opens the waiting drawer from the strip.
+/// Opens the waiting drawer from the strip, or a phone's bottom bar.
 Future<void> openWaiting(WidgetTester tester) async {
-  await tester.tap(find.byKey(const ValueKey('overview-waiting-toggle')));
+  final strip = find.byKey(const ValueKey('overview-waiting-toggle'));
+  await tester.tap(
+    strip.evaluate().isNotEmpty
+        ? strip
+        : find.byKey(const ValueKey('overview-bar-waiting')),
+  );
   await settleMission(tester);
 }
 
