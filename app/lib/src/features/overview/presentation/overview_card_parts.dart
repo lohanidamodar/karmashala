@@ -262,22 +262,23 @@ class OverviewSubSessionRow extends ConsumerWidget {
   }
 }
 
-/// How many messages came since the owner last opened [card] here; 0 when
-/// nothing is new to them.
+/// How many messages came since the owner last opened [card] here, at least
+/// one for a session never opened here; 0 when nothing is new to them.
 int watchOverviewNewCount(WidgetRef ref, OverviewCard card) {
   final id = card.id;
   final seen = ref.watch(overviewSeenProvider.select((s) => s[id]));
-  if (seen == null || card.state == AgentState.ended) return 0;
+  if (card.state == AgentState.ended) return 0;
+  if (seen == null && !ref.watch(overviewSeenReadProvider)) return 0;
   final peeked = ref.watch(overviewFocusProvider.select((f) => f.peeked == id));
+  if (peeked) return 0;
   final times =
       ref.watch(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
       const <DateTime>[];
-  final count = newSince(seen, times) ?? 0;
-  return peeked ? 0 : count;
+  return newSince(seen, times) ?? (times.isEmpty ? 1 : times.length);
 }
 
 /// "3": what came since the owner last opened [card] on this device, from the
-/// read its card already makes. Nothing for one never opened here.
+/// read its card already makes; "New" for one never opened here.
 class OverviewNewBadge extends ConsumerWidget {
   const OverviewNewBadge({required this.card, super.key});
 
@@ -288,10 +289,13 @@ class OverviewNewBadge extends ConsumerWidget {
     final id = card.id;
     final count = watchOverviewNewCount(ref, card);
     if (count == 0) return const SizedBox.shrink();
+    final never = ref.watch(
+      overviewSeenProvider.select((s) => !s.containsKey(id)),
+    );
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Tooltip(
-      message: '$count new since you last looked',
+      message: never ? 'Never opened here' : '$count new since you last looked',
       child: Container(
         key: ValueKey('overview-new:$id'),
         padding: const EdgeInsets.symmetric(
@@ -303,7 +307,8 @@ class OverviewNewBadge extends ConsumerWidget {
           borderRadius: BorderRadius.circular(Radii.pill),
         ),
         child: Text(
-          '$count',
+          never ? 'New' : '$count',
+          maxLines: 1,
           style: theme.textTheme.labelSmall?.copyWith(
             color: scheme.onPrimary,
             fontWeight: FontWeight.w700,
