@@ -99,9 +99,12 @@ class _OverviewLatestMessageState extends ConsumerState<OverviewLatestMessage> {
 /// "2/4 · Write the layout tests" and "+620 −40 · 3 files", each only when
 /// known.
 class OverviewMetaLine extends ConsumerWidget {
-  const OverviewMetaLine({required this.card, super.key});
+  const OverviewMetaLine({required this.card, this.oneLine = false, super.key});
 
   final OverviewCard card;
+
+  /// Every part on one line, each ellipsised, for a row of fixed height.
+  final bool oneLine;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -150,35 +153,48 @@ class OverviewMetaLine extends ConsumerWidget {
     if (step == null && diff.isEmpty && !checked) {
       return const SizedBox.shrink();
     }
+    final parts = [
+      if (step != null)
+        Text(
+          step,
+          key: ValueKey('overview-step:$id'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: muted,
+        ),
+      if (diff.isNotEmpty)
+        Text.rich(
+          TextSpan(children: diff),
+          key: ValueKey('overview-diff:$id'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: muted,
+        ),
+      if (checked)
+        SessionVerdictMark(
+          key: ValueKey('overview-verdict:$id'),
+          sessionId: id,
+        ),
+    ];
+    if (oneLine) {
+      return Row(
+        key: ValueKey('overview-meta:$id'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (i, part) in parts.indexed) ...[
+            if (i > 0) const SizedBox(width: Insets.md),
+            Flexible(child: part),
+          ],
+        ],
+      );
+    }
     // A narrow card — a phone's tree — wraps the parts rather than cut one.
     return Wrap(
       key: ValueKey('overview-meta:$id'),
       spacing: Insets.md,
       runSpacing: Insets.xxs,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        if (step != null)
-          Text(
-            step,
-            key: ValueKey('overview-step:$id'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: muted,
-          ),
-        if (diff.isNotEmpty)
-          Text.rich(
-            TextSpan(children: diff),
-            key: ValueKey('overview-diff:$id'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: muted,
-          ),
-        if (checked)
-          SessionVerdictMark(
-            key: ValueKey('overview-verdict:$id'),
-            sessionId: id,
-          ),
-      ],
+      children: parts,
     );
   }
 }

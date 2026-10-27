@@ -374,6 +374,9 @@ class _FamilyHeader extends ConsumerWidget {
   final ValueChanged<OverviewCard> onOpen;
   final bool wide;
 
+  /// The most of the meta line "2/4 finished" and the agent take, wide.
+  static const _metaShare = 0.5;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final card = node.card;
@@ -474,14 +477,42 @@ class _FamilyHeader extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  // One fixed line: wide, the plan step, diff and check
+                  // follow, each cut short rather than wrapping.
                   SizedBox(
                     height: overviewLinesHeight(context, muted, 1),
-                    child: Text(
-                      meta,
-                      key: ValueKey('overview-family-meta:${card.id}'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: muted,
+                    child: ClipRect(
+                      child: Row(
+                        children: [
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: wide
+                                  ? box.maxWidth * _metaShare
+                                  : box.maxWidth,
+                            ),
+                            child: Text(
+                              meta,
+                              key: ValueKey('overview-family-meta:${card.id}'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: muted,
+                            ),
+                          ),
+                          if (wide) ...[
+                            if (meta.isNotEmpty)
+                              const SizedBox(width: Insets.md),
+                            Expanded(
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: OverviewMetaLine(
+                                  card: card,
+                                  oneLine: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: Insets.xxs),

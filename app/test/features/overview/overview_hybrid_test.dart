@@ -302,9 +302,27 @@ void main() {
         findsNothing,
       );
       await unmountMission(tester);
-      // The fixed family card draws no meta line, so no verdict, diff or
-      // plan step reaches the board; skipped until one has a place again.
-    }, skip: true);
+    });
+
+    testWidgets('wide, the meta row carries the plan step, diff and check '
+        'on one line; narrow, it does not', (tester) async {
+      await pump(tester);
+      final card = familyCard('ks-r32');
+      await tester.scrollUntilVisible(card, 200, scrollable: hybridList);
+      final meta = find.byKey(const ValueKey('overview-family-meta:ks-r32'));
+      final line = find.byKey(const ValueKey('overview-meta:ks-r32'));
+      expect(line, findsOneWidget);
+      // On the same row as "3/5 finished", never a second line.
+      expect(
+        tester.getCenter(line).dy,
+        moreOrLessEquals(tester.getCenter(meta).dy, epsilon: 1),
+      );
+      await unmountMission(tester);
+
+      await pump(tester, size: const Size(390, 844), phone: true);
+      expect(find.byKey(const ValueKey('overview-meta:ks-r32')), findsNothing);
+      await unmountMission(tester);
+    });
 
     testWidgets('a family is one card: the parent\'s header, then each '
         'sub-session on a branch with its latest line and state, opening in '
