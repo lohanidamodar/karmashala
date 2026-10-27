@@ -69,7 +69,8 @@ class OverviewTopStrip extends ConsumerWidget {
         );
         final moreToggle = OverviewStripToggle(
           key: const ValueKey('overview-more-toggle'),
-          label: more ? 'More ▾' : 'More ▸',
+          label: 'Activity',
+          icon: more ? AppIcons.caretDown : AppIcons.caretRight,
           selected: more,
           onTap: ref.read(overviewMoreProvider.notifier).toggle,
         );
@@ -410,7 +411,7 @@ class OverviewLaneHeader extends ConsumerWidget {
                   title: 'Archived today',
                   builder: (_) => _ArchivedList(titles: archived),
                 ),
-                child: Text('${archived.length} archived today ▸'),
+                child: Text('${archived.length} archived today'),
               ),
             ),
         ],

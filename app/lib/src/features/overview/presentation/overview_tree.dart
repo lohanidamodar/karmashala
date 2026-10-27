@@ -653,7 +653,10 @@ class _FamilyFooter extends ConsumerWidget {
                 key: ValueKey('overview-family-open:${card.id}'),
                 style: compact,
                 onPressed: () => onOpen(card),
-                child: label('Open chat'),
+                // A phone's card has room for the verb alone.
+                child: label(
+                  box.maxWidth < WidthClass.mediumMin ? 'Open' : 'Open chat',
+                ),
               ),
             ),
             Builder(
