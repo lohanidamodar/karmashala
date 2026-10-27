@@ -277,6 +277,20 @@ int watchOverviewNewCount(WidgetRef ref, OverviewCard card) {
   return newSince(seen, times) ?? (times.isEmpty ? 1 : times.length);
 }
 
+/// Whether [card] is new to the owner, read once for a key rather than
+/// watched for a build.
+bool readOverviewIsNew(WidgetRef ref, OverviewCard card) {
+  final id = card.id;
+  final seen = ref.read(overviewSeenProvider)[id];
+  if (card.state == AgentState.ended) return false;
+  if (ref.read(overviewFocusProvider).peeked == id) return false;
+  if (seen == null) return ref.read(overviewSeenReadProvider);
+  final times =
+      ref.read(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
+      const <DateTime>[];
+  return (newSince(seen, times) ?? 0) > 0;
+}
+
 /// "3": what came since the owner last opened [card] on this device, from the
 /// read its card already makes; "New" for one never opened here.
 class OverviewNewBadge extends ConsumerWidget {

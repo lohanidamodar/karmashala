@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart' show EyebrowLabel;
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -11,22 +13,34 @@ import '../../explorer/application/agent_states.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../application/overview_board.dart';
 import '../application/overview_drawer.dart';
+import '../application/overview_family_order.dart';
+import '../application/overview_reads.dart';
+import '../application/overview_search.dart';
 import '../application/overview_tree.dart';
 import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_counters.dart';
 import 'overview_done_card.dart';
 import 'overview_queue_card.dart';
+import 'overview_session_parts.dart';
 
 /// **The dashboard's slim strip**: Today's counts, the search field, New and
 /// Pinned (which dim the rest), Waiting N (the drawer) and More (the
 /// heartbeat, glances and lanes under it). Narrow, the controls wrap under
 /// the counts.
 class OverviewTopStrip extends ConsumerWidget {
-  const OverviewTopStrip({required this.waiting, super.key});
+  const OverviewTopStrip({
+    required this.waiting,
+    this.queue = const [],
+    super.key,
+  });
 
   /// How many wait on the owner: the Waiting button's count.
   final int waiting;
+
+  /// What waits on the owner, in the drawer's order: the search lists it
+  /// first while it is empty.
+  final List<OverviewCard> queue;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -52,10 +66,7 @@ class OverviewTopStrip extends ConsumerWidget {
         final controls = <Widget>[
           SizedBox(
             width: searchWidth,
-            child: SearchField(
-              key: const ValueKey('overview-search'),
-              decoration: compactSearchDecoration(hintText: 'Search sessions'),
-            ),
+            child: OverviewSearchBox(queue: queue),
           ),
           _StripToggle(
             key: const ValueKey('overview-strip-new'),
@@ -574,6 +585,301 @@ class OverviewWaitingDrawer extends ConsumerWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// [forest]'s sessions whose title or latest line match the search, folded
+/// and done ones included, in drawn order; empty while nothing is typed.
+List<OverviewCard> watchOverviewSearchMatches(
+  WidgetRef ref,
+  OverviewForest forest,
+) {
+  final query = ref.watch(overviewSearchProvider.select((s) => s.query));
+  if (query.trim().isEmpty) return const [];
+  return overviewSearchMatchesIn(forest, query, (card) {
+    final said = ref.watch(overviewLastAnswerProvider(card.id)).value?.text;
+    return [
+      if (said != null) overviewPlain(said),
+      watchOverviewLine(ref, card),
+    ].join(' ');
+  });
+}
+
+/// **The dashboard's search**: `/` focuses it; typing dims what does not
+/// match; ↑ and ↓ step through the matches, Enter goes to one, Esc clears.
+/// Empty and focused, it lists what needs you, then what is new.
+class OverviewSearchBox extends ConsumerStatefulWidget {
+  const OverviewSearchBox({required this.queue, super.key});
+
+  final List<OverviewCard> queue;
+
+  @override
+  ConsumerState<OverviewSearchBox> createState() => _OverviewSearchBoxState();
+}
+
+class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode(debugLabel: 'overview-search');
+  final _portal = OverlayPortalController();
+  final _link = LayerLink();
+
+  /// What the keys step through: the matches, or the list under an empty
+  /// field.
+  var _ids = const <String>[];
+
+  /// The query [_ids] were drawn for; a key typed before the next frame
+  /// waits for it.
+  String? _idsFor;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = ref.read(overviewSearchProvider).query;
+    _focus.addListener(_focusChanged);
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_focusChanged);
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _focusChanged() {
+    if (!mounted) return;
+    _focus.hasFocus ? _portal.show() : _portal.hide();
+    setState(() {});
+  }
+
+  OverviewSearchController get _search =>
+      ref.read(overviewSearchProvider.notifier);
+
+  void _reveal(String id) =>
+      ref.read(overviewRevealProvider.notifier).reveal(id);
+
+  /// Hands the keys back to the board.
+  void _leave() =>
+      _focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
+
+  void _go([String? id]) {
+    final to =
+        id ?? ref.read(overviewSearchProvider).current ?? _ids.firstOrNull;
+    if (to == null) return;
+    _reveal(to);
+    _leave();
+  }
+
+  /// Runs [then] on matches drawn for what is typed now.
+  void _drawn(VoidCallback then) {
+    if (_idsFor == ref.read(overviewSearchProvider).query) {
+      then();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) then();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  KeyEventResult _onKey(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    switch (event.logicalKey) {
+      case LogicalKeyboardKey.arrowDown || LogicalKeyboardKey.arrowUp:
+        final step = event.logicalKey == LogicalKeyboardKey.arrowDown ? 1 : -1;
+        _drawn(() {
+          if (_search.step(_ids, step) case final id?) _reveal(id);
+        });
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
+        if (event is KeyDownEvent) _drawn(_go);
+        return KeyEventResult.handled;
+      case LogicalKeyboardKey.escape:
+        if (event is KeyDownEvent) {
+          _search.clear();
+          _controller.clear();
+          _leave();
+        }
+        return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(overviewSearchProvider.select((s) => s.focusAsks), (_, _) {
+      _focus.requestFocus();
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    });
+    ref.listen(overviewSearchProvider.select((s) => s.query), (_, query) {
+      if (_controller.text != query) _controller.text = query;
+    });
+    final search = ref.watch(overviewSearchProvider);
+    final forest = ref.watch(overviewForestProvider);
+    final List<(String, List<OverviewCard>)> sections;
+    _idsFor = search.query;
+    if (search.active) {
+      final matches = watchOverviewSearchMatches(ref, forest);
+      sections = const [];
+      _ids = [for (final card in matches) card.id];
+    } else if (_focus.hasFocus) {
+      final asks = {for (final card in widget.queue) card.id};
+      final fresh = [
+        for (final card in overviewForestMembers(forest))
+          if (!asks.contains(card.id) && watchOverviewNewCount(ref, card) > 0)
+            card,
+      ];
+      sections = [
+        if (widget.queue.isNotEmpty) ('Needs you', widget.queue),
+        if (fresh.isNotEmpty) ('New', fresh),
+      ];
+      _ids = [
+        for (final (_, cards) in sections)
+          for (final card in cards) card.id,
+      ];
+    } else {
+      sections = const [];
+      _ids = const [];
+    }
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: (_) => sections.isEmpty
+          ? const SizedBox.shrink()
+          : CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomLeft,
+              offset: const Offset(0, Insets.xs),
+              child: Align(
+                alignment: AlignmentDirectional.topStart,
+                child: TextFieldTapRegion(
+                  child: _SearchList(
+                    sections: sections,
+                    current: search.current,
+                    onPick: _go,
+                  ),
+                ),
+              ),
+            ),
+      child: CompositedTransformTarget(
+        link: _link,
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _onKey,
+          child: SearchField(
+            key: const ValueKey('overview-search'),
+            controller: _controller,
+            focusNode: _focus,
+            clearOnEscape: false,
+            decoration: compactSearchDecoration(hintText: 'Search sessions'),
+            onChanged: _search.type,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What an empty search lists: each section's sessions, the one the keys
+/// are on lit.
+class _SearchList extends StatelessWidget {
+  const _SearchList({
+    required this.sections,
+    required this.current,
+    required this.onPick,
+  });
+
+  final List<(String, List<OverviewCard>)> sections;
+  final String? current;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final screen = MediaQuery.sizeOf(context);
+    final width = WidthClass.scaleBreakpoint(
+      Chrome.waitingDrawerWidth,
+      MediaQuery.textScalerOf(context),
+    ).clamp(0.0, screen.width - Insets.lg * 2);
+    return Material(
+      key: const ValueKey('overview-search-list'),
+      elevation: Elevations.popup,
+      color: scheme.surfaceContainerHigh,
+      shadowColor: scheme.shadow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.md),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: width,
+          minWidth: width,
+          maxHeight: screen.height * Chrome.waitingSheetShare / 2,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+          children: [
+            for (final (title, cards) in sections) ...[
+              EyebrowLabel(
+                title,
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.md,
+                  Insets.xs,
+                  Insets.md,
+                  Insets.xxs,
+                ),
+              ),
+              for (final card in cards)
+                InkWell(
+                  key: ValueKey('overview-search-hint:$title:${card.id}'),
+                  onTap: () => onPick(card.id),
+                  child: Container(
+                    color: card.id == current
+                        ? StateLayers.selected(scheme)
+                        : Colors.transparent,
+                    constraints: BoxConstraints(
+                      minHeight: density.isTouch
+                          ? Touch.target
+                          : Chrome.menuRow,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            card.entry.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                        const SizedBox(width: Insets.sm),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: OverviewStatePill(card: card),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
       ),
     );
   }

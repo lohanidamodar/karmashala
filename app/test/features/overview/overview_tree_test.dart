@@ -1160,15 +1160,16 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('overview-search')));
       await settleMission(tester);
       final now = selected();
-      for (final key in [
-        LogicalKeyboardKey.keyJ,
-        LogicalKeyboardKey.keyK,
-        LogicalKeyboardKey.enter,
-      ]) {
+      for (final key in [LogicalKeyboardKey.keyJ, LogicalKeyboardKey.keyK]) {
         await tester.sendKeyEvent(key);
         await settleMission(tester);
       }
       expect(selected(), now);
+      // Enter in the empty search goes to the first that needs you, and
+      // neither peeks nor sends.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(selected(), 'ks-r21');
       expect(c.read(overviewFocusProvider).peeked, isNull);
       expect(sent(c), isEmpty, reason: 'nothing typed, nothing sent');
       await unmountMission(tester);

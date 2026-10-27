@@ -15,6 +15,8 @@ import '../application/overview_family_order.dart';
 import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
+import '../application/overview_search.dart';
+import '../application/overview_tiles.dart' show overviewCardOf;
 import '../application/overview_tree.dart';
 import 'overview_card_parts.dart';
 import 'overview_filters.dart';
@@ -157,9 +159,70 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   static const _maxAcross = 3;
 
   @override
+  void initState() {
+    super.initState();
+    // A session asked for before the board was up, from quick open.
+    if (ref.read(overviewRevealProvider) case final asked?) _reveal(asked);
+  }
+
+  @override
   void dispose() {
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Brings [asked] into view: its family unfolded, it selected — or peeked,
+  /// while a peek is open — and scrolled to.
+  void _reveal(({String id, int ask}) asked) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final id = asked.id;
+      final forest = ref.read(overviewForestProvider);
+      ref
+          .read(overviewFoldedParentsProvider.notifier)
+          .open(overviewAncestorsIn(forest, id));
+      final focus = ref.read(overviewFocusProvider);
+      final card = overviewCardOf(ref.read(overviewBoardProvider), id);
+      if (card != null && focus.peeked != null && focus.peeked != id) {
+        widget.onOpen(card);
+      } else {
+        ref.read(overviewFocusProvider.notifier).select(id);
+      }
+      ref.read(overviewRevealProvider.notifier).done(asked.ask);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollTo(id);
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  /// Scrolls [id]'s row, or its family, into view.
+  void _scrollTo(String id) {
+    final root = overviewFamilyOf(ref.read(overviewForestProvider), id);
+    final family = _treeKeys[root?.tree.card.id]?.currentContext;
+    if (family is! Element) return;
+    Element? row;
+    if (root!.tree.card.id != id) {
+      final key = ValueKey('overview-tree-node:$id');
+      void visit(Element element) {
+        if (row != null) return;
+        if (element.widget.key == key) {
+          row = element;
+          return;
+        }
+        element.visitChildElements(visit);
+      }
+
+      family.visitChildElements(visit);
+    }
+    unawaited(
+      Scrollable.ensureVisible(
+        row ?? family,
+        duration: Motion.of(context).base,
+        alignment: 0.5,
+      ),
+    );
   }
 
   /// Lights the chip of the last lane whose header has reached the top.
@@ -187,6 +250,9 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(overviewRevealProvider, (_, asked) {
+      if (asked != null) _reveal(asked);
+    });
     final board = ref.watch(overviewBoardProvider);
     final statusOf = ref.read(sessionStatusLookupProvider);
     for (final lane in board.lanes) {
@@ -229,10 +295,18 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         (c) => watchOverviewNewCount(ref, c) > 0,
       ),
     };
+    // A search dims the families with no match; a match never moves.
+    final searching = ref.watch(overviewSearchProvider.select((s) => s.active));
+    final matches = searching
+        ? {for (final card in watchOverviewSearchMatches(ref, forest)) card.id}
+        : null;
     final dimmed = {
       for (final (_, trees) in forest.lanes)
         for (final tree in trees)
-          if (!lit(tree)) tree.card.id,
+          if (!lit(tree) ||
+              (matches != null &&
+                  !tree.drawn.any((c) => matches.contains(c.id))))
+            tree.card.id,
     };
 
     return LayoutBuilder(
@@ -266,6 +340,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             wide: wide,
             laneKey: laneKey,
             laneRoots: roots,
+            matches: matches,
           );
           final shown = AnimatedOpacity(
             opacity: dimmed.contains(id) ? StateLayers.dimmedOpacity : 1,
@@ -380,7 +455,10 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           children: [
             Padding(
               padding: EdgeInsets.fromLTRB(gutter, Insets.md, gutter, 0),
-              child: OverviewTopStrip(waiting: sections.queue.length),
+              child: OverviewTopStrip(
+                waiting: sections.queue.length,
+                queue: sections.queue,
+              ),
             ),
             if (forest.lanes.isNotEmpty)
               Padding(

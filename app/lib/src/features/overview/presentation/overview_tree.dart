@@ -42,8 +42,13 @@ class OverviewFamilyTree extends ConsumerStatefulWidget {
     this.wide = false,
     this.laneKey,
     this.laneRoots = const [],
+    this.matches,
     super.key,
   });
+
+  /// What the dashboard's search matches, null while it is empty: a family
+  /// holding a match unfolds whole, and its other rows dim.
+  final Set<String>? matches;
 
   final OverviewTreeNode node;
   final ValueChanged<OverviewCard> onOpen;
@@ -80,7 +85,14 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     final scheme = Theme.of(context).colorScheme;
     final node = widget.node;
     final root = node.card;
-    final folded = ref.watch(overviewFoldedParentsProvider);
+    final matches = widget.matches ?? const <String>{};
+    final found = node.drawn.any((c) => matches.contains(c.id));
+    // A match below the root, folded away or past the cap, is drawn.
+    final opened = found && node.descendants.any((c) => matches.contains(c.id));
+    final watched = ref.watch(overviewFoldedParentsProvider);
+    final folded = opened
+        ? watched.difference({for (final c in node.drawn) c.id})
+        : watched;
     final focused = ref.watch(
       overviewFocusProvider.select((f) => f.peeked ?? f.selected),
     );
@@ -97,7 +109,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
     final long = below.length > cap + 1;
     // A session picked past the cap is never left out of view.
     final pickedPast = below.skip(cap).any((c) => c.id == focused);
-    final capped = long && !_showAll && !pickedPast;
+    final capped = long && !_showAll && !pickedPast && !opened;
     final hidden = <OverviewCard>[];
     var budget = capped ? cap : below.length;
 
@@ -122,6 +134,9 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
               hidden: inner ? under : null,
               onOpen: () => widget.onOpen(node.card),
             );
+      if (found && !matches.contains(id)) {
+        head = Opacity(opacity: StateLayers.dimmedOpacity, child: head);
+      }
       if (under.isNotEmpty) {
         head = _withKnob(
           head,

@@ -14,6 +14,7 @@ import '../application/overview_batch_actions.dart';
 import '../application/overview_board.dart';
 import '../application/overview_family_order.dart';
 import '../application/overview_links.dart';
+import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_quick_message.dart';
 import '../application/overview_tiles.dart';
@@ -34,16 +35,24 @@ List<OverviewCard> overviewSelectedCards(WidgetRef ref) {
   ];
 }
 
-/// The ids ↑ and ↓ walk, and a Shift-click spans: as the board draws them.
+/// The ids ↑ and ↓ walk, and a Shift-click spans: as the board draws them,
+/// a pinned session on no tree first, as its strip is drawn first.
 List<String> overviewDrawnOrder(WidgetRef ref) {
   final statusOf = ref.read(sessionStatusLookupProvider);
+  final board = ref.read(overviewBoardProvider);
   final sections = overviewSectionsOf(
-    ref.read(overviewBoardProvider),
+    board,
     ref.read(overviewForestProvider),
     waitingSince: (id) => statusOf(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
   );
-  return [for (final card in sections.families) card.id];
+  final families = [for (final card in sections.families) card.id];
+  final drawn = families.toSet();
+  return [
+    for (final id in ref.read(overviewPrefsProvider).pinned)
+      if (!drawn.contains(id) && overviewCardOf(board, id) != null) id,
+    ...families,
+  ];
 }
 
 /// A pick with Ctrl or Shift held, a long press, or under a thumb while some
