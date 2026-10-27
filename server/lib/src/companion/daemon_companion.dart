@@ -167,6 +167,10 @@ class DaemonCompanion implements CompanionHandler {
   /// and a usage limit's words while unseen. Until then a phone's list reads
   /// the prompts' own status.
   AgentStatusReport? Function(String sessionId)? statusOf;
+
+  /// When a session's agent last produced evidence, as the server's status
+  /// keeps it; unset, a phone's list dates each row by its creation.
+  DateTime? Function(String sessionId)? lastEvidenceOf;
   String? Function(String sessionId)? attentionOf;
   String? Function(String sessionId)? usageLimitOf;
 
@@ -277,6 +281,7 @@ class DaemonCompanion implements CompanionHandler {
       hostName: hostName,
       agentStatusOf: (sessionId) =>
           statusOf?.call(sessionId) ?? prompts?.statusOf(sessionId),
+      lastEvidenceOf: (sessionId) => lastEvidenceOf?.call(sessionId),
       attentionOf: (sessionId) => attentionOf == null
           ? remoteAttentionOf(prompts?.statusOf(sessionId))
           : attentionOf!(sessionId),

@@ -243,6 +243,56 @@ void main() {
       },
     );
   });
+
+  /// Found on a desk tablet: a session working that minute was listed as last
+  /// active a day earlier — the row's creation — and sorted below idle ones.
+  group('when a row was last active', () {
+    SessionsAtRest dated(DateTime? Function(String sessionId) evidence) =>
+        SessionsAtRest(
+          sessions: SessionDao(database),
+          names: WorkspaceNames(database),
+          screens: _NoScreens(),
+          hostName: 'droplet',
+          lastEvidenceOf: evidence,
+          clock: () => t0,
+        );
+
+    setUp(
+      () => SessionDao(database).insert(
+        Session(
+          id: 's1',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Fix the cart',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: t0,
+        ),
+      ),
+    );
+
+    test('is its agent\'s newest evidence, not its creation', () {
+      final later = t0.add(const Duration(hours: 26, minutes: 3));
+      final atRest = dated((id) => id == 's1' ? later : null);
+      expect(atRest.byId('s1')!.lastActivityAt, later.toIso8601String());
+      expect(atRest.list().single.lastActivityAt, later.toIso8601String());
+    });
+
+    test('falls back to its creation while no agent has said anything', () {
+      expect(
+        dated((_) => null).byId('s1')!.lastActivityAt,
+        t0.toIso8601String(),
+      );
+    });
+
+    test('is never earlier than its creation', () {
+      final before = t0.subtract(const Duration(days: 3));
+      expect(
+        dated((_) => before).byId('s1')!.lastActivityAt,
+        t0.toIso8601String(),
+      );
+    });
+  });
 }
 
 class _TypingScreens extends _NoScreens {

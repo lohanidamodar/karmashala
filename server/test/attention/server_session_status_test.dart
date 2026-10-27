@@ -521,6 +521,77 @@ void main() {
     });
   });
 
+  /// What a phone's list dates a session by. Found on a desk tablet: every
+  /// session was dated by its creation, and a screen read every cycle would
+  /// have dated every idle agent "now".
+  group('when a session last produced evidence', () {
+    HostedAgentStatus screenSays(AgentActivityStatus said) => HostedAgentStatus(
+      sessionId: 'row-1',
+      report: AgentStatusReport(
+        agentId: AgentIds.claudeCode,
+        sessionId: 'conv-1',
+        status: said,
+        source: AgentStatusSource.terminalGrid,
+        // A screen is read every cycle: its report is always stamped now.
+        observedAt: clock.nowUtc(),
+      ),
+    );
+
+    test('a screen dates it by when what it shows last moved', () async {
+      watched.add(
+        const WatchedSession(
+          key: AgentSessionKey(AgentIds.claudeCode, 'conv-1'),
+          label: 'Hosted',
+          openId: 'row-1',
+          imported: false,
+        ),
+      );
+      hosted['row-1'] = screenSays(AgentActivityStatus.idle);
+      final status = build();
+      await status.cycle();
+      expect(status.evidenceAtForOpenId('row-1'), _start);
+
+      // Ten quiet minutes of cycles: the same screen, read again and again.
+      for (var i = 0; i < 10; i++) {
+        clock.now = clock.now.add(const Duration(minutes: 1));
+        hosted['row-1'] = screenSays(AgentActivityStatus.idle);
+        await status.cycle();
+      }
+      expect(status.evidenceAtForOpenId('row-1'), _start);
+
+      hosted['row-1'] = screenSays(AgentActivityStatus.working);
+      await status.cycle();
+      expect(status.evidenceAtForOpenId('row-1'), clock.now);
+      await status.close();
+    });
+
+    test('a transcript dates it by its own time', () async {
+      addTranscriptSessions(1);
+      final written = _start.subtract(const Duration(hours: 3));
+      source.modified['store/cli-0.jsonl'] = written;
+      final status = build();
+      await status.cycle();
+      expect(status.evidenceAtForOpenId('row-cli-0'), written);
+      await status.close();
+    });
+
+    test('nothing said is no date, not now', () async {
+      watched.add(
+        const WatchedSession(
+          key: AgentSessionKey(AgentIds.claudeCode, 'silent'),
+          label: 'Silent',
+          openId: 'row-silent',
+          imported: false,
+        ),
+      );
+      final status = build();
+      await status.cycle();
+      expect(status.evidenceAtForOpenId('row-silent'), isNull);
+      expect(status.evidenceAtForOpenId('not-watched'), isNull);
+      await status.close();
+    });
+  });
+
   group('a hook does not wait for a cycle', () {
     test('it is applied in place, told once, and not again', () async {
       addHookedSessions(1, event: 'UserPromptSubmit');
@@ -542,6 +613,16 @@ void main() {
 
       status.hookReported(const AgentSessionKey(AgentIds.claudeCode, 'hook-0'));
       expect(moves, hasLength(1), reason: 'the same evidence is no move');
+      await status.close();
+    });
+
+    test('a hook dates its session by its arrival', () async {
+      addHookedSessions(1);
+      final status = build();
+      await status.cycle();
+      clock.now = clock.now.add(const Duration(minutes: 4));
+      await status.cycle();
+      expect(status.evidenceAtForOpenId('row-hook-0'), _start);
       await status.close();
     });
 

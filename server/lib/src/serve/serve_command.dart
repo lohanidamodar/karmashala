@@ -750,6 +750,7 @@ Future<int> _serve(
   data.attentionWork = attention.attention;
   companion
     ..statusOf = attention.status.reportForOpenId
+    ..lastEvidenceOf = attention.status.evidenceAtForOpenId
     ..attentionOf = attention.attentionOf
     ..usageLimitOf = attention.usageLimitOf
     // A phone reads a session's transcript from its agent's own record.
