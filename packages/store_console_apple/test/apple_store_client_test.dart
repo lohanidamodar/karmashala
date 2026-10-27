@@ -496,12 +496,12 @@ void main() {
         ),
       );
 
-      expect(asked, hasLength(14));
-      expect(asked.toSet(), hasLength(14));
+      expect(asked, hasLength(30));
+      expect(asked.toSet(), hasLength(30));
       expect(first.unit, 'Units');
-      expect(first.days, hasLength(13));
-      expect(first.days.first.day, DateTime.utc(2026, 9, 16));
-      expect(first.days.first.count, 16);
+      expect(first.days, hasLength(29));
+      expect(first.days.first.day, DateTime.utc(2026, 8, 31));
+      expect(first.days.first.count, 31);
       expect(first.days.last.day, DateTime.utc(2026, 9, 28));
       expect(first.days.last.count, 28);
       expect(other.days.every((day) => day.count == 7), isTrue);
@@ -524,8 +524,8 @@ void main() {
       fail = false;
       final series = await client.downloads(testApp);
 
-      expect(series.days, hasLength(14));
-      expect(asked, hasLength(15));
+      expect(series.days, hasLength(30));
+      expect(asked, hasLength(31));
       expect(asked.where((date) => date == '2026-09-20'), hasLength(2));
     });
 

@@ -14,7 +14,9 @@ import 'play_mapping.dart';
 import 'play_reporting.dart';
 import 'play_reports_bucket.dart';
 
-const int _downloadDays = 14;
+/// How many days the daily installs series covers: a month, so the Stores
+/// summary can say what the last 30 days brought.
+const int _downloadDays = 30;
 
 /// Google Play, read-only.
 class PlayStoreClient
@@ -218,7 +220,7 @@ class PlayStoreClient
       found = true;
       days.addAll(dailyInstalls(table, from: from, to: to));
     }
-    // No file at all is a wrong bucket or package, not fourteen quiet days.
+    // No file at all is a wrong bucket or package, not a month of quiet days.
     if (!found) throw playStatusFailure(404, area: PlayArea.bucket);
     return DownloadSeries(
       unit: 'Installs',
