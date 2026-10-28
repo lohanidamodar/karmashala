@@ -231,13 +231,22 @@ void main() {
 
       expect(find.byKey(const ValueKey('overview-hybrid')), findsOneWidget);
       expect(find.byKey(const ValueKey('overview-strip')), findsOneWidget);
-      // Today's parts with something in them; nothing is stuck.
+      // Today's parts with something in them; nothing is stuck. A phone's
+      // "N waiting" stands in for "needs you".
+      final phone = size.width < 600;
       for (final part in OverviewTodayPart.values) {
         expect(
           today(part),
-          part == OverviewTodayPart.stuck ? findsNothing : findsOneWidget,
+          part == OverviewTodayPart.stuck ||
+                  (phone && part == OverviewTodayPart.needsYou)
+              ? findsNothing
+              : findsOneWidget,
         );
       }
+      expect(
+        find.byKey(const ValueKey('overview-strip-waiting')),
+        phone ? findsOneWidget : findsNothing,
+      );
       // Each session is a family in its place, whatever its state.
       expect(card('ask'), findsOneWidget);
       expect(card('busy'), findsOneWidget);

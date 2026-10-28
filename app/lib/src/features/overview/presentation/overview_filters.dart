@@ -13,6 +13,7 @@ import '../../agents/application/agent_providers.dart';
 import '../../explorer/application/agent_state_providers.dart';
 import '../../sessions/application/session_list_prefs.dart';
 import '../application/overview_board.dart';
+import '../application/overview_drawer.dart' show overviewMoreProvider;
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
@@ -68,23 +69,27 @@ const String kOverviewFilterTitle = 'View and filters';
 /// From this many choices a checklist gets a search box.
 const int kOverviewChecklistSearchFrom = 6;
 
-Future<void> _showFilters(BuildContext context) => showAdaptivePopover<void>(
-  context: context,
-  title: kOverviewFilterTitle,
-  builder: (_) => const OverviewFilterPanel(),
-);
+Future<void> _showFilters(BuildContext context, {bool withActivity = false}) =>
+    showAdaptivePopover<void>(
+      context: context,
+      title: kOverviewFilterTitle,
+      builder: (_) => OverviewFilterPanel(withActivity: withActivity),
+    );
 
 /// **The one filter control**: a funnel with a count of what is set, opening
 /// the view and filters as a sheet on a phone and a popover under it
 /// elsewhere.
 class OverviewFilterButton extends ConsumerWidget {
-  const OverviewFilterButton({super.key});
+  const OverviewFilterButton({this.withActivity = false, super.key});
+
+  /// See [OverviewFilterPanel.withActivity].
+  final bool withActivity;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => FilterFunnelButton(
     key: const ValueKey('overview-filter-button'),
     count: ref.watch(overviewActiveFiltersProvider).length,
-    onPressed: () => _showFilters(context),
+    onPressed: () => _showFilters(context, withActivity: withActivity),
   );
 }
 
@@ -92,7 +97,11 @@ class OverviewFilterButton extends ConsumerWidget {
 /// projects, agents, machines and archived sessions. Every change applies and
 /// is kept at once in this device's prefs.
 class OverviewFilterPanel extends ConsumerWidget {
-  const OverviewFilterPanel({super.key});
+  const OverviewFilterPanel({this.withActivity = false, super.key});
+
+  /// Whether View offers Activity — the heartbeat, glances and lanes over the
+  /// board — for a phone-width board, whose strip has no Activity toggle.
+  final bool withActivity;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -153,6 +162,20 @@ class OverviewFilterPanel extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const EyebrowLabel('View', padding: side),
+          if (withActivity)
+            SwitchListTile(
+              key: const ValueKey('overview-more-toggle'),
+              dense: true,
+              contentPadding: side,
+              title: const Text('Activity'),
+              subtitle: const Text(
+                'The heartbeat, glances, and the waiting and pipeline lanes, '
+                'over the board',
+              ),
+              value: ref.watch(overviewMoreProvider),
+              onChanged: (_) =>
+                  ref.read(overviewMoreProvider.notifier).toggle(),
+            ),
           field(
             'Group by',
             CompactSegmented<OverviewGroupBy>(

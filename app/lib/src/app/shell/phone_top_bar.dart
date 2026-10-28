@@ -11,6 +11,8 @@ import '../../core/capabilities/capabilities.dart';
 import '../../core/lifecycle/server_switcher.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
+import '../../features/overview/application/overview_drawer.dart';
+import '../../features/overview/application/overview_prefs.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/remote/presentation/machine_route.dart'
     show machineName, machineRouteLine;
@@ -38,15 +40,42 @@ class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
     title: const PhoneHostSwitcher(),
     actions: [
       const LinkRouteChip(),
-      IconButton(
-        tooltip: 'Search',
-        icon: const Icon(AppIcons.magnifyingGlass),
-        onPressed: () => QuickOpen.show(context),
-      ),
+      const _SearchButton(),
       const _NeedsYouCount(),
       const SizedBox(width: Insets.xs),
     ],
   );
+}
+
+/// Search: on the Dashboard's board, a phone's, the dashboard's own search
+/// sheet, which goes on to quick open; everywhere else, quick open.
+class _SearchButton extends ConsumerWidget {
+  const _SearchButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final board =
+        ref.watch(phoneTabProvider) == PhoneTab.dashboard &&
+        ref.watch(overviewPrefsProvider.select((p) => p.view)) ==
+            OverviewView.board &&
+        MediaQuery.sizeOf(context).width < WidthClass.mediumMin;
+    final open = board && ref.watch(overviewSearchSheetProvider);
+    return IconButton(
+      key: const ValueKey('phone-top-search'),
+      tooltip: board ? 'Search sessions' : 'Search',
+      isSelected: open,
+      icon: const Icon(AppIcons.magnifyingGlass),
+      onPressed: () {
+        if (!board) {
+          unawaited(QuickOpen.show(context));
+          return;
+        }
+        final sheets = ref.read(overviewSearchSheetProvider.notifier);
+        ref.read(overviewDrawerProvider.notifier).close();
+        open ? sheets.close() : sheets.open();
+      },
+    );
+  }
 }
 
 /// What a pick in the host switcher asks for.

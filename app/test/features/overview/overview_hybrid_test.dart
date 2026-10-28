@@ -148,9 +148,8 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('overview-drawer-close')));
         await settleMission(tester);
         expect(queueCard('ks-r21'), findsNothing);
-        // More unfolds the heartbeat under the strip.
-        await tester.tap(find.byKey(const ValueKey('overview-more-toggle')));
-        await settleMission(tester);
+        // Activity unfolds the heartbeat under the strip.
+        await toggleActivity(tester);
         expect(
           find.byKey(const ValueKey('overview-heartbeat')),
           findsOneWidget,
@@ -1450,12 +1449,12 @@ void main() {
       phone: true,
     );
     expect(find.byKey(const ValueKey('overview-queue')), findsNothing);
-    // A phone's Waiting is in the bottom bar, with no count while none waits.
+    // A phone's Waiting is in its strip, at nought while none waits.
     expect(
       tester
-          .getSemantics(find.byKey(const ValueKey('overview-bar-waiting')))
+          .getSemantics(find.byKey(const ValueKey('overview-strip-waiting')))
           .label,
-      'Waiting',
+      '0 waiting on you, tap to list them',
     );
     expect(find.byKey(const ValueKey('overview-none-at-work')), findsNothing);
     expect(find.textContaining('Archive done · '), findsWidgets);
@@ -1589,8 +1588,7 @@ void main() {
       tester,
     ) async {
       await pump(tester, size: const Size(390, 844), phone: true);
-      await tester.tap(find.byKey(const ValueKey('overview-more-toggle')));
-      await settleMission(tester);
+      await toggleActivity(tester);
       final chart = find.byKey(const ValueKey('overview-heartbeat-chart'));
       expect(chart, findsNothing);
       await tester.tap(find.byKey(const ValueKey('overview-chart-toggle')));

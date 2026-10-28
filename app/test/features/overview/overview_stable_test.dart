@@ -296,7 +296,7 @@ void main() {
 
         // The search's results: the phone's sheet, or the strip's list.
         if (size.width < WidthClass.mediumMin) {
-          await tester.tap(byKey('overview-bar-search'));
+          c.read(overviewSearchSheetProvider.notifier).open();
           await settleMission(tester);
           expect(byKey('overview-search-sheet-list'), findsOneWidget);
           await tester.enterText(byKey('overview-search-sheet-field'), 'Round');

@@ -27,20 +27,16 @@ import 'overview_session_parts.dart';
 /// **The dashboard's slim strip**: Today's counts, the search field, New and
 /// Pinned (which dim the rest), Waiting N (the drawer) and More (the
 /// heartbeat, glances and lanes under it). Narrow, the controls wrap under
-/// the counts. On a [phone] the bottom bar holds search, New, Pinned and
-/// Waiting, so the strip keeps the counts and More.
+/// the counts. A phone draws [OverviewPhoneStrip] instead.
 class OverviewTopStrip extends ConsumerWidget {
   const OverviewTopStrip({
     required this.waiting,
     this.queue = const [],
-    this.phone = false,
     super.key,
   });
 
   /// How many wait on the owner: the Waiting button's count.
   final int waiting;
-
-  final bool phone;
 
   /// What waits on the owner, in the drawer's order: the search lists it
   /// first while it is empty.
@@ -74,16 +70,6 @@ class OverviewTopStrip extends ConsumerWidget {
           selected: more,
           onTap: ref.read(overviewMoreProvider.notifier).toggle,
         );
-        if (phone) {
-          return Row(
-            key: const ValueKey('overview-strip'),
-            children: [
-              const Expanded(child: counts),
-              const SizedBox(width: Insets.xs),
-              moreToggle,
-            ],
-          );
-        }
         final controls = <Widget>[
           SizedBox(
             width: searchWidth,
@@ -222,7 +208,6 @@ class OverviewLaneChips extends StatelessWidget {
     required this.lanes,
     required this.onScreen,
     required this.onTap,
-    this.focusNodeOf,
     super.key,
   });
 
@@ -230,27 +215,41 @@ class OverviewLaneChips extends StatelessWidget {
   final String? onScreen;
   final ValueChanged<String> onTap;
 
-  /// Each chip's focus, by lane key, so the phone's Lanes can reach one.
-  final FocusNode Function(String lane)? focusNodeOf;
-
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     key: const ValueKey('overview-lane-chips'),
     scrollDirection: Axis.horizontal,
-    child: Row(
-      children: [
-        for (final (i, (lane, trees)) in lanes.indexed) ...[
-          if (i > 0) const SizedBox(width: Insets.xs),
-          _LaneChip(
-            lane: lane,
-            trees: trees,
-            selected: lane.key == onScreen,
-            onTap: () => onTap(lane.key),
-            focusNode: focusNodeOf?.call(lane.key),
-          ),
-        ],
+    child: OverviewLaneChipRow(lanes: lanes, onScreen: onScreen, onTap: onTap),
+  );
+}
+
+/// The lane chips side by side, for a row that slides to hold them.
+class OverviewLaneChipRow extends StatelessWidget {
+  const OverviewLaneChipRow({
+    required this.lanes,
+    required this.onScreen,
+    required this.onTap,
+    super.key,
+  });
+
+  final List<(OverviewLane, List<OverviewTreeNode>)> lanes;
+  final String? onScreen;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      for (final (i, (lane, trees)) in lanes.indexed) ...[
+        if (i > 0) const SizedBox(width: Insets.xs),
+        _LaneChip(
+          lane: lane,
+          trees: trees,
+          selected: lane.key == onScreen,
+          onTap: () => onTap(lane.key),
+        ),
       ],
-    ),
+    ],
   );
 }
 
@@ -260,21 +259,18 @@ class _LaneChip extends ConsumerWidget {
     required this.trees,
     required this.selected,
     required this.onTap,
-    this.focusNode,
   });
 
   final OverviewLane lane;
   final List<OverviewTreeNode> trees;
   final bool selected;
   final VoidCallback onTap;
-  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
-    final density = UiDensity.of(context);
     final asks = trees.fold(0, (sum, tree) => sum + overviewWaitingIn(tree));
     final fresh = [
       for (final tree in trees) ...tree.drawn,
@@ -302,13 +298,12 @@ class _LaneChip extends ConsumerWidget {
         child: InkWell(
           borderRadius: radius,
           onTap: onTap,
-          focusNode: focusNode,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: density.isTouch ? Touch.target : Chrome.control,
+              minHeight: overviewCompactChipHeight(context),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

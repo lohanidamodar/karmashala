@@ -70,6 +70,9 @@ class OverviewTabView extends ConsumerWidget {
     // Words beside Resume and New session only where the header has room
     // for them and the view switch together.
     final narrow = width < WidthClass.expandedMin;
+    // A phone-width board has no strip controls: Activity is in the filter
+    // popover, and search on the phone's top bar.
+    final phone = width < WidthClass.mediumMin;
     final actions = [
       // The phone's way to its todos, one tap from home.
       if (rootTab) const OverviewTodosButton(),
@@ -77,7 +80,9 @@ class OverviewTabView extends ConsumerWidget {
       _NewSessionButton(narrow: narrow),
       if (width >= WidthClass.expandedMin) const _RunPipelineButton(),
       if (view == OverviewView.board) ...[
-        const OverviewFilterButton(),
+        // A narrow window has no phone top bar to search from.
+        if (phone && !rootTab) const OverviewSearchButton(),
+        OverviewFilterButton(withActivity: phone),
         // The keys need a keyboard; a thumb has none to press.
         if (!UiDensity.of(context).isTouch)
           IconButton(
