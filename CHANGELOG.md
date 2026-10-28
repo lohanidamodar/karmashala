@@ -17,6 +17,13 @@ installs claim the same version name.
 
 ---
 
+## 1.34.16 — 2026-10-28 (build 83)
+
+- **Reply from a dashboard card again.** Reply turns the card's footer into a one-line message box in place, so the card never changes size: Enter sends, Esc puts the buttons back, and a failed send says "Not sent" and keeps the text. The waiting drawer's reply box takes focus and closes on Esc the same way.
+- **The family card lines up.** Reply, Stop and Archive sit at the card's edge under the state pill, Open chat starts where the title does, the ⋯ menu is a real button, New follows the title, and the empty space under the footer is gone.
+- **One outline on hover and focus.** A hovered, focused or keyed card or row draws a single outline on its own rounded shape, with no doubled line at a row's avatar; a parent shows its hovered sub-session by its avatar ring.
+- **Previews read as plain text.** Links show their label, and markdown markers and emphasis are dropped. The unread count says "1 new", styled like New.
+
 ## 1.34.15 — 2026-10-28 (build 82)
 
 - **The dashboard keeps every session in its place.** Families are ordered pinned first, then by your own drag order (kept across restarts), then by start time; a change of state alters only a card's ring, pill and actions, never its position. The Ready and done-today sections and the queue column are gone: what waits on you opens as a drawer over the board, answerable in place, and each lane can archive its done sessions at once.
