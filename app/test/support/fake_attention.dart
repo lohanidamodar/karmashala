@@ -27,6 +27,9 @@ class FakeAttention {
   /// Every `inbox.seen` asked, in order.
   final seenAsked = <List<String>>[];
 
+  /// Every `inbox.viewed` asked, in order.
+  final viewedAsked = <List<String>>[];
+
   /// Every item id `inbox.open` / `inbox.dismiss` asked for, in order.
   final opened = <String>[];
   final dismissed = <String>[];
@@ -235,6 +238,13 @@ class FakeAttention {
         seenAsked.add(openIds);
         _looking[origin] = openIds.toSet();
         final next = inbox.viewed(_lookedAt());
+        if (!identical(next, inbox)) {
+          inbox = next;
+          _tellInbox();
+        }
+      case InboxViewed(:final openIds):
+        viewedAsked.add(openIds);
+        final next = inbox.viewed(openIds.toSet());
         if (!identical(next, inbox)) {
           inbox = next;
           _tellInbox();

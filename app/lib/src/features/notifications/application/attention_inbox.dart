@@ -10,6 +10,7 @@ import '../../../app/shell/phone_routes.dart' show phoneWorkbenchProvider;
 import '../../../app/shell/reveal_session.dart';
 import '../../../core/data/data_providers.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
+import '../../overview/application/overview_seen.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../stores/application/store_changes.dart'
@@ -85,6 +86,7 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     ref.listen(windowFocusedProvider, (_, _) => _syncViewed());
     // A phone's session page coming up or going down; never moves on a desktop.
     ref.listen(phoneWorkbenchProvider, (_, _) => _syncViewed());
+    ref.listen(overviewSeenProvider, _peeked);
     // What this window already shows is said at once: nothing about it is
     // news, here or at the server.
     final looking = _lookingAt();
@@ -144,6 +146,20 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     if (next == null) return false;
     open(next);
     return true;
+  }
+
+  /// A dashboard peek opened or closed, or Mark seen: those sessions were
+  /// looked at now, which no selection says. The looks read back from this
+  /// device's file are not news.
+  void _peeked(Map<String, DateTime>? before, Map<String, DateTime> now) {
+    if (!ref.read(overviewSeenReadProvider)) return;
+    final looked = [
+      for (final MapEntry(:key, :value) in now.entries)
+        if (before?[key] != value) key,
+    ];
+    if (looked.isEmpty) return;
+    state = state.viewed(looked.toSet());
+    _send(InboxViewed(looked..sort()));
   }
 
   /// What this window is looking at: the selected sessions and the
