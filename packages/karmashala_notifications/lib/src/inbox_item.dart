@@ -104,6 +104,27 @@ enum InboxItemKind {
     InboxItemKind.pipelineFailed => InboxRetirement.source,
   };
 
+  /// Whether a new turn of its session settles this: what the last turn
+  /// left, its limit or its cut-off. Retired, as looking at it would.
+  bool get endsWithTurn => switch (this) {
+    InboxItemKind.finished ||
+    InboxItemKind.usageLimit ||
+    InboxItemKind.turnCutOff ||
+    InboxItemKind.wentQuiet => true,
+    _ => false,
+  };
+
+  /// Whether its native session ending settles this. Not a failure or a
+  /// cut-off, which an end can be the cause of, nor a follow-up, which an
+  /// end files.
+  bool get endsWithSession => switch (this) {
+    InboxItemKind.needsApproval ||
+    InboxItemKind.finished ||
+    InboxItemKind.usageLimit ||
+    InboxItemKind.wentQuiet => true,
+    _ => false,
+  };
+
   /// Whether this kind is a condition still true right now. Load-bearing: a
   /// delivery item marked one would be swept away by a poll that knows no PRs.
   bool get isCondition => retirement == InboxRetirement.agentWatcher;
@@ -288,6 +309,7 @@ class InboxUpdate {
     this.watched = const {},
     this.news = const [],
     this.details = const {},
+    this.started = const [],
   });
 
   /// Sessions whose *current* status is a condition needing the user.
@@ -303,6 +325,10 @@ class InboxUpdate {
   /// The agent's own words for a session this poll looked at. Absent for a
   /// source that quoted nothing, which is the normal case — see [evidenceLine].
   final Map<AgentSessionKey, String> details;
+
+  /// Sessions a new turn began in since the last poll: whatever their last
+  /// turn left ([InboxItemKind.endsWithTurn]) is over.
+  final List<WatchedSession> started;
 }
 
 /// How many *event* items the attention inbox keeps. Conditions and follow-ups
@@ -466,6 +492,18 @@ class AttentionInbox {
       }
     }
 
+    // A new turn settles what the last one left, wherever it was started.
+    if (update.started.isNotEmpty) {
+      String rowOf(WatchedSession session) =>
+          '${session.imported}:${session.openId}';
+      final rows = {for (final session in update.started) rowOf(session)};
+      for (final item in items) {
+        if (item.kind.endsWithTurn && rows.contains(rowOf(item.session))) {
+          retired.add(item.id);
+        }
+      }
+    }
+
     // Identity when nothing moved: a poll every five seconds must not rebuild
     // the strip badges, the panel and the tray for saying the same thing again.
     if (added.isEmpty && retired.isEmpty && rebound.isEmpty) return this;
@@ -540,13 +578,14 @@ class AttentionInbox {
       if (listed.id != item.id) listed,
   ]);
 
-  /// Retires the asks of native sessions [openIds] that have ended: an agent
-  /// that is gone waits on nobody, and no poll watches it to see that clear.
-  AttentionInbox retireAsksOf(Set<String> openIds) {
+  /// Retires what native sessions [openIds] that have ended settled
+  /// ([InboxItemKind.endsWithSession]): an agent that is gone waits on
+  /// nobody, and no poll watches it to see that clear.
+  AttentionInbox retireEnded(Set<String> openIds) {
     if (openIds.isEmpty) return this;
     return _maybe([
       for (final item in items)
-        if (item.kind != InboxItemKind.needsApproval ||
+        if (!item.kind.endsWithSession ||
             item.session.imported ||
             !openIds.contains(item.session.openId))
           item,

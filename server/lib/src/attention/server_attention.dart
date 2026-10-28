@@ -167,9 +167,10 @@ class ServerAttention implements AttentionWork {
       final seen = <AgentSessionKey>{};
       final news = <({WatchedSession session, NotificationReason reason})>[];
       final details = <AgentSessionKey, String>{};
+      final started = <WatchedSession>[];
       for (final entry in entries) {
         seen.add(entry.key);
-        final waiting = _judge(entry, news, details);
+        final waiting = _judge(entry, news, details, started);
         if (waiting != null) attention[entry.key] = waiting;
       }
       // A session that comes back is a first observation again, which the
@@ -189,10 +190,11 @@ class ServerAttention implements AttentionWork {
           watched: seen,
           news: news,
           details: details,
+          started: started,
         ),
       );
       if (endedSessions?.call() case final ended? when ended.isNotEmpty) {
-        _update(_inbox.retireAsksOf(ended));
+        _update(_inbox.retireEnded(ended));
       }
     } finally {
       _polling = false;
@@ -205,7 +207,8 @@ class ServerAttention implements AttentionWork {
     if (_closed) return;
     final news = <({WatchedSession session, NotificationReason reason})>[];
     final details = <AgentSessionKey, String>{};
-    final waiting = _judge(entry, news, details);
+    final started = <WatchedSession>[];
+    final waiting = _judge(entry, news, details, started);
     if (waiting == null) {
       _attention.remove(entry.key);
     } else {
@@ -217,16 +220,19 @@ class ServerAttention implements AttentionWork {
         watched: {entry.key},
         news: news,
         details: details,
+        started: started,
       ),
     );
   }
 
   /// The policy over one session: the news in its transition (told for a
-  /// client's toast, filed in the inbox) and whether it holds a person up.
+  /// client's toast, filed in the inbox), whether a new turn began in it
+  /// ([started]), and whether it holds a person up.
   SessionAttention? _judge(
     SessionStatusEntry entry,
     List<({WatchedSession session, NotificationReason reason})> news,
     Map<AgentSessionKey, String> details,
+    List<WatchedSession> started,
   ) {
     final session = entry.session;
     final report = entry.report;
@@ -240,6 +246,13 @@ class ServerAttention implements AttentionWork {
       source: report.source,
       waiting: report.waiting,
     );
+    // Whoever started it — a message from any client, an answer, a
+    // terminal — the turn before it is over. A first sight is no evidence.
+    if (previous != null &&
+        previous != AgentActivityStatus.working &&
+        report.status == AgentActivityStatus.working) {
+      started.add(session);
+    }
     final reason = policy.newsIn(transition).reason;
     if (reason != null) {
       news.add((session: session, reason: reason));
@@ -413,6 +426,7 @@ class ServerAttention implements AttentionWork {
         InboxDismiss(:final id) => _dismiss(id),
         InboxOpen(:final id) => open(id),
         InboxSeen(:final openIds) => _seen(link, openIds),
+        InboxViewed(:final openIds) => _viewed(openIds),
         InboxMarkAllSeen() => _markAllSeen(),
         InboxRaise(:final item) => raise(item),
       };
@@ -459,6 +473,11 @@ class ServerAttention implements AttentionWork {
       _looking[link] = openIds.toSet();
     }
     _update(_inbox);
+    return const DataAck();
+  }
+
+  DataAck _viewed(List<String> openIds) {
+    viewedElsewhere(openIds.toSet());
     return const DataAck();
   }
 
