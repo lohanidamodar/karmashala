@@ -12,15 +12,28 @@ import '../../terminal/application/system_terminal_providers.dart';
 
 /// The session menu for [entry] — [sessionMenuItems] for one Karmashala
 /// runs, the imported conversation's verbs for one it does not — with
-/// [extras], this place's own verbs, as the first group.
+/// [extras], this place's own verbs, as the first group. [replace] puts this
+/// place's own item where a shared verb, by its value, would be.
 List<PopupMenuEntry<String>> overviewSessionMenuItems(
   WidgetRef ref,
   WorkspaceSessionEntry entry, {
   List<PopupMenuEntry<String>> extras = const [],
+  Map<String, PopupMenuEntry<String>> replace = const {},
 }) {
   final terminals = _terminals(ref);
   if (entry.native case final native?) {
-    return sessionMenuItems(ref, native, terminals: terminals, extras: extras);
+    return [
+      for (final item in sessionMenuItems(
+        ref,
+        native,
+        terminals: terminals,
+        extras: extras,
+      ))
+        if (item is PopupMenuItem<String> && replace[item.value] != null)
+          replace[item.value]!
+        else
+          item,
+    ];
   }
   final imported = entry.imported;
   if (imported == null) return extras;
@@ -51,10 +64,16 @@ Future<void> showOverviewSessionMenu(
   WidgetRef ref,
   WorkspaceSessionEntry entry, {
   List<PopupMenuEntry<String>> extras = const [],
+  Map<String, PopupMenuEntry<String>> replace = const {},
   Future<bool> Function(String value)? onExtra,
   Offset? at,
 }) async {
-  final items = overviewSessionMenuItems(ref, entry, extras: extras);
+  final items = overviewSessionMenuItems(
+    ref,
+    entry,
+    extras: extras,
+    replace: replace,
+  );
   if (items.isEmpty) return;
   final picked = await showSessionMenu(
     anchor,

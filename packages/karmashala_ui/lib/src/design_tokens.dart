@@ -927,10 +927,12 @@ class Chrome {
   /// The narrowest cell a family takes on the dashboard's grid, at 1x text.
   static const familyCellMin = 560.0;
 
-  /// A family card's fixed slots, at 1x text: its state pill and its one
-  /// primary action, so a change of state never moves what sits beside them.
+  /// A family card's fixed slots, at 1x text: its state pill, its footer's
+  /// Message, and Stop or Archive beside it, so a change of state never
+  /// moves what sits beside them.
   static const familyStateSlot = 112.0;
-  static const familyPrimarySlot = 128.0;
+  static const familyPrimarySlot = 104.0;
+  static const familySecondarySlot = 96.0;
 
   /// The dashboard's waiting drawer docked over the board, and its share of
   /// the height as a phone's bottom sheet.

@@ -113,21 +113,25 @@ String? overviewEndWarning(WidgetRef ref, OverviewCard card) {
 /// line's Stop and the session rows' End share. A session working or waiting
 /// on the person asks first, in one line, as the rows' End does; an idle one
 /// ends at once with Undo, which resumes it here — its conversation is kept,
-/// so resuming is cheap.
+/// so resuming is cheap. [confirm] asks first even then: a family card's ⋯
+/// ends from beside Stop, which only interrupts.
 Future<void> endFromDashboard(
   BuildContext context,
   WidgetRef ref,
-  OverviewCard card,
-) async {
+  OverviewCard card, {
+  bool confirm = false,
+}) async {
   final id = card.id;
   final title = card.entry.title;
   final warning = overviewEndWarning(ref, card);
   final asks = warning != null;
-  if (warning != null) {
+  if (warning != null || confirm) {
     final confirmed = await showConfirmDialog(
       context,
       title: 'End "$title"?',
-      message: warning,
+      message:
+          warning ??
+          'Its agent stops. The conversation stays: Message resumes it.',
       confirmLabel: 'End session',
     );
     if (!confirmed || !context.mounted) return;

@@ -1002,6 +1002,15 @@ void main() {
 
     setUp(() => server.sessionWork.running.addAll(['ask', 'busy', 'idle']));
 
+    /// Opens [id]'s family card ⋯.
+    Future<void> openMenu(WidgetTester tester, String id) async {
+      final menu = find.byKey(ValueKey('overview-card-menu:$id'));
+      await tester.ensureVisible(menu);
+      await settle(tester);
+      await tester.tap(menu);
+      await settle(tester);
+    }
+
     Future<void> hover(WidgetTester tester, Finder target) async {
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: Offset.zero);
@@ -1020,16 +1029,27 @@ void main() {
       await settle(tester);
     }
 
-    testBoard("a working family's Stop is always there; the drawer's End "
-        'shows under a hover', (tester) async {
+    testBoard("a family's End is in its ⋯, Stop beside it only interrupts; "
+        "the drawer's End shows under a hover", (tester) async {
       await pump(tester, const Size(1440, 900));
-      // The family's primary slot: Stop while it works, nothing to end else.
-      expect(end('busy'), findsOneWidget);
-      expect(tester.widget<OutlinedButton>(end('busy')).onPressed, isNotNull);
+      // No End button on a family's footer: Stop there interrupts the turn.
+      expect(end('busy'), findsNothing);
       expect(end('idle'), findsNothing);
       expect(end('ask'), findsNothing);
-      // Ended: no process to end.
       expect(end('done'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('overview-interrupt:busy')),
+        findsOneWidget,
+      );
+      await openMenu(tester, 'busy');
+      expect(end('busy'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
+      // Ended: no process to end, and Archive takes Stop's place.
+      await openMenu(tester, 'done');
+      expect(end('done'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
 
       // What waits has its End on its card in the drawer, under a hover.
       await openWaiting(tester);
@@ -1091,10 +1111,33 @@ void main() {
       expect(server.sessionWork.running, contains('ask'));
     });
 
+    testBoard('an idle family ended from its ⋯ is asked first all the same', (
+      tester,
+    ) async {
+      await pump(tester, const Size(1440, 900));
+      server.attention.statusOf(
+        'idle',
+        AgentActivityStatus.idle,
+        sessionId: 'cli-idle',
+        label: 'idle',
+        source: AgentStatusSource.terminalGrid,
+      );
+      await settle(tester);
+      await openMenu(tester, 'idle');
+      await tester.tap(end('idle'));
+      await settle(tester);
+      expect(find.text('End "Chat idle"?'), findsOneWidget);
+      expect(find.textContaining('Message resumes it'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      expect(server.sessionWork.running, contains('idle'));
+    });
+
     testBoard('a working session asks first, then ends at the server', (
       tester,
     ) async {
       await pump(tester, const Size(1440, 900));
+      await openMenu(tester, 'busy');
       await tester.tap(end('busy'));
       await settle(tester);
       expect(find.text('End "Chat busy"?'), findsOneWidget);

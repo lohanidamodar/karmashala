@@ -156,13 +156,15 @@ List<PopupMenuEntry<String>> overviewCardExtras(
 
 /// Opens [card]'s menu — the card's own verbs, then the session menu every
 /// other place has — from [anchor], at [at] for a right-click. [more] are a
-/// place's own verbs after the card's, answered by [onMore].
+/// place's own verbs after the card's, answered by [onMore]; [replace] puts
+/// a place's own item where a shared verb would be.
 Future<void> showOverviewCardMenu(
   BuildContext anchor,
   WidgetRef ref,
   OverviewCard card, {
   Offset? at,
   List<PopupMenuEntry<String>> more = const [],
+  Map<String, PopupMenuEntry<String>> replace = const {},
   Future<bool> Function(String value)? onMore,
 }) => showOverviewSessionMenu(
   anchor,
@@ -170,6 +172,7 @@ Future<void> showOverviewCardMenu(
   card.entry,
   at: at,
   extras: [...overviewCardExtras(ref, card), ...more],
+  replace: replace,
   onExtra: (value) async {
     switch (value) {
       case 'board-pin':

@@ -142,12 +142,12 @@ void main() {
     await unmountMission(tester);
   });
 
-  testWidgets('opening it in the peek marks it seen', (tester) async {
+  testWidgets('opening it in the peek, by its card, marks it seen', (
+    tester,
+  ) async {
     final c = await pumpMission(tester, fixture: fixture(), prefsDir: dir);
     await readKept(tester, c);
-    await tester.tap(
-      find.byKey(const ValueKey('overview-family-open:u-never')),
-    );
+    await tester.tap(find.byKey(const ValueKey('overview-card-title:u-never')));
     await settleMission(tester);
     expect(c.read(overviewSeenProvider).containsKey('u-never'), isTrue);
     await unmountMission(tester);

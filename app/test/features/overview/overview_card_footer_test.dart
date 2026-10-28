@@ -5,7 +5,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/explorer/application/agent_states.dart';
+import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
+import 'package:karmashala/src/features/sessions/application/session_turn_interrupt.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/application/overview_quick_message.dart';
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
@@ -35,9 +39,10 @@ class _SpyMessage extends OverviewQuickMessage {
   }
 }
 
-/// **A family card's footer** (round 119): its primary action at the card's
-/// end, Open chat from the title's edge, the new count beside the title, and
-/// Reply turning the footer into a one-line message box in place.
+/// **A family card's footer** (rounds 119 and 120): the same ⋯, Stop or
+/// Archive, and Message in every state at the card's end; the card's tap
+/// opens the chat; End in ⋯; the ask marker opens the drawer; and Message
+/// turning the footer into a one-line message box in place.
 void main() {
   late Directory dir;
 
@@ -59,6 +64,7 @@ void main() {
     Size size = const Size(1440, 1400),
     double textScale = 1,
     MissionFixture? fixture,
+    List<Override> overrides = const [],
   }) => pumpMission(
     tester,
     fixture: fixture ?? MissionFixture.full(),
@@ -66,7 +72,10 @@ void main() {
     size: size,
     phone: size.width < WidthClass.mediumMin,
     textScale: textScale,
-    overrides: [overviewQuickMessageProvider.overrideWith(_SpyMessage.new)],
+    overrides: [
+      overviewQuickMessageProvider.overrideWith(_SpyMessage.new),
+      ...overrides,
+    ],
   );
 
   _SpyMessage spy(ProviderContainer c) =>
@@ -106,9 +115,9 @@ void main() {
     find.descendant(of: byKey(key), matching: find.byType(Material)).first,
   );
 
-  Future<void> openReply(WidgetTester tester, String id) async {
-    await reveal(tester, byKey('overview-family-reply:$id'));
-    await tester.tap(byKey('overview-family-reply:$id'));
+  Future<void> openMessage(WidgetTester tester, String id) async {
+    await reveal(tester, byKey('overview-family-message:$id'));
+    await tester.tap(byKey('overview-family-message:$id'));
     await settleMission(tester);
   }
 
@@ -126,40 +135,85 @@ void main() {
     final size = Size(width, width > 600 ? 1400 : 844);
     final pad = width > 600 ? Insets.md : Insets.sm;
 
-    testWidgets('${width.toInt()} px: the primary action sits at the card\'s '
-        'end, and the footer starts where the title does', (tester) async {
+    testWidgets('${width.toInt()} px: every state draws ⋯, Stop or Archive, '
+        'and Message, in the same places, ending at the card\'s padding in '
+        'line with the state pill; no Open chat', (tester) async {
       await pump(tester, size: size);
-      for (final (id, primary) in const [
-        ('ks-r30', 'overview-family-reply:ks-r30'),
-        ('ks-r32', 'overview-end:ks-r32'),
-        ('ks-r21', 'overview-family-review:ks-r21'),
+      Map<String, double>? first;
+      for (final (id, side) in const [
+        ('ks-r30', 'overview-interrupt:ks-r30'),
+        ('ks-r32', 'overview-interrupt:ks-r32'),
+        ('ks-r21', 'overview-interrupt:ks-r21'),
         ('ks-r29', 'overview-done-archive:ks-r29'),
       ]) {
-        await reveal(tester, byKey(primary));
+        final message = 'overview-family-message:$id';
+        await reveal(tester, byKey(message));
         final card = tester.getRect(byKey('overview-family:$id'));
-        final button = face(tester, primary);
+        final button = face(tester, message);
         expect(
           card.right - button.right,
           lessThanOrEqualTo(pad + 1),
-          reason: '$id: its primary ends at the card\'s padding',
+          reason: '$id: Message ends at the card\'s padding',
         );
-        // Its end lines up with the state pill's slot above it.
         final state = tester.getRect(byKey('overview-family-state:$id'));
         expect(button.right, closeTo(state.right, 1), reason: id);
-        final title = tester.getTopLeft(byKey('overview-card-title:$id'));
-        final open = tester.getTopLeft(
-          find.descendant(
-            of: byKey('overview-family-open:$id'),
-            matching: find.byType(Text),
-          ),
-        );
-        expect(open.dx, closeTo(title.dx, 1), reason: '$id: Open chat');
-        // ⋯ is a button's face, as tall as the primary beside it.
+        expect(byKey(side), findsOneWidget, reason: id);
+        expect(byKey('overview-family-open:$id'), findsNothing, reason: id);
+        // From the card's right edge, so a wider or narrower card in another
+        // lane compares the same.
+        final places = {
+          'menu': card.right - face(tester, 'overview-card-menu:$id').left,
+          'side': card.right - tester.getRect(byKey(side)).left,
+          'message': card.right - button.left,
+        };
+        // ⋯ and Stop are a button's face, as tall as Message beside them.
         expect(
           face(tester, 'overview-card-menu:$id').height,
           closeTo(button.height, 1),
           reason: '$id: ⋯',
         );
+        if (first == null) {
+          first = places;
+        } else {
+          for (final MapEntry(:key, :value) in places.entries) {
+            expect(value, closeTo(first[key]!, 1), reason: '$id: $key');
+          }
+        }
+      }
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('${width.toInt()} px: a state flip moves no footer button', (
+      tester,
+    ) async {
+      final c = await pump(tester, size: size);
+      const id = 'ks-r30';
+      await reveal(tester, byKey('overview-family-message:$id'));
+      Map<String, Offset> places() {
+        final card = tester.getTopLeft(byKey('overview-family:$id'));
+        return {
+          for (final key in [
+            'overview-card-menu:$id',
+            'overview-family-secondary:$id',
+            'overview-family-primary:$id',
+          ])
+            key: tester.getTopLeft(byKey(key)) - card,
+        };
+      }
+
+      final before = places();
+      final states = c.read(missionStatesProvider.notifier);
+      for (final to in const [
+        AgentState.working,
+        AgentState.needsYou,
+        AgentState.ready,
+      ]) {
+        states.flip(id, to);
+        await settleMission(tester);
+        expect(places(), before, reason: to.name);
+        expect(byKey('overview-family-message:$id'), findsOneWidget);
+        expect(byKey('overview-interrupt:$id'), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
       await unmountMission(tester);
@@ -198,56 +252,59 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('${width.toInt()} px: Reply opens a message box in place — no '
-        'family moves or resizes — Enter sends and closes it, Esc closes '
-        'it', (tester) async {
-      final c = await pump(tester, size: size);
-      await reveal(tester, byKey('overview-family-reply:ks-r30'));
-      final before = families(tester);
-      await tester.tap(byKey('overview-family-reply:ks-r30'));
-      await settleMission(tester);
-      final field = byKey('overview-composer:ks-r30');
-      expect(field, findsOneWidget);
-      expect(focused(tester, 'ks-r30'), isTrue, reason: 'the keys go in');
-      expect(families(tester), before, reason: 'nothing moves');
-      // The box starts at the title's edge.
-      expect(
-        tester.getTopLeft(field).dx,
-        closeTo(tester.getTopLeft(byKey('overview-card-title:ks-r30')).dx, 1),
-      );
+    testWidgets(
+      '${width.toInt()} px: Message opens a message box in place — no '
+      'family moves or resizes — Enter sends and closes it, Esc closes '
+      'it',
+      (tester) async {
+        final c = await pump(tester, size: size);
+        await reveal(tester, byKey('overview-family-message:ks-r30'));
+        final before = families(tester);
+        await tester.tap(byKey('overview-family-message:ks-r30'));
+        await settleMission(tester);
+        final field = byKey('overview-composer:ks-r30');
+        expect(field, findsOneWidget);
+        expect(focused(tester, 'ks-r30'), isTrue, reason: 'the keys go in');
+        expect(families(tester), before, reason: 'nothing moves');
+        // The box starts at the title's edge.
+        expect(
+          tester.getTopLeft(field).dx,
+          closeTo(tester.getTopLeft(byKey('overview-card-title:ks-r30')).dx, 1),
+        );
 
-      await tester.enterText(field, 'Run the webhook tests again');
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await settleMission(tester);
-      expect(spy(c).sent, [('ks-r30', 'Run the webhook tests again')]);
-      expect(field, findsNothing, reason: 'sending puts the buttons back');
-      expect(byKey('overview-family-reply:ks-r30'), findsOneWidget);
-      expect(families(tester), before);
+        await tester.enterText(field, 'Run the webhook tests again');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await settleMission(tester);
+        expect(spy(c).sent, [('ks-r30', 'Run the webhook tests again')]);
+        expect(field, findsNothing, reason: 'sending puts the buttons back');
+        expect(byKey('overview-family-message:ks-r30'), findsOneWidget);
+        expect(families(tester), before);
 
-      await tester.tap(byKey('overview-family-reply:ks-r30'));
-      await settleMission(tester);
-      await tester.enterText(field, 'never mind');
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await settleMission(tester);
-      expect(field, findsNothing, reason: 'Esc puts the buttons back');
-      expect(spy(c).sent, hasLength(1));
+        await tester.tap(byKey('overview-family-message:ks-r30'));
+        await settleMission(tester);
+        await tester.enterText(field, 'never mind');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await settleMission(tester);
+        expect(field, findsNothing, reason: 'Esc puts the buttons back');
+        expect(spy(c).sent, hasLength(1));
 
-      await tester.tap(byKey('overview-family-reply:ks-r30'));
-      await settleMission(tester);
-      await tester.tap(byKey('overview-composer-cancel:ks-r30'));
-      await settleMission(tester);
-      expect(field, findsNothing, reason: 'Cancel puts the buttons back');
-      expect(families(tester), before);
-      expect(tester.takeException(), isNull);
-      await unmountMission(tester);
-    });
+        await tester.tap(byKey('overview-family-message:ks-r30'));
+        await settleMission(tester);
+        await tester.tap(byKey('overview-composer-cancel:ks-r30'));
+        await settleMission(tester);
+        expect(field, findsNothing, reason: 'Cancel puts the buttons back');
+        expect(families(tester), before);
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      },
+    );
   }
 
   testWidgets('a send that fails says so in the box and keeps the words', (
     tester,
   ) async {
     final c = await pump(tester);
-    await openReply(tester, 'ks-r30');
+    await openMessage(tester, 'ks-r30');
     final before = families(tester);
     spy(c).fail = 'The host is offline';
     final field = byKey('overview-composer:ks-r30');
@@ -273,7 +330,7 @@ void main() {
     tester,
   ) async {
     await pump(tester, size: const Size(390, 844));
-    await openReply(tester, 'ks-r30');
+    await openMessage(tester, 'ks-r30');
     // The box at the foot of the screen, where the keyboard comes up.
     await tester.ensureVisible(byKey('overview-composer:ks-r30'));
     unawaited(
@@ -308,7 +365,24 @@ void main() {
           size: Size(width, width > 600 ? 1400 : 800),
           textScale: scale,
         );
-        await openReply(tester, 'ks-r30');
+        // Closed, every state's footer fits the card.
+        for (final id in const ['ks-r30', 'ks-r32', 'ks-r21', 'ks-r29']) {
+          final message = byKey('overview-family-message:$id');
+          await reveal(tester, message);
+          final card = tester.getRect(byKey('overview-family:$id'));
+          expect(
+            tester.getRect(message).right,
+            lessThanOrEqualTo(card.right),
+            reason: id,
+          );
+          expect(
+            tester.getRect(byKey('overview-card-menu:$id')).left,
+            greaterThanOrEqualTo(card.left),
+            reason: id,
+          );
+          expect(tester.takeException(), isNull, reason: id);
+        }
+        await openMessage(tester, 'ks-r30');
         await tester.enterText(
           byKey('overview-composer:ks-r30'),
           'A long enough message to fill the one line of the box and more',
@@ -322,6 +396,113 @@ void main() {
       });
     }
   }
+
+  group('footer actions', () {
+    testWidgets('Stop interrupts the turn, never ends it, and only while one '
+        'runs', (tester) async {
+      final stopped = <String>[];
+      await pump(
+        tester,
+        overrides: [
+          sessionTurnInterruptProvider.overrideWithValue((id) async {
+            stopped.add(id);
+            return null;
+          }),
+        ],
+      );
+      final stop = byKey('overview-interrupt:ks-r32');
+      await reveal(tester, stop);
+      expect(tester.widget<OutlinedButton>(stop).onPressed, isNotNull);
+      await tester.tap(stop);
+      await settleMission(tester);
+      expect(stopped, ['ks-r32']);
+      expect(find.byType(AlertDialog), findsNothing, reason: 'no End confirm');
+      expect(byKey('overview-family:ks-r32'), findsOneWidget);
+
+      // A ready session has no turn to stop: the slot stays, disabled.
+      final idle = byKey('overview-interrupt:ks-r30');
+      await reveal(tester, idle);
+      expect(tester.widget<OutlinedButton>(idle).onPressed, isNull);
+      expect(
+        find.ancestor(of: idle, matching: find.byType(Tooltip)),
+        findsWidgets,
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('the ask marker opens the waiting drawer on its family', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      final marker = byKey('overview-family-review:ks-r21');
+      await reveal(tester, marker);
+      expect(find.text('Review 1 ask'), findsNothing, reason: 'no takeover');
+      await tester.tap(marker);
+      await settleMission(tester);
+      expect(
+        c.read(overviewDrawerProvider),
+        const OverviewDrawer(open: true, family: 'ks-r21'),
+      );
+      await unmountMission(tester);
+    });
+
+    testWidgets('tapping the card opens its chat, and says so', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final c = await pump(tester);
+      final head = byKey('overview-family-head:ks-r30');
+      await reveal(tester, head);
+      expect(
+        tester.getSemantics(head).hint,
+        contains('Open chat'),
+        reason: 'the tap is announced',
+      );
+      await tester.tap(byKey('overview-card-title:ks-r30'));
+      await settleMission(tester);
+      final focus = c.read(overviewFocusProvider);
+      expect(focus.peeked, 'ks-r30');
+      expect(focus.tab, OverviewPeekTab.chat);
+      semantics.dispose();
+      await unmountMission(tester);
+    });
+
+    testWidgets('Message on a working session says it queues, and sends; on '
+        'a ready one it sends', (tester) async {
+      final c = await pump(tester);
+      for (final id in const ['ks-r32', 'ks-r30']) {
+        await openMessage(tester, id);
+        final field = byKey('overview-composer:$id');
+        if (id == 'ks-r32' &&
+            c.read(overviewQuickMessageProvider).wouldQueue(id)) {
+          expect(
+            find.text('Message · queues until the turn ends'),
+            findsOneWidget,
+          );
+        }
+        await tester.enterText(field, 'hello $id');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await settleMission(tester);
+        expect(field, findsNothing);
+      }
+      expect(spy(c).sent, [
+        ('ks-r32', 'hello ks-r32'),
+        ('ks-r30', 'hello ks-r30'),
+      ]);
+      await unmountMission(tester);
+    });
+
+    testWidgets('an ended session: Message resumes it to take the words', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      await openMessage(tester, 'ks-r29');
+      expect(find.text('Message to resume…'), findsOneWidget);
+      await tester.enterText(byKey('overview-composer:ks-r29'), 'go on');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(spy(c).sent, [('ks-r29', 'go on')]);
+      await unmountMission(tester);
+    });
+  });
 
   group('one outline', () {
     Finder pill(String id) => byKey('overview-tree-pill:$id');
