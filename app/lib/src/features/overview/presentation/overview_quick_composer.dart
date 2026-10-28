@@ -19,10 +19,15 @@ import '../application/overview_quick_message.dart';
 /// **A quick message to one session**: one line, Enter sends, Shift+Enter
 /// starts a new line, Esc clears — or, given [onEscape], closes. Says whether
 /// it went now or waits for the turn running.
+///
+/// [oneLine] draws it as a family card's footer does: one line in the
+/// height it is given, Send and Cancel at its end, and a failure said inside
+/// the box, its words kept, so nothing around it moves.
 class OverviewQuickComposer extends ConsumerStatefulWidget {
   const OverviewQuickComposer({
     required this.card,
     this.autofocus = false,
+    this.oneLine = false,
     this.onEscape,
     this.onSent,
     super.key,
@@ -32,6 +37,9 @@ class OverviewQuickComposer extends ConsumerStatefulWidget {
 
   /// Takes the keys as it opens.
   final bool autofocus;
+
+  /// One line, no status under it; Cancel calls [onEscape].
+  final bool oneLine;
   final VoidCallback? onEscape;
 
   /// A message went: what became of it, for whoever closes the composer.
@@ -170,6 +178,9 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
       _ => 'Message…',
     };
     final said = _said;
+    if (widget.oneLine) {
+      return _oneLine(hint: hint, idle: idle, said: said);
+    }
     // Under a thumb the field is a compact control's height, as the app's
     // other dense fields are, and Send keeps a thumb's target: laid over the
     // field's end, its hit area reaching past the field's top and bottom.
@@ -287,6 +298,110 @@ class _OverviewQuickComposerState extends ConsumerState<OverviewQuickComposer> {
             ),
           ),
       ],
+    );
+  }
+
+  /// The footer's box: the field at a button's face height, centred in the
+  /// height it is given, then Send and Cancel. A send that fails says
+  /// "Not sent" at the field's start, the reason on hover, its words kept.
+  Widget _oneLine({
+    required String hint,
+    required bool idle,
+    required String? said,
+  }) {
+    final card = widget.card;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final touch = density.isTouch;
+    final failure = SemanticColors.of(context).failure;
+    final failed = _failed && said != null;
+    OutlineInputBorder edge(Color color) => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(Radii.sm),
+      borderSide: BorderSide(color: color),
+    );
+    final field = TextField(
+      key: ValueKey('overview-composer:${card.id}'),
+      controller: _text,
+      focusNode: _focus,
+      maxLines: 1,
+      // Held, not disabled, while it sends: a failure leaves the keys here.
+      enabled: idle || _sending,
+      readOnly: _sending,
+      textInputAction: TextInputAction.send,
+      style: theme.textTheme.bodySmall,
+      // A phone's keyboard sends; a desktop's Enter is taken by [_key].
+      onSubmitted: (_) => _send(),
+      // Kept: a send that fails leaves the words, and the keys, in place.
+      onEditingComplete: () {},
+      onChanged: (_) {
+        if (_said != null) setState(() => _said = null);
+      },
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: hint,
+        hintStyle: theme.textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+        filled: true,
+        fillColor: scheme.surfaceContainerLowest,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.sm,
+        ),
+        prefixIcon: failed
+            ? Tooltip(
+                message: said,
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.only(
+                    start: Insets.sm,
+                    end: Insets.xs,
+                  ),
+                  child: Text(
+                    'Not sent',
+                    key: ValueKey('overview-composer-said:${card.id}'),
+                    maxLines: 1,
+                    style: theme.textTheme.labelSmall?.copyWith(color: failure),
+                  ),
+                ),
+              )
+            : null,
+        prefixIconConstraints: const BoxConstraints(),
+        border: edge(scheme.outlineVariant),
+        enabledBorder: edge(failed ? failure : scheme.outlineVariant),
+        focusedBorder: edge(failed ? failure : scheme.primary),
+      ),
+    );
+    final constraints = touch ? density.iconConstraints(Touch.target) : null;
+    return Semantics(
+      liveRegion: failed,
+      label: failed ? said : null,
+      child: Row(
+        children: [
+          Expanded(child: field),
+          IconButton(
+            key: ValueKey('overview-composer-send:${card.id}'),
+            tooltip: 'Send to ${card.entry.title}',
+            visualDensity: density.controlDensity,
+            constraints: constraints,
+            iconSize: density.iconSize(Chrome.icon),
+            onPressed: idle ? _send : null,
+            icon: _sending
+                ? const InlineSpinner()
+                : Icon(AppIcons.paperPlaneRight, color: scheme.primary),
+          ),
+          IconButton(
+            key: ValueKey('overview-composer-cancel:${card.id}'),
+            tooltip: 'Cancel (Esc)',
+            visualDensity: density.controlDensity,
+            constraints: constraints,
+            iconSize: density.iconSize(Chrome.icon),
+            color: scheme.onSurfaceVariant,
+            onPressed: widget.onEscape,
+            icon: const Icon(AppIcons.x),
+          ),
+        ],
+      ),
     );
   }
 }

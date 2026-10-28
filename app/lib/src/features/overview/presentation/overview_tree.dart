@@ -26,6 +26,7 @@ import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_done_card.dart';
 import 'overview_end_button.dart';
+import 'overview_quick_composer.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 import 'session_avatar.dart';
@@ -249,7 +250,10 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
           : '${root.entry.title} and its sub-sessions',
       child: Container(
         key: ValueKey('overview-family:${root.id}'),
-        padding: EdgeInsets.all(pad),
+        // The footer's target is taller than its buttons: the card's
+        // bottom edge gives back that slack, so the space under them reads
+        // as the space over the avatar.
+        padding: EdgeInsets.fromLTRB(pad, pad, pad, Insets.xs),
         decoration: BoxDecoration(
           color: surface,
           borderRadius: BorderRadius.circular(Radii.lg),
@@ -274,6 +278,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
             const SizedBox(height: Insets.xs),
             _FamilyFooter(
               node: node,
+              text: _rootSize + Insets.sm,
               onOpen: widget.onOpen,
               laneKey: widget.laneKey,
               laneRoots: widget.laneRoots,
@@ -432,36 +437,48 @@ class _FamilyHeader extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
+                      // The new count and pin follow the title, not the
+                      // state's slot: the title gives up its width first.
                       Expanded(
-                        child: Semantics(
-                          header: true,
-                          label: [
-                            card.entry.title,
-                            card.state.label,
-                            ?agent,
-                            if (place.isNotEmpty) place,
-                          ].join(', '),
-                          excludeSemantics: true,
-                          child: TruncatedText(
-                            card.entry.title,
-                            textKey: ValueKey('overview-card-title:${card.id}'),
-                            triggerMode: TooltipTriggerMode.manual,
-                            style: titleStyle,
-                          ),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Semantics(
+                                header: true,
+                                label: [
+                                  card.entry.title,
+                                  card.state.label,
+                                  ?agent,
+                                  if (place.isNotEmpty) place,
+                                ].join(', '),
+                                excludeSemantics: true,
+                                child: TruncatedText(
+                                  card.entry.title,
+                                  textKey: ValueKey(
+                                    'overview-card-title:${card.id}',
+                                  ),
+                                  triggerMode: TooltipTriggerMode.manual,
+                                  style: titleStyle,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: Insets.xs),
+                            OverviewNewBadge(card: card),
+                            if (pinned) ...[
+                              const SizedBox(width: Insets.xs),
+                              Icon(
+                                AppIcons.pushPinFill,
+                                key: ValueKey(
+                                  'overview-family-pinned:${card.id}',
+                                ),
+                                size: density.iconSmall,
+                                color: scheme.primary,
+                                semanticLabel: 'Pinned',
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(width: Insets.xs),
-                      OverviewNewBadge(card: card),
-                      if (pinned) ...[
-                        const SizedBox(width: Insets.xs),
-                        Icon(
-                          AppIcons.pushPinFill,
-                          key: ValueKey('overview-family-pinned:${card.id}'),
-                          size: density.iconSmall,
-                          color: scheme.primary,
-                          semanticLabel: 'Pinned',
-                        ),
-                      ],
                       const SizedBox(width: Insets.xs),
                       SizedBox(
                         key: ValueKey('overview-family-state:${card.id}'),
@@ -569,24 +586,63 @@ class _SayLines extends ConsumerWidget {
   }
 }
 
-/// A family's footer, one fixed height: Open chat, ⋯, and one primary slot
-/// of fixed width — Review N asks, Reply, Stop or Archive.
-class _FamilyFooter extends ConsumerWidget {
+/// A family's footer, one fixed height: Open chat and ⋯ from the text
+/// column's edge, and one primary slot of fixed width at the card's end —
+/// Review N asks, Reply, Stop or Archive. Reply turns the footer itself into
+/// a one-line message box, the same height, so the card never resizes.
+class _FamilyFooter extends ConsumerStatefulWidget {
   const _FamilyFooter({
     required this.node,
+    required this.text,
     required this.onOpen,
     required this.laneKey,
     required this.laneRoots,
   });
 
   final OverviewTreeNode node;
+
+  /// Where the header's text column starts, from the card's content edge.
+  final double text;
   final ValueChanged<OverviewCard> onOpen;
   final String? laneKey;
   final List<String> laneRoots;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FamilyFooter> createState() => _FamilyFooterState();
+}
+
+class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
+  /// The message box is open in place of the buttons.
+  var _replying = false;
+
+  void _close() {
+    if (mounted) setState(() => _replying = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final node = widget.node;
+    final onOpen = widget.onOpen;
+    final laneKey = widget.laneKey;
+    final laneRoots = widget.laneRoots;
     final card = node.card;
+    if (_replying) {
+      return SizedBox(
+        key: ValueKey('overview-family-reply-box:${card.id}'),
+        height: Touch.target,
+        child: Padding(
+          padding: EdgeInsetsDirectional.only(start: widget.text),
+          child: OverviewQuickComposer(
+            card: card,
+            oneLine: true,
+            autofocus: true,
+            onEscape: _close,
+            onSent: (_) => _close(),
+          ),
+        ),
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
     final density = UiDensity.of(context);
     final compact = density.compactButton;
     final slot = WidthClass.scaleBreakpoint(
@@ -610,7 +666,7 @@ class _FamilyFooter extends ConsumerWidget {
       primary = FilledButton.tonal(
         key: ValueKey('overview-family-reply:${card.id}'),
         style: compact,
-        onPressed: () => onOpen(card),
+        onPressed: () => setState(() => _replying = true),
         child: label('Reply'),
       );
     } else if (card.state == AgentState.ended) {
@@ -642,42 +698,81 @@ class _FamilyFooter extends ConsumerWidget {
         child: label('Stop'),
       );
     }
+    // Open chat's label starts where the title does: its button reaches
+    // back into the avatar's column by its own padding.
+    const openPad = Insets.md;
+    final openStyle = (compact ?? const ButtonStyle()).copyWith(
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: openPad),
+      ),
+    );
+    final lead = (widget.text - openPad).clamp(0.0, double.infinity);
     return SizedBox(
       height: Touch.target,
       child: LayoutBuilder(
         builder: (context, box) => Row(
           children: [
-            if (drag) _DragHandle(card: card),
-            Flexible(
-              child: TextButton(
-                key: ValueKey('overview-family-open:${card.id}'),
-                style: compact,
-                onPressed: () => onOpen(card),
-                // A phone's card has room for the verb alone.
-                child: label(
-                  box.maxWidth < WidthClass.mediumMin ? 'Open' : 'Open chat',
-                ),
+            SizedBox(
+              width: lead,
+              child: drag
+                  ? Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: _DragHandle(card: card),
+                    )
+                  : null,
+            ),
+            // The pair keeps its own width; what is left goes before the
+            // primary slot, which so sits at the card's end.
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: TextButton(
+                      key: ValueKey('overview-family-open:${card.id}'),
+                      style: openStyle,
+                      onPressed: () => onOpen(card),
+                      // A phone's card has room for the verb alone.
+                      child: label(
+                        box.maxWidth < WidthClass.mediumMin
+                            ? 'Open'
+                            : 'Open chat',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  // A button's face, Stop's and Archive's own, not a glyph
+                  // that reads as text.
+                  Builder(
+                    builder: (button) => Tooltip(
+                      message: 'More',
+                      child: OutlinedButton(
+                        key: ValueKey('overview-card-menu:${card.id}'),
+                        style: (compact ?? const ButtonStyle()).copyWith(
+                          padding: const WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(horizontal: Insets.sm),
+                          ),
+                          foregroundColor: WidgetStatePropertyAll(
+                            scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        onPressed: () => showOverviewFamilyMenu(
+                          button,
+                          ref,
+                          node,
+                          laneKey: laneKey,
+                          laneRoots: laneRoots,
+                        ),
+                        child: Icon(
+                          AppIcons.dotsThree,
+                          size: density.iconSize(Chrome.icon),
+                          semanticLabel: 'More',
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            Builder(
-              builder: (button) => IconButton(
-                key: ValueKey('overview-card-menu:${card.id}'),
-                tooltip: 'More',
-                visualDensity: density.controlDensity,
-                padding: EdgeInsets.zero,
-                constraints: density.iconConstraints(Chrome.control),
-                iconSize: density.iconSize(Chrome.iconSmall),
-                icon: const Icon(AppIcons.dotsThree),
-                onPressed: () => showOverviewFamilyMenu(
-                  button,
-                  ref,
-                  node,
-                  laneKey: laneKey,
-                  laneRoots: laneRoots,
-                ),
-              ),
-            ),
-            const Spacer(),
             SizedBox(
               key: ValueKey('overview-family-primary:${card.id}'),
               width: slot.clamp(0.0, box.maxWidth / 2),
