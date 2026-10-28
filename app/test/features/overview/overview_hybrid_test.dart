@@ -900,7 +900,7 @@ void main() {
         await settleMission(tester);
         await tester.scrollUntilVisible(badge, 200, scrollable: hybridList);
         expect(
-          find.descendant(of: badge, matching: find.text('3')),
+          find.descendant(of: badge, matching: find.text('3 new')),
           findsOneWidget,
         );
 
@@ -1161,8 +1161,8 @@ void main() {
       promptOverride: 'Merge the pull request with a squash.',
     );
 
-    testWidgets('a ready family keeps its place in its lane, and Reply peeks '
-        'it', (tester) async {
+    testWidgets('a ready family keeps its place in its lane, and Reply sends '
+        'from its footer through the one send path', (tester) async {
       await pump(tester);
       final card = familyCard('ks-r30');
       await tester.scrollUntilVisible(card, 300, scrollable: hybridList);
@@ -1172,10 +1172,14 @@ void main() {
       await settleMission(tester);
       await tester.tap(reply);
       await settleMission(tester);
-      expect(
-        find.byKey(const ValueKey('overview-peek:ks-r30')),
-        findsOneWidget,
-      );
+      // The box opens in the card, not the peek.
+      expect(find.byKey(const ValueKey('overview-peek:ks-r30')), findsNothing);
+      final field = find.byKey(const ValueKey('overview-composer:ks-r30'));
+      expect(find.descendant(of: card, matching: field), findsOneWidget);
+      await tester.enterText(field, 'Run the webhook tests again');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settleMission(tester);
+      expect(sent, [('ks-r30', 'Run the webhook tests again')]);
       await unmountMission(tester);
     });
 

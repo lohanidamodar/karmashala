@@ -29,9 +29,22 @@ import 'overview_session_menu.dart';
 import 'overview_session_parts.dart';
 import 'overview_title_block.dart';
 
-/// [text] as one plain paragraph: markdown marks and line breaks dropped.
+/// [text] as one plain paragraph: markdown marks and line breaks dropped,
+/// a link or an image said by its label ("[#6980](https://…)" is "#6980"),
+/// an autolink by its address, and a heading's, quote's or list item's
+/// marker gone.
 String overviewPlain(String text) => text
-    .replaceAll(RegExp(r'\*\*|__|`|^#+\s*', multiLine: true), '')
+    .replaceAllMapped(
+      RegExp(r'!?\[([^\]\n]*)\]\([^)\s]*(?:\s+"[^"]*")?\)'),
+      (m) => m[1]!,
+    )
+    .replaceAllMapped(RegExp(r'<((?:https?|mailto):[^>\s]+)>'), (m) => m[1]!)
+    .replaceAll(RegExp(r'^\s*(?:#+|>+|[-*+]|\d+[.)])\s+', multiLine: true), '')
+    .replaceAll(RegExp(r'\*\*|__|~~|`'), '')
+    .replaceAllMapped(
+      RegExp(r'(^|[\s(])[*_]([^*_\s][^*_\n]*?)[*_](?=[\s).,:;!?]|$)'),
+      (m) => '${m[1]}${m[2]}',
+    )
     .replaceAll(RegExp(r'\s*\n+\s*'), ' ')
     .trim();
 
@@ -337,7 +350,7 @@ class OverviewNewBadge extends ConsumerWidget {
           borderRadius: BorderRadius.circular(Radii.pill),
         ),
         child: Text(
-          never ? 'New' : '$count',
+          never ? 'New' : '$count new',
           maxLines: 1,
           style: theme.textTheme.labelSmall?.copyWith(
             color: scheme.onPrimary,

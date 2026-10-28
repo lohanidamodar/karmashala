@@ -26,6 +26,7 @@ import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_done_card.dart';
 import 'overview_end_button.dart';
+import 'overview_quick_composer.dart';
 import 'overview_resume_actions.dart';
 import 'overview_session_parts.dart';
 import 'session_avatar.dart';
@@ -70,6 +71,15 @@ class OverviewFamilyTree extends ConsumerStatefulWidget {
 class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   /// The rows past [OverviewFamilyTree.shownRows] are drawn too.
   var _showAll = false;
+
+  /// The header holds the keys: the card's outline says so.
+  final _headFocused = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _headFocused.dispose();
+    super.dispose();
+  }
 
   double get _rootSize =>
       widget.compact ? Chrome.sessionAvatarCompact : Chrome.sessionAvatar;
@@ -247,24 +257,13 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
       label: node.children.isEmpty
           ? root.entry.title
           : '${root.entry.title} and its sub-sessions',
-      child: Container(
-        key: ValueKey('overview-family:${root.id}'),
-        padding: EdgeInsets.all(pad),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: scheme.outlineVariant),
-        ),
-        // The keyboard's ring is drawn over the edge, so it moves nothing.
-        foregroundDecoration: selected
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(Radii.lg),
-                border: Border.all(
-                  color: scheme.primary,
-                  width: StateLayers.focusRingWidth * 2,
-                ),
-              )
-            : null,
+      child: _FamilyFrame(
+        card: root,
+        inside: {for (final c in node.descendants) c.id},
+        selected: selected,
+        headFocused: _headFocused,
+        pad: pad,
+        surface: surface,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -274,6 +273,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
             const SizedBox(height: Insets.xs),
             _FamilyFooter(
               node: node,
+              text: _rootSize + Insets.sm,
               onOpen: widget.onOpen,
               laneKey: widget.laneKey,
               laneRoots: widget.laneRoots,
@@ -327,15 +327,111 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
         constraints: BoxConstraints(minHeight: size),
         child: Padding(
           padding: EdgeInsets.only(left: size + Insets.sm),
+          // Lit, it is the card's outline that turns the accent.
           child: OverviewFamilyHover(
             card: card,
+            ring: false,
             child: _FamilyHeader(
               node: node,
               onOpen: widget.onOpen,
               wide: widget.wide,
+              onFocus: (on) => _headFocused.value = on,
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A family card's surface and its one outline, along the card's own
+/// rounded edge: the accent, wider, when it is selected, its header holds
+/// the keys, or a sub-session drawn elsewhere lights it; [Theme]'s outline
+/// under a pointer; the quiet outline otherwise. Drawn over the edge, so
+/// nothing moves. A sub-session inside the card lighting its parent rings
+/// nothing: the pointer or the keys are in the card already, and the
+/// parent's avatar glows instead.
+class _FamilyFrame extends ConsumerStatefulWidget {
+  const _FamilyFrame({
+    required this.card,
+    required this.inside,
+    required this.selected,
+    required this.headFocused,
+    required this.pad,
+    required this.surface,
+    required this.child,
+  });
+
+  final OverviewCard card;
+
+  /// The sub-sessions this card draws, or folds away.
+  final Set<String> inside;
+  final bool selected;
+  final ValueNotifier<bool> headFocused;
+  final double pad;
+  final Color surface;
+  final Widget child;
+
+  @override
+  ConsumerState<_FamilyFrame> createState() => _FamilyFrameState();
+}
+
+class _FamilyFrameState extends ConsumerState<_FamilyFrame> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = widget.card;
+    final scheme = Theme.of(context).colorScheme;
+    final touch = UiDensity.of(context).isTouch;
+    final lit = ref.watch(
+      overviewLinkFocusProvider.select(
+        (f) => overviewLinkLit(card, f) && !widget.inside.contains(f!.id),
+      ),
+    );
+    final radius = BorderRadius.circular(Radii.lg);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: widget.headFocused,
+        builder: (context, focused, child) {
+          final ringed = widget.selected || lit || focused;
+          return Container(
+            key: ValueKey('overview-family:${card.id}'),
+            // The footer's target is taller than its buttons: the card's
+            // bottom edge gives back that slack, so the space under them
+            // reads as the space over the avatar.
+            padding: EdgeInsets.fromLTRB(
+              widget.pad,
+              widget.pad,
+              widget.pad,
+              Insets.xs,
+            ),
+            decoration: BoxDecoration(
+              color: widget.surface,
+              borderRadius: radius,
+              border: Border.all(
+                color: _hovered && !touch
+                    ? scheme.outline
+                    : scheme.outlineVariant,
+              ),
+            ),
+            // Always there, so lighting it never remounts the card and takes
+            // the keys from a row inside it.
+            foregroundDecoration: BoxDecoration(
+              borderRadius: radius,
+              border: ringed
+                  ? Border.all(
+                      color: scheme.primary,
+                      width: StateLayers.focusRingWidth * 2,
+                    )
+                  : null,
+            ),
+            child: child,
+          );
+        },
+        child: widget.child,
       ),
     );
   }
@@ -368,11 +464,15 @@ class _FamilyHeader extends ConsumerWidget {
     required this.node,
     required this.onOpen,
     required this.wide,
+    required this.onFocus,
   });
 
   final OverviewTreeNode node;
   final ValueChanged<OverviewCard> onOpen;
   final bool wide;
+
+  /// It took or lost the keys: the card, not the header, draws the ring.
+  final ValueChanged<bool> onFocus;
 
   /// The most of the meta line "2/4 finished" and the agent take, wide.
   static const _metaShare = 0.5;
@@ -411,7 +511,11 @@ class _FamilyHeader extends ConsumerWidget {
       type: MaterialType.transparency,
       child: InkWell(
         key: ValueKey('overview-family-head:${card.id}'),
-        borderRadius: BorderRadius.circular(Radii.sm),
+        // No box of its own behind the title and text: hover, focus and a
+        // press show on the card's outline, along the card's shape.
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        splashFactory: NoSplash.splashFactory,
+        onFocusChange: onFocus,
         onTap: () {
           if (!overviewPickSelects(ref, card, touch: touch)) onOpen(card);
         },
@@ -432,36 +536,48 @@ class _FamilyHeader extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
+                      // The new count and pin follow the title, not the
+                      // state's slot: the title gives up its width first.
                       Expanded(
-                        child: Semantics(
-                          header: true,
-                          label: [
-                            card.entry.title,
-                            card.state.label,
-                            ?agent,
-                            if (place.isNotEmpty) place,
-                          ].join(', '),
-                          excludeSemantics: true,
-                          child: TruncatedText(
-                            card.entry.title,
-                            textKey: ValueKey('overview-card-title:${card.id}'),
-                            triggerMode: TooltipTriggerMode.manual,
-                            style: titleStyle,
-                          ),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Semantics(
+                                header: true,
+                                label: [
+                                  card.entry.title,
+                                  card.state.label,
+                                  ?agent,
+                                  if (place.isNotEmpty) place,
+                                ].join(', '),
+                                excludeSemantics: true,
+                                child: TruncatedText(
+                                  card.entry.title,
+                                  textKey: ValueKey(
+                                    'overview-card-title:${card.id}',
+                                  ),
+                                  triggerMode: TooltipTriggerMode.manual,
+                                  style: titleStyle,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: Insets.xs),
+                            OverviewNewBadge(card: card),
+                            if (pinned) ...[
+                              const SizedBox(width: Insets.xs),
+                              Icon(
+                                AppIcons.pushPinFill,
+                                key: ValueKey(
+                                  'overview-family-pinned:${card.id}',
+                                ),
+                                size: density.iconSmall,
+                                color: scheme.primary,
+                                semanticLabel: 'Pinned',
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(width: Insets.xs),
-                      OverviewNewBadge(card: card),
-                      if (pinned) ...[
-                        const SizedBox(width: Insets.xs),
-                        Icon(
-                          AppIcons.pushPinFill,
-                          key: ValueKey('overview-family-pinned:${card.id}'),
-                          size: density.iconSmall,
-                          color: scheme.primary,
-                          semanticLabel: 'Pinned',
-                        ),
-                      ],
                       const SizedBox(width: Insets.xs),
                       SizedBox(
                         key: ValueKey('overview-family-state:${card.id}'),
@@ -569,24 +685,63 @@ class _SayLines extends ConsumerWidget {
   }
 }
 
-/// A family's footer, one fixed height: Open chat, ⋯, and one primary slot
-/// of fixed width — Review N asks, Reply, Stop or Archive.
-class _FamilyFooter extends ConsumerWidget {
+/// A family's footer, one fixed height: Open chat and ⋯ from the text
+/// column's edge, and one primary slot of fixed width at the card's end —
+/// Review N asks, Reply, Stop or Archive. Reply turns the footer itself into
+/// a one-line message box, the same height, so the card never resizes.
+class _FamilyFooter extends ConsumerStatefulWidget {
   const _FamilyFooter({
     required this.node,
+    required this.text,
     required this.onOpen,
     required this.laneKey,
     required this.laneRoots,
   });
 
   final OverviewTreeNode node;
+
+  /// Where the header's text column starts, from the card's content edge.
+  final double text;
   final ValueChanged<OverviewCard> onOpen;
   final String? laneKey;
   final List<String> laneRoots;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FamilyFooter> createState() => _FamilyFooterState();
+}
+
+class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
+  /// The message box is open in place of the buttons.
+  var _replying = false;
+
+  void _close() {
+    if (mounted) setState(() => _replying = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final node = widget.node;
+    final onOpen = widget.onOpen;
+    final laneKey = widget.laneKey;
+    final laneRoots = widget.laneRoots;
     final card = node.card;
+    if (_replying) {
+      return SizedBox(
+        key: ValueKey('overview-family-reply-box:${card.id}'),
+        height: Touch.target,
+        child: Padding(
+          padding: EdgeInsetsDirectional.only(start: widget.text),
+          child: OverviewQuickComposer(
+            card: card,
+            oneLine: true,
+            autofocus: true,
+            onEscape: _close,
+            onSent: (_) => _close(),
+          ),
+        ),
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
     final density = UiDensity.of(context);
     final compact = density.compactButton;
     final slot = WidthClass.scaleBreakpoint(
@@ -610,7 +765,7 @@ class _FamilyFooter extends ConsumerWidget {
       primary = FilledButton.tonal(
         key: ValueKey('overview-family-reply:${card.id}'),
         style: compact,
-        onPressed: () => onOpen(card),
+        onPressed: () => setState(() => _replying = true),
         child: label('Reply'),
       );
     } else if (card.state == AgentState.ended) {
@@ -642,42 +797,81 @@ class _FamilyFooter extends ConsumerWidget {
         child: label('Stop'),
       );
     }
+    // Open chat's label starts where the title does: its button reaches
+    // back into the avatar's column by its own padding.
+    const openPad = Insets.md;
+    final openStyle = (compact ?? const ButtonStyle()).copyWith(
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: openPad),
+      ),
+    );
+    final lead = (widget.text - openPad).clamp(0.0, double.infinity);
     return SizedBox(
       height: Touch.target,
       child: LayoutBuilder(
         builder: (context, box) => Row(
           children: [
-            if (drag) _DragHandle(card: card),
-            Flexible(
-              child: TextButton(
-                key: ValueKey('overview-family-open:${card.id}'),
-                style: compact,
-                onPressed: () => onOpen(card),
-                // A phone's card has room for the verb alone.
-                child: label(
-                  box.maxWidth < WidthClass.mediumMin ? 'Open' : 'Open chat',
-                ),
+            SizedBox(
+              width: lead,
+              child: drag
+                  ? Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: _DragHandle(card: card),
+                    )
+                  : null,
+            ),
+            // The pair keeps its own width; what is left goes before the
+            // primary slot, which so sits at the card's end.
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: TextButton(
+                      key: ValueKey('overview-family-open:${card.id}'),
+                      style: openStyle,
+                      onPressed: () => onOpen(card),
+                      // A phone's card has room for the verb alone.
+                      child: label(
+                        box.maxWidth < WidthClass.mediumMin
+                            ? 'Open'
+                            : 'Open chat',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  // A button's face, Stop's and Archive's own, not a glyph
+                  // that reads as text.
+                  Builder(
+                    builder: (button) => Tooltip(
+                      message: 'More',
+                      child: OutlinedButton(
+                        key: ValueKey('overview-card-menu:${card.id}'),
+                        style: (compact ?? const ButtonStyle()).copyWith(
+                          padding: const WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(horizontal: Insets.sm),
+                          ),
+                          foregroundColor: WidgetStatePropertyAll(
+                            scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        onPressed: () => showOverviewFamilyMenu(
+                          button,
+                          ref,
+                          node,
+                          laneKey: laneKey,
+                          laneRoots: laneRoots,
+                        ),
+                        child: Icon(
+                          AppIcons.dotsThree,
+                          size: density.iconSize(Chrome.icon),
+                          semanticLabel: 'More',
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            Builder(
-              builder: (button) => IconButton(
-                key: ValueKey('overview-card-menu:${card.id}'),
-                tooltip: 'More',
-                visualDensity: density.controlDensity,
-                padding: EdgeInsets.zero,
-                constraints: density.iconConstraints(Chrome.control),
-                iconSize: density.iconSize(Chrome.iconSmall),
-                icon: const Icon(AppIcons.dotsThree),
-                onPressed: () => showOverviewFamilyMenu(
-                  button,
-                  ref,
-                  node,
-                  laneKey: laneKey,
-                  laneRoots: laneRoots,
-                ),
-              ),
-            ),
-            const Spacer(),
             SizedBox(
               key: ValueKey('overview-family-primary:${card.id}'),
               width: slot.clamp(0.0, box.maxWidth / 2),
@@ -859,6 +1053,11 @@ class _RootHeadState extends ConsumerState<_RootHead> {
       overviewSelectionProvider.select((s) => !s.isEmpty),
     );
     final pickable = selecting || ((_hovered || _within) && !touch);
+    // A sub-session of its own under a pointer or the keys: the quiet
+    // "this is its parent", its ring glowing as the hovered one's does.
+    final lit = ref.watch(
+      overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
+    );
     final hit = touch && Touch.target > size ? Touch.target : size;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -880,6 +1079,7 @@ class _RootHeadState extends ConsumerState<_RootHead> {
                   progress: overviewDoneShare(node),
                   waiting: overviewWaitingIn(node),
                   halo: widget.halo,
+                  glow: lit,
                 ),
               ),
             ),
@@ -1009,7 +1209,13 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final apart = widget.parent == null
         ? ''
         : watchOverviewPlaceApart(ref, card, widget.parent!);
-    final edge = _focused || selected
+    // Its family lit by a pointer or the keys elsewhere turns its own outline
+    // the accent: one line, never a ring drawn round it and its avatar.
+    final lit = ref.watch(
+      overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
+    );
+    final ringed = _focused || selected || lit;
+    final edge = ringed
         ? scheme.primary
         : hovered
         ? scheme.outline
@@ -1028,7 +1234,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
         borderRadius: BorderRadius.circular(Radii.lg),
         side: BorderSide(
           color: edge,
-          width: _focused || selected ? StateLayers.focusRingWidth * 2 : 1,
+          width: ringed ? StateLayers.focusRingWidth * 2 : 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1166,6 +1372,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final pickable = selecting || active;
     return OverviewFamilyHover(
       card: card,
+      ring: false,
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
@@ -1253,6 +1460,7 @@ class _SummaryRow extends ConsumerStatefulWidget {
 
 class _SummaryRowState extends ConsumerState<_SummaryRow> {
   var _hovered = false;
+  var _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1281,14 +1489,21 @@ class _SummaryRowState extends ConsumerState<_SummaryRow> {
         onExit: (_) => setState(() => _hovered = false),
         child: Material(
           color: fanned ? scheme.surfaceContainer : scheme.surfaceContainerLow,
+          // The rows' own outline: the accent, wider, holding the keys.
           shape: StadiumBorder(
             side: BorderSide(
-              color: fanned ? scheme.outline : scheme.outlineVariant,
+              color: _focused
+                  ? scheme.primary
+                  : fanned
+                  ? scheme.outline
+                  : scheme.outlineVariant,
+              width: _focused ? StateLayers.focusRingWidth * 2 : 1,
             ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
+            onFocusChange: (on) => setState(() => _focused = on),
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight: touch && Touch.target > widget.height

@@ -1009,13 +1009,35 @@ void main() {
       await mouse.addPointer(location: Offset.zero);
       await mouse.moveTo(tester.getCenter(parent));
       await settleMission(tester);
+      // Lit is the row's own outline in the accent, never a ring of its own.
+      final accent = Theme.of(tester.element(parent)).colorScheme.primary;
+      Color edgeOf(String id) =>
+          (tester
+                      .widget<Material>(
+                        find
+                            .ancestor(
+                              of: pill(id),
+                              matching: find.byType(Material),
+                            )
+                            .first,
+                      )
+                      .shape!
+                  as RoundedRectangleBorder)
+              .side
+              .color;
+      bool cardLit(String id) =>
+          (tester.widget<Container>(familyCard(id)).foregroundDecoration!
+                  as BoxDecoration)
+              .border !=
+          null;
       expect(
         find.byKey(const ValueKey('overview-link-lit:ks-r32-sub0')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('overview-link-lit:ks-r32-sub0-a')),
         findsNothing,
+      );
+      expect(edgeOf('ks-r32-sub0'), accent);
+      expect(
+        edgeOf('ks-r32-sub0-a'),
+        isNot(accent),
         reason: 'a grandchild is its own parent\'s',
       );
 
@@ -1026,14 +1048,11 @@ void main() {
       await mouse.moveTo(tester.getCenter(pill('ks-r32-sub0')));
       await settleMission(tester);
       expect(avatarOf('ks-r32-sub0').glow, isTrue);
-      expect(
-        find.byKey(const ValueKey('overview-link-lit:ks-r32')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('overview-link-lit:ks-r32-sub0-a')),
-        findsOneWidget,
-      );
+      // The parent, in the same card, rings nothing: its avatar glows. The
+      // grandchild lights its own row.
+      expect(cardLit('ks-r32'), isFalse);
+      expect(avatarOf('ks-r32').glow, isTrue);
+      expect(edgeOf('ks-r32-sub0-a'), accent);
       await mouse.moveTo(Offset.zero);
       await settleMission(tester);
       expect(avatarOf('ks-r32-sub0').glow, isFalse);

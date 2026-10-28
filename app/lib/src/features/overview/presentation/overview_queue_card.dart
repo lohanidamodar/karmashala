@@ -228,7 +228,12 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
           ),
           if (_replying) ...[
             const SizedBox(height: Insets.xs),
-            OverviewQuickComposer(card: card),
+            // As a card's Reply opens: the keys go in, Esc closes it.
+            OverviewQuickComposer(
+              card: card,
+              autofocus: true,
+              onEscape: () => setState(() => _replying = false),
+            ),
           ],
         ],
       ),

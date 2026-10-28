@@ -417,9 +417,8 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('Shift+Enter makes a new line, Esc clears, nothing is sent', (
-      tester,
-    ) async {
+    testWidgets('Shift+Enter makes a new line, Esc closes the box as a '
+        "card's Reply does, nothing is sent", (tester) async {
       final field = await composer(tester);
       await tester.enterText(field, 'one');
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
@@ -434,7 +433,7 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await settleMission(tester);
-      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+      expect(field, findsNothing);
       expect(sent, isEmpty);
       await unmountMission(tester);
     });
