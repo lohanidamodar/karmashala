@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/application/overview_quick_message.dart';
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_card_parts.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import 'mission_fixture.dart';
@@ -318,4 +321,134 @@ void main() {
       });
     }
   }
+
+  group('one outline', () {
+    Finder pill(String id) => byKey('overview-tree-pill:$id');
+
+    BorderSide edgeOf(WidgetTester tester, String id) =>
+        (tester
+                    .widget<Material>(
+                      find
+                          .ancestor(
+                            of: pill(id),
+                            matching: find.byType(Material),
+                          )
+                          .first,
+                    )
+                    .shape!
+                as RoundedRectangleBorder)
+            .side;
+
+    BoxDecoration? ringOf(WidgetTester tester, String id) =>
+        tester
+                .widget<Container>(byKey('overview-family:$id'))
+                .foregroundDecoration
+            as BoxDecoration?;
+
+    Color borderOf(WidgetTester tester, String id) =>
+        ((tester.widget<Container>(byKey('overview-family:$id')).decoration!
+                        as BoxDecoration)
+                    .border!
+                as Border)
+            .top
+            .color;
+
+    /// No ring is drawn round a row or a header on top of its own outline.
+    Finder extraRings() => find.byWidgetPredicate(
+      (w) => switch (w.key) {
+        ValueKey<String>(:final value) => value.startsWith(
+          'overview-link-lit:',
+        ),
+        _ => false,
+      },
+    );
+
+    const subs = ['ks-r32-sub0', 'ks-r32-sub1', 'ks-r32-sub2'];
+
+    testWidgets('a pointer over the parent: the card outlines along its own '
+        'shape, each sub-session\'s row turns its own outline the accent, and '
+        'no second line or header box is drawn', (tester) async {
+      await pump(tester);
+      final head = byKey('overview-family-head:ks-r32');
+      await reveal(tester, head);
+      final scheme = Theme.of(tester.element(head)).colorScheme;
+      expect(borderOf(tester, 'ks-r32'), scheme.outlineVariant);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: tester.getCenter(head));
+      await settleMission(tester);
+
+      expect(extraRings(), findsNothing);
+      expect(borderOf(tester, 'ks-r32'), scheme.outline);
+      expect(ringOf(tester, 'ks-r32')?.border, isNull);
+      for (final id in subs) {
+        final side = edgeOf(tester, id);
+        expect(side.color, scheme.primary, reason: id);
+        expect(side.width, StateLayers.focusRingWidth * 2, reason: id);
+      }
+      // The header draws no hover box of its own behind the title.
+      final ink = tester.widget<InkWell>(head);
+      expect(
+        ink.overlayColor?.resolve({WidgetState.hovered}),
+        Colors.transparent,
+      );
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('a pointer over a sub-session: its row outlines once, the '
+        'parent\'s card turns the accent, no ring of its own', (tester) async {
+      await pump(tester);
+      await reveal(tester, pill('ks-r32-sub1'));
+      final scheme = Theme.of(tester.element(pill('ks-r32-sub1'))).colorScheme;
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: tester.getCenter(pill('ks-r32-sub1')));
+      await settleMission(tester);
+      expect(extraRings(), findsNothing);
+      expect(edgeOf(tester, 'ks-r32-sub1').color, scheme.outline);
+      expect(ringOf(tester, 'ks-r32')?.border?.top.color, scheme.primary);
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('the keys (J/K) select with the same one accent outline, on '
+        'the card and on a row', (tester) async {
+      final c = await pump(tester);
+      await reveal(tester, pill('ks-r32-sub1'));
+      final scheme = Theme.of(tester.element(pill('ks-r32-sub1'))).colorScheme;
+      c.read(overviewFocusProvider.notifier).select('ks-r32');
+      await settleMission(tester);
+      final ring = ringOf(tester, 'ks-r32')!.border!.top;
+      expect(ring.color, scheme.primary);
+      expect(ring.width, StateLayers.focusRingWidth * 2);
+      expect(extraRings(), findsNothing);
+
+      c.read(overviewFocusProvider.notifier).select('ks-r32-sub1');
+      await settleMission(tester);
+      expect(ringOf(tester, 'ks-r32')?.border, isNull);
+      final side = edgeOf(tester, 'ks-r32-sub1');
+      expect(side.color, scheme.primary);
+      expect(side.width, ring.width, reason: 'the same ring as the card');
+      expect(extraRings(), findsNothing);
+      await unmountMission(tester);
+    });
+  });
+
+  test('a preview line is plain text: links by their label', () {
+    expect(
+      overviewPlain(
+        'It sent its report on [#6980](https://github.com/o/r/pull/6980). '
+        'See <https://example.com/x> and ![shot](a.png).\n'
+        '- **Bold** and *soft* and `code` and ~~gone~~\n'
+        '## Next\n> quoted',
+      ),
+      'It sent its report on #6980. See https://example.com/x and shot. '
+      'Bold and soft and code and gone Next quoted',
+    );
+    expect(
+      overviewPlain('snake_case_name stays, -40 stays'),
+      'snake_case_name stays, -40 stays',
+    );
+  });
 }

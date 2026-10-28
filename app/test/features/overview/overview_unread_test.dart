@@ -114,7 +114,7 @@ void main() {
     await settleMission(tester);
     expect(badgeSays('u-never', 'New'), findsOneWidget);
     expect(badge('u-read'), findsNothing);
-    expect(badgeSays('u-more', '1'), findsOneWidget);
+    expect(badgeSays('u-more', '1 new'), findsOneWidget);
 
     onDashboard.value = false;
     await settleMission(tester);
@@ -124,7 +124,7 @@ void main() {
     await settleMission(tester);
 
     expect(badgeSays('u-never', 'New'), findsOneWidget);
-    expect(badgeSays('u-more', '1'), findsOneWidget);
+    expect(badgeSays('u-more', '1 new'), findsOneWidget);
     expect(c.read(overviewSeenProvider).containsKey('u-never'), isFalse);
     await unmountMission(tester);
   });

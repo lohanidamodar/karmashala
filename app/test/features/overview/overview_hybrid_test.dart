@@ -900,7 +900,7 @@ void main() {
         await settleMission(tester);
         await tester.scrollUntilVisible(badge, 200, scrollable: hybridList);
         expect(
-          find.descendant(of: badge, matching: find.text('3')),
+          find.descendant(of: badge, matching: find.text('3 new')),
           findsOneWidget,
         );
 

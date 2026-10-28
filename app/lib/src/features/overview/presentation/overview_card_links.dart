@@ -15,17 +15,23 @@ final _drawn = <String, BuildContext>{};
 /// the keys, [child] lights its parent and its sub-sessions and is lit by
 /// them, ringed in the accent along a [radius]; and it can be jumped to
 /// ([overviewJumpTo]).
+///
+/// Given [ring] false it draws no ring of its own: a surface with an
+/// outline already, a family card or a sub-session's row, turns that
+/// outline into the accent itself ([overviewLinkLit]), so one line is drawn.
 class OverviewFamilyHover extends ConsumerStatefulWidget {
   const OverviewFamilyHover({
     required this.card,
     required this.child,
     this.radius = Radii.lg,
+    this.ring = true,
     super.key,
   });
 
   final OverviewCard card;
   final Widget child;
   final double radius;
+  final bool ring;
 
   @override
   ConsumerState<OverviewFamilyHover> createState() =>
@@ -59,9 +65,11 @@ class _OverviewFamilyHoverState extends ConsumerState<OverviewFamilyHover> {
   Widget build(BuildContext context) {
     _drawn[_id] = context;
     final card = widget.card;
-    final lit = ref.watch(
-      overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
-    );
+    final lit =
+        widget.ring &&
+        ref.watch(
+          overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
+        );
     final body = MouseRegion(
       onEnter: (_) => _enter(),
       onExit: (_) => _leave(),

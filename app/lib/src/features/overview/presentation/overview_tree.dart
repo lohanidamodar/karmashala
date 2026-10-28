@@ -72,6 +72,15 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
   /// The rows past [OverviewFamilyTree.shownRows] are drawn too.
   var _showAll = false;
 
+  /// The header holds the keys: the card's outline says so.
+  final _headFocused = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _headFocused.dispose();
+    super.dispose();
+  }
+
   double get _rootSize =>
       widget.compact ? Chrome.sessionAvatarCompact : Chrome.sessionAvatar;
   double get _kidSize =>
@@ -248,27 +257,12 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
       label: node.children.isEmpty
           ? root.entry.title
           : '${root.entry.title} and its sub-sessions',
-      child: Container(
-        key: ValueKey('overview-family:${root.id}'),
-        // The footer's target is taller than its buttons: the card's
-        // bottom edge gives back that slack, so the space under them reads
-        // as the space over the avatar.
-        padding: EdgeInsets.fromLTRB(pad, pad, pad, Insets.xs),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: scheme.outlineVariant),
-        ),
-        // The keyboard's ring is drawn over the edge, so it moves nothing.
-        foregroundDecoration: selected
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(Radii.lg),
-                border: Border.all(
-                  color: scheme.primary,
-                  width: StateLayers.focusRingWidth * 2,
-                ),
-              )
-            : null,
+      child: _FamilyFrame(
+        card: root,
+        selected: selected,
+        headFocused: _headFocused,
+        pad: pad,
+        surface: surface,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -332,15 +326,102 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
         constraints: BoxConstraints(minHeight: size),
         child: Padding(
           padding: EdgeInsets.only(left: size + Insets.sm),
+          // Lit, it is the card's outline that turns the accent.
           child: OverviewFamilyHover(
             card: card,
+            ring: false,
             child: _FamilyHeader(
               node: node,
               onOpen: widget.onOpen,
               wide: widget.wide,
+              onFocus: (on) => _headFocused.value = on,
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A family card's surface and its one outline, along the card's own
+/// rounded edge: the accent, wider, when it is selected, lit by its family
+/// or its header holds the keys; [Theme]'s outline under a pointer; the
+/// quiet outline otherwise. Drawn over the edge, so nothing moves.
+class _FamilyFrame extends ConsumerStatefulWidget {
+  const _FamilyFrame({
+    required this.card,
+    required this.selected,
+    required this.headFocused,
+    required this.pad,
+    required this.surface,
+    required this.child,
+  });
+
+  final OverviewCard card;
+  final bool selected;
+  final ValueNotifier<bool> headFocused;
+  final double pad;
+  final Color surface;
+  final Widget child;
+
+  @override
+  ConsumerState<_FamilyFrame> createState() => _FamilyFrameState();
+}
+
+class _FamilyFrameState extends ConsumerState<_FamilyFrame> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = widget.card;
+    final scheme = Theme.of(context).colorScheme;
+    final touch = UiDensity.of(context).isTouch;
+    final lit = ref.watch(
+      overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
+    );
+    final radius = BorderRadius.circular(Radii.lg);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: widget.headFocused,
+        builder: (context, focused, child) {
+          final ringed = widget.selected || lit || focused;
+          return Container(
+            key: ValueKey('overview-family:${card.id}'),
+            // The footer's target is taller than its buttons: the card's
+            // bottom edge gives back that slack, so the space under them
+            // reads as the space over the avatar.
+            padding: EdgeInsets.fromLTRB(
+              widget.pad,
+              widget.pad,
+              widget.pad,
+              Insets.xs,
+            ),
+            decoration: BoxDecoration(
+              color: widget.surface,
+              borderRadius: radius,
+              border: Border.all(
+                color: _hovered && !touch
+                    ? scheme.outline
+                    : scheme.outlineVariant,
+              ),
+            ),
+            // Always there, so lighting it never remounts the card and takes
+            // the keys from a row inside it.
+            foregroundDecoration: BoxDecoration(
+              borderRadius: radius,
+              border: ringed
+                  ? Border.all(
+                      color: scheme.primary,
+                      width: StateLayers.focusRingWidth * 2,
+                    )
+                  : null,
+            ),
+            child: child,
+          );
+        },
+        child: widget.child,
       ),
     );
   }
@@ -373,11 +454,15 @@ class _FamilyHeader extends ConsumerWidget {
     required this.node,
     required this.onOpen,
     required this.wide,
+    required this.onFocus,
   });
 
   final OverviewTreeNode node;
   final ValueChanged<OverviewCard> onOpen;
   final bool wide;
+
+  /// It took or lost the keys: the card, not the header, draws the ring.
+  final ValueChanged<bool> onFocus;
 
   /// The most of the meta line "2/4 finished" and the agent take, wide.
   static const _metaShare = 0.5;
@@ -416,7 +501,11 @@ class _FamilyHeader extends ConsumerWidget {
       type: MaterialType.transparency,
       child: InkWell(
         key: ValueKey('overview-family-head:${card.id}'),
-        borderRadius: BorderRadius.circular(Radii.sm),
+        // No box of its own behind the title and text: hover, focus and a
+        // press show on the card's outline, along the card's shape.
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        splashFactory: NoSplash.splashFactory,
+        onFocusChange: onFocus,
         onTap: () {
           if (!overviewPickSelects(ref, card, touch: touch)) onOpen(card);
         },
@@ -1104,7 +1193,13 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final apart = widget.parent == null
         ? ''
         : watchOverviewPlaceApart(ref, card, widget.parent!);
-    final edge = _focused || selected
+    // Its family lit by a pointer or the keys elsewhere turns its own outline
+    // the accent: one line, never a ring drawn round it and its avatar.
+    final lit = ref.watch(
+      overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
+    );
+    final ringed = _focused || selected || lit;
+    final edge = ringed
         ? scheme.primary
         : hovered
         ? scheme.outline
@@ -1123,7 +1218,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
         borderRadius: BorderRadius.circular(Radii.lg),
         side: BorderSide(
           color: edge,
-          width: _focused || selected ? StateLayers.focusRingWidth * 2 : 1,
+          width: ringed ? StateLayers.focusRingWidth * 2 : 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1261,6 +1356,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
     final pickable = selecting || active;
     return OverviewFamilyHover(
       card: card,
+      ring: false,
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
@@ -1348,6 +1444,7 @@ class _SummaryRow extends ConsumerStatefulWidget {
 
 class _SummaryRowState extends ConsumerState<_SummaryRow> {
   var _hovered = false;
+  var _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1376,14 +1473,21 @@ class _SummaryRowState extends ConsumerState<_SummaryRow> {
         onExit: (_) => setState(() => _hovered = false),
         child: Material(
           color: fanned ? scheme.surfaceContainer : scheme.surfaceContainerLow,
+          // The rows' own outline: the accent, wider, holding the keys.
           shape: StadiumBorder(
             side: BorderSide(
-              color: fanned ? scheme.outline : scheme.outlineVariant,
+              color: _focused
+                  ? scheme.primary
+                  : fanned
+                  ? scheme.outline
+                  : scheme.outlineVariant,
+              width: _focused ? StateLayers.focusRingWidth * 2 : 1,
             ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
+            onFocusChange: (on) => setState(() => _focused = on),
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight: touch && Touch.target > widget.height

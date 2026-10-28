@@ -14,10 +14,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 
 import '../test/features/overview/mission_fixture.dart';
 
@@ -27,6 +30,7 @@ const _outDir = String.fromEnvironment(
 );
 const _tag = String.fromEnvironment('SHOT_TAG', defaultValue: 'shot');
 const _reply = bool.fromEnvironment('SHOT_REPLY');
+const _hover = bool.fromEnvironment('SHOT_HOVER');
 
 const _cards = ['ks-r30', 'ks-r32', 'ks-r21', 'ks-r29', 'web-blog'];
 
@@ -52,9 +56,11 @@ void main() {
     required Size size,
     double textScale = 1,
     bool reply = false,
+    Future<void> Function(WidgetTester, ProviderContainer)? act,
+    List<String>? only,
   }) async {
     final key = GlobalKey();
-    await pumpMission(
+    final container = await pumpMission(
       tester,
       fixture: MissionFixture.full(),
       prefsDir: Directory.systemTemp.createTempSync('ks-r119-shot'),
@@ -77,13 +83,17 @@ void main() {
       );
       await settleMission(tester);
     }
+    if (act != null) {
+      await act(tester, container);
+      await settleMission(tester);
+    }
     await tester.runAsync(() async {
       final render =
           key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final origin = render.localToGlobal(Offset.zero);
       final image = await render.toImage(pixelRatio: 1);
       Directory(_outDir).createSync(recursive: true);
-      for (final id in reply ? const ['ks-r30'] : _cards) {
+      for (final id in only ?? (reply ? const ['ks-r30'] : _cards)) {
         final card = find.byKey(ValueKey('overview-family:$id'));
         if (card.evaluate().isEmpty) continue;
         final rect = tester.getRect(card).shift(-origin).inflate(8);
@@ -115,6 +125,45 @@ void main() {
     '360, text 1.6',
     (t) => shoot(t, '360-x16', size: const Size(360, 9000), textScale: 1.6),
   );
+  if (_hover) {
+    Future<void> point(WidgetTester tester, String key) async {
+      final at = find.byKey(ValueKey(key));
+      await tester.ensureVisible(at);
+      await settleMission(tester);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(at));
+      addTearDown(mouse.removePointer);
+      await tester.pump();
+    }
+
+    for (final (name, act)
+        in <(String, Future<void> Function(WidgetTester, ProviderContainer))>[
+          ('hover-parent', (t, _) => point(t, 'overview-family-head:ks-r32')),
+          ('hover-sub', (t, _) => point(t, 'overview-tree-pill:ks-r32-sub2')),
+          ('hover-more', (t, _) => point(t, 'overview-card-menu:ks-r32')),
+          (
+            'keys-parent',
+            (t, c) async =>
+                c.read(overviewFocusProvider.notifier).select('ks-r32'),
+          ),
+          (
+            'keys-sub',
+            (t, c) async =>
+                c.read(overviewFocusProvider.notifier).select('ks-r32-sub2'),
+          ),
+        ]) {
+      testWidgets(
+        name,
+        (t) => shoot(
+          t,
+          '1440-$name',
+          size: const Size(1440, 1400),
+          act: act,
+          only: const ['ks-r32'],
+        ),
+      );
+    }
+  }
   if (_reply) {
     for (final (name, size, scale) in const [
       ('1440', Size(1440, 1400), 1.0),
