@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch_actions.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionsArchived;
 import 'package:karmashala_ui/menus.dart';
@@ -106,17 +107,18 @@ void main() {
   });
 
   group('the selection', () {
-    test('toggles, extends from the last pick, and clears', () {
+    test('toggles, remembers the last pick, and clears', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       final keep = container.listen(overviewSelectionProvider, (_, _) {});
       addTearDown(keep.close);
       final selection = container.read(overviewSelectionProvider.notifier);
       selection.toggle('b');
-      selection.extendTo('d', ['a', 'b', 'c', 'd', 'e']);
-      expect(container.read(overviewSelectionProvider).ids, {'b', 'c', 'd'});
-      selection.toggle('c');
+      selection.toggle('d');
       expect(container.read(overviewSelectionProvider).ids, {'b', 'd'});
+      expect(container.read(overviewSelectionProvider).anchor, 'd');
+      selection.toggle('b');
+      expect(container.read(overviewSelectionProvider).ids, {'d'});
       selection.clear();
       expect(container.read(overviewSelectionProvider).isEmpty, isTrue);
       selection.selectAll(['x', 'y']);
@@ -361,40 +363,107 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('Ctrl-click picks, Shift-click spans, Esc clears', (
-      tester,
-    ) async {
-      await pump(tester);
-      Future<void> clickWith(LogicalKeyboardKey key, String id) async {
-        final title = find.byKey(ValueKey('overview-queue-title:$id'));
+    // A modifier Windows left "held" behind a shortcut — Win+Shift+S, Alt+Tab
+    // — once turned every click into a pick, and no card opened again
+    // (owner, 2026-10-28). Only the box picks.
+    for (final key in [
+      LogicalKeyboardKey.shiftLeft,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.metaLeft,
+    ]) {
+      testWidgets('with ${key.keyLabel} held, a click on a card and on a '
+          'tree root opens it and picks nothing', (tester) async {
+        final c = await pump(tester);
+        String? peeked() => c.read(overviewFocusProvider).peeked;
+        final title = find.byKey(const ValueKey('overview-queue-title:r21'));
+        final root = find.byKey(
+          const ValueKey('overview-family-head:ks-release'),
+        );
         await tester.ensureVisible(title);
         await tester.sendKeyDownEvent(key);
+        expect(HardwareKeyboard.instance.logicalKeysPressed, contains(key));
         await tester.tap(title);
-        await tester.sendKeyUpEvent(key);
         await settleMission(tester);
-      }
+        expect(peeked(), 'r21');
+        await tester.ensureVisible(root);
+        await settleMission(tester);
+        await tester.tap(root);
+        await settleMission(tester);
+        expect(peeked(), 'ks-release');
+        expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
+        expect(bar, findsNothing);
+        await tester.sendKeyUpEvent(key);
+        await unmountMission(tester);
+      });
+    }
 
-      await clickWith(LogicalKeyboardKey.controlLeft, 'r21');
-      expect(find.text('1 selected'), findsOneWidget);
-      await clickWith(LogicalKeyboardKey.shiftLeft, 'r23');
-      expect(find.text('3 selected'), findsOneWidget);
-      // Picking is not opening.
-      expect(find.byKey(const ValueKey('overview-peek')), findsNothing);
-
+    testWidgets('a long press picks nothing: it opens the card\'s menu', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      final root = find.byKey(
+        const ValueKey('overview-family-head:ks-release'),
+      );
+      await tester.ensureVisible(root);
+      await settleMission(tester);
+      await tester.longPress(root);
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
+      expect(
+        find.byKey(const ValueKey('overview-card-menu:pin')),
+        findsOneWidget,
+      );
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await settleMission(tester);
+      await unmountMission(tester);
+    });
+
+    testWidgets('the box toggles, another card\'s box adds, and a click on a '
+        'card still opens it while some are picked', (tester) async {
+      final c = await pump(tester);
+      await pick(tester, 'r21');
+      await pick(tester, 'r22');
+      expect(find.text('2 selected'), findsOneWidget);
+      await pick(tester, 'r21');
+      expect(c.read(overviewSelectionProvider).ids, {'r22'});
+      await pick(tester, 'r21');
+      expect(find.text('2 selected'), findsOneWidget);
+
+      final title = find.byKey(const ValueKey('overview-queue-title:r23'));
+      await tester.ensureVisible(title);
+      await tester.tap(title);
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'r23');
+      // Opening leaves the selection as it was.
+      expect(c.read(overviewSelectionProvider).ids, {'r21', 'r22'});
+      await unmountMission(tester);
+    });
+
+    testWidgets('Esc empties the selection, and so does the bar\'s Clear', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      await pick(tester, 'r21');
+      await pick(tester, 'r22');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
+      expect(bar, findsNothing);
+
+      await pick(tester, 'r21');
+      await tester.tap(find.byKey(const ValueKey('overview-batch-clear')));
+      await settleMission(tester);
+      expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
       expect(bar, findsNothing);
       await unmountMission(tester);
     });
 
-    testWidgets('Ctrl+A picks every family in the lane of the selected one', (
+    testWidgets('Ctrl+A picks every family in the lane of the last pick', (
       tester,
     ) async {
       final c = await pump(tester);
-      final title = find.byKey(const ValueKey('overview-queue-title:r21'));
-      await tester.ensureVisible(title);
+      await pick(tester, 'r21');
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.tap(title);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await settleMission(tester);
@@ -466,10 +535,10 @@ void main() {
       await unmountMission(tester);
     });
 
-    // A tree's root carries its box on its avatar, only while picking
-    // (owner, 2026-10-14); a long press starts that.
+    // A tree's root carries its box on its avatar (owner, 2026-10-14); under
+    // a thumb always, as the box is the only way to pick (round 124).
     testWidgets('under a thumb a waiting row has its box, and a tree root '
-        'none at rest', (tester) async {
+        'its own on its avatar', (tester) async {
       await pump(tester, size: const Size(412, 780), phone: true);
       expect(box('r21'), findsOneWidget);
       // The drawer closed, the board under it.
@@ -480,16 +549,15 @@ void main() {
       );
       await tester.scrollUntilVisible(root, 200, scrollable: hybridList);
       expect(box('ks-release'), findsNothing);
-      expect(treeBox('ks-release'), findsNothing);
+      expect(treeBox('ks-release'), findsOneWidget);
       expect(bar, findsNothing);
       expect(tester.takeException(), isNull);
       await unmountMission(tester);
     });
 
-    testWidgets('on the phone a long press picks and the bar fits', (
-      tester,
-    ) async {
-      await pump(tester, size: const Size(360, 780), phone: true);
+    testWidgets('on the phone a tap on a row opens it while some are picked, '
+        'a long press picks nothing, and the bar fits', (tester) async {
+      final c = await pump(tester, size: const Size(360, 780), phone: true);
       await pick(tester, 'r21');
       expect(find.text('1 selected'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('overview-drawer-close')));
@@ -500,7 +568,14 @@ void main() {
       await settleMission(tester);
       await tester.longPress(row);
       await settleMission(tester);
-      expect(find.text('2 selected'), findsOneWidget);
+      expect(find.text('1 selected'), findsOneWidget);
+      // Its menu, closed again.
+      await tester.tapAt(const Offset(4, 4));
+      await settleMission(tester);
+      await tester.tap(row);
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, 'ks-release');
+      expect(c.read(overviewSelectionProvider).ids, {'r21'});
       expect(tester.takeException(), isNull);
       await unmountMission(tester);
     });

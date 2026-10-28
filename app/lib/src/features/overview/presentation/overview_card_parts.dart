@@ -391,10 +391,8 @@ class OverviewPhoneRow extends ConsumerWidget {
         color: selected ? StateLayers.selected(scheme) : Colors.transparent,
         child: InkWell(
           key: ValueKey('overview-phone-row:${card.id}'),
-          onTap: () {
-            if (!overviewPickSelects(ref, card, touch: true)) onOpen(card);
-          },
-          onLongPress: () => overviewPickSelects(ref, card, long: true),
+          onTap: () => onOpen(card),
+          onLongPress: () => showOverviewCardMenu(context, ref, card),
           onSecondaryTapUp: (details) => showOverviewCardMenu(
             context,
             ref,
@@ -427,7 +425,7 @@ class OverviewPhoneRow extends ConsumerWidget {
                       card.entry.title,
                       titleStyle,
                     ),
-                    // A long press selects the row; hover names it whole.
+                    // A long press opens its menu; hover names it whole.
                     title: TruncatedText(
                       card.entry.title,
                       textKey: ValueKey('overview-card-title:${card.id}'),

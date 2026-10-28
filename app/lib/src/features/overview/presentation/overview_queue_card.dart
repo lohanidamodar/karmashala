@@ -15,7 +15,6 @@ import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../application/overview_board.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_quick_message.dart';
-import 'overview_batch_bar.dart';
 import 'overview_cards.dart';
 import 'overview_quick_composer.dart';
 import 'overview_session_parts.dart';
@@ -251,9 +250,7 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
             child: InkWell(
               key: ValueKey('overview-queue-title:${card.id}'),
               borderRadius: BorderRadius.circular(Radii.sm),
-              onTap: () {
-                if (!overviewPickSelects(ref, card)) widget.onOpen(card);
-              },
+              onTap: () => widget.onOpen(card),
               child: OverviewCardHeader(
                 card: card,
                 chip: OverviewStateChip(

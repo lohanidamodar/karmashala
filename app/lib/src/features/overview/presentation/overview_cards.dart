@@ -80,14 +80,10 @@ class OverviewCardFrame extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: radius,
-        onTap: onOpen == null
-            ? null
-            : () {
-                if (!overviewPickSelects(ref, card, touch: _touch(context))) {
-                  onOpen!(card);
-                }
-              },
-        onLongPress: () => overviewPickSelects(ref, card, long: true),
+        // A tap always opens: only the pick box picks.
+        onTap: onOpen == null ? null : () => onOpen!(card),
+        // A long press is a thumb's right-click: the card's ⋯.
+        onLongPress: () => showOverviewCardMenu(context, ref, card),
         // A right-click opens the card's ⋯ where the pointer is.
         onSecondaryTapUp: (details) => showOverviewCardMenu(
           context,
@@ -106,8 +102,6 @@ class OverviewCardFrame extends ConsumerWidget {
     );
   }
 }
-
-bool _touch(BuildContext context) => UiDensity.of(context).isTouch;
 
 /// Title, where it runs, and the state chip.
 class OverviewCardHeader extends ConsumerWidget {
@@ -175,7 +169,7 @@ class OverviewCardHeader extends ConsumerWidget {
                 if (parent != null) 'from $parent',
               ].join(', '),
               excludeSemantics: true,
-              // A long press selects the card; hover names it whole.
+              // A long press opens the card's menu; hover names it whole.
               child: TruncatedText(
                 card.entry.title,
                 textKey: ValueKey('overview-card-title:${card.id}'),

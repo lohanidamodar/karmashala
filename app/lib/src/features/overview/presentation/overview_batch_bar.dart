@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -35,7 +34,7 @@ List<OverviewCard> overviewSelectedCards(WidgetRef ref) {
   ];
 }
 
-/// The ids ↑ and ↓ walk, and a Shift-click spans: as the board draws them,
+/// The ids ↑ and ↓ walk: as the board draws them,
 /// a pinned session on no tree first, as its strip is drawn first.
 List<String> overviewDrawnOrder(WidgetRef ref) {
   final statusOf = ref.read(sessionStatusLookupProvider);
@@ -55,31 +54,10 @@ List<String> overviewDrawnOrder(WidgetRef ref) {
   ];
 }
 
-/// A pick with Ctrl or Shift held, a long press, or under a thumb while some
-/// are picked: true when it changed the selection rather than meaning "open".
-bool overviewPickSelects(
-  WidgetRef ref,
-  OverviewCard card, {
-  bool long = false,
-  bool touch = false,
-}) {
-  final keys = HardwareKeyboard.instance;
-  final selection = ref.read(overviewSelectionProvider.notifier);
-  if (keys.isShiftPressed && !touch) {
-    selection.extendTo(card.id, overviewDrawnOrder(ref));
-    return true;
-  }
-  if (long ||
-      keys.isControlPressed ||
-      keys.isMetaPressed ||
-      (touch && !ref.read(overviewSelectionProvider).isEmpty)) {
-    selection.toggle(card.id);
-    return true;
-  }
-  return false;
-}
-
-/// Whether a card's checkbox is drawn: always under a thumb; with a pointer,
+/// Whether a card's checkbox is drawn — the only way to pick one: a click,
+/// a modifier-click or a long press on the card never does, since a modifier
+/// Windows left "held" behind a shortcut once turned every click into one
+/// (round 124). Drawn always under a thumb; with a pointer,
 /// on the card hovered or holding focus, on what waits on you once there is
 /// more than one to answer, and on every card while some are picked.
 bool watchOverviewSelectable(
