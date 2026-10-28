@@ -89,6 +89,42 @@ void main() {
     await unmountMission(tester);
   });
 
+  /// The board's family card for `ks-r21` says where it runs on its meta
+  /// line, wide and on a phone, and each toggle hides its own part there.
+  for (final phone in [false, true]) {
+    testWidgets('the family card\'s meta line follows Show on cards '
+        '(${phone ? 'phone' : 'wide'})', (tester) async {
+      final c = await pumpMission(
+        tester,
+        fixture: filed(),
+        prefsDir: dir,
+        size: phone ? const Size(390, 844) : const Size(1440, 900),
+        phone: phone,
+      );
+      String meta() => tester
+          .widget<Text>(
+            find.byKey(const ValueKey('overview-family-meta:ks-r21')),
+          )
+          .data!;
+      expect(meta(), contains('Apps · karmashala · Windows'));
+
+      final prefs = c.read(overviewPrefsProvider.notifier);
+      prefs.setDetailShown(OverviewCardDetail.machine, false);
+      await settleMission(tester);
+      expect(meta(), contains('Apps · karmashala'));
+      expect(meta(), isNot(contains('Windows')));
+
+      prefs
+        ..setDetailShown(OverviewCardDetail.project, false)
+        ..setDetailShown(OverviewCardDetail.context, false);
+      await settleMission(tester);
+      expect(meta(), isNot(contains('karmashala')));
+      expect(meta(), isNot(contains('Apps')));
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+  }
+
   test('the prefs round-trip the hidden parts, and ignore unknown names', () {
     const prefs = OverviewPrefs(
       hiddenDetails: {OverviewCardDetail.context, OverviewCardDetail.machine},

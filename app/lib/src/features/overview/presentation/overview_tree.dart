@@ -500,8 +500,11 @@ class _FamilyHeader extends ConsumerWidget {
     final started = MaterialLocalizations.of(
       context,
     ).formatTimeOfDay(TimeOfDay.fromDateTime(card.entry.createdAt.toLocal()));
+    // Where it runs comes before the agent: it is what "Show on cards" asks
+    // for, so it holds on a phone too.
     final meta = [
       if (kids > 0) '${overviewFinishedBelow(node)}/$kids finished',
+      if (place.isNotEmpty) place,
       if (wide) ...[?agent, 'started $started'],
     ].join(' · ');
     final titleStyle = theme.textTheme.bodyMedium?.copyWith(
