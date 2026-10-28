@@ -220,7 +220,7 @@ Future<void> _peek(WidgetTester tester) async {
     final strip = _byKey('overview-waiting-toggle');
     await _tap(
       tester,
-      strip.evaluate().isNotEmpty ? strip : _byKey('overview-bar-waiting'),
+      strip.evaluate().isNotEmpty ? strip : _byKey('overview-strip-waiting'),
     );
   }
   await _tap(tester, _byKey('overview-queue-title:ks-r21'));

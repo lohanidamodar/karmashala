@@ -154,18 +154,22 @@ void main() {
       // karmashala alone: nothing failed there.
       c.read(overviewPrefsProvider.notifier).setProjects({'p-ks'});
       await settleMission(tester);
-      // A part at zero is left out; one with something in it is drawn.
+      // A part at zero is left out; one with something in it is drawn. The
+      // strip's "N waiting" stands in for "needs you", always there.
       final today = c.read(overviewTodayProvider);
       for (final part in OverviewTodayPart.values) {
         expect(
           byKey('overview-today:${part.name}'),
-          today.countOf(part) > 0 ? findsOneWidget : findsNothing,
+          part != OverviewTodayPart.needsYou && today.countOf(part) > 0
+              ? findsOneWidget
+              : findsNothing,
           reason: part.name,
         );
       }
-      // One line in the strip: a chip's height, not two.
+      expect(byKey('overview-strip-waiting'), findsOneWidget);
+      // One line in the strip, counts and lanes: a chip's height, not two.
       expect(
-        tester.getSize(byKey('overview-strip-counts')).height,
+        tester.getSize(byKey('overview-strip')).height,
         lessThanOrEqualTo(
           tester.getSize(byKey('overview-today:running')).height,
         ),

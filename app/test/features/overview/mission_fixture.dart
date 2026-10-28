@@ -854,19 +854,51 @@ Future<void> unmountMission(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 1));
 }
 
-/// Opens the waiting drawer from the strip, or a phone's bottom bar.
+/// Opens the waiting drawer from the strip's Waiting, or a phone strip's
+/// "N waiting".
 Future<void> openWaiting(WidgetTester tester) async {
   final strip = find.byKey(const ValueKey('overview-waiting-toggle'));
   await tester.tap(
     strip.evaluate().isNotEmpty
         ? strip
-        : find.byKey(const ValueKey('overview-bar-waiting')),
+        : find.byKey(const ValueKey('overview-strip-waiting')),
   );
+  await settleMission(tester);
+}
+
+/// Turns Activity on or off: the strip's toggle, or on a phone-width board
+/// the switch in the filter popover, which is closed again after.
+Future<void> toggleActivity(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('overview-more-toggle'));
+  if (toggle.evaluate().isNotEmpty) {
+    await tester.tap(toggle);
+    await settleMission(tester);
+    return;
+  }
+  await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
+  await settleMission(tester);
+  await tester.tap(toggle);
+  await settleMission(tester);
+  Navigator.of(tester.element(toggle)).pop();
   await settleMission(tester);
 }
 
 /// A family's card on the dashboard, by its root's id.
 Finder familyCard(String id) => find.byKey(ValueKey('overview-family:$id'));
+
+/// Where the board's first family card starts: the least top of any drawn.
+double firstFamilyTop(WidgetTester tester) {
+  final families = find.byWidgetPredicate(
+    (w) => switch (w.key) {
+      ValueKey<String>(:final value) => value.startsWith('overview-family:'),
+      _ => false,
+    },
+  );
+  final count = families.evaluate().length;
+  return [
+    for (var i = 0; i < count; i++) tester.getTopLeft(families.at(i)).dy,
+  ].reduce((a, b) => a < b ? a : b);
+}
 
 /// The Overview's own list, for a scroll that must not pick a text field's.
 final Finder hybridList = find

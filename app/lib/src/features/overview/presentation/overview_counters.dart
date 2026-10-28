@@ -17,17 +17,30 @@ import '../application/overview_tiles.dart';
 import '../application/overview_today.dart';
 import 'overview_session_parts.dart' show watchOverviewLine;
 
+/// The face height of the dashboard strip's compact chips — the counts and
+/// the lane chips: [Touch.compactControl] under a thumb, [Chrome.control]
+/// under a pointer.
+double overviewCompactChipHeight(BuildContext context) =>
+    UiDensity.of(context).isTouch ? Touch.compactControl : Chrome.control;
+
 /// **Today**, at the top of the Board: what needs you — how long the oldest
 /// has waited and what it asks — what finished since you last looked, what
 /// is stuck, and what runs. Each part filters the Board and taps again to
 /// clear; a part with nothing in it is left out.
 ///
-/// [compact], where the row is narrow, draws one line for the caller to
-/// slide sideways; otherwise the parts wrap as chips.
+/// [compact], where the row is narrow, draws one line of compact chips for
+/// the caller to slide sideways; otherwise the parts wrap as chips.
 class OverviewTodayStrip extends ConsumerWidget {
-  const OverviewTodayStrip({this.compact = false, super.key});
+  const OverviewTodayStrip({
+    this.compact = false,
+    this.withNeedsYou = true,
+    super.key,
+  });
 
   final bool compact;
+
+  /// False where a waiting count beside it stands for "needs you".
+  final bool withNeedsYou;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,7 +57,9 @@ class OverviewTodayStrip extends ConsumerWidget {
         : watchOverviewLine(ref, firstCard);
     final shown = [
       for (final part in OverviewTodayPart.values)
-        if (today.countOf(part) > 0 || part.selectedIn(filter)) part,
+        if ((today.countOf(part) > 0 || part.selectedIn(filter)) &&
+            (withNeedsYou || part != OverviewTodayPart.needsYou))
+          part,
     ];
     if (shown.isEmpty && hidden == 0) {
       final theme = Theme.of(context);
@@ -77,6 +92,7 @@ class OverviewTodayStrip extends ConsumerWidget {
           part: part,
           today: today,
           question: part == OverviewTodayPart.needsYou ? question : null,
+          compact: compact,
           selected: part.selectedIn(filter),
           onTap: () => toggle(part),
           onSeen: part == OverviewTodayPart.finished
@@ -122,6 +138,7 @@ class _TodayChip extends StatelessWidget {
     required this.onTap,
     this.question,
     this.onSeen,
+    this.compact = false,
   });
 
   final OverviewTodayPart part;
@@ -130,6 +147,9 @@ class _TodayChip extends StatelessWidget {
   final VoidCallback onTap;
   final String? question;
   final VoidCallback? onSeen;
+
+  /// In a compact strip, a thumb gets the compact face.
+  final bool compact;
 
   /// The widest the first question is drawn, at 1x text.
   static const _questionWidth = Insets.xxl * 5;
@@ -141,6 +161,9 @@ class _TodayChip extends StatelessWidget {
     final semantic = SemanticColors.of(context);
     final density = UiDensity.of(context);
     final count = today.countOf(part);
+    final minHeight = compact && density.isTouch
+        ? Touch.compactControl
+        : density.minRow;
     final live = count > 0;
     final hue = switch (part) {
       OverviewTodayPart.needsYou => semantic.attention,
@@ -187,7 +210,7 @@ class _TodayChip extends StatelessWidget {
         borderRadius: radius,
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: density.minRow),
+          constraints: BoxConstraints(minHeight: minHeight),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: Insets.sm,
@@ -286,7 +309,9 @@ class _TodayChip extends StatelessWidget {
           style: TextButton.styleFrom(
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-            minimumSize: Size(0, density.minRow),
+            minimumSize: Size(0, minHeight),
+            // A compact strip's row is the chips' face high.
+            tapTargetSize: compact ? MaterialTapTargetSize.shrinkWrap : null,
           ),
           onPressed: onSeen,
           child: const Text('Seen'),

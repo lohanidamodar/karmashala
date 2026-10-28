@@ -22,10 +22,11 @@ import 'overview_card_parts.dart';
 import 'overview_filters.dart';
 import 'overview_glances.dart';
 import 'overview_heartbeat.dart';
-import 'overview_phone_bar.dart';
+import 'overview_phone_strip.dart';
 import 'overview_pins.dart';
 import 'overview_pipeline_lane.dart';
 import 'overview_queue_card.dart';
+import 'overview_search_sheet.dart';
 import 'overview_strip.dart';
 import 'overview_tree.dart';
 import 'overview_waiting_lane.dart';
@@ -114,8 +115,8 @@ Map<String, int> overviewDepthsIn(List<OverviewCard> cards) {
   return {for (final card in cards) card.id: depthOf(card.id)};
 }
 
-/// **The Overview, hybrid**: a slim strip on top, the lane chips under it,
-/// then every family in its fixed place, lane by lane. What waits on you is
+/// **The Overview, hybrid**: a slim strip on top, the lane chips under it
+/// — on a phone, one row of both — then every family in its fixed place, lane by lane. What waits on you is
 /// in the waiting drawer, over the board, so opening it moves nothing.
 class OverviewHybrid extends ConsumerStatefulWidget {
   const OverviewHybrid({
@@ -151,9 +152,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   /// Each lane's header, for its chip to scroll to and to light the chip of
   /// the lane on screen.
   final _laneKeys = <String, GlobalKey>{};
-
-  /// Each lane chip's focus, for the phone bar's Lanes to reach.
-  final _chipFocus = <String, FocusNode>{};
   final _scroll = ScrollController();
   final _viewport = GlobalKey();
   String? _laneOnScreen;
@@ -172,9 +170,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
   @override
   void dispose() {
     _scroll.dispose();
-    for (final node in _chipFocus.values) {
-      node.dispose();
-    }
     super.dispose();
   }
 
@@ -255,23 +250,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     );
   }
 
-  /// The phone bar's Lanes: the chip of the lane on screen brought into
-  /// view and given the focus.
-  void _showLanes() {
-    final lane = _laneOnScreen ?? _lanes.firstOrNull;
-    final node = lane == null ? null : _chipFocus[lane];
-    final chip = node?.context;
-    if (node == null || chip == null) return;
-    node.requestFocus();
-    unawaited(
-      Scrollable.ensureVisible(
-        chip,
-        duration: Motion.of(context).base,
-        alignment: 0.5,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     ref.listen(overviewRevealProvider, (_, asked) {
@@ -306,11 +284,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     final onOpen = widget.onOpen;
     _lanes = [for (final (lane, _) in forest.lanes) lane.key];
     _laneKeys.removeWhere((key, _) => !_lanes.contains(key));
-    _chipFocus.removeWhere((key, node) {
-      if (_lanes.contains(key)) return false;
-      node.dispose();
-      return true;
-    });
     final searchSheet = ref.watch(overviewSearchSheetProvider);
     final fresh = [
       for (final card in overviewForestMembers(forest))
@@ -435,7 +408,13 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         final list = SingleChildScrollView(
           key: const ValueKey('overview-hybrid'),
           controller: _scroll,
-          padding: EdgeInsets.fromLTRB(gutter, Insets.sm, gutter, Insets.xxl),
+          // A phone's first lane header sits a compact step under the strip.
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            phone ? Insets.xs : Insets.sm,
+            gutter,
+            Insets.xxl,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -487,15 +466,32 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(gutter, Insets.md, gutter, 0),
-              child: OverviewTopStrip(
-                waiting: sections.queue.length,
-                queue: sections.queue,
-                phone: phone,
+            if (phone)
+              // Counts and lanes in one row, a compact step under the header.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.sm,
+                  Insets.xs,
+                  Insets.sm,
+                  0,
+                ),
+                child: OverviewPhoneStrip(
+                  waiting: sections.queue.length,
+                  fresh: fresh,
+                  lanes: forest.lanes,
+                  onScreen: _laneOnScreen,
+                  onLane: _goToLane,
+                ),
+              )
+            else
+              Padding(
+                padding: EdgeInsets.fromLTRB(gutter, Insets.md, gutter, 0),
+                child: OverviewTopStrip(
+                  waiting: sections.queue.length,
+                  queue: sections.queue,
+                ),
               ),
-            ),
-            if (forest.lanes.isNotEmpty)
+            if (forest.lanes.isNotEmpty && !phone)
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   gutter,
@@ -507,10 +503,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   lanes: forest.lanes,
                   onScreen: _laneOnScreen,
                   onTap: _goToLane,
-                  focusNodeOf: (lane) => _chipFocus.putIfAbsent(
-                    lane,
-                    () => FocusNode(debugLabel: 'overview-lane-chip:$lane'),
-                  ),
                 ),
               ),
             Expanded(
@@ -556,12 +548,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 ),
               ),
             ),
-            if (phone)
-              OverviewPhoneBar(
-                waiting: sections.queue.length,
-                fresh: fresh,
-                onLanes: _showLanes,
-              ),
           ],
         );
       },

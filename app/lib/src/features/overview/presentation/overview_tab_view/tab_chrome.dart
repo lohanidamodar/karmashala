@@ -146,6 +146,32 @@ class _RunPipelineButton extends StatelessWidget {
   );
 }
 
+/// **Search**, on a phone-width board's header in a narrow window, which has
+/// no phone top bar: the search sheet over the board.
+class OverviewSearchButton extends ConsumerWidget {
+  const OverviewSearchButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final open = ref.watch(overviewSearchSheetProvider);
+    // A highlight or a query left on dims the board; the button says so.
+    final narrowing =
+        ref.watch(overviewHighlightProvider) != OverviewHighlight.none ||
+        ref.watch(overviewSearchProvider.select((s) => s.active));
+    return IconButton(
+      key: const ValueKey('overview-header-search'),
+      tooltip: 'Search sessions',
+      isSelected: open || narrowing,
+      onPressed: () {
+        final sheets = ref.read(overviewSearchSheetProvider.notifier);
+        ref.read(overviewDrawerProvider.notifier).close();
+        open ? sheets.close() : sheets.open();
+      },
+      icon: const Icon(AppIcons.magnifyingGlass),
+    );
+  }
+}
+
 /// **Todos**, on the phone's Dashboard header: the open count on it, and the
 /// todos a tap away as a page of their own.
 class OverviewTodosButton extends ConsumerWidget {

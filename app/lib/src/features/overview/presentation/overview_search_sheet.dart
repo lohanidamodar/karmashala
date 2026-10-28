@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/quick_open/quick_open.dart';
 import '../application/overview_board.dart';
 import '../application/overview_drawer.dart';
 import '../application/overview_family_order.dart';
@@ -11,166 +14,10 @@ import '../application/overview_search.dart';
 import 'overview_card_parts.dart';
 import 'overview_pins.dart';
 import 'overview_strip.dart';
-import 'overview_triage.dart';
 
-/// **The phone dashboard's bottom bar**, under the thumb: Search (a sheet),
-/// Waiting N (the drawer as a sheet), Next new (as U does) and Lanes.
-class OverviewPhoneBar extends ConsumerWidget {
-  const OverviewPhoneBar({
-    required this.waiting,
-    required this.fresh,
-    required this.onLanes,
-    super.key,
-  });
-
-  /// How many wait on the owner, and how many sessions are new.
-  final int waiting;
-  final int fresh;
-
-  /// Brings the lane chips into reach.
-  final VoidCallback onLanes;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final semantic = SemanticColors.of(context);
-    final sheet = ref.watch(overviewSearchSheetProvider);
-    final drawer = ref.watch(overviewDrawerProvider.select((d) => d.open));
-    // A highlight or a query left on dims the board; the Search item says so.
-    final narrowing =
-        ref.watch(overviewHighlightProvider) != OverviewHighlight.none ||
-        ref.watch(overviewSearchProvider.select((s) => s.active));
-    final sheets = ref.read(overviewSearchSheetProvider.notifier);
-    final drawers = ref.read(overviewDrawerProvider.notifier);
-    return DecoratedBox(
-      key: const ValueKey('overview-phone-bar'),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
-        border: Border(top: BorderSide(color: scheme.outlineVariant)),
-      ),
-      child: Row(
-        children: [
-          _BarItem(
-            key: const ValueKey('overview-bar-search'),
-            icon: AppIcons.magnifyingGlass,
-            label: 'Search',
-            selected: sheet || narrowing,
-            onTap: () {
-              drawers.close();
-              sheet ? sheets.close() : sheets.open();
-            },
-          ),
-          _BarItem(
-            key: const ValueKey('overview-bar-waiting'),
-            icon: AppIcons.bellSimple,
-            label: 'Waiting',
-            count: waiting,
-            countColor: semantic.attention,
-            selected: drawer,
-            onTap: () {
-              sheets.close();
-              drawers.toggle();
-            },
-          ),
-          _BarItem(
-            key: const ValueKey('overview-bar-next-new'),
-            icon: AppIcons.star,
-            label: 'Next new',
-            count: fresh,
-            countColor: semantic.unread,
-            onTap: () {
-              sheets.close();
-              FocusManager.instance.primaryFocus?.unfocus();
-              Actions.maybeInvoke(context, const OverviewNextNewIntent());
-            },
-          ),
-          _BarItem(
-            key: const ValueKey('overview-bar-lanes'),
-            icon: AppIcons.list,
-            label: 'Lanes',
-            onTap: () {
-              sheets.close();
-              onLanes();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One of the bar's items: a compact glyph and label in a thumb's target.
-class _BarItem extends StatelessWidget {
-  const _BarItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.selected = false,
-    this.count = 0,
-    this.countColor,
-    super.key,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool selected;
-  final int count;
-  final Color? countColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final ink = selected ? scheme.primary : scheme.onSurfaceVariant;
-    return Expanded(
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: count > 0 ? '$label, $count' : label,
-        excludeSemantics: true,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: Touch.target),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.xxs,
-                vertical: Insets.xs,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Badge(
-                    isLabelVisible: count > 0,
-                    label: Text('$count'),
-                    backgroundColor: countColor,
-                    textColor: scheme.surface,
-                    child: Icon(icon, size: Touch.icon, color: ink),
-                  ),
-                  const SizedBox(height: Insets.xxs),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: ink,
-                      fontWeight: selected ? FontWeight.w600 : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// **The phone's search sheet**, over the board above the bar: the strip's
-/// search with New and Pinned as quick filters and the same results list.
+/// **The phone's search sheet**, over the board, opened from the top bar's
+/// search on the Dashboard: the strip's search with New and Pinned as quick
+/// filters and the same results list, and a way on to quick open.
 /// A pick shows the session on the board and closes the sheet.
 class OverviewSearchSheet extends ConsumerStatefulWidget {
   const OverviewSearchSheet({required this.queue, super.key});
@@ -299,6 +146,17 @@ class _OverviewSearchSheetState extends ConsumerState<OverviewSearchSheet> {
                       if (to != null) _pick(to);
                     },
                   ),
+                ),
+                IconButton(
+                  key: const ValueKey('overview-search-sheet-everything'),
+                  tooltip: 'Search everything',
+                  onPressed: () {
+                    unawaited(
+                      QuickOpen.show(context, initialQuery: _controller.text),
+                    );
+                    _close();
+                  },
+                  icon: const Icon(AppIcons.listMagnifyingGlass),
                 ),
                 IconButton(
                   key: const ValueKey('overview-search-sheet-close'),
