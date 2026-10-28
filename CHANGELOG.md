@@ -17,6 +17,14 @@ installs claim the same version name.
 
 ---
 
+## 1.34.17 — 2026-10-28 (build 84)
+
+- **Stop is back on the dashboard card, and the footer never changes shape.** Every family card's footer reads ⋯, Stop or Archive, and Message, in the same places at the card's right edge whatever the state. Stop interrupts the current turn without ending the agent; Archive takes its place once the session has ended. Message is always there: it queues while the agent is working and resumes an ended session. End session moved into ⋯ and asks first. The Open chat button is gone, since a click on the card opens the chat, and waiting asks open from the chip beside the title.
+- **Family cards follow "Show on cards".** The machine, project and context chosen in the filters now show on a family card's meta line, as they already did on other cards.
+- **The inbox clears what you have already dealt with.** A finished, usage-limit, cut-off or gone-quiet item retires when its session starts a new turn; finished, usage-limit and gone-quiet items also retire when it ends; and viewing a session on the dashboard marks its items read, on every device. Failures and follow-ups stay until you look at them.
+- **The phone dashboard is compact.** Its bottom bar is gone. One short strip of chips holds "N waiting" (opens the drawer), "N new" (jumps to the next new session) and the lanes, the top search opens dashboard search, and Activity moved into the filter menu. The first card sits about 84 dp higher on a 390×844 screen.
+- **On the dashboard only the checkbox selects.** A click or tap always opens a card, even with Shift or Ctrl held or a selection active, and a long press opens its menu. Select with the checkbox, which a phone always shows. Range selection is gone.
+
 ## 1.34.16 — 2026-10-28 (build 83)
 
 - **Reply from a dashboard card again.** Reply turns the card's footer into a one-line message box in place, so the card never changes size: Enter sends, Esc puts the buttons back, and a failed send says "Not sent" and keeps the text. The waiting drawer's reply box takes focus and closes on Esc the same way.
