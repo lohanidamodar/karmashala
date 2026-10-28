@@ -70,7 +70,9 @@ void main() {
       boundary: key,
     );
     if (reply) {
-      final button = find.byKey(const ValueKey('overview-family-reply:ks-r30'));
+      final button = find.byKey(
+        const ValueKey('overview-family-message:ks-r30'),
+      );
       unawaited(
         Scrollable.ensureVisible(tester.element(button), alignment: 0.6),
       );
