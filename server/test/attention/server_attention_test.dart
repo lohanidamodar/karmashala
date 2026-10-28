@@ -523,6 +523,145 @@ void main() {
     });
   });
 
+  group('an item its session has moved past is not left unread', () {
+    /// One finished turn of row-1, filed and unread.
+    Future<void> finishATurn() async {
+      hook('PreToolUse');
+      await attention.poll();
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      hook('Stop');
+      await attention.poll();
+      expect(attention.inbox.items.single.kind, InboxItemKind.finished);
+    }
+
+    test('a new turn retires the finished one, and every window is told — '
+        'a message sent from anywhere', () async {
+      await finishATurn();
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      // The prompt a dashboard, chat, terminal or phone sent.
+      hook('UserPromptSubmit');
+      await attention.poll();
+      await flush();
+      expect(attention.inbox.isEmpty, isTrue);
+      expect(lastInbox()!.inbox.isEmpty, isTrue, reason: 'told to everyone');
+      expect(lastInbox()!.inbox.unseen, 0, reason: 'the badge follows');
+    });
+
+    test('a new turn seen as a hook lands retires it without a pass', () async {
+      await finishATurn();
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      hook('UserPromptSubmit');
+      status.hookReported(key);
+      await flush();
+      expect(attention.inbox.isEmpty, isTrue);
+    });
+
+    test('an answered ask leaves with the turn it continues', () async {
+      await finishATurn();
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      hook('PreToolUse');
+      await attention.poll();
+      hook('Notification');
+      await attention.poll();
+      expect(attention.inbox.items.single.kind, InboxItemKind.needsApproval);
+
+      // Answered — on the dashboard, the waiting drawer, the chat, the
+      // terminal or the phone: the agent goes on.
+      hook('PreToolUse');
+      await attention.poll();
+      await flush();
+      expect(attention.inbox.isEmpty, isTrue);
+    });
+
+    test('another session\'s finished turn stays unread', () async {
+      const other = WatchedSession(
+        key: AgentSessionKey(AgentIds.claudeCode, 'cli-2'),
+        label: 'Other',
+        openId: 'row-2',
+        imported: false,
+      );
+      watched = [session, other];
+      hook('PreToolUse', sessionId: 'cli-2');
+      await attention.poll();
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      hook('Stop', sessionId: 'cli-2');
+      await attention.poll();
+
+      hook('PreToolUse');
+      await attention.poll();
+      await flush();
+      expect(attention.inbox.items.single.session.openId, 'row-2');
+      expect(attention.inbox.unseen, 1);
+    });
+
+    test('a usage limit stands until the session resumes', () async {
+      await finishATurn();
+      final limit = InboxItem(
+        session: session,
+        kind: InboxItemKind.usageLimit,
+        at: clock.nowUtc(),
+      );
+      attention.handle(InboxRaise(limit), null);
+      await attention.poll();
+      expect(attention.inbox.items, hasLength(2), reason: 'idle, still');
+
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      hook('UserPromptSubmit');
+      await attention.poll();
+      expect(attention.inbox.isEmpty, isTrue);
+    });
+
+    test('an ended session leaves no finished turn, but a cut-off '
+        'stays', () async {
+      const other = WatchedSession(
+        key: AgentSessionKey(AgentIds.claudeCode, 'cli-2'),
+        label: 'Other',
+        openId: 'row-2',
+        imported: false,
+      );
+      await finishATurn();
+      attention.handle(
+        InboxRaise(
+          InboxItem(session: other, kind: InboxItemKind.turnCutOff, at: _start),
+        ),
+        null,
+      );
+      watched = [];
+      ended = {'row-1', 'row-2'};
+      await attention.poll();
+      await flush();
+      expect(
+        lastInbox()!.inbox.items.single.kind,
+        InboxItemKind.turnCutOff,
+        reason: 'a cut-off is what the end left for a person',
+      );
+    });
+
+    test('inbox.viewed marks a peeked session seen once, not as items '
+        'arrive', () async {
+      hook('PreToolUse');
+      await attention.poll();
+      hook('Notification');
+      await attention.poll();
+      expect(attention.inbox.items.single.kind, InboxItemKind.needsApproval);
+      expect(attention.inbox.unseen, 1);
+
+      attention.handle(const InboxViewed(['row-1']), Object());
+      await flush();
+      final told = lastInbox()!.inbox;
+      expect(told.items.single.seen, isTrue, reason: 'a question looked at');
+      expect(told.unseen, 0);
+
+      // It was a look, not a window kept open on it.
+      hook('PreToolUse');
+      await attention.poll();
+      clock.now = clock.now.add(const Duration(seconds: 2));
+      hook('Stop');
+      await attention.poll();
+      expect(attention.inbox.unseen, 1);
+    });
+  });
+
   test('a follow-up is filed from the store and resolved on dismiss', () {
     followUps = [
       InboxItem(

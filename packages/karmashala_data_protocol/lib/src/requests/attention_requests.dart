@@ -17,6 +17,7 @@ DataRequest<Object?>? _attentionRequestFromJson(String kind, _Arguments args) =>
       InboxDismiss.name => InboxDismiss(args.string('id')),
       InboxOpen.name => InboxOpen(args.string('id')),
       InboxSeen.name => InboxSeen(args.strings('openIds', orEmpty: true)),
+      InboxViewed.name => InboxViewed(args.strings('openIds')),
       InboxMarkAllSeen.name => const InboxMarkAllSeen(),
       InboxRaise.name => InboxRaise(args.value('item', InboxItem.fromJson)),
       ChecksRun.name => ChecksRun(args.string('sessionId')),
@@ -123,6 +124,29 @@ final class InboxSeen extends AttentionRequest<DataAck> {
   const InboxSeen(this.openIds);
 
   static const String name = 'inbox.seen';
+
+  final List<String> openIds;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'openIds': openIds};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Sessions [openIds] were looked at just now, where [InboxSeen] does not
+/// reach: a peek on the dashboard, or its Mark seen. Their items are marked
+/// seen as a window looking at them would — once, not as they arrive.
+final class InboxViewed extends AttentionRequest<DataAck> {
+  const InboxViewed(this.openIds);
+
+  static const String name = 'inbox.viewed';
 
   final List<String> openIds;
 

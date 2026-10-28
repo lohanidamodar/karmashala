@@ -328,6 +328,95 @@ void main() {
     });
   });
 
+  group('its session moving on', () {
+    InboxItem item(WatchedSession s, InboxItemKind kind) =>
+        InboxItem(session: s, kind: kind, at: t0);
+
+    test('a new turn retires what the last one left, and nothing else', () {
+      final a = session('a');
+      final b = session('b');
+      var inbox = AttentionInbox(
+        items: [
+          item(a, InboxItemKind.finished),
+          item(a, InboxItemKind.usageLimit),
+          item(a, InboxItemKind.turnCutOff),
+          item(a, InboxItemKind.wentQuiet),
+          item(a, InboxItemKind.readyToMerge),
+          item(a, InboxItemKind.followUp),
+          item(b, InboxItemKind.finished),
+        ],
+      );
+      inbox = inbox.apply(InboxUpdate(watched: {a.key}, started: [a]), at(1));
+      expect(inbox.items.map((i) => (i.session.openId, i.kind)), [
+        ('row-a', InboxItemKind.readyToMerge),
+        ('row-a', InboxItemKind.followUp),
+        ('row-b', InboxItemKind.finished),
+      ]);
+      expect(inbox.unseen, 3, reason: 'the badge counts what is left');
+    });
+
+    test('a new turn leaves an ask that still waits', () {
+      final a = session('a');
+      final inbox = AttentionInbox.empty
+          .apply(InboxUpdate(watched: {a.key}, waiting: [waiting(a)]), t0)
+          .apply(
+            InboxUpdate(watched: {a.key}, waiting: [waiting(a)], started: [a]),
+            at(1),
+          );
+      expect(inbox.items.single.kind, InboxItemKind.needsApproval);
+    });
+
+    test('a turn that finishes as the next starts is filed, not retired', () {
+      final a = session('a');
+      final inbox = AttentionInbox.empty.apply(
+        InboxUpdate(
+          watched: {a.key},
+          news: [news(a, NotificationReason.finished)],
+          started: [a],
+        ),
+        t0,
+      );
+      expect(inbox.items.single.kind, InboxItemKind.finished);
+    });
+
+    test('an ended session retires its asks and finished turns, not its '
+        'failure, cut-off or follow-up', () {
+      final a = session('a');
+      final b = session('b');
+      final inbox = AttentionInbox(
+        items: [
+          item(a, InboxItemKind.needsApproval),
+          item(a, InboxItemKind.finished),
+          item(a, InboxItemKind.usageLimit),
+          item(a, InboxItemKind.wentQuiet),
+          item(a, InboxItemKind.failed),
+          item(a, InboxItemKind.turnCutOff),
+          item(a, InboxItemKind.followUp),
+          item(b, InboxItemKind.finished),
+        ],
+      ).retireEnded({'row-a'});
+      expect(inbox.items.map((i) => (i.session.openId, i.kind)), [
+        ('row-a', InboxItemKind.failed),
+        ('row-a', InboxItemKind.turnCutOff),
+        ('row-a', InboxItemKind.followUp),
+        ('row-b', InboxItemKind.finished),
+      ]);
+    });
+
+    test('an imported session is never taken for ended', () {
+      final imported = WatchedSession(
+        key: const AgentSessionKey('claudeCode', 'x'),
+        label: 'x',
+        openId: 'row-a',
+        imported: true,
+      );
+      final inbox = AttentionInbox(
+        items: [item(imported, InboxItemKind.finished)],
+      );
+      expect(identical(inbox.retireEnded({'row-a'}), inbox), isTrue);
+    });
+  });
+
   group('the cap', () {
     /// One poll's worth of finished turns for [count] fresh sessions.
     AttentionInbox fill(

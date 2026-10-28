@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:karmashala/src/core/data/data_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_seen.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
@@ -42,6 +46,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late TestMachine db;
   late ProviderContainer container;
+  late Directory prefs;
 
   const key = AgentSessionKey('claudeCode', 'cli-1');
   const watched = WatchedSession(
@@ -60,10 +65,13 @@ void main() {
     server.installationRows.insert(agentInstallation());
     db.server.sessionRows.insert(session(id: 's1'));
     db.server.sessionRows.updatePaneId('s1', 'pane-1');
+    prefs = Directory.systemTemp.createTempSync('inbox_peek_');
+    addTearDown(() => prefs.deleteSync(recursive: true));
     container = ProviderContainer(
       overrides: [
         await server.override(),
         clockProvider.overrideWithValue(FixedClock(testTime)),
+        overviewPrefsDirectoryProvider.overrideWithValue(() async => prefs),
         foregroundTerminalPaneIdsProvider.overrideWith(
           (ref) => ref.watch(_foregroundProvider),
         ),
@@ -243,6 +251,65 @@ void main() {
       terminals.tabIdOfPane(kOverviewPaneId),
     );
     expect(container.read(attentionInboxProvider).items, isEmpty);
+  });
+
+  group('a look on the dashboard, which selects nothing', () {
+    FakeAttention server() =>
+        FakeDataServer.of(container.read(dataClientProvider)).attention;
+
+    /// The looks kept on this device, read.
+    Future<void> lookedRead() async {
+      container.read(attentionInboxProvider);
+      for (var i = 0; i < 50; i++) {
+        if (container.read(overviewSeenReadProvider)) return;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      fail('the looks were never read');
+    }
+
+    Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+    test('a peek retires its finished turn at the server, for every '
+        'window', () async {
+      await lookedRead();
+      finished();
+      expect(container.read(attentionCountProvider), 1);
+
+      container.read(overviewSeenProvider.notifier).markSeen('s1', testTime);
+      await settle();
+
+      expect(server().viewedAsked, [
+        ['s1'],
+      ]);
+      expect(server().inbox.isEmpty, isTrue, reason: 'the phone is told too');
+      expect(container.read(attentionInboxProvider).items, isEmpty);
+      expect(container.read(attentionCountProvider), 0);
+    });
+
+    test('Mark seen leaves an ask listed, read', () async {
+      await lookedRead();
+      waiting();
+      container.read(overviewSeenProvider.notifier).markSeen('s1', testTime);
+      await settle();
+
+      final item = server().inbox.items.single;
+      expect(item.kind, InboxItemKind.needsApproval);
+      expect(item.seen, isTrue);
+      expect(container.read(inboxAskCountProvider), 1);
+    });
+
+    test('the looks read back from this device are not news', () async {
+      File(
+        '${prefs.path}/overview_seen.json',
+      ).writeAsStringSync('{"s1": "${testTime.toUtc().toIso8601String()}"}');
+      finished();
+      await lookedRead();
+      await settle();
+
+      expect(container.read(overviewSeenProvider), contains('s1'));
+      expect(server().viewedAsked, isEmpty);
+      expect(container.read(attentionCountProvider), 1);
+    });
   });
 
   test('dismissing drops it without visiting the session', () {

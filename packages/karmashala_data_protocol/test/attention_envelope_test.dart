@@ -67,6 +67,7 @@ void main() {
     const InboxOpen('needsApproval:claudeCode/conv-1'),
     const InboxSeen(['row-1', 'imp-2']),
     const InboxSeen([]),
+    const InboxViewed(['row-1']),
     const InboxMarkAllSeen(),
     InboxRaise(item),
     const ChecksRun('row-1'),
