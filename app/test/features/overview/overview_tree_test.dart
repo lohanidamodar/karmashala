@@ -1048,8 +1048,10 @@ void main() {
       await mouse.moveTo(tester.getCenter(pill('ks-r32-sub0')));
       await settleMission(tester);
       expect(avatarOf('ks-r32-sub0').glow, isTrue);
-      // The parent lit is its card's outline; the grandchild its row's.
-      expect(cardLit('ks-r32'), isTrue);
+      // The parent, in the same card, rings nothing: its avatar glows. The
+      // grandchild lights its own row.
+      expect(cardLit('ks-r32'), isFalse);
+      expect(avatarOf('ks-r32').glow, isTrue);
       expect(edgeOf('ks-r32-sub0-a'), accent);
       await mouse.moveTo(Offset.zero);
       await settleMission(tester);

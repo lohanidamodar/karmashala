@@ -128,7 +128,7 @@ void main() {
   if (_hover) {
     Future<void> point(WidgetTester tester, String key) async {
       final at = find.byKey(ValueKey(key));
-      await tester.ensureVisible(at);
+      unawaited(Scrollable.ensureVisible(tester.element(at), alignment: 0.5));
       await settleMission(tester);
       final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await mouse.addPointer(location: tester.getCenter(at));

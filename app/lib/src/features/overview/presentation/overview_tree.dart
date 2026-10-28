@@ -259,6 +259,7 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
           : '${root.entry.title} and its sub-sessions',
       child: _FamilyFrame(
         card: root,
+        inside: {for (final c in node.descendants) c.id},
         selected: selected,
         headFocused: _headFocused,
         pad: pad,
@@ -344,12 +345,16 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
 }
 
 /// A family card's surface and its one outline, along the card's own
-/// rounded edge: the accent, wider, when it is selected, lit by its family
-/// or its header holds the keys; [Theme]'s outline under a pointer; the
-/// quiet outline otherwise. Drawn over the edge, so nothing moves.
+/// rounded edge: the accent, wider, when it is selected, its header holds
+/// the keys, or a sub-session drawn elsewhere lights it; [Theme]'s outline
+/// under a pointer; the quiet outline otherwise. Drawn over the edge, so
+/// nothing moves. A sub-session inside the card lighting its parent rings
+/// nothing: the pointer or the keys are in the card already, and the
+/// parent's avatar glows instead.
 class _FamilyFrame extends ConsumerStatefulWidget {
   const _FamilyFrame({
     required this.card,
+    required this.inside,
     required this.selected,
     required this.headFocused,
     required this.pad,
@@ -358,6 +363,9 @@ class _FamilyFrame extends ConsumerStatefulWidget {
   });
 
   final OverviewCard card;
+
+  /// The sub-sessions this card draws, or folds away.
+  final Set<String> inside;
   final bool selected;
   final ValueNotifier<bool> headFocused;
   final double pad;
@@ -377,7 +385,9 @@ class _FamilyFrameState extends ConsumerState<_FamilyFrame> {
     final scheme = Theme.of(context).colorScheme;
     final touch = UiDensity.of(context).isTouch;
     final lit = ref.watch(
-      overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
+      overviewLinkFocusProvider.select(
+        (f) => overviewLinkLit(card, f) && !widget.inside.contains(f!.id),
+      ),
     );
     final radius = BorderRadius.circular(Radii.lg);
     return MouseRegion(
@@ -1043,6 +1053,11 @@ class _RootHeadState extends ConsumerState<_RootHead> {
       overviewSelectionProvider.select((s) => !s.isEmpty),
     );
     final pickable = selecting || ((_hovered || _within) && !touch);
+    // A sub-session of its own under a pointer or the keys: the quiet
+    // "this is its parent", its ring glowing as the hovered one's does.
+    final lit = ref.watch(
+      overviewLinkFocusProvider.select((f) => overviewLinkLit(card, f)),
+    );
     final hit = touch && Touch.target > size ? Touch.target : size;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -1064,6 +1079,7 @@ class _RootHeadState extends ConsumerState<_RootHead> {
                   progress: overviewDoneShare(node),
                   waiting: overviewWaitingIn(node),
                   halo: widget.halo,
+                  glow: lit,
                 ),
               ),
             ),

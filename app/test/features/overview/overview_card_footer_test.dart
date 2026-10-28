@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/overview/application/overview_quick_mess
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_card_parts.dart';
+import 'package:karmashala/src/features/overview/presentation/session_avatar.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import 'mission_fixture.dart';
@@ -396,21 +397,38 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('a pointer over a sub-session: its row outlines once, the '
-        'parent\'s card turns the accent, no ring of its own', (tester) async {
-      await pump(tester);
-      await reveal(tester, pill('ks-r32-sub1'));
-      final scheme = Theme.of(tester.element(pill('ks-r32-sub1'))).colorScheme;
-      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      addTearDown(mouse.removePointer);
-      await mouse.addPointer(location: tester.getCenter(pill('ks-r32-sub1')));
-      await settleMission(tester);
-      expect(extraRings(), findsNothing);
-      expect(edgeOf(tester, 'ks-r32-sub1').color, scheme.outline);
-      expect(ringOf(tester, 'ks-r32')?.border?.top.color, scheme.primary);
-      expect(tester.takeException(), isNull);
-      await unmountMission(tester);
-    });
+    testWidgets(
+      'a pointer over a sub-session: its row outlines once, its avatar '
+      'glows; the parent rings nothing, its avatar glows, its card shows '
+      'the hover outline along its own edge',
+      (tester) async {
+        await pump(tester);
+        await reveal(tester, pill('ks-r32-sub1'));
+        final scheme = Theme.of(
+          tester.element(pill('ks-r32-sub1')),
+        ).colorScheme;
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        addTearDown(mouse.removePointer);
+        await mouse.addPointer(location: tester.getCenter(pill('ks-r32-sub1')));
+        await settleMission(tester);
+        expect(extraRings(), findsNothing);
+        expect(edgeOf(tester, 'ks-r32-sub1').color, scheme.outline);
+        expect(ringOf(tester, 'ks-r32')?.border, isNull);
+        expect(borderOf(tester, 'ks-r32'), scheme.outline);
+        bool glows(String id) => tester
+            .widget<SessionAvatar>(
+              find.byWidgetPredicate(
+                (w) => w is SessionAvatar && w.card.id == id,
+              ),
+            )
+            .glow;
+        expect(glows('ks-r32-sub1'), isTrue);
+        expect(glows('ks-r32'), isTrue, reason: 'the quiet "its parent"');
+        expect(glows('ks-r32-sub2'), isFalse);
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      },
+    );
 
     testWidgets('the keys (J/K) select with the same one accent outline, on '
         'the card and on a row', (tester) async {
