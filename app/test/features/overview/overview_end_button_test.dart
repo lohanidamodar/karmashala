@@ -7,9 +7,9 @@ import 'package:karmashala/src/features/sessions/application/host_lifecycle/host
 
 import 'mission_fixture.dart';
 
-/// **A card's quick End under a thumb**: always drawn on a live session, as
-/// tall as the ⋯, from a 360 px phone at 1.6x text without overflow; never on
-/// an ended one.
+/// **A family's Stop under a thumb** (round 120): always drawn, as tall as
+/// the ⋯, from a 360 px phone at 1.6x text without overflow; End is in the
+/// ⋯, not on the footer; an ended family has Archive in Stop's place.
 void main() {
   late Directory dir;
 
@@ -25,57 +25,63 @@ void main() {
   });
 
   for (final (width, scale) in [(360.0, 1.0), (360.0, 1.6), (412.0, 1.6)]) {
-    testWidgets('${width}px at ${scale}x: on every live row, at full ink', (
-      tester,
-    ) async {
-      final fixture = MissionFixture.full();
-      await pumpMission(
-        tester,
-        fixture: fixture,
-        prefsDir: dir,
-        size: Size(width, 800),
-        phone: true,
-        textScale: scale,
-        // Every session in the fixture runs at the server.
-        overrides: [
-          sessionRunningOnHostProvider.overrideWithValue((_) => true),
-        ],
-      );
-      final ends = find.byWidgetPredicate(
-        (w) =>
-            w.key is ValueKey<String> &&
-            (w.key! as ValueKey<String>).value.startsWith('overview-end:'),
-      );
-      expect(ends, findsWidgets);
-      for (final slot in tester.widgetList<AnimatedOpacity>(
-        find.byWidgetPredicate(
+    testWidgets(
+      '${width}px at ${scale}x: Stop on every live family, End in its ⋯',
+      (tester) async {
+        final fixture = MissionFixture.full();
+        await pumpMission(
+          tester,
+          fixture: fixture,
+          prefsDir: dir,
+          size: Size(width, 800),
+          phone: true,
+          textScale: scale,
+          // Every session in the fixture runs at the server.
+          overrides: [
+            sessionRunningOnHostProvider.overrideWithValue((_) => true),
+          ],
+        );
+        final ends = find.byWidgetPredicate(
           (w) =>
-              w is AnimatedOpacity &&
               w.key is ValueKey<String> &&
               (w.key! as ValueKey<String>).value.startsWith(
-                'overview-end-slot:',
+                'overview-interrupt:',
               ),
-        ),
-      )) {
-        expect(slot.opacity, 1, reason: '${slot.key}');
-      }
-      // As tall a target as the ⋯ beside it.
-      final first = (tester.widget(ends.first).key! as ValueKey<String>).value
-          .substring('overview-end:'.length);
-      expect(
-        tester.getSize(ends.first).height,
-        tester
-            .getSize(find.byKey(ValueKey('overview-card-menu:$first')))
-            .height,
-      );
-      // No ended session offers one.
-      for (final s in fixture.sessions) {
-        if (s.state == AgentState.ended) {
-          expect(find.byKey(ValueKey('overview-end:${s.id}')), findsNothing);
+        );
+        expect(ends, findsWidgets);
+        for (final slot in tester.widgetList<AnimatedOpacity>(
+          find.byWidgetPredicate(
+            (w) =>
+                w is AnimatedOpacity &&
+                w.key is ValueKey<String> &&
+                (w.key! as ValueKey<String>).value.startsWith(
+                  'overview-end-slot:',
+                ),
+          ),
+        )) {
+          expect(slot.opacity, 1, reason: '${slot.key}');
         }
-      }
-      expect(tester.takeException(), isNull);
-      await unmountMission(tester);
-    });
+        // As tall a target as the ⋯ beside it.
+        final first = (tester.widget(ends.first).key! as ValueKey<String>).value
+            .substring('overview-interrupt:'.length);
+        expect(
+          tester.getSize(ends.first).height,
+          tester
+              .getSize(find.byKey(ValueKey('overview-card-menu:$first')))
+              .height,
+        );
+        // No ended session offers one.
+        for (final s in fixture.sessions) {
+          if (s.state == AgentState.ended) {
+            expect(
+              find.byKey(ValueKey('overview-interrupt:${s.id}')),
+              findsNothing,
+            );
+          }
+        }
+        expect(tester.takeException(), isNull);
+        await unmountMission(tester);
+      },
+    );
   }
 }

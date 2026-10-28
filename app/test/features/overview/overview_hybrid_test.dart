@@ -441,7 +441,8 @@ void main() {
         findsOneWidget,
       );
       // The parent is held at work by it: its state says Waiting, and its
-      // one primary action is Stop, not Reply.
+      // footer is the same as any: Stop, disabled, for its own turn is over,
+      // and Message.
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('overview-family-state:ks-r30')),
@@ -449,10 +450,11 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('overview-end:ks-r30')), findsOneWidget);
+      final stop = find.byKey(const ValueKey('overview-interrupt:ks-r30'));
+      expect(tester.widget<OutlinedButton>(stop).onPressed, isNull);
       expect(
-        find.byKey(const ValueKey('overview-family-reply:ks-r30')),
-        findsNothing,
+        find.byKey(const ValueKey('overview-family-message:ks-r30')),
+        findsOneWidget,
       );
       expect(familyCard('ks-r30-child'), findsNothing);
       await unmountMission(tester);
@@ -553,7 +555,7 @@ void main() {
       await tester.ensureVisible(review);
       await settleMission(tester);
       expect(
-        find.descendant(of: review, matching: find.text('Review 1 ask')),
+        find.descendant(of: review, matching: find.text('1 ask')),
         findsOneWidget,
       );
       await tester.tap(review);
@@ -1161,12 +1163,14 @@ void main() {
       promptOverride: 'Merge the pull request with a squash.',
     );
 
-    testWidgets('a ready family keeps its place in its lane, and Reply sends '
+    testWidgets('a ready family keeps its place in its lane, and Message sends '
         'from its footer through the one send path', (tester) async {
       await pump(tester);
       final card = familyCard('ks-r30');
       await tester.scrollUntilVisible(card, 300, scrollable: hybridList);
-      final reply = find.byKey(const ValueKey('overview-family-reply:ks-r30'));
+      final reply = find.byKey(
+        const ValueKey('overview-family-message:ks-r30'),
+      );
       expect(find.descendant(of: card, matching: reply), findsOneWidget);
       await tester.ensureVisible(reply);
       await settleMission(tester);
@@ -1308,9 +1312,14 @@ void main() {
             .data,
         startsWith('0/1 finished'),
       );
+      // Its own turn is over: nothing for Stop to interrupt.
       expect(
-        find.byKey(const ValueKey('overview-family-reply:ks-r30')),
-        findsNothing,
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const ValueKey('overview-interrupt:ks-r30')),
+            )
+            .onPressed,
+        isNull,
       );
       await unmountMission(tester);
     });

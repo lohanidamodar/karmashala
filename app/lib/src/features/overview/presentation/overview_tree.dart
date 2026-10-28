@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,9 +9,13 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/truncated_text.dart';
+import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_states.dart';
-import '../../sessions/presentation/end_session_action.dart';
+import '../../sessions/application/session_status_providers.dart';
+import '../../sessions/application/session_turn_interrupt.dart';
+import '../../sessions/application/session_turn_stop.dart';
+import '../../sessions/presentation/stop_children_offer.dart';
 import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
 import '../application/overview_drawer.dart';
@@ -274,7 +279,6 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
             _FamilyFooter(
               node: node,
               text: _rootSize + Insets.sm,
-              onOpen: widget.onOpen,
               laneKey: widget.laneKey,
               laneRoots: widget.laneRoots,
             ),
@@ -507,135 +511,204 @@ class _FamilyHeader extends ConsumerWidget {
       Chrome.familyStateSlot,
       MediaQuery.textScalerOf(context),
     );
+    final asks = overviewWaitingIn(node);
     return Material(
       type: MaterialType.transparency,
-      child: InkWell(
-        key: ValueKey('overview-family-head:${card.id}'),
-        // No box of its own behind the title and text: hover, focus and a
-        // press show on the card's outline, along the card's shape.
-        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-        splashFactory: NoSplash.splashFactory,
-        onFocusChange: onFocus,
-        onTap: () {
-          if (!overviewPickSelects(ref, card, touch: touch)) onOpen(card);
-        },
-        onLongPress: () => overviewPickSelects(ref, card, long: true),
-        onSecondaryTapUp: (details) => showOverviewFamilyMenu(
-          context,
-          ref,
-          node,
-          at: details.globalPosition,
-        ),
-        child: OverviewHoverScope(
-          child: LayoutBuilder(
-            builder: (context, box) {
-              final stateWidth = slot.clamp(0.0, box.maxWidth / 3);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      // The new count and pin follow the title, not the
-                      // state's slot: the title gives up its width first.
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Semantics(
-                                header: true,
-                                label: [
-                                  card.entry.title,
-                                  card.state.label,
-                                  ?agent,
-                                  if (place.isNotEmpty) place,
-                                ].join(', '),
-                                excludeSemantics: true,
-                                child: TruncatedText(
-                                  card.entry.title,
-                                  textKey: ValueKey(
-                                    'overview-card-title:${card.id}',
+      child: Semantics(
+        hint: 'Open chat',
+        onTapHint: 'Open chat',
+        child: InkWell(
+          key: ValueKey('overview-family-head:${card.id}'),
+          // No box of its own behind the title and text: hover, focus and a
+          // press show on the card's outline, along the card's shape.
+          overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+          splashFactory: NoSplash.splashFactory,
+          onFocusChange: onFocus,
+          // The card's tap is its Open chat: there is no button for it.
+          onTap: () {
+            if (!overviewPickSelects(ref, card, touch: touch)) onOpen(card);
+          },
+          onLongPress: () => overviewPickSelects(ref, card, long: true),
+          onSecondaryTapUp: (details) => showOverviewFamilyMenu(
+            context,
+            ref,
+            node,
+            at: details.globalPosition,
+          ),
+          child: OverviewHoverScope(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final stateWidth = slot.clamp(0.0, box.maxWidth / 3);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        // The new count and pin follow the title, not the
+                        // state's slot: the title gives up its width first.
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Semantics(
+                                  header: true,
+                                  label: [
+                                    card.entry.title,
+                                    card.state.label,
+                                    ?agent,
+                                    if (place.isNotEmpty) place,
+                                  ].join(', '),
+                                  excludeSemantics: true,
+                                  child: TruncatedText(
+                                    card.entry.title,
+                                    textKey: ValueKey(
+                                      'overview-card-title:${card.id}',
+                                    ),
+                                    triggerMode: TooltipTriggerMode.manual,
+                                    style: titleStyle,
                                   ),
-                                  triggerMode: TooltipTriggerMode.manual,
-                                  style: titleStyle,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: Insets.xs),
-                            OverviewNewBadge(card: card),
-                            if (pinned) ...[
                               const SizedBox(width: Insets.xs),
-                              Icon(
-                                AppIcons.pushPinFill,
-                                key: ValueKey(
-                                  'overview-family-pinned:${card.id}',
+                              OverviewNewBadge(card: card),
+                              if (pinned) ...[
+                                const SizedBox(width: Insets.xs),
+                                Icon(
+                                  AppIcons.pushPinFill,
+                                  key: ValueKey(
+                                    'overview-family-pinned:${card.id}',
+                                  ),
+                                  size: density.iconSmall,
+                                  color: scheme.primary,
+                                  semanticLabel: 'Pinned',
                                 ),
-                                size: density.iconSmall,
-                                color: scheme.primary,
-                                semanticLabel: 'Pinned',
+                              ],
+                              if (asks > 0) ...[
+                                const SizedBox(width: Insets.xs),
+                                _AskMarker(
+                                  card: card,
+                                  asks: asks,
+                                  height: overviewLinesHeight(
+                                    context,
+                                    titleStyle,
+                                    1,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: Insets.xs),
+                        SizedBox(
+                          key: ValueKey('overview-family-state:${card.id}'),
+                          width: stateWidth,
+                          child: Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: OverviewStatePill(card: card),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // One fixed line: wide, the plan step, diff and check
+                    // follow, each cut short rather than wrapping.
+                    SizedBox(
+                      height: overviewLinesHeight(context, muted, 1),
+                      child: ClipRect(
+                        child: Row(
+                          children: [
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: wide
+                                    ? box.maxWidth * _metaShare
+                                    : box.maxWidth,
+                              ),
+                              child: Text(
+                                meta,
+                                key: ValueKey(
+                                  'overview-family-meta:${card.id}',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: muted,
+                              ),
+                            ),
+                            if (wide) ...[
+                              if (meta.isNotEmpty)
+                                const SizedBox(width: Insets.md),
+                              Expanded(
+                                child: Align(
+                                  alignment: AlignmentDirectional.centerStart,
+                                  child: OverviewMetaLine(
+                                    card: card,
+                                    oneLine: true,
+                                  ),
+                                ),
                               ),
                             ],
                           ],
                         ),
                       ),
-                      const SizedBox(width: Insets.xs),
-                      SizedBox(
-                        key: ValueKey('overview-family-state:${card.id}'),
-                        width: stateWidth,
-                        child: Align(
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: AlignmentDirectional.centerEnd,
-                            child: OverviewStatePill(card: card),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  // One fixed line: wide, the plan step, diff and check
-                  // follow, each cut short rather than wrapping.
-                  SizedBox(
-                    height: overviewLinesHeight(context, muted, 1),
-                    child: ClipRect(
-                      child: Row(
-                        children: [
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: wide
-                                  ? box.maxWidth * _metaShare
-                                  : box.maxWidth,
-                            ),
-                            child: Text(
-                              meta,
-                              key: ValueKey('overview-family-meta:${card.id}'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: muted,
-                            ),
-                          ),
-                          if (wide) ...[
-                            if (meta.isNotEmpty)
-                              const SizedBox(width: Insets.md),
-                            Expanded(
-                              child: Align(
-                                alignment: AlignmentDirectional.centerStart,
-                                child: OverviewMetaLine(
-                                  card: card,
-                                  oneLine: true,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
                     ),
-                  ),
-                  const SizedBox(height: Insets.xxs),
-                  _SayLines(card: card),
-                ],
-              );
-            },
+                    const SizedBox(height: Insets.xxs),
+                    _SayLines(card: card),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// **What waits on you in a family**, beside its title: the count in the
+/// attention colour, which opens the waiting drawer on this family. No
+/// taller than the title's line, so its coming and going moves nothing.
+class _AskMarker extends ConsumerWidget {
+  const _AskMarker({
+    required this.card,
+    required this.asks,
+    required this.height,
+  });
+
+  final OverviewCard card;
+  final int asks;
+  final double height;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final words = 'Review $asks ${asks == 1 ? 'ask' : 'asks'}';
+    final radius = BorderRadius.circular(Radii.pill);
+    return Tooltip(
+      message: words,
+      child: Semantics(
+        button: true,
+        label: words,
+        excludeSemantics: true,
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: radius,
+          child: InkWell(
+            key: ValueKey('overview-family-review:${card.id}'),
+            borderRadius: radius,
+            onTap: () =>
+                ref.read(overviewDrawerProvider.notifier).open(family: card.id),
+            child: SizedBox(
+              height: height,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: OverviewStateChip(
+                  state: AgentState.needsYou,
+                  label: '$asks ${asks == 1 ? 'ask' : 'asks'}',
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -685,15 +758,15 @@ class _SayLines extends ConsumerWidget {
   }
 }
 
-/// A family's footer, one fixed height: Open chat and ⋯ from the text
-/// column's edge, and one primary slot of fixed width at the card's end —
-/// Review N asks, Reply, Stop or Archive. Reply turns the footer itself into
-/// a one-line message box, the same height, so the card never resizes.
+/// A family's footer, one fixed height and the same three slots in every
+/// state, so nothing moves sideways: the drag handle at its start, then, at
+/// the card's end, ⋯, Stop (Archive once it ended) and Message. Message
+/// turns the footer itself into a one-line message box, the same height, so
+/// the card never resizes. Opening the chat is the card's own tap.
 class _FamilyFooter extends ConsumerStatefulWidget {
   const _FamilyFooter({
     required this.node,
     required this.text,
-    required this.onOpen,
     required this.laneKey,
     required this.laneRoots,
   });
@@ -702,7 +775,6 @@ class _FamilyFooter extends ConsumerStatefulWidget {
 
   /// Where the header's text column starts, from the card's content edge.
   final double text;
-  final ValueChanged<OverviewCard> onOpen;
   final String? laneKey;
   final List<String> laneRoots;
 
@@ -721,7 +793,6 @@ class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
   @override
   Widget build(BuildContext context) {
     final node = widget.node;
-    final onOpen = widget.onOpen;
     final laneKey = widget.laneKey;
     final laneRoots = widget.laneRoots;
     final card = node.card;
@@ -744,145 +815,231 @@ class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
     final scheme = Theme.of(context).colorScheme;
     final density = UiDensity.of(context);
     final compact = density.compactButton;
-    final slot = WidthClass.scaleBreakpoint(
+    final scaler = MediaQuery.textScalerOf(context);
+    final messageSlot = WidthClass.scaleBreakpoint(
       Chrome.familyPrimarySlot,
-      MediaQuery.textScalerOf(context),
+      scaler,
+    );
+    final sideSlot = WidthClass.scaleBreakpoint(
+      Chrome.familySecondarySlot,
+      scaler,
     );
     final drag = !density.isTouch && laneKey != null && laneRoots.length > 1;
+    final caps = ref.watch(capabilitiesProvider);
+    final ended = card.state == AgentState.ended;
+    // Message resumes an ended session through the same send, where this
+    // client may start one.
+    final noMessage = !caps.maySend
+        ? kPromptNotGranted
+        : ended && !caps.mayStart
+        ? kStartNotGranted
+        : null;
+    final stop = _stopState(card, caps);
     Widget label(String text) =>
         Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
-    final asks = overviewWaitingIn(node);
-    final Widget primary;
-    if (asks > 0) {
-      primary = FilledButton(
-        key: ValueKey('overview-family-review:${card.id}'),
-        style: compact,
-        onPressed: () =>
-            ref.read(overviewDrawerProvider.notifier).open(family: card.id),
-        child: label('Review $asks ${asks == 1 ? 'ask' : 'asks'}'),
-      );
-    } else if (card.state == AgentState.ready) {
-      primary = FilledButton.tonal(
-        key: ValueKey('overview-family-reply:${card.id}'),
-        style: compact,
-        onPressed: () => setState(() => _replying = true),
-        child: label('Reply'),
-      );
-    } else if (card.state == AgentState.ended) {
-      final family = node.children.isNotEmpty;
-      final left = overviewFamilyToArchive(node);
-      primary = OverviewArchiveGate(
-        sessionId: card.id,
-        builder: (resuming) => OutlinedButton(
-          key: ValueKey(
-            family
-                ? 'overview-archive-family:${card.id}'
-                : 'overview-done-archive:${card.id}',
+    final menu = Builder(
+      builder: (button) => Tooltip(
+        message: 'More',
+        // A button's face, Stop's and Message's own, not a glyph that reads
+        // as text.
+        child: OutlinedButton(
+          key: ValueKey('overview-card-menu:${card.id}'),
+          style: (compact ?? const ButtonStyle()).copyWith(
+            padding: const WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: Insets.sm),
+            ),
+            foregroundColor: WidgetStatePropertyAll(scheme.onSurfaceVariant),
           ),
-          style: compact,
-          onPressed: resuming || left.isEmpty
-              ? null
-              : () => unawaited(archiveFamilyFromDashboard(context, ref, node)),
-          child: label('Archive'),
+          onPressed: () => showOverviewFamilyMenu(
+            button,
+            ref,
+            node,
+            laneKey: laneKey,
+            laneRoots: laneRoots,
+          ),
+          child: Icon(
+            AppIcons.dotsThree,
+            size: density.iconSize(Chrome.icon),
+            semanticLabel: 'More',
+          ),
         ),
-      );
-    } else {
-      final live = sessionHasLiveProcess(ref, card.id);
-      primary = OutlinedButton(
-        key: ValueKey('overview-end:${card.id}'),
-        style: compact,
-        onPressed: live
-            ? () => unawaited(endFromDashboard(context, ref, card))
-            : null,
-        child: label('Stop'),
-      );
-    }
-    // Open chat's label starts where the title does: its button reaches
-    // back into the avatar's column by its own padding.
-    const openPad = Insets.md;
-    final openStyle = (compact ?? const ButtonStyle()).copyWith(
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(horizontal: openPad),
       ),
     );
-    final lead = (widget.text - openPad).clamp(0.0, double.infinity);
     return SizedBox(
       height: Touch.target,
       child: LayoutBuilder(
-        builder: (context, box) => Row(
-          children: [
-            SizedBox(
-              width: lead,
-              child: drag
-                  ? Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: _DragHandle(card: card),
+        builder: (context, box) {
+          final lead = drag ? Chrome.control : 0.0;
+          // ⋯'s face, its gaps and the two slots; where they do not fit, as
+          // on a phone at large text, Stop and Archive draw as icons and
+          // Message takes what is left.
+          const gaps = Insets.xs * 2;
+          final room = box.maxWidth - lead - Touch.target - gaps;
+          final iconOnly = messageSlot + sideSlot > room;
+          final side = iconOnly ? Touch.target : sideSlot;
+          final message = (iconOnly ? room - side : messageSlot).clamp(
+            0.0,
+            messageSlot,
+          );
+          final Widget secondary;
+          if (ended) {
+            final family = node.children.isNotEmpty;
+            final left = overviewFamilyToArchive(node);
+            secondary = OverviewArchiveGate(
+              sessionId: card.id,
+              builder: (resuming) {
+                final key = ValueKey(
+                  family
+                      ? 'overview-archive-family:${card.id}'
+                      : 'overview-done-archive:${card.id}',
+                );
+                final onPressed = resuming || left.isEmpty
+                    ? null
+                    : () => unawaited(
+                        archiveFamilyFromDashboard(context, ref, node),
+                      );
+                return Tooltip(
+                  message: family ? 'Archive the family' : 'Archive',
+                  child: iconOnly
+                      ? OutlinedButton(
+                          key: key,
+                          style: _iconFace(compact),
+                          onPressed: onPressed,
+                          child: Icon(
+                            AppIcons.tray,
+                            size: density.iconSize(Chrome.icon),
+                            semanticLabel: 'Archive',
+                          ),
+                        )
+                      : OutlinedButton(
+                          key: key,
+                          style: compact,
+                          onPressed: onPressed,
+                          child: label('Archive'),
+                        ),
+                );
+              },
+            );
+          } else {
+            final key = ValueKey('overview-interrupt:${card.id}');
+            final onPressed = stop.why == null
+                ? () => _interrupt(context, card)
+                : null;
+            secondary = Tooltip(
+              message: stop.why ?? 'Stop this turn; the session keeps running',
+              child: iconOnly
+                  ? OutlinedButton(
+                      key: key,
+                      style: _iconFace(compact),
+                      onPressed: onPressed,
+                      child: Icon(
+                        AppIcons.stop,
+                        size: density.iconSize(Chrome.icon),
+                        semanticLabel: 'Stop',
+                      ),
                     )
-                  : null,
-            ),
-            // The pair keeps its own width; what is left goes before the
-            // primary slot, which so sits at the card's end.
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: TextButton(
-                      key: ValueKey('overview-family-open:${card.id}'),
-                      style: openStyle,
-                      onPressed: () => onOpen(card),
-                      // A phone's card has room for the verb alone.
-                      child: label(
-                        box.maxWidth < WidthClass.mediumMin
-                            ? 'Open'
-                            : 'Open chat',
-                      ),
+                  : OutlinedButton(
+                      key: key,
+                      style: compact,
+                      onPressed: onPressed,
+                      child: label('Stop'),
                     ),
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  // A button's face, Stop's and Archive's own, not a glyph
-                  // that reads as text.
-                  Builder(
-                    builder: (button) => Tooltip(
-                      message: 'More',
-                      child: OutlinedButton(
-                        key: ValueKey('overview-card-menu:${card.id}'),
-                        style: (compact ?? const ButtonStyle()).copyWith(
-                          padding: const WidgetStatePropertyAll(
-                            EdgeInsets.symmetric(horizontal: Insets.sm),
-                          ),
-                          foregroundColor: WidgetStatePropertyAll(
-                            scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        onPressed: () => showOverviewFamilyMenu(
-                          button,
-                          ref,
-                          node,
-                          laneKey: laneKey,
-                          laneRoots: laneRoots,
-                        ),
-                        child: Icon(
-                          AppIcons.dotsThree,
-                          size: density.iconSize(Chrome.icon),
-                          semanticLabel: 'More',
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+            );
+          }
+          final send = FilledButton.tonal(
+            key: ValueKey('overview-family-message:${card.id}'),
+            style: compact,
+            onPressed: noMessage == null
+                ? () => setState(() => _replying = true)
+                : null,
+            child: label('Message'),
+          );
+          return Row(
+            children: [
+              SizedBox(
+                width: lead,
+                child: drag
+                    ? Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: _DragHandle(card: card),
+                      )
+                    : null,
               ),
-            ),
-            SizedBox(
-              key: ValueKey('overview-family-primary:${card.id}'),
-              width: slot.clamp(0.0, box.maxWidth / 2),
-              child: Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: primary,
+              const Spacer(),
+              menu,
+              const SizedBox(width: Insets.xs),
+              SizedBox(
+                key: ValueKey('overview-family-secondary:${card.id}'),
+                width: side,
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: SizedBox(width: side, child: secondary),
+                ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(width: Insets.xs),
+              SizedBox(
+                key: ValueKey('overview-family-primary:${card.id}'),
+                width: message,
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: SizedBox(
+                    width: message,
+                    child: noMessage == null
+                        ? send
+                        : Tooltip(message: noMessage, child: send),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  /// A Stop or Archive drawn as its icon alone: a square face.
+  ButtonStyle _iconFace(ButtonStyle? compact) =>
+      (compact ?? const ButtonStyle()).copyWith(
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        minimumSize: const WidgetStatePropertyAll(Size.square(Chrome.control)),
+      );
+
+  /// Whether Stop may interrupt [card] now, and why not when it may not.
+  /// A turn runs while it works, or waits on an approval inside its turn;
+  /// a parent drawn at work for its sub-sessions has none of its own.
+  ({String? why}) _stopState(OverviewCard card, Capabilities caps) {
+    final working = ref.watch(sessionTurnWorkingProvider(card.id));
+    final approving =
+        card.state == AgentState.needsYou &&
+        ref.watch(
+          agentSessionStatusProvider(card.id).select(
+            (s) =>
+                s.asData?.value.turnStatus ==
+                AgentActivityStatus.awaitingApproval,
+          ),
+        );
+    final running =
+        working ||
+        approving ||
+        (card.waitingOn == null &&
+            (card.state == AgentState.working ||
+                card.state == AgentState.quiet));
+    if (!caps.maySend) return (why: kPromptNotGranted);
+    if (!running) return (why: 'No turn is running');
+    return (why: null);
+  }
+
+  /// **Stop**: the chat's own interrupt — an Esc, or the protocol's cancel —
+  /// never End; the session stays up for the next message.
+  void _interrupt(BuildContext context, OverviewCard card) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    offerToStopChildren(context, ref, card.id);
+    unawaited(
+      ref.read(sessionTurnInterruptProvider)(card.id).then((why) {
+        if (why != null) {
+          messenger?.showSnackBar(SnackBar(content: Text(why)));
+        }
+      }),
     );
   }
 }
@@ -989,8 +1146,20 @@ Future<void> showOverviewFamilyMenu(
           icon: AppIcons.arrowBendDownRight,
         ),
     ],
+    // The shared End, where it stands, but the card's own: asked first,
+    // since Stop beside it only interrupts.
+    replace: {
+      'end': DesktopMenuItem(
+        key: ValueKey('overview-end:${card.id}'),
+        value: 'board-end',
+        label: 'End session…',
+        icon: AppIcons.power,
+      ),
+    },
     onMore: (value) async {
       switch (value) {
+        case 'board-end':
+          await endFromDashboard(anchor, ref, card, confirm: true);
         case 'board-earlier' || 'board-later':
           ref
               .read(overviewFamilyOrderProvider.notifier)

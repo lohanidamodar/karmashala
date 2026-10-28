@@ -117,10 +117,10 @@ void main() {
       'to hit', (tester) async {
     await pump(tester);
     for (final key in [
-      'overview-family-open:web-blog',
-      'overview-family-reply:web-blog',
-      'overview-family-open:ks-release',
-      'overview-end:ks-release',
+      'overview-interrupt:web-blog',
+      'overview-family-message:web-blog',
+      'overview-family-message:ks-release',
+      'overview-interrupt:ks-release',
     ]) {
       await reveal(tester, byKey(key));
       final hit = tester.getSize(byKey(key));
