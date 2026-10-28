@@ -3,13 +3,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/overview/application/overview_batch.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import 'mission_fixture.dart';
 
 /// **The dashboard's families on a phone are as compact as the rest of the
 /// app** (owner, 2026-10-14): one frame per family with its avatar inside,
-/// the title beside it, one pick box and only while picking, the state in
+/// the title beside it, one pick box, always under a thumb, the state in
 /// its slot, and footer buttons the size of the app's compact controls with
 /// a thumb's hit area kept.
 void main() {
@@ -137,26 +138,30 @@ void main() {
       find.byKey(ValueKey('overview-select:$id')).evaluate().length +
       find.byKey(ValueKey('overview-tree-select:$id')).evaluate().length;
 
-  testWidgets('no pick box at rest under a thumb; one per card once a '
-      'long press starts picking', (tester) async {
+  // The box is the only way to pick (round 124), so a thumb always has one.
+  testWidgets('one pick box per card under a thumb; a long press picks '
+      'nothing, and a tap opens while some are picked', (tester) async {
     final c = await pump(tester);
-    for (final id in solos) {
-      await reveal(tester, head(id));
-      expect(boxesOf(id), 0, reason: '$id at rest');
+    for (final id in [...solos, family, 'ks-r32-sub0']) {
+      await reveal(tester, byKey('session-avatar:$id'));
+      expect(boxesOf(id), 1, reason: '$id at rest');
     }
     await reveal(tester, titleOf('web-blog'));
     await tester.longPress(titleOf('web-blog'));
     await settleMission(tester);
-    expect(c.read(overviewSelectionProvider).contains('web-blog'), isTrue);
-    for (final id in [...solos, family, 'ks-r32-sub0']) {
-      await reveal(tester, byKey('session-avatar:$id'));
-      expect(boxesOf(id), 1, reason: '$id while picking');
-    }
-    // The avatar's box picks another while picking.
+    expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
+    // Its menu, closed again.
+    await tester.tapAt(const Offset(4, 4));
+    await settleMission(tester);
     await reveal(tester, byKey('overview-tree-select:beej-ci'));
     await tester.tap(byKey('overview-tree-select:beej-ci'));
     await settleMission(tester);
-    expect(c.read(overviewSelectionProvider).contains('beej-ci'), isTrue);
+    expect(c.read(overviewSelectionProvider).ids, {'beej-ci'});
+    await reveal(tester, titleOf('web-blog'));
+    await tester.tap(titleOf('web-blog'));
+    await settleMission(tester);
+    expect(c.read(overviewFocusProvider).peeked, 'web-blog');
+    expect(c.read(overviewSelectionProvider).ids, {'beej-ci'});
     await unmountMission(tester);
   });
 

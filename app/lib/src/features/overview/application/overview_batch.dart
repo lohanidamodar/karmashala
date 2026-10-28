@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show immutable;
 import 'package:riverpod/riverpod.dart';
 
 /// The sessions picked on the dashboard to answer together, and the one the
-/// last plain pick was on, which a Shift-click extends from.
+/// last pick was on, whose lane Ctrl+A picks when nothing holds the keys.
 @immutable
 class OverviewSelection {
   const OverviewSelection({this.ids = const {}, this.anchor});
@@ -34,18 +34,6 @@ class OverviewSelectionController extends Notifier<OverviewSelection> {
     final ids = {...state.ids};
     if (!ids.remove(id)) ids.add(id);
     state = OverviewSelection(ids: ids, anchor: id);
-  }
-
-  /// Adds every session from the anchor to [id], as [order] draws them.
-  void extendTo(String id, List<String> order) {
-    final from = order.indexOf(state.anchor ?? '');
-    final to = order.indexOf(id);
-    if (from < 0 || to < 0) return toggle(id);
-    final (start, end) = from <= to ? (from, to) : (to, from);
-    state = OverviewSelection(
-      ids: {...state.ids, ...order.sublist(start, end + 1)},
-      anchor: state.anchor,
-    );
   }
 
   /// Picks every one of [ids] too: Ctrl+A in a lane.

@@ -1100,19 +1100,18 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('under a thumb the box shows only while picking', (
-      tester,
-    ) async {
+    // The box is the only way to pick (round 124), so a thumb always has one.
+    testWidgets('under a thumb the box is always there, and a long press on '
+        'the pill picks nothing', (tester) async {
       final c = await pump(tester, size: const Size(390, 1400));
       const id = 'ks-r32-sub2';
       await reveal(tester, pill(id));
       final box = find.byKey(const ValueKey('overview-tree-select:$id'));
-      expect(box, findsNothing);
+      expect(box, findsOneWidget);
+      expect(tester.widget<Checkbox>(box).value, isFalse);
       await tester.longPress(pill(id));
       await settleMission(tester);
-      expect(c.read(overviewSelectionProvider).contains(id), isTrue);
-      expect(box, findsOneWidget);
-      expect(tester.widget<Checkbox>(box).value, isTrue);
+      expect(c.read(overviewSelectionProvider).isEmpty, isTrue);
       await unmountMission(tester);
     });
 
@@ -1125,7 +1124,9 @@ void main() {
       await showAll(tester);
       const leaf = 'ks-r32-sub2';
       await reveal(tester, pill(leaf));
-      await tester.longPress(pill(leaf));
+      await tester.tap(
+        find.byKey(const ValueKey('overview-tree-select:$leaf')),
+      );
       await settleMission(tester);
       expect(picked(leaf), isTrue);
 
@@ -1146,15 +1147,7 @@ void main() {
       await settleMission(tester);
       expect(picked(leaf), isFalse);
 
-      // The pill's own long press still picks, and its tap still unpicks.
-      await tester.longPress(pill(leaf));
-      await settleMission(tester);
-      expect(picked(leaf), isTrue);
-      await tester.tap(pill(leaf));
-      await settleMission(tester);
-      expect(picked(leaf), isFalse);
-
-      // And the knob still folds, its box showing over a parent's avatar.
+      // The knob still folds, its box showing over a parent's avatar.
       const parent = 'ks-r32-sub0';
       c.read(overviewSelectionProvider.notifier).toggle(parent);
       await reveal(tester, knob(parent));
@@ -1162,6 +1155,13 @@ void main() {
       await settleMission(tester);
       expect(c.read(overviewFoldedParentsProvider), {parent});
       expect(picked(parent), isTrue);
+
+      // And the pill's tap opens it, the selection left as it was.
+      await reveal(tester, pill(leaf));
+      await tester.tap(pill(leaf));
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, leaf);
+      expect(c.read(overviewSelectionProvider).ids, {parent});
       await unmountMission(tester);
     });
 

@@ -26,7 +26,6 @@ import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
 import '../application/overview_tree.dart';
-import 'overview_batch_bar.dart';
 import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_done_card.dart';
@@ -487,7 +486,6 @@ class _FamilyHeader extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    final touch = density.isTouch;
     final muted = theme.textTheme.labelSmall?.copyWith(
       color: scheme.onSurfaceVariant,
     );
@@ -528,10 +526,8 @@ class _FamilyHeader extends ConsumerWidget {
           splashFactory: NoSplash.splashFactory,
           onFocusChange: onFocus,
           // The card's tap is its Open chat: there is no button for it.
-          onTap: () {
-            if (!overviewPickSelects(ref, card, touch: touch)) onOpen(card);
-          },
-          onLongPress: () => overviewPickSelects(ref, card, long: true),
+          onTap: () => onOpen(card),
+          onLongPress: () => showOverviewFamilyMenu(context, ref, node),
           onSecondaryTapUp: (details) => showOverviewFamilyMenu(
             context,
             ref,
@@ -1224,7 +1220,8 @@ class _RootHeadState extends ConsumerState<_RootHead> {
     final selecting = ref.watch(
       overviewSelectionProvider.select((s) => !s.isEmpty),
     );
-    final pickable = selecting || ((_hovered || _within) && !touch);
+    // Under a thumb the box is the only way to pick, so it is always there.
+    final pickable = touch || selecting || _hovered || _within;
     // A sub-session of its own under a pointer or the keys: the quiet
     // "this is its parent", its ring glowing as the hovered one's does.
     final lit = ref.watch(
@@ -1419,12 +1416,8 @@ class _TreePillState extends ConsumerState<_TreePill> {
         },
         child: InkWell(
           key: ValueKey('overview-tree-pill:${card.id}'),
-          onTap: () {
-            if (!overviewPickSelects(ref, card, touch: touch)) {
-              widget.onOpen();
-            }
-          },
-          onLongPress: () => overviewPickSelects(ref, card, long: true),
+          onTap: widget.onOpen,
+          onLongPress: () => showOverviewFamilyMenu(context, ref, node),
           onSecondaryTapUp: (details) => showOverviewFamilyMenu(
             context,
             ref,
@@ -1455,7 +1448,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
                           children: [
                             Expanded(
                               flex: 3,
-                              // A long press picks the pill; hover names a
+                              // A long press opens its menu; hover names a
                               // cut title whole.
                               child: TruncatedText(
                                 card.entry.title,
@@ -1541,7 +1534,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
       ),
     );
 
-    final pickable = selecting || active;
+    final pickable = touch || selecting || active;
     return OverviewFamilyHover(
       card: card,
       ring: false,
