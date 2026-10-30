@@ -30,6 +30,7 @@ String encodeScrollback(
 }) {
   final buffer = terminal.mainBuffer;
   final lines = buffer.lines;
+  final columns = terminal.viewWidth;
 
   // Drop trailing blank lines — the unused remainder of the viewport.
   var end = lines.length;
@@ -46,18 +47,21 @@ String encodeScrollback(
   var total = 0;
   for (var i = end - 1; i >= start; i--) {
     // The rest of a fill a narrower grid wrapped is no part of this row.
-    final from = i > 0 ? fillLeftover(lines[i - 1], lines[i]) : 0;
+    final from = i > 0 ? fillLeftover(lines[i - 1], lines[i], columns) : 0;
     if (from > 0 && from >= lines[i].getTrimmedLength()) continue;
     final newest = newestFirst.isEmpty;
     // Every row but the newest also carries what joins the next one on.
     // A row filled out to its edge is a TUI's drawing even when it ran on
     // (ConPTY sends no line break after one), so it ends its line.
     final joint =
-        newest || (_continues(lines[i], lines[i + 1]) && !endsInFill(lines[i]))
+        newest ||
+            (_continues(lines[i], lines[i + 1], columns) &&
+                !endsInFill(lines[i], columns))
         ? ''
         : '\r\n';
     final line = _encodeLine(
       lines[i],
+      columns: columns,
       from: from,
       endsLine: joint.isNotEmpty || newest,
     );
@@ -77,7 +81,7 @@ String encodeScrollback(
 
 /// Whether [next] continues [row] in a shape that reads back so: [row] full
 /// (but for a wide glyph that did not fit) and [next] opening on text.
-bool _continues(BufferLine row, BufferLine next) {
+bool _continues(BufferLine row, BufferLine next, int columns) {
   if (!next.isWrapped || next.length == 0 || next.getCodePoint(0) == 0) {
     return false;
   }
@@ -87,8 +91,10 @@ bool _continues(BufferLine row, BufferLine next) {
     if (end > 1 && row.getWidth(end - 2) == 2) break;
     end--;
   }
-  if (end == row.length) return true;
-  return end == row.length - 1 && next.getWidth(0) == 2;
+  // Against the grid: a row of history is compacted to its last used cell.
+  final width = max(row.length, columns);
+  if (end == width) return true;
+  return end == width - 1 && next.getWidth(0) == 2;
 }
 
 bool _isBlank(BufferLine line) {
@@ -105,6 +111,7 @@ bool _isBlank(BufferLine line) {
 /// back narrower, as a TUI would redraw it, instead of wrapping it into more.
 String _encodeLine(
   BufferLine line, {
+  required int columns,
   required bool endsLine,
   int from = 0,
 }) {
@@ -119,7 +126,7 @@ String _encodeLine(
   }
   if (end == 0) return out.toString();
   final fillEnd = end;
-  if (endsLine) end = max(from, fillStart(line, end));
+  if (endsLine) end = max(from, fillStart(line, end, columns));
 
   // Style currently in effect for the parser, which ESC[0m just reset.
   var styleFg = 0;
@@ -187,7 +194,6 @@ String _encodeLine(
 
   return out.toString();
 }
-
 
 /// The SGR sequence that sets exactly [foreground], [background] and [flags].
 /// Every code emitted here is handled by the vendored parser's `_csiHandleSgr`,
