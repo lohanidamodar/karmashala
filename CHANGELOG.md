@@ -17,6 +17,11 @@ installs claim the same version name.
 
 ---
 
+## 1.34.18 — 2026-10-30 (build 85)
+
+- **The terminal is on xterm2 5.4.** Scrollback takes about a tenth of the memory per scrolled row, holds its place while a full-screen program redraws, and scrolling is cheaper. Mouse motion is reported once per cell, and kitty key releases and private-use keys reach a program only when it asked for them.
+- **Restored scrollback keeps its line ends.** Short lines read back after a restore, or cut by a narrow pane, are measured against the grid, so they wrap as they did when written.
+
 ## 1.34.17 — 2026-10-28 (build 84)
 
 - **Stop is back on the dashboard card, and the footer never changes shape.** Every family card's footer reads ⋯, Stop or Archive, and Message, in the same places at the card's right edge whatever the state. Stop interrupts the current turn without ending the agent; Archive takes its place once the session has ended. Message is always there: it queues while the agent is working and resumes an ended session. End session moved into ⋯ and asks first. The Open chat button is gone, since a click on the card opens the chat, and waiting asks open from the chip beside the title.
