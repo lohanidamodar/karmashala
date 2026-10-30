@@ -6,15 +6,20 @@ import 'package:xterm2/xterm.dart';
 /// the width — a rule — rather than as text that happened to end there.
 const kMinFillCells = 4;
 
+/// Whether [row] reaches the last of a grid [columns] wide. A row of history
+/// is compacted to its last used cell, so its own length does not say.
+bool reachesEdge(BufferLine row, int columns) => row.length >= columns;
+
 /// Whether [row] is filled to its last column by a fill of [kMinFillCells]
 /// or more — never a word that soft-wrapping happened to break.
-bool endsInFill(BufferLine row) =>
-    row.length - fillStart(row, row.length) >= kMinFillCells;
+bool endsInFill(BufferLine row, int columns) =>
+    reachesEdge(row, columns) &&
+    row.length - fillStart(row, row.length, columns) >= kMinFillCells;
 
 /// Where [line]'s trailing fill starts, or [end] when it has none: trailing
 /// spaces, or one glyph other than a letter or digit repeated out to the last
-/// column.
-int fillStart(BufferLine line, int end) {
+/// column of a grid [columns] wide.
+int fillStart(BufferLine line, int end, int columns) {
   final last = end - 1;
   final codePoint = line.getCodePoint(last);
   if (codePoint == 0 || line.getWidth(last) != 1) return end;
@@ -25,6 +30,7 @@ int fillStart(BufferLine line, int end) {
   if (codePoint == 0x20) return start;
   final drawn =
       end == line.length &&
+      reachesEdge(line, columns) &&
       end - start >= kMinFillCells &&
       !_wordGlyph.hasMatch(String.fromCharCode(codePoint));
   return drawn ? start : end;
@@ -34,8 +40,8 @@ int fillStart(BufferLine line, int end) {
 /// a narrower grid wrapped onto a row of its own. Zero unless [next]
 /// continues a [row] that [endsInFill], and for spaces unless they are all
 /// [next] holds.
-int fillLeftover(BufferLine row, BufferLine next) {
-  if (!next.isWrapped || !endsInFill(row)) return 0;
+int fillLeftover(BufferLine row, BufferLine next, int columns) {
+  if (!next.isWrapped || !endsInFill(row, columns)) return 0;
   final last = row.length - 1;
   var cell = 0;
   while (cell < next.length &&
@@ -59,11 +65,12 @@ int fillLeftover(BufferLine row, BufferLine next) {
 /// its own indent.
 void cutFillsPast(Buffer buffer, int columns) {
   final lines = buffer.lines;
+  final width = buffer.viewWidth;
   for (var i = 0; i < lines.length; i++) {
     final line = lines[i];
     if (line.length <= columns || line.getTrimmedLength() <= columns) continue;
-    if (!endsInFill(line)) continue;
-    final start = fillStart(line, line.length);
+    if (!endsInFill(line, width)) continue;
+    final start = fillStart(line, line.length, width);
     // Spaces that paint nothing go; any other fill keeps what shows.
     final blank =
         line.getCodePoint(start) == 0x20 &&

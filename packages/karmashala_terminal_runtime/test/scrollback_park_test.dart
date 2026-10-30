@@ -30,15 +30,20 @@ void main() {
 
   test('parking releases everything above the screen', () {
     final terminal = filled(500);
-    final before = residentCellBytes(terminal);
     final park = ScrollbackPark(terminal);
 
     expect(park.park(), isTrue);
 
     expect(terminal.mainBuffer.lines.length, rows);
+    // Against an empty screen, not the full buffer: history is compacted as it
+    // scrolls, so it no longer costs ten screens to release.
     expect(
       residentCellBytes(terminal),
-      lessThan(before ~/ 10),
+      lessThanOrEqualTo(
+        residentCellBytes(
+          Terminal(maxLines: kLiveScrollbackMaxLines)..resize(columns, rows),
+        ),
+      ),
       reason: 'the lines have to actually go, not just stop being addressed',
     );
     expect(park.isParked, isTrue);

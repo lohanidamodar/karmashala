@@ -117,12 +117,51 @@ void main() {
   test('a wrapped row whose first half was erased stays its own row', () {
     // The flag outlives the text it continued: joining these would pull the
     // second row up into the gap.
-    final saved = blank(20)..write('${'a' * 30}\x1b[1;11H\x1b[K\x1b[2;11H\r\n');
+    final saved = blank(20)
+      ..write('${'a' * 30}\x1b[1;11H\x1b[10X\x1b[2;11H\r\n');
     expect(rowsOf(saved), ['a' * 10, 'a' * 10]);
     expect(saved.mainBuffer.lines[1].isWrapped, isTrue);
 
     final restored = blank(20)..write(encodeScrollback(saved));
     expect(rowsOf(restored), rowsOf(saved));
+  });
+
+  group('history rows are compacted, so a row is shorter than the grid', () {
+    Terminal scrolledAway(String bytes, {int width = 20}) {
+      final terminal = blank(width, height: 4)..write(bytes);
+      for (var i = 0; i < 8; i++) {
+        terminal.write('x$i\r\n');
+      }
+      return terminal;
+    }
+
+    test('a gap in the history is not taken for a full row', () {
+      final saved = scrolledAway('${'a' * 30}\x1b[1;11H\x1b[10X\x1b[2;11H\r\n');
+      expect(saved.mainBuffer.lines[0].length, lessThan(20));
+      expect(saved.mainBuffer.lines[1].isWrapped, isTrue);
+
+      final restored = blank(20)..write(encodeScrollback(saved));
+      expect(rowsOf(restored).take(2), ['a' * 10, 'a' * 10]);
+    });
+
+    test('a rule short of the edge wraps like text when restored narrower', () {
+      final saved = scrolledAway('a title ${'-' * 20}\r\n', width: 40);
+      expect(saved.mainBuffer.lines[0].length, lessThan(40));
+
+      final restored = blank(20)..write(encodeScrollback(saved));
+      expect(rowsOf(restored).take(2), ['a title ${'-' * 12}', '-' * 8]);
+    });
+
+    test('nor is it cut when the pane narrows', () {
+      final pane = PaneTerminal(maxLines: 5000, settle: Duration.zero)
+        ..resizeNow(40, 4)
+        ..write('a title ${'-' * 20}\r\n');
+      for (var i = 0; i < 8; i++) {
+        pane.write('x$i\r\n');
+      }
+      pane.resize(20, 4);
+      expect(rowsOf(pane).take(2), ['a title ${'-' * 12}', '-' * 8]);
+    });
   });
 
   group('a TUI drawn to the full width, restored into a narrower pane', () {
