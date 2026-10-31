@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -190,10 +192,19 @@ void main() {
         addTearDown(h.container.dispose);
 
         h.db.server.environmentRows.upsert(wslEnv());
+        h.db.server.installationRows.insert(
+          agentInstallation(
+            id: 'a2',
+            agentId: _conversational.id,
+            environmentId: 'wsl:Ubuntu',
+            path: '/usr/bin/conv',
+          ),
+        );
         h.db.server.sessionRows.insert(
           session(
             id: 'n2',
             title: 'Worktree work',
+            agentInstallationId: 'a2',
             workingDirectory: const EnvironmentPath(
               environmentId: 'wsl:Ubuntu',
               path: '/home/me/wt',
@@ -223,6 +234,173 @@ void main() {
         h.terminals.launches.single,
         containsAllInOrder(['--conversation', 'ext-1']),
       );
+    });
+  });
+
+  /// Round 127: a conversation from a WSL store merges into a Windows project.
+  /// What is handed to a person has to run in WSL, in `/mnt/c/…`, as a resume
+  /// does; the executable and the directory never come from two machines.
+  group('a session whose agent is installed away from its checkout', () {
+    const wslFolder = '/mnt/c/src/demo/app';
+
+    Future<Harness> inWsl() async {
+      final h = await harness(_conversational);
+      addTearDown(h.container.dispose);
+      h.db.server.environmentRows.upsert(wslEnv());
+      h.db.server.installationRows.insert(
+        agentInstallation(
+          id: 'a2',
+          agentId: _conversational.id,
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/.local/bin/conv',
+        ),
+      );
+      h.db.server.sessionRows.insert(
+        session(
+          id: 'n3',
+          title: 'From WSL',
+          agentInstallationId: 'a2',
+          workingDirectory: const EnvironmentPath(
+            environmentId: 'windows',
+            path: r'C:\src\demo\app',
+          ),
+        ),
+      );
+      h.db.server.sessionRows.updateExternalSessionId('n3', 'ext-3');
+      return h;
+    }
+
+    final fromWsl = ImportedSession(
+      id: 'i3',
+      repositoryId: 'r1',
+      cli: _conversational.id,
+      externalId: 'ext-3',
+      environmentId: 'wsl:Ubuntu',
+      filePath: '/store/ext-3.jsonl',
+      storeHome: '/store',
+      isSubagent: false,
+      preview: 'earlier work',
+      createdAt: testTime,
+    );
+
+    void expectRunsInWsl(String line) {
+      expect(line, startsWith('cd $wslFolder && '));
+      expect(line, contains('/home/me/.local/bin/conv'));
+      expect(line, isNot(contains('Set-Location')));
+      expect(line, isNot(contains(r'C:\')));
+    }
+
+    test('the imported copied command runs in WSL', () async {
+      final h = await inWsl();
+
+      expectRunsInWsl(
+        h.container.read(sessionActionsProvider).resumeShellCommand(fromWsl),
+      );
+    });
+
+    test('so does the native one, from a row written wrongly', () async {
+      final h = await inWsl();
+
+      expectRunsInWsl(
+        h.container.read(sessionActionsProvider).nativeResumeShellCommand('n3'),
+      );
+    });
+
+    void expectOpensInWsl(List<String> command) {
+      expect(
+        command,
+        containsAllInOrder([
+          'wsl.exe',
+          '-d',
+          'Ubuntu',
+          '--cd',
+          wslFolder,
+          '--',
+        ]),
+      );
+      // The agent's own line reaches WSL's shell encoded, as `eval`'s argument.
+      final encoded = RegExp(r"echo '([^']+)'").firstMatch(command.last)!;
+      expect(
+        utf8.decode(base64.decode(encoded.group(1)!)),
+        contains('/home/me/.local/bin/conv'),
+      );
+    }
+
+    test('the imported terminal opens in WSL', () async {
+      final h = await inWsl();
+
+      await h.container
+          .read(sessionActionsProvider)
+          .openInSystemTerminal(fromWsl, _terminal);
+
+      expectOpensInWsl(h.terminals.launches.single);
+    });
+
+    test('so does the native one, written wrongly or healed', () async {
+      final h = await inWsl();
+      final actions = h.container.read(sessionActionsProvider);
+
+      await actions.openSessionInSystemTerminal('n3', _terminal);
+      expectOpensInWsl(h.terminals.launches.single);
+
+      // As the server leaves the row after a resume.
+      h.db.server.sessionRows.updateWorkingDirectory(
+        'n3',
+        const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: wslFolder),
+      );
+      await actions.openSessionInSystemTerminal('n3', _terminal);
+      expectOpensInWsl(h.terminals.launches.last);
+    });
+
+    test('a folder that has no name there is refused in words', () async {
+      final h = await inWsl();
+      h.db.server.sessionRows.updateWorkingDirectory(
+        'n3',
+        const EnvironmentPath(environmentId: 'windows', path: r'\\nas\src'),
+      );
+
+      expect(
+        () => h.container
+            .read(sessionActionsProvider)
+            .nativeResumeShellCommand('n3'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('Ubuntu'), contains(r'\\nas\src')),
+          ),
+        ),
+      );
+    });
+
+    test('the reverse: a Windows store under a WSL checkout', () async {
+      final h = await harness(_conversational);
+      addTearDown(h.container.dispose);
+      h.db.server.environmentRows.upsert(wslEnv());
+      h.db.server.repositoryRows.insert(
+        repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: wslFolder),
+      );
+
+      final line = h.container
+          .read(sessionActionsProvider)
+          .resumeShellCommand(
+            ImportedSession(
+              id: 'i4',
+              repositoryId: 'r2',
+              cli: _conversational.id,
+              externalId: 'ext-4',
+              environmentId: 'windows',
+              filePath: r'C:\store\ext-4.jsonl',
+              storeHome: r'C:\store',
+              isSubagent: false,
+              preview: 'earlier work',
+              createdAt: testTime,
+            ),
+          );
+
+      expect(line, contains('Set-Location'));
+      expect(line, contains(r'C:\src\demo\app'));
+      expect(line, isNot(contains('/mnt/c')));
     });
   });
 

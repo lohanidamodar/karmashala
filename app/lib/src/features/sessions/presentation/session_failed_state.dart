@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show LoginRequiredRefusal;
 import 'package:karmashala_notifications/attention.dart' show describeFollowUp;
 import 'package:karmashala_session/events.dart' show FollowUpReason;
 import 'package:karmashala_session/session.dart' show SessionStatus;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../agents/application/agent_providers.dart';
+import '../../agents/presentation/acp_login_dialog.dart';
 import '../application/session_launcher.dart';
 import '../application/session_providers.dart';
 import '../application/session_signals.dart';
@@ -18,25 +22,55 @@ class SessionFailedState extends ConsumerStatefulWidget {
   final String sessionId;
 
   @override
-  ConsumerState<SessionFailedState> createState() =>
-      _SessionFailedStateState();
+  ConsumerState<SessionFailedState> createState() => _SessionFailedStateState();
 }
 
 class _SessionFailedStateState extends ConsumerState<SessionFailedState> {
   bool _retrying = false;
   String? _refusal;
+  bool _loginAsked = false;
 
   Future<void> _retry() async {
     setState(() {
       _retrying = true;
       _refusal = null;
+      _loginAsked = false;
     });
     try {
       await ref.read(sessionLauncherProvider).resumeAtServer(widget.sessionId);
     } on Object catch (error) {
-      if (mounted) setState(() => _refusal = '$error');
+      if (mounted) {
+        setState(() {
+          _refusal = error is StateError ? error.message : '$error';
+          _loginAsked = error is LoginRequiredRefusal;
+        });
+      }
     } finally {
       if (mounted) setState(() => _retrying = false);
+    }
+  }
+
+  /// Opens the agent's login; once it is done, the start it stopped goes on.
+  Future<void> _logIn() async {
+    final session = ref.read(sessionsDataProvider).getById(widget.sessionId);
+    final installation = session == null
+        ? null
+        : ref
+              .read(agentInstallationsDataProvider)
+              .getById(session.agentInstallationId);
+    if (installation == null) return;
+    final outcome = await AcpLoginDialog.show(
+      context,
+      installationId: installation.id,
+      agentName: ref
+          .read(agentRegistryProvider)
+          .displayNameFor(installation.agentId),
+    );
+    if (!mounted || outcome == null) return;
+    if (outcome.done) {
+      await _retry();
+    } else {
+      setState(() => _refusal = outcome.said);
     }
   }
 
@@ -101,6 +135,13 @@ class _SessionFailedStateState extends ConsumerState<SessionFailedState> {
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.error,
                         ),
+                      ),
+                    ],
+                    if (_loginAsked) ...[
+                      const SizedBox(height: Insets.xs),
+                      TextButton(
+                        onPressed: _retrying ? null : _logIn,
+                        child: const Text('Log in…'),
                       ),
                     ],
                   ],

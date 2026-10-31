@@ -51,6 +51,10 @@ class FakeSessionWork {
   /// agent that would not start — a login it asks for first.
   String? resumeOnSendRefusesWith;
 
+  /// Set to refuse every start and resume in these words, as the server
+  /// refuses an agent that asks to be logged in first.
+  String? asksForLogin;
+
   /// Tells the one client a window's intent, as the server would.
   void tellIntent(ClientIntent intent) => _server._tell(null, [intent]);
 
@@ -250,6 +254,11 @@ class FakeSessionWork {
     asked.add(request);
     final refusal = refuseWith;
     if (refusal != null) throw DataRefused.invalid(refusal);
+    if (request is SessionStart || request is SessionResume) {
+      if (asksForLogin case final words?) {
+        throw DataRefused(DataRefusalCode.loginRequired, words);
+      }
+    }
     switch (request) {
       case SessionStart(:final spec):
         return _start(spec);

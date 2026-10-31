@@ -64,4 +64,19 @@ void main() {
       },
     );
   });
+
+  group('tryTranslate', () {
+    test('answers what translate answers', () {
+      expect(
+        t.tryTranslate(p('windows', r'C:\a'), from: windows, to: ubuntu)?.path,
+        '/mnt/c/a',
+      );
+    });
+    test('is null for a folder with no name in the other environment', () {
+      expect(
+        t.tryTranslate(p('windows', r'\\nas\src'), from: windows, to: ubuntu),
+        isNull,
+      );
+    });
+  });
 }

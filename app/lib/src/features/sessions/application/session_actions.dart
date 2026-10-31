@@ -600,11 +600,15 @@ class SessionActions {
         session: session,
         // The CLIs key their conversation stores by directory, so the repo root
         // is a fallback rather than an answer.
-        workingDirectory: directoryOrFallback(
+        workingDirectory: directoryWhereAgentRuns(
           _ref,
-          directory: sessionWorkingDirectoryOf(_ref, session),
-          fallback: repo.path,
-        ).directory,
+          directoryOrFallback(
+            _ref,
+            directory: sessionWorkingDirectoryOf(_ref, session),
+            fallback: repo.path,
+          ).directory,
+          installation.environmentId,
+        ),
         installation: installation,
         permission: permission,
         resumeSessionId: session.externalSessionId,
@@ -896,7 +900,7 @@ class SessionActions {
       permission: _ref
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
-      cwd: repo.path.path,
+      cwd: directoryWhereAgentRuns(_ref, repo.path, session.environmentId).path,
       environment: _shellKindOf(session.environmentId),
       registry: _ref.read(agentRegistryProvider),
     );
@@ -930,8 +934,11 @@ class SessionActions {
       throw StateError('The agent for this session is not installed.');
     }
     _refuseWhatCannotResume(installation.agentId, session.externalSessionId);
-    final workingDirectory =
-        sessionWorkingDirectoryOf(_ref, session) ?? repo.path;
+    final workingDirectory = directoryWhereAgentRuns(
+      _ref,
+      sessionWorkingDirectoryOf(_ref, session) ?? repo.path,
+      installation.environmentId,
+    );
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
@@ -1014,9 +1021,14 @@ class SessionActions {
         'Repository for this session is no longer in the workspace.',
       );
     }
+    final directory = directoryWhereAgentRuns(
+      _ref,
+      repo.path,
+      session.environmentId,
+    );
     final env = _ref
         .read(environmentResolverProvider)
-        .resolveFor(repo.path)
+        .resolveFor(directory)
         .require;
     final installs = _ref
         .read(agentInstallationsDataProvider)
@@ -1031,7 +1043,7 @@ class SessionActions {
       cli: session.cli,
       externalId: session.externalId,
       environment: env,
-      cwd: repo.path,
+      cwd: directory,
       permission: _ref
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
@@ -1039,7 +1051,7 @@ class SessionActions {
     );
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host
     // shells take a start directory.
-    final cwd = env.wslDistribution == null ? repo.path.path : null;
+    final cwd = env.wslDistribution == null ? directory.path : null;
     await _ref
         .read(systemTerminalServiceProvider)
         .launch(terminal, command: command, workingDirectory: cwd);
@@ -1093,16 +1105,23 @@ class SessionActions {
         'their id automatically.',
       );
     }
-    final env = _ref
-        .read(environmentResolverProvider)
-        .resolveFor(repo.path)
-        .require;
-    final recorded = sessionWorkingDirectoryOf(_ref, session);
+    final known = sessionWorkingDirectoryOf(_ref, session);
+    final recorded = known == null
+        ? null
+        : directoryWhereAgentRuns(_ref, known, installation.environmentId);
     final directory = directoryOrFallback(
       _ref,
       directory: recorded,
-      fallback: repo.path,
+      fallback: directoryWhereAgentRuns(
+        _ref,
+        repo.path,
+        installation.environmentId,
+      ),
     ).directory;
+    final env = _ref
+        .read(environmentResolverProvider)
+        .resolveFor(directory)
+        .require;
     // After the id is resolved: the two recovery paths above can supply one the
     // row did not carry, and it is that id the command has to continue.
     _refuseWhatCannotResume(installation.agentId, externalId);

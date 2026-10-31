@@ -15,6 +15,7 @@ import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/new_session_memory.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_launcher.dart';
+import '../../sessions/application/session_notice.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -97,20 +98,24 @@ class ExplorerActions {
     }
 
     final launcher = _ref.read(sessionLauncherProvider);
-    // Its pane, or a pane attached to the host's session when none shows it.
-    if (await launcher.show(sessionId)) {
-      return const ExplorerResult(ExplorerOutcome.reattached);
+    // Attaching is a resume at the server, which can refuse: a row reads as
+    // running while the start that will fail is still under way.
+    final ExplorerResult? shown;
+    try {
+      shown = await _showRunning(session, launcher);
+    } on StateError catch (refused) {
+      _ref
+          .read(sessionNoticesProvider.notifier)
+          .post(
+            sessionId,
+            SessionNotice(
+              message: refused.message,
+              tone: SessionNoticeTone.warning,
+            ),
+          );
+      return ExplorerResult(ExplorerOutcome.failed, message: refused.message);
     }
-
-    // A previous resume of this conversation left a second row behind and its
-    // pane may be the live one; revealing it beats a third process.
-    final twin = _liveTwinOf(session);
-    if (twin != null && await launcher.show(twin.id)) {
-      return ExplorerResult(
-        ExplorerOutcome.reattached,
-        message: '"${twin.title}" is already running this conversation.',
-      );
-    }
+    if (shown != null) return shown;
 
     // An ACP session has no CLI conversation to look for: its conversation is
     // the server's own rows. It opens in its chat tab, and a message sent
@@ -122,6 +127,27 @@ class ExplorerActions {
       return const ExplorerResult(ExplorerOutcome.selected);
     }
     return _resumeConversation(session, openTab: true);
+  }
+
+  /// What runs [session] brought into view, or null when nothing does.
+  Future<ExplorerResult?> _showRunning(
+    Session session,
+    SessionLauncher launcher,
+  ) async {
+    // Its pane, or a pane attached to the host's session when none shows it.
+    if (await launcher.show(session.id)) {
+      return const ExplorerResult(ExplorerOutcome.reattached);
+    }
+    // A previous resume of this conversation left a second row behind and its
+    // pane may be the live one; revealing it beats a third process.
+    final twin = _liveTwinOf(session);
+    if (twin != null && await launcher.show(twin.id)) {
+      return ExplorerResult(
+        ExplorerOutcome.reattached,
+        message: '"${twin.title}" is already running this conversation.',
+      );
+    }
+    return null;
   }
 
   /// Resumes [sessionId] where the person is: at the server, with no tab

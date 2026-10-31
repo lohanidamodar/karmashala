@@ -19,6 +19,9 @@ class SessionsClient {
     try {
       return (await _client.send(request)).value;
     } on DataRefused catch (refusal) {
+      if (refusal.code == DataRefusalCode.loginRequired) {
+        throw LoginRequiredRefusal(refusal.message);
+      }
       throw StateError(refusal.message);
     }
   }

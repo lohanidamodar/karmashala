@@ -463,10 +463,19 @@ void main() {
       final h = await harness(_sharing);
       addTearDown(h.container.dispose);
       broken(h);
+      h.server.installationRows.insert(
+        agentInstallation(
+          id: 'a2',
+          agentId: _sharing.id,
+          environmentId: 'wsl:Ubuntu',
+          path: '/usr/bin/claude',
+        ),
+      );
       h.server.sessionRows.insert(
         session(
           id: 'n2',
           repositoryId: 'r2',
+          agentInstallationId: 'a2',
           title: 'Adopted',
         ).copyWith(externalSessionId: 'ext-2'),
       );

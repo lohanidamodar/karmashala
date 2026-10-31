@@ -34,6 +34,12 @@ enum DataRefusalCode {
       .firstWhere((code) => code.name == name, orElse: () => failed);
 }
 
+/// [DataRefusalCode.loginRequired], for a client whose refusals are
+/// [StateError]s: the code is what lets it offer the agent's login.
+class LoginRequiredRefusal extends StateError {
+  LoginRequiredRefusal(super.message);
+}
+
 /// A data request the server refused, with its reason in words — short
 /// enough for where it is shown — and, when there is more to it, the whole
 /// technical account in [detail].
