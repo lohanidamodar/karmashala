@@ -25,6 +25,28 @@ EnvironmentPath? sessionWorkingDirectoryOf(Ref ref, Session session) {
   return ref.read(workspaceDataProvider).repository(session.repositoryId)?.path;
 }
 
+/// [directory] as [environmentId] spells it: an agent runs where it is
+/// installed, whichever environment its checkout was registered in, as a
+/// launch at the server does. Refused in words when it has no name there; an
+/// environment with no row is "could not tell".
+EnvironmentPath directoryWhereAgentRuns(
+  Ref ref,
+  EnvironmentPath directory,
+  String environmentId,
+) {
+  final environments = ref.read(environmentsDataProvider);
+  final from = environments.getById(directory.environmentId);
+  final to = environments.getById(environmentId);
+  if (from == null || to == null) return directory;
+  return ref
+          .read(pathTranslatorProvider)
+          .tryTranslate(directory, from: from, to: to) ??
+      (throw StateError(
+        'This agent is installed on ${to.name}, which cannot reach '
+        '${directory.path} on ${from.name}.',
+      ));
+}
+
 /// Whether a directory a session recorded is still there — a seam tests stub.
 /// **True also means "could not tell"**, so an SSH session is never refused.
 final sessionDirectoryPresentProvider =
