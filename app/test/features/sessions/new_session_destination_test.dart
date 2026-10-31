@@ -33,8 +33,8 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
         AcpAuthMethod,
         AcpAuthMethods,
-        DataRefusalCode,
         DataRefused,
+        LoginRequiredRefusal,
         ScratchCheckoutCreate;
 import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 
@@ -1408,10 +1408,7 @@ class _LoginRequired extends SessionLauncher {
   }) async {
     launches++;
     if (launches > 1) throw StateError('the second start');
-    throw const DataRefused(
-      DataRefusalCode.loginRequired,
-      'Antigravity asks to be logged in first.',
-    );
+    throw LoginRequiredRefusal('Antigravity asks to be logged in first.');
   }
 }
 

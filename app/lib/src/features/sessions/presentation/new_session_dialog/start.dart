@@ -217,7 +217,7 @@ extension _NewSessionStart on _NewSessionDialogState {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        if (e is DataRefused && e.code == DataRefusalCode.loginRequired) {
+        if (e is LoginRequiredRefusal) {
           _error = e.message;
           _loginFor = installation;
           _loginPlace = place;

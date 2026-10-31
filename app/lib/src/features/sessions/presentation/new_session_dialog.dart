@@ -18,7 +18,7 @@ import '../../agents/application/folded_installations.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../agents/presentation/acp_login_dialog.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DataRefused, DataRefusalCode;
+    show LoginRequiredRefusal;
 import 'package:agent_cli/descriptors.dart' show AgentRunForm;
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_values.dart'

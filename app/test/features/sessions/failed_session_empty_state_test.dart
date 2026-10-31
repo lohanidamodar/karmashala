@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/presentation/acp_login_dialog.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
@@ -130,5 +131,37 @@ void main() {
     expect(server.sessionRows.getById('acp-1')!.status, SessionStatus.running);
     expect(find.text('Ended in error'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a Retry refused for a login says so, and offers it', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    server.sessionWork.asksForLogin = 'Claude asks to be logged in first.';
+    await pump(tester);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Claude asks to be logged in first.'), findsOneWidget);
+    expect(find.textContaining('Bad state'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Log in…'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AcpLoginDialog), findsOneWidget);
+  });
+
+  testWidgets('any other refusal offers no login', (tester) async {
+    server.sessionWork.refuseWith = 'That checkout is gone.';
+    await pump(tester);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('That checkout is gone.'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Log in…'), findsNothing);
   });
 }

@@ -5,7 +5,9 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/sessions/application/session_notice.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_resume_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -76,6 +78,7 @@ typedef Harness = ({ProviderContainer container, TestMachine db});
 Future<Harness> harness({
   bool installAgent = true,
   String agentId = 'sharing',
+  bool? runningOnHost,
 }) async {
   final db = TestMachine();
   final server = FakeDataServer()..runsOn(db);
@@ -102,6 +105,8 @@ Future<Harness> harness({
         ]),
       ),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
+      if (runningOnHost != null)
+        sessionRunningOnHostProvider.overrideWithValue((_) => runningOnHost),
       // The whereabouts provider watches this stream for a "last seen" time;
       // a real poll leaves an autoDispose stream mid-flight when a plain
       // container reads it once. Nothing here is about ageing evidence.
@@ -190,6 +195,31 @@ void main() {
         );
       },
     );
+
+    test('a start refused while the row still reads as running comes back as '
+        'a failure in words, never as an uncaught error', () async {
+      // 2026-10-31: the send's own start had the row reading `running`, so
+      // opening it went to `show`, which attaches to what the host runs — a
+      // resume, refused the same way, with nobody catching it.
+      final h = await harness(runningOnHost: true);
+      addTearDown(h.container.dispose);
+      serverOf(h.container).sessionRows.insert(stopped());
+      serverOf(h.container).sessionWork.asksForLogin =
+          'Antigravity · Chat could not be started: it asks to be logged in '
+          'first.';
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .openNative('old');
+
+      expect(result.outcome, ExplorerOutcome.failed);
+      expect(result.message, contains('asks to be logged in first'));
+      expect(result.message, isNot(contains('Bad state')));
+      expect(
+        h.container.read(sessionNoticeProvider('old'))?.message,
+        contains('asks to be logged in first'),
+      );
+    });
 
     test('a stopped worktree session resumes in its worktree', () async {
       // Loop 57's blocker, and the reason it could not be fixed there: the
