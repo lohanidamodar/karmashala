@@ -256,7 +256,9 @@ class ServerSessionLauncher {
           'That agent is not installed any more. Run "Discover agents" in '
           'Settings.',
         ));
-    final environment = rows.environment(repository.path.environmentId);
+    final environment =
+        rows.environment(installation.environmentId) ??
+        rows.environment(repository.path.environmentId);
     if (environment != null &&
         environment.kind == EnvironmentKind.wsl &&
         !facts.isHere(environment)) {
@@ -272,6 +274,24 @@ class ServerSessionLauncher {
     if (held != null) return _adopted(held);
 
     _refuseIfForbidden(agentId, spec.resumeConversationId);
+
+    // An agent runs where it is installed, whichever environment its checkout
+    // was registered in: a conversation from a WSL store merges into a Windows
+    // project. Every launch and resume passes here, so a row written before
+    // this heals on its next start.
+    final checkout = _whereAgentRuns(repository.path, installation);
+    final existingWorktree = spec.existingWorktree == null
+        ? null
+        : _whereAgentRuns(spec.existingWorktree!, installation);
+    if (spec.worktree && checkout != repository.path) {
+      throw StateError(
+        'A new worktree is made where the checkout lives, on '
+        '${_environmentName(repository.path.environmentId)}, and '
+        '${agents.nameOf(agentId)} is installed on '
+        '${_environmentName(installation.environmentId)}. Start it without a '
+        'new worktree, or with an agent installed beside the checkout.',
+      );
+    }
     installation = await _usable(installation);
 
     var resumeId = spec.resumeConversationId;
@@ -301,22 +321,26 @@ class ServerSessionLauncher {
     var recordDirectory = true;
     String? notice;
     if (spec.existingWorktree == null && !spec.worktree) {
-      final wanted =
+      final recorded =
           spec.workingDirectory ?? reused?.workingDirectory ?? reused?.worktree;
-      if (wanted != null && wanted != repository.path) {
+      final wanted = recorded == null
+          ? null
+          : _whereAgentRuns(recorded, installation);
+      if (wanted != null && wanted != checkout) {
         if (_present(wanted)) {
           workingDirectory = wanted;
         } else {
-          workingDirectory = repository.path;
+          workingDirectory = checkout;
           recordDirectory = false;
           notice =
               '${wanted.path} no longer exists, so this session starts in '
-              '${repository.path.path} instead.';
+              '${checkout.path} instead.';
         }
+      } else if (checkout != repository.path) {
+        workingDirectory = checkout;
       }
     }
-    final launchDirectory =
-        spec.existingWorktree ?? workingDirectory ?? repository.path;
+    final launchDirectory = existingWorktree ?? workingDirectory ?? checkout;
     final caveat = _elsewhereCaveat(
       agentId,
       resumeId ?? spec.forkConversationId,
@@ -402,7 +426,7 @@ class ServerSessionLauncher {
           worktreeBranch: spec.worktreeBranch,
           worktreeBase: spec.worktreeBase,
           worktreeExistingBranch: spec.worktreeExistingBranch,
-          existingWorktree: spec.existingWorktree,
+          existingWorktree: existingWorktree,
 
           workingDirectory: workingDirectory,
           recordDirectory: recordDirectory,
@@ -847,6 +871,27 @@ class ServerSessionLauncher {
       launchDirectory: launchDirectory.path,
     );
   }
+
+  /// [directory] where [installation] runs. Refused in words when it cannot
+  /// be said there: a PTY started anyway is a shell failing on a path it has
+  /// never heard of. An environment with no row is "could not tell".
+  EnvironmentPath _whereAgentRuns(
+    EnvironmentPath directory,
+    AgentInstallation installation,
+  ) {
+    final from = rows.environment(directory.environmentId);
+    final to = rows.environment(installation.environmentId);
+    if (from == null || to == null) return directory;
+    return const PathTranslator().tryTranslate(directory, from: from, to: to) ??
+        (throw StateError(
+          '${agents.nameOf(installation.agentId)} is installed on ${to.name}, '
+          'which cannot reach ${directory.path} on ${from.name}, so it was '
+          'not started. Use an agent installed on ${from.name}.',
+        ));
+  }
+
+  String _environmentName(String environmentId) =>
+      rows.environment(environmentId)?.name ?? environmentId;
 
   /// [trustScratchFolder] for [folder], never failing the launch: an agent
   /// that still asks about the folder is a prompt, not a refusal.

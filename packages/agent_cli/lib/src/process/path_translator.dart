@@ -94,6 +94,19 @@ class PathTranslator {
     );
   }
 
+  /// [translate], or null where [path] cannot be said in [to].
+  EnvironmentPath? tryTranslate(
+    EnvironmentPath path, {
+    required ExecutionEnvironment from,
+    required ExecutionEnvironment to,
+  }) {
+    try {
+      return translate(path, from: from, to: to);
+    } on PathTranslationException {
+      return null;
+    }
+  }
+
   String _windowsToWsl(String windowsPath, ExecutionEnvironment wslEnv) {
     if (_windowsDrive.hasMatch(windowsPath)) {
       return windowsDriveToWslMount(windowsPath);
