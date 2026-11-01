@@ -208,7 +208,7 @@ void main() {
     test('has plan mode, and its ask is the unflagged behaviour', () {
       expect(
         [for (final v in support.axes.single.values) v.id],
-        ['plan', 'prompt', 'accept-edits', 'skip-permissions'],
+        ['plan', 'prompt', 'accept-edits', 'auto', 'skip-permissions'],
       );
       expect(support.argumentsFor(support.defaultSelection), isEmpty);
     });
@@ -220,6 +220,7 @@ void main() {
         '--mode',
         'accept-edits',
       ]);
+      expect(axis.valueFor('auto')!.arguments, ['--mode', 'auto']);
       expect(axis.valueFor('skip-permissions')!.arguments, [
         '--dangerously-skip-permissions',
       ]);

@@ -73,10 +73,21 @@ const antigravityDescriptor = AgentDescriptor(
     // "Antigravity's acceptEdits was empty because we have no idea how to ask"
     // is retired by the first line.
     //
-    // **`agy` does not validate `--mode` at parse time** (Go's `flag` package
-    // prints help and carries on), so only the two values its help names are
-    // declared — an unknown one has never been run and would not announce
-    // itself.
+    // **`agy` does not refuse a `--mode` it will not honour**, so only the
+    // values its help names are declared. 1.4.12 warns on stderr and carries on
+    // in its default mode, both for a value it does not know (`unrecognized
+    // --mode value "nonsense" (valid: accept-edits, auto, plan)`, exit 0) and
+    // for `auto` on an account it is not offered to.
+    //
+    // **`auto` is declared on that second warning's evidence, and its row says
+    // so.** Run in WSL on 2026-11-01 with this machine's account, `--mode auto`
+    // printed `--mode auto is not available for this account; continuing in the
+    // default mode` and then prompted like an unflagged run. Eligibility is
+    // the CLI's and nothing here can read it, so a chip reading Auto can mean
+    // Ask. That direction is safe when a person picks it, and it is why the
+    // value's description states it. What Auto does when it is honoured has not
+    // been watched here: the rung is the CLI's own account of it, the 1.3.5
+    // changelog (below).
     //
     // **`--sandbox` is still not declared, and now for a measured reason
     // rather than an absent one.** It was run on 2026-09-03, which is what the
@@ -165,6 +176,25 @@ const antigravityDescriptor = AgentDescriptor(
               evidence:
                   'agy 1.1.24 --help: "--mode  Set the agent execution mode '
                   'for this session (accept-edits, plan)"',
+            ),
+            AgentPermissionValue(
+              id: 'auto',
+              label: 'Auto mode',
+              shortLabel: 'Auto',
+              description:
+                  'Edits and safe commands run without asking, a separate '
+                  'agent reviews commands leaving the sandbox, and '
+                  'irreversible actions still ask. Antigravity stays at Ask '
+                  'on an account it does not offer this to.',
+              arguments: ['--mode', 'auto'],
+              permits: PermissionRisk.autoRun,
+              evidence:
+                  'agy 1.4.12 --help: "--mode  Set the agent execution mode '
+                  'for this session (accept-edits, auto, plan)"; its 1.3.5 '
+                  'changelog: "approves file edits and safe commands without '
+                  'asking and still prompts before irreversible actions; '
+                  'commands that would leave the terminal sandbox are first '
+                  'reviewed by a separate agent"',
             ),
             AgentPermissionValue(
               id: 'skip-permissions',

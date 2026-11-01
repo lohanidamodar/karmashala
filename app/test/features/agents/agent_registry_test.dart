@@ -191,6 +191,7 @@ const List<_AgentGolden> _goldens = [
       'mode=plan': ['--mode', 'plan'],
       'mode=prompt': [],
       'mode=accept-edits': ['--mode', 'accept-edits'],
+      'mode=auto': ['--mode', 'auto'],
       // Read off `agy --help` (1.1.22+). The previous `--yolo` was not a flag
       // this CLI has, and it was the dangerous mode that carried it.
       'mode=skip-permissions': ['--dangerously-skip-permissions'],

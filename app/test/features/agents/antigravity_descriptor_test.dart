@@ -56,7 +56,7 @@ void main() {
       expect(support.evidence, contains('agy'));
       expect(
         [for (final value in support.axes.single.values) value.id],
-        ['plan', 'prompt', 'accept-edits', 'skip-permissions'],
+        ['plan', 'prompt', 'accept-edits', 'auto', 'skip-permissions'],
       );
       for (final value in support.axes.single.values) {
         expect(value.evidence, contains('agy'), reason: value.id);
@@ -91,6 +91,27 @@ void main() {
           const PermissionSelection({'mode': 'skip-permissions'}),
         ),
         ['--dangerously-skip-permissions'],
+      );
+    });
+
+    test('auto is the screened rung, and says when it does not apply', () {
+      final auto = support.axes.single.valueFor('auto')!;
+      expect(auto.arguments, ['--mode', 'auto']);
+      expect(auto.permits, PermissionRisk.autoRun);
+      expect(auto.isDangerous, isFalse);
+      // agy drops `--mode auto` to its default on an account it does not offer
+      // the mode to, so the row has to say a chip reading Auto may not be true.
+      expect(auto.description, contains('stays at Ask'));
+    });
+
+    test('nothing below the screened rung is raised to auto', () {
+      expect(
+        carryPermission(PermissionRisk.acceptEdits, descriptor).selection,
+        const PermissionSelection({'mode': 'accept-edits'}),
+      );
+      expect(
+        carryPermission(PermissionRisk.autoRun, descriptor).selection,
+        const PermissionSelection({'mode': 'auto'}),
       );
     });
 

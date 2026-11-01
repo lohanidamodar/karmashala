@@ -72,6 +72,7 @@ void main() {
       'plan',
       'prompt',
       'accept-edits',
+      'auto',
       'skip-permissions',
     ]);
   });
