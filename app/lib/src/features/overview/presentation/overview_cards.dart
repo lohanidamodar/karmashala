@@ -1,3 +1,4 @@
+import 'overview_via_bot_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -204,6 +205,7 @@ class OverviewCardHeader extends ConsumerWidget {
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      OverviewViaBotLabel(session: card.entry.native),
                       OverviewNewBadge(card: card),
                       const SizedBox(width: Insets.sm),
                       Flexible(child: state),
@@ -228,6 +230,7 @@ class OverviewCardHeader extends ConsumerWidget {
                 children: [
                   Flexible(child: state),
                   const SizedBox(width: Insets.xs),
+                  OverviewViaBotLabel(session: card.entry.native),
                   OverviewNewBadge(card: card),
                 ],
               ),

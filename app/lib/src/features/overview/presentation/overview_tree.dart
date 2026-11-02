@@ -1,3 +1,4 @@
+import 'overview_via_bot_label.dart';
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
@@ -570,6 +571,7 @@ class _FamilyHeader extends ConsumerWidget {
                                 ),
                               ),
                               const SizedBox(width: Insets.xs),
+                              OverviewViaBotLabel(session: card.entry.native),
                               OverviewNewBadge(card: card),
                               if (pinned) ...[
                                 const SizedBox(width: Insets.xs),
@@ -1483,6 +1485,7 @@ class _TreePillState extends ConsumerState<_TreePill> {
                               ),
                             ],
                             const SizedBox(width: Insets.xs),
+                            OverviewViaBotLabel(session: card.entry.native),
                             OverviewNewBadge(card: card),
                             const SizedBox(width: Insets.xs),
                             SizedBox(

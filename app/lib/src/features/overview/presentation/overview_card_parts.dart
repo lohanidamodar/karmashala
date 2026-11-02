@@ -1,3 +1,4 @@
+import 'overview_via_bot_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:agent_cli/usage.dart' show kUsageCriticalPercent;
@@ -443,6 +444,7 @@ class OverviewPhoneRow extends ConsumerWidget {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        OverviewViaBotLabel(session: card.entry.native),
                         OverviewNewBadge(card: card),
                         const SizedBox(width: Insets.xs),
                         Flexible(child: OverviewStatePill(card: card)),
