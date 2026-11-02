@@ -5,12 +5,14 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../domain/uuid.dart';
 import '../sessions/session_subagents.dart' show boundedText;
+import 'bot_approval_summary.dart';
 
 /// How often a request past its time is looked for.
 const Duration kBotApprovalSweep = Duration(seconds: 30);
@@ -25,40 +27,6 @@ String botApprovalHeld(BotApproval request) =>
     '(${request.id}): ${request.summary}. It has not run. If they say Yes the '
     'server runs it itself, so do not call it again. Tell them what you asked '
     'for, then end your turn; you will be told the outcome.';
-
-/// The tool and its target in plain words: what a person says Yes to.
-String botApprovalSummary(
-  String tool,
-  Map<String, dynamic> arguments, {
-  String? Function(String sessionId)? sessionTitle,
-}) {
-  final words = tool.replaceAll('_', ' ');
-  final named = arguments['sessionId'];
-  if (named is String && named.isNotEmpty) {
-    final title = sessionTitle?.call(named);
-    return title == null ? '$words: session $named' : '$words: "$title"';
-  }
-  for (final key in const [
-    'command',
-    'path',
-    'url',
-    'title',
-    'name',
-    'projectId',
-    'repositoryId',
-    'id',
-    'serial',
-    'paneId',
-  ]) {
-    final value = arguments[key];
-    if (value is String && value.trim().isNotEmpty) {
-      return '$words: ${boundedText(value.trim(), 200).$1}';
-    }
-  }
-  return arguments.isEmpty
-      ? '$words: this bot session'
-      : '$words: ${boundedText(jsonEncode(arguments), 200).$1}';
-}
 
 /// **The bot asks before it does what cannot be undone.** A tool call annotated
 /// `destructive` from the bot is not run: [hold] records the exact call and
@@ -80,6 +48,7 @@ class BotApprovals {
     required this.post,
     required this.announce,
     this.queueQuietly,
+    this.terminalTitle,
     this.live,
     this.raise,
     this.retire,
@@ -87,6 +56,7 @@ class BotApprovals {
     DateTime Function()? now,
     String Function()? newId,
   }) : _sessions = SessionDao(database),
+       _checkouts = RepositoryDao(database),
        _store = BotApprovalDao(database),
        _now = now ?? (() => DateTime.now().toUtc()),
        _newId = newId ?? newUuid;
@@ -107,6 +77,9 @@ class BotApprovals {
   final void Function(String sessionId, String text, String approvalId)?
   queueQuietly;
 
+  /// The title of the terminal [String] names, for what a person reads.
+  final String? Function(String tabOrPaneId)? terminalTitle;
+
   /// Whether something runs row [String] now; a live bot hears an expiry as it
   /// hears anything. Null counts as live.
   final bool Function(String sessionId)? live;
@@ -121,6 +94,7 @@ class BotApprovals {
   final void Function(String message)? log;
 
   final SessionDao _sessions;
+  final RepositoryDao _checkouts;
   final BotApprovalDao _store;
   final DateTime Function() _now;
   final String Function() _newId;
@@ -185,7 +159,11 @@ class BotApprovals {
       summary: botApprovalSummary(
         tool,
         arguments,
-        sessionTitle: (id) => _sessions.getById(id)?.title,
+        names: BotCallNames(
+          session: (id) => _sessions.getById(id)?.title,
+          terminal: terminalTitle,
+          checkout: (id) => _checkouts.getById(id)?.name,
+        ),
       ),
       state: BotApprovalState.pending,
       requestedAt: at,
