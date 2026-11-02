@@ -706,6 +706,10 @@ class DataService {
         final SectionDelete r => _workspace.deleteSection(r, changes),
         SessionsList() => _sessions.list(),
         final SessionCreate r => _sessions.create(r, changes),
+        final SessionsOperateByDefaultSet r => _sessions.setOperateByDefault(
+          r,
+          changes,
+        ),
         final SessionEdit r => _sessions.edit(r, changes),
         final SessionDelete r => _sessions.delete(r, changes),
         final SessionsDeleteMany r => _sessions.deleteMany(r, changes),
@@ -1164,6 +1168,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       ...?_service.terminalWork?.greeting(),
       ...?_service.attentionWork?.greeting(),
       ..._service._quickAccess.greeting(),
+      ..._service._sessions.operateByDefaultGreeting(),
       for (final greeter in _service.greeters) ...greeter(),
     ];
     if (greeting.isNotEmpty) {
@@ -1236,6 +1241,7 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     // sessions: no more than the phone may do itself.
     SessionEdit(:final patch) when patch.touchesOperatorGrant =>
       Capability.startSession,
+    SessionsOperateByDefaultSet() => Capability.startSession,
     SessionStart() ||
     SessionResume() ||
     SessionFork() ||

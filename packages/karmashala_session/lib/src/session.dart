@@ -6,6 +6,11 @@ import 'session_status.dart';
 
 /// A unit of work targeting one repository, run by one agent installation, with
 /// an explicit per-session choice of worktree or repository root.
+/// The server's own setting "Let new sessions operate Karmashala": `app_metadata`
+/// holds `true` while it is on. Written through `sessions.operateByDefault.set`,
+/// read when a row is inserted, and never a client's to supply on a row.
+const String kOperateNewSessionsKey = 'sessions.operate_by_default.v1';
+
 class Session {
   const Session({
     required this.id,

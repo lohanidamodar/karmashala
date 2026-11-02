@@ -61,6 +61,23 @@ class SessionsHandler {
 
   // Rows.
 
+  /// Sets "Let new sessions operate Karmashala", read by [SessionDao.insert]
+  /// for each row after this; rows already made keep what they have.
+  DataAck setOperateByDefault(
+    SessionsOperateByDefaultSet request,
+    List<DataChange> changes,
+  ) {
+    _db.writeMetadata(kOperateNewSessionsKey, '${request.enabled}');
+    changes.add(OperateByDefaultChanged(enabled: request.enabled));
+    return const DataAck();
+  }
+
+  /// What a subscribing client is told: nothing while it is off, the default.
+  List<DataChange> operateByDefaultGreeting() =>
+      _db.readMetadata(kOperateNewSessionsKey) == 'true'
+      ? const [OperateByDefaultChanged(enabled: true)]
+      : const [];
+
   Session create(SessionCreate request, List<DataChange> changes) {
     var session = request.session;
     // A placeholder is nobody's name: the agent may still give it one.

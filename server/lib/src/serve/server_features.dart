@@ -1,3 +1,6 @@
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionsOperateByDefaultSet;
+
 /// What this server announces in `welcome.features`, the one place a client
 /// learns what it serves beyond the protocol number (spec §3.2 rule 3).
 ///
@@ -125,4 +128,7 @@ const Set<String> kServerFeatures = <String>{
   // Concurrency limits: `sessions.capacity`, `sessions.waitStartAnyway`,
   // `sessions.waitCancel`, `capacityChanged`, and a start's `wait`.
   'sessions.capacity',
+  // `sessions.operateByDefault.set` and `operateByDefaultChanged`: the server's
+  // "Let new sessions operate Karmashala", applied as each row is inserted.
+  SessionsOperateByDefaultSet.feature,
 };

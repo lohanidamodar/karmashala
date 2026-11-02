@@ -76,6 +76,7 @@ void main() {
   late ServerSessionLauncher launches;
   late SessionLaunchGate gate;
   late _Clock clock;
+  late String firstId;
   var ids = 0;
 
   (ServerSessionLauncher, SessionLaunchGate) build() {
@@ -200,6 +201,103 @@ void main() {
     expect(pty.started.last.argv.join(' '), contains('second'));
     expect(row(second.sessionId).status, SessionStatus.running);
     expect(gate.snapshot().waiters, isEmpty);
+  });
+
+  group('Let new sessions operate Karmashala', () {
+    void operate(bool on) =>
+        database.writeMetadata(kOperateNewSessionsKey, on ? 'true' : 'false');
+
+    Future<String> waitingRow() async {
+      limit({'global': 1});
+      final first = await launches.start(spec('One'));
+      final second = await launches.start(spec('Two'));
+      expect(second.waiting, isTrue);
+      firstId = first.sessionId;
+      return second.sessionId;
+    }
+
+    Future<void> freeSlot() async {
+      await launches.end(firstId);
+      gate.pump();
+      await _settle();
+    }
+
+    test('a session started now has the grant while it is on', () async {
+      operate(true);
+      final started = await launches.start(spec('One'));
+      expect(row(started.sessionId).operatorGranted, isTrue);
+    });
+
+    test('off, a session started now has none', () async {
+      final started = await launches.start(spec('One'));
+      expect(row(started.sessionId).operatorGranted, isFalse);
+    });
+
+    test('a waiting row has it from when it was inserted', () async {
+      operate(true);
+      final id = await waitingRow();
+      expect(row(id).status, SessionStatus.created);
+      expect(row(id).operatorGranted, isTrue);
+    });
+
+    test('turning it off during the wait leaves the row its grant', () async {
+      operate(true);
+      final id = await waitingRow();
+      operate(false);
+      await freeSlot();
+      expect(row(id).status, SessionStatus.running);
+      expect(row(id).operatorGranted, isTrue);
+    });
+
+    test('turning it on during the wait gives the row nothing', () async {
+      final id = await waitingRow();
+      operate(true);
+      await freeSlot();
+      expect(row(id).status, SessionStatus.running);
+      expect(row(id).operatorGranted, isFalse);
+    });
+
+    test('the person\'s switch during the wait is kept', () async {
+      operate(true);
+      final id = await waitingRow();
+      SessionDao(database).write(row(id).copyWith(operatorGranted: false));
+      await freeSlot();
+      expect(row(id).status, SessionStatus.running);
+      expect(row(id).operatorGranted, isFalse);
+    });
+
+    test('a resume keeps what the row has', () async {
+      SessionDao(database).insert(
+        Session(
+          id: 'old',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Old',
+          useWorktree: false,
+          status: SessionStatus.completed,
+          createdAt: t0,
+          externalSessionId: 'conv-old',
+        ),
+      );
+      operate(true);
+      await launches.resume('old');
+      expect(row('old').status, SessionStatus.running);
+      expect(row('old').operatorGranted, isFalse);
+    });
+
+    test('an automation\'s launch takes the setting', () async {
+      operate(true);
+      final rows = CheckoutRows(database);
+      final started = await launches.launcher.start(
+        HostedLaunch(
+          repository: rows.repository('r1')!,
+          installation: rows.installation('a1')!,
+          title: 'Nightly',
+          prompt: 'go',
+        ),
+      );
+      expect(row(started.id).operatorGranted, isTrue);
+    });
   });
 
   test('starts at once never oversubscribe', () async {

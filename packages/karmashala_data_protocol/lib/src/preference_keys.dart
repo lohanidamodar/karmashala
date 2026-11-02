@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:karmashala_session/session.dart' show kOperateNewSessionsKey;
+
 /// Which `app_metadata` keys are client preferences — readable and writable
 /// through the data API — and which belong to the server or to a domain that
 /// writes its own (and is refused here).
@@ -25,6 +27,9 @@ abstract final class PreferenceKeys {
     // Pinned folders: written through `quickAccess.*`, which keeps them in
     // one order for every client.
     QuickAccessKeys.pins,
+    // "Let new sessions operate Karmashala": written through
+    // `sessions.operateByDefault.set`, which a phone needs a grant for.
+    kOperateNewSessionsKey,
   };
 
   /// Domains whose keys their own store writes (worktree setup) — not a

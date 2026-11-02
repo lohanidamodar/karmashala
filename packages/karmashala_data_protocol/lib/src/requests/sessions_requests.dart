@@ -21,6 +21,32 @@ final class SessionsList extends DataRequest<SessionsSnapshot> {
       _decode(kind, () => SessionsSnapshot.fromJson(_object(json, kind)));
 }
 
+/// Sets the server's "Let new sessions operate Karmashala", told to every client
+/// as [OperateByDefaultChanged]. An older server has no such request: a client
+/// reads [feature] in `welcome.features` first.
+final class SessionsOperateByDefaultSet extends DataRequest<DataAck> {
+  const SessionsOperateByDefaultSet({required this.enabled});
+
+  static const String name = 'sessions.operateByDefault.set';
+
+  /// In `welcome.features` when the server keeps this setting.
+  static const String feature = 'sessions.operateByDefault';
+
+  final bool enabled;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'enabled': enabled};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
 /// Records a session under the client's id, linked to its repository as the
 /// primary checkout and to each of [repositories] beside it, in one
 /// transaction: a row no list can place is never left behind. Refused for a

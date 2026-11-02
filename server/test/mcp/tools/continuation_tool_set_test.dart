@@ -261,6 +261,55 @@ void main() {
     });
   });
 
+  group('Let new sessions operate Karmashala', () {
+    void source({required bool granted}) {
+      final rows = SessionDao(database);
+      rows.write(rows.getById('s1')!.copyWith(operatorGranted: granted));
+    }
+
+    bool grantOf(Map<String, Object?> answer) => SessionDao(
+      database,
+    ).getById(answer['sessionId']! as String)!.operatorGranted;
+
+    Future<Map<String, Object?>> handoff() => call('session_handoff', {
+      'sessionId': 's1',
+      'instruction': 'finish it',
+      'cli': 'codex',
+    });
+
+    Future<Map<String, Object?>> fork() =>
+        call('session_fork', {'sessionId': 's1'});
+
+    test('a handoff does not inherit its source\'s grant', () async {
+      source(granted: true);
+      expect(grantOf(await handoff()), isFalse);
+    });
+
+    test('a handoff takes the setting while it is on', () async {
+      source(granted: false);
+      database.writeMetadata(kOperateNewSessionsKey, 'true');
+      expect(grantOf(await handoff()), isTrue);
+    });
+
+    test('a fork does not inherit its source\'s grant', () async {
+      source(granted: true);
+      expect(grantOf(await fork()), isFalse);
+    });
+
+    test('a fork takes the setting while it is on', () async {
+      source(granted: false);
+      database.writeMetadata(kOperateNewSessionsKey, 'true');
+      expect(grantOf(await fork()), isTrue);
+    });
+
+    test('an in-place switch is the same row, so keeps its grant', () async {
+      source(granted: false);
+      database.writeMetadata(kOperateNewSessionsKey, 'true');
+      await call('session_handoff', {'sessionId': 's1', 'inPlace': true});
+      expect(SessionDao(database).getById('s1')!.operatorGranted, isFalse);
+    });
+  });
+
   test('session_fork_from_checkpoint names its session', () async {
     await expectLater(
       tools.call('session_fork_from_checkpoint', {'turn': 1}, null),

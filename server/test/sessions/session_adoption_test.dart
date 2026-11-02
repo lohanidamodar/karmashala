@@ -85,6 +85,21 @@ void main() {
   List<Session> rows() => world.sessions.getAll();
 
   group('a pane that starts an agent', () {
+    test('takes the grant from the server\'s setting', () {
+      final subject = adoption();
+      world.db.writeMetadata(kOperateNewSessionsKey, 'true');
+      typeCommand(subject, 'pane-1', 'cmd-0', 'claude');
+      claudeHook(subject, 'conv-1', cwd: repoPath);
+      expect(rows().single.operatorGranted, isTrue);
+    });
+
+    test('has no grant while the setting is off', () {
+      final subject = adoption();
+      typeCommand(subject, 'pane-1', 'cmd-0', 'claude');
+      claudeHook(subject, 'conv-1', cwd: repoPath);
+      expect(rows().single.operatorGranted, isFalse);
+    });
+
     test('is adopted once, and a second signal adds no second row', () {
       final subject = adoption();
       typeCommand(subject, 'pane-1', 'cmd-0', 'claude');

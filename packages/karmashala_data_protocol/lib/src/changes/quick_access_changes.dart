@@ -11,8 +11,25 @@ DataChange? _quickAccessChangeFromJson(
     for (final item in json['pins']! as List)
       QuickAccessPin.fromJson((item as Map).cast<String, Object?>()),
   ]),
+  'operateByDefaultChanged' => OperateByDefaultChanged(
+    enabled: json['enabled'] == true,
+  ),
   _ => null,
 };
+
+/// "Let new sessions operate Karmashala" as it now stands. A client that
+/// subscribes is told it only while it is on: silence means off.
+final class OperateByDefaultChanged extends DataChange {
+  const OperateByDefaultChanged({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'operateByDefaultChanged',
+    'enabled': enabled,
+  };
+}
 
 /// Every pinned folder, in order, as it now stands.
 final class QuickAccessChanged extends DataChange {
