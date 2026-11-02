@@ -17,6 +17,15 @@ installs claim the same version name.
 
 ---
 
+## 1.34.19 — 2026-11-03 (build 86)
+
+- **A bot to talk to.** Each server has one bot and one lasting conversation, reached from the Bot button, Ctrl+Shift+M or "Open bot" in quick open, as a panel on desktop and a sheet on a phone. It answers about your sessions, does small things itself and starts normal sessions for bigger work, and it never appears on the dashboard or in session lists. It runs on an agent's chat form, chosen in Settings or switched from the panel, and the conversation carries on across a switch. Clear starts a new conversation and keeps its MEMORY.md.
+- **The bot asks before what it cannot undo.** A risky Karmashala action shows a Yes/No card in plain words, and Yes runs exactly that one recorded call. This is not a sandbox: commands the agent runs in its own shell follow its own permissions.
+- **Operate Karmashala now means other sessions and agents.** Devices, the browser, builds and terminal commands no longer need it. Force-closing a terminal and restoring another session's checkpoint still do.
+- **"Let new sessions operate Karmashala".** A new setting under Agents and accounts, off by default, turns Operate Karmashala on for sessions started after it is set.
+- **Antigravity's Auto mode is offered** where the account has it.
+- **An agent runs where it is installed.** A session, a copied command or an external terminal uses the machine the agent is on, whatever its checkout says, so an Antigravity session started in another environment can be resumed. A login refusal now reaches you, with the login it asks for.
+
 ## 1.34.18 — 2026-10-30 (build 85)
 
 - **The terminal is on xterm2 5.4.** Scrollback takes about a tenth of the memory per scrolled row, holds its place while a full-screen program redraws, and scrolling is cheaper. Mouse motion is reported once per cell, and kitty key releases and private-use keys reach a program only when it asked for them.
