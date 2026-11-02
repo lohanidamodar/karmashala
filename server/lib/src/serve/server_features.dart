@@ -1,5 +1,5 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionsOperateByDefaultSet;
+    show BotOpen, SessionsOperateByDefaultSet;
 
 /// What this server announces in `welcome.features`, the one place a client
 /// learns what it serves beyond the protocol number (spec §3.2 rule 3).
@@ -131,4 +131,8 @@ const Set<String> kServerFeatures = <String>{
   // `sessions.operateByDefault.set` and `operateByDefaultChanged`: the server's
   // "Let new sessions operate Karmashala", applied as each row is inserted.
   SessionsOperateByDefaultSet.feature,
+  // `bot.*` and the `bot…Changed` changes: the server's one hidden
+  // conversation, its agent, Clear conversation and its approvals. A session
+  // it started reaches a client with no parent and `viaBot` (PROJECT.md §26).
+  BotOpen.feature,
 };

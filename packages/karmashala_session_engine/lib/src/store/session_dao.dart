@@ -56,9 +56,24 @@ class SessionDao implements SessionStatusStore {
     );
   }
 
+  /// Inserts the server's bot: [session] with its role and, always, the grant
+  /// to operate Karmashala, whatever the global setting says. The store's own
+  /// unique index keeps it to one unarchived row, and throws on a second. Only
+  /// the bot service calls this; nothing a client sends reaches it.
+  void insertBot(Session session) => _db.transaction(() {
+    _insertLinked(session);
+    _db.execute(
+      'UPDATE sessions SET role = ?, operator_granted = 1 WHERE id = ?;',
+      [kSessionRoleBot, session.id],
+    );
+  });
+
   /// Inserts [session] and links its repository as the primary one, in one
   /// transaction: a row no list can place must not be left behind.
-  void insertWithPrimaryRepository(Session session) => _db.transaction(() {
+  void insertWithPrimaryRepository(Session session) =>
+      _db.transaction(() => _insertLinked(session));
+
+  void _insertLinked(Session session) {
     insert(session);
     _db.execute(
       'INSERT INTO session_repositories (session_id, repository_id, role) '
@@ -66,7 +81,7 @@ class SessionDao implements SessionStatusStore {
       'ON CONFLICT(session_id, repository_id) DO NOTHING;',
       [session.id, session.repositoryId],
     );
-  });
+  }
 
   /// Writes every column a client may change — the server's write of a
   /// patched row it read a moment before, in the same synchronous step, so no
@@ -78,7 +93,7 @@ class SessionDao implements SessionStatusStore {
       'working_directory_environment_id = ?, working_directory_path = ?, '
       'status = ?, external_session_id = ?, pane_id = ?, view = ?, '
       'permission_mode = ?, model_id = ?, archived_at = ?, worktree_removed_at = ?, '
-      'operator_granted = ? WHERE id = ?;',
+      'operator_granted = CASE WHEN role = ? THEN 1 ELSE ? END WHERE id = ?;',
       [
         session.title,
         intFromBool(session.titleByUser),
@@ -95,6 +110,7 @@ class SessionDao implements SessionStatusStore {
         session.modelId,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
         _iso(session.worktreeRemovedAt),
+        kSessionRoleBot,
         intFromBool(session.operatorGranted),
         session.id,
       ],
@@ -354,6 +370,41 @@ class SessionDao implements SessionStatusStore {
     return rows.map(_fromRow).toList();
   }
 
+  /// Every row a person may see, oldest first: [getAll] without the bot. A
+  /// reader that lists sessions for people or agents reads this; one that
+  /// keeps the server running reads [getAll], and says why it may.
+  List<Session> getPublic() {
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE role IS NULL ORDER BY created_at, id;',
+    );
+    return rows.map(_fromRow).toList();
+  }
+
+  /// [getClaimingLive] without the bot, which neither holds a slot nor counts
+  /// for anything unattended.
+  List<Session> getClaimingLivePublic() => [
+    for (final row in getClaimingLive())
+      if (!row.isBot) row,
+  ];
+
+  /// The server's bot: its one unarchived row, or null before the first
+  /// message and after a clear.
+  Session? bot() {
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE role = ? AND archived_at IS NULL LIMIT 1;',
+      [kSessionRoleBot],
+    );
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
+
+  /// Every bot row there has been, a cleared one's too: they stay hidden.
+  Set<String> botIds() => {
+    for (final row in _db.query('SELECT id FROM sessions WHERE role = ?;', [
+      kSessionRoleBot,
+    ]))
+      row['id']! as String,
+  };
+
   /// All external session IDs currently held by active sessions. Projects one
   /// column instead of deserializing full session objects.
   @override
@@ -388,11 +439,13 @@ class SessionDao implements SessionStatusStore {
     return rows.map(_fromRow).toList();
   }
 
-  /// Active, non-archived sessions that are still waiting for an external session ID.
+  /// Active, non-archived sessions that are still waiting for an external
+  /// session ID. Never the bot: it runs over a protocol and its agent names
+  /// its conversation, so a folder's history is not its to adopt.
   @override
   List<Session> getUnattributed() {
     final rows = _db.query(
-      'SELECT * FROM sessions WHERE archived_at IS NULL '
+      'SELECT * FROM sessions WHERE archived_at IS NULL AND role IS NULL '
       "AND (external_session_id IS NULL OR external_session_id = '') "
       'ORDER BY created_at, id;',
     );
@@ -513,6 +566,7 @@ class SessionDao implements SessionStatusStore {
           : dateFromIso(row['worktree_removed_at']),
       titleByUser: boolFromInt(row['title_by_user']),
       operatorGranted: ((row['operator_granted'] as int?) ?? 0) != 0,
+      role: row['role'] as String?,
     );
   }
 }

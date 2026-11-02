@@ -5,6 +5,7 @@
 /// through the server's data API (`karmashala_data_protocol`).
 library;
 
+export 'src/store/bot_approval_dao.dart';
 export 'src/store/decision_record_dao.dart';
 export 'src/store/follow_up_dao.dart';
 export 'src/store/imported_session_dao.dart';

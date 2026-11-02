@@ -378,6 +378,15 @@ class ConversationIndexDao {
       where.add('t.session_id = ?');
       params.add(filter.conversationId);
     }
+    // The bot's conversations are never a search hit, whatever its index
+    // holds: its row's own, and an earlier agent's of a switched one.
+    where.add(
+      't.session_id NOT IN (SELECT external_session_id FROM sessions '
+      'WHERE role IS NOT NULL AND external_session_id IS NOT NULL) '
+      'AND t.session_id NOT IN (SELECT sp.external_session_id '
+      'FROM session_agent_spans sp JOIN sessions s ON s.id = sp.session_id '
+      'WHERE s.role IS NOT NULL AND sp.external_session_id IS NOT NULL)',
+    );
     if (filter.cli != null) {
       where.add('t.cli = ?');
       params.add(filter.cli);
@@ -632,13 +641,14 @@ class ConversationIndexDao {
         'a.agent_kind AS cli FROM sessions s '
         'JOIN agent_installations a ON a.id = s.agent_installation_id '
         "WHERE s.external_session_id IS NOT NULL "
-        "AND s.external_session_id <> '' "
+        "AND s.external_session_id <> '' AND s.role IS NULL "
         // Each earlier agent of a switched thread, under its own agent.
         'UNION SELECT sp.external_session_id, a.agent_kind '
         'FROM session_agent_spans sp '
         'JOIN agent_installations a ON a.id = sp.agent_installation_id '
+        'JOIN sessions s ON s.id = sp.session_id '
         "WHERE sp.external_session_id IS NOT NULL "
-        "AND sp.external_session_id <> '';",
+        "AND sp.external_session_id <> '' AND s.role IS NULL;",
       ))
         (sessionId: row['session_id'] as String, cli: row['cli'] as String),
     ];
@@ -702,8 +712,11 @@ class ConversationIndexDao {
           'WITH named(id) AS ('
           'SELECT external_session_id FROM sessions '
           "WHERE external_session_id IS NOT NULL AND external_session_id <> '' "
-          'UNION SELECT external_session_id FROM session_agent_spans '
-          "WHERE external_session_id IS NOT NULL AND external_session_id <> '' "
+          'AND role IS NULL '
+          'UNION SELECT sp.external_session_id FROM session_agent_spans sp '
+          'JOIN sessions s ON s.id = sp.session_id '
+          "WHERE sp.external_session_id IS NOT NULL "
+          "AND sp.external_session_id <> '' AND s.role IS NULL "
           'UNION SELECT external_id FROM imported_sessions) '
           'SELECT COUNT(*) AS n, COALESCE(SUM(NOT EXISTS ('
           'SELECT 1 FROM conversation_index_state state '
@@ -734,7 +747,7 @@ class ConversationIndexDao {
       'FROM sessions s '
       'JOIN agent_installations a ON a.id = s.agent_installation_id '
       'WHERE s.id = ? AND s.external_session_id IS NOT NULL '
-      "AND s.external_session_id <> '';",
+      "AND s.external_session_id <> '' AND s.role IS NULL;",
       [rowId],
     );
     if (rows.isEmpty) return null;
@@ -753,7 +766,7 @@ class ConversationIndexDao {
         'a.agent_kind AS cli FROM sessions s '
         'JOIN agent_installations a ON a.id = s.agent_installation_id '
         'WHERE s.external_session_id IS NOT NULL '
-        "AND s.external_session_id <> '' "
+        "AND s.external_session_id <> '' AND s.role IS NULL "
         'AND EXISTS (SELECT 1 FROM session_messages m '
         'WHERE m.session_id = s.id);',
       ))

@@ -685,7 +685,8 @@ class DaemonCompanion implements CompanionHandler {
       if (item.session.imported) continue;
       final kind = switch (item.kind) {
         InboxItemKind.finished => 'finished',
-        InboxItemKind.needsApproval => kAttentionNeedsApproval,
+        InboxItemKind.needsApproval ||
+        InboxItemKind.botApproval => kAttentionNeedsApproval,
         InboxItemKind.failed => 'failed',
         InboxItemKind.usageLimit => kAttentionUsageLimit,
         InboxItemKind.checksFailed ||

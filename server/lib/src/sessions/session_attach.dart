@@ -83,6 +83,12 @@ class SessionAttacher {
       (throw DataRefused.notFound('no session with id $id'));
 
   void _check(Session child, Session parent) {
+    if (child.isBot || parent.isBot) {
+      throw const DataRefused.invalid(
+        'The bot is the server\'s own: it is neither attached nor attached '
+        'under. A session it starts reports to it by itself.',
+      );
+    }
     if (child.isArchived) {
       throw DataRefused.invalid(
         '"${child.title}" is archived. Unarchive it first.',

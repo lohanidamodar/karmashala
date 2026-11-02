@@ -111,9 +111,15 @@ class SessionsAtRest {
   /// then every session the server runs that no row names — a box's.
   List<RemoteSessionSnapshot> list() {
     final repositories = names.repositories();
-    final rows = sessions.getAll().where((row) => !row.isArchived).toList()
+    final all = sessions.getAll().where((row) => !row.isArchived).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final named = {for (final row in rows) hostSessionIdOf(row.id)};
+    // The bot reaches a phone only through its own call, and never as a
+    // nameless hosted session either.
+    final rows = [
+      for (final row in all)
+        if (!row.isBot) row,
+    ];
+    final named = {for (final row in all) hostSessionIdOf(row.id)};
     return [
       for (final row in rows) _rowSnapshot(row, repositories),
       for (final record in imported?.call() ?? const <ImportedSession>[])

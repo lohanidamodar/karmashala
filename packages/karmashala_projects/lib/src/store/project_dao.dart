@@ -54,6 +54,16 @@ class ProjectDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  /// The bot's hidden project in [environmentId], when one has been made.
+  Project? botIn(String environmentId) {
+    final rows = _db.query(
+      'SELECT * FROM projects WHERE kind = ? AND root_environment_id = ? '
+      'ORDER BY created_at, id LIMIT 1;',
+      [Project.botKind, environmentId],
+    );
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
+
   /// How many sessions run with a primary checkout of [projectId]: what keeps
   /// a scratch project from being deleted.
   int sessionsIn(String projectId) {

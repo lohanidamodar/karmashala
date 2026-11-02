@@ -331,6 +331,45 @@ void main() {
     expect(row('old').status, SessionStatus.completed);
   });
 
+  group('the bot', () {
+    Session bot() => Session(
+      id: 'bot',
+      repositoryId: 'r1',
+      agentInstallationId: 'a1',
+      title: 'Bot',
+      useWorktree: false,
+      status: SessionStatus.created,
+      createdAt: t0,
+    );
+
+    test('takes no slot and answers to no limit', () async {
+      limit({'global': 1});
+      await launches.start(spec('One'));
+      SessionDao(database).insertBot(bot());
+      final started = await launches.resume('bot', prompt: 'hi');
+      expect(started.waiting, isFalse);
+      expect(started.sessionId, 'bot');
+      expect(row('bot').isBot, isTrue);
+      expect(row('bot').operatorGranted, isTrue);
+      expect(
+        liveSlotHolders(
+          sessions: SessionDao(database),
+          rows: CheckoutRows(database),
+          holds: launches.runsHere,
+          activityOf: (_) => null,
+        ).map((holder) => holder.sessionId),
+        isNot(contains('bot')),
+      );
+    });
+
+    test('a cleared one never starts: no new visible row is made', () async {
+      SessionDao(database).insertBot(bot());
+      SessionDao(database).markArchived('bot', t0);
+      await expectLater(launches.resume('bot'), throwsStateError);
+      expect(SessionDao(database).getAll().single.id, 'bot');
+    });
+  });
+
   test('Start anyway starts a waiting session over the limit', () async {
     limit({'global': 1});
     await launches.start(spec('One'));

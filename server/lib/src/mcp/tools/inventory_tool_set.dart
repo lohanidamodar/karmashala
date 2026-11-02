@@ -82,13 +82,14 @@ class InventoryToolSet extends ServerToolSet {
 
   List<Map<String, Object?>> _listProjects() => [
     for (final project in _projects.getAll()..sort(compareProjects))
-      {
-        'id': project.id,
-        'name': project.name,
-        'environmentId': project.environmentId,
-        'path': project.root.path,
-        if (project.kind != null) 'kind': project.kind,
-      },
+      if (!project.isBot)
+        {
+          'id': project.id,
+          'name': project.name,
+          'environmentId': project.environmentId,
+          'path': project.root.path,
+          if (project.kind != null) 'kind': project.kind,
+        },
   ];
 
   List<Map<String, Object?>> _listSessions({String? query, String? cli}) {
@@ -108,6 +109,7 @@ class InventoryToolSet extends ServerToolSet {
 
     final sessions = <Map<String, Object?>>[];
     for (final project in _projects.getAll()..sort(compareProjects)) {
+      if (project.isBot) continue;
       for (final repo in repositories) {
         if (repo.projectId != project.id) continue;
         // Sessions started in Karmashala, then the history imported beside
@@ -260,6 +262,7 @@ class InventoryToolSet extends ServerToolSet {
     final results = <Map<String, Object?>>[];
     for (final hit in page.hits) {
       final native = _sessions.getByExternalSessionId(hit.sessionId);
+      if (native?.isBot ?? false) continue;
       final imported = native == null
           ? _imported.getByExternal(hit.cli, hit.sessionId)
           : null;

@@ -44,9 +44,30 @@ class ServerImports {
   Future<List<DetectedProject>> scan() async {
     final environments = _data.environments;
     final stores = await _stores.locate(environments);
-    return mergeDetectedProjects(await _detection.readStores(stores), {
-      for (final environment in environments) environment.id: environment,
-    }, translator: translator);
+    final detected = mergeDetectedProjects(
+      await _detection.readStores(stores),
+      {for (final environment in environments) environment.id: environment},
+      translator: translator,
+    );
+    // The bot's own conversations are no history to offer a person.
+    final bot = _botFolders();
+    return [
+      for (final project in detected)
+        if (!project.sessions.any((session) => bot.contains(session.cwd)))
+          project,
+    ];
+  }
+
+  Set<EnvironmentPath> _botFolders() {
+    final workspace = _data.applyAsServer(const WorkspaceList());
+    final hidden = {
+      for (final project in workspace.projects)
+        if (project.isBot) project.id,
+    };
+    return {
+      for (final repository in workspace.repositories)
+        if (hidden.contains(repository.projectId)) repository.path,
+    };
   }
 
   /// Imports [detected]: a project and a checkout per folder, found or

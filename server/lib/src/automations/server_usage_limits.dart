@@ -223,6 +223,8 @@ class ServerUsageLimits {
         detail: usageLimitSentence(hit, at),
       ),
     );
+    // The bot takes a turn only when messaged: no resume is armed for it.
+    if (session.isBot) return;
     final agentId = installationOf(session.agentInstallationId)?.agentId;
     final message = agentId == null
         ? kDefaultResumeMessage

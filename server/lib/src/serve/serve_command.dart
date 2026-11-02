@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec;
+import 'package:agent_cli/descriptors.dart'
+    show AcpLaunchSpec, PermissionRisk, PermissionSelection, carryPermission;
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart'
     show
@@ -78,6 +79,9 @@ import '../acp/acp_version_probe.dart';
 import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
 import '../agents/server_agent_work.dart';
+import '../bot/bot_approvals.dart';
+import '../bot/bot_instructions.dart';
+import '../bot/server_bot.dart';
 import '../artifacts/artifact_tool_set.dart';
 import '../artifacts/visualize_tool_set.dart';
 import '../artifacts/server_artifact_markers.dart';
@@ -1493,6 +1497,8 @@ Future<int> _serve(
     readPaused: () => database.readMetadata(kQueuePausedKey),
     writePaused: (value) => database.writeMetadata(kQueuePausedKey, value),
     resumesOnSend: speaksAcp,
+    // A report or an approval's outcome resumes the bot; nobody else's.
+    wakes: (sessionId) => sessionRows.getById(sessionId)?.isBot ?? false,
     // A PTY session nothing runs is resumed for its queue, never left
     // holding it.
     resumeStopped: (sessionId, prompt) => launches.resume(
@@ -1520,8 +1526,11 @@ Future<int> _serve(
           typist.markersFor(sessionId) != null;
     },
     // A row closed on purpose: what still waits for it is cancelled at start.
-    endedDeliberately: (sessionId) =>
-        sessionRows.getById(sessionId)?.status == SessionStatus.cancelled,
+    // Not the bot: its process stops unseen, and what waits is still wanted.
+    endedDeliberately: (sessionId) {
+      final row = sessionRows.getById(sessionId);
+      return row?.status == SessionStatus.cancelled && !row!.isBot;
+    },
     // A message is not typed over what a person is typing in the pane.
     personTypedAt: (sessionId) =>
         prompts.status.runningSessionOf(sessionId)?.token.lastActiveAt,
@@ -1958,6 +1967,8 @@ Future<int> _serve(
     isLive: prompts.status.holds,
     parentReachable: (id) {
       final parent = SessionDao(database).getById(id);
+      // The one parent a report resumes: a stopped bot is not a gone one.
+      if (parent?.isBot ?? false) return !parent!.isArchived;
       return parent != null &&
           !parent.isOver &&
           !parent.isArchived &&
@@ -2020,6 +2031,74 @@ Future<int> _serve(
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   sessionWork.attach = attacher.attach;
+  // The bot: one hidden conversation, made on the first message. Its gate sits
+  // in the relay beside the operator grant, and never holds a call open.
+  final botApprovals = BotApprovals(
+    database: database,
+    run: mcpTools.runApproved,
+    post: (sessionId, text, approvalId) =>
+        sessionQueue.postNotice(sessionId, text, originId: approvalId),
+    queueQuietly: (sessionId, text, approvalId) =>
+        sessionQueue.postQuiet(sessionId, text, originId: approvalId),
+    live: prompts.status.holds,
+    announce: data.announce,
+    raise: attention.attention.raise,
+    retire: (id) {
+      if (attention.attention.snapshot.inbox.items.any((i) => i.id == id)) {
+        attention.attention.handle(InboxDismiss(id), null);
+      }
+    },
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  mcpTools.approvalGate = botApprovals.hold;
+  PermissionSelection botMode(String agentId) => carryPermission(
+    PermissionRisk.autoRun,
+    liveAgents.descriptorOf(agentId),
+  ).selection;
+  final bot = ServerBot(
+    database: database,
+    data: data,
+    environmentId: localHostEnvironmentId,
+    agents: () => liveAgents.registry,
+    installationsIn: launches.installationsIn,
+    defaultInstallation: (found) =>
+        launches.settings?.call().defaultInstallationAmong(found),
+    ensureCheckout: () async {
+      final environment =
+          checkoutRows.environment(localHostEnvironmentId) ??
+          (throw StateError('This server has no record of its own machine.'));
+      return folders.createBotCheckout(environment);
+    },
+    runs: prompts.status.holds,
+    busy: sessionQueue.busy,
+    end: (sessionId) => launches.end(sessionId, quietly: true),
+    cancelQueue: (sessionId) => sessionQueue.ended(
+      sessionId,
+      reason: 'The conversation was cleared before it could take this.',
+    ),
+    detach: (childId) => detacher.detach(childId),
+    approvals: botApprovals,
+    switchAgent: (sessionId, installationId) async {
+      final agentId = checkoutRows.installation(installationId)?.agentId;
+      await continuations.switchAgent(
+        sessionId: sessionId,
+        targetInstallationId: installationId,
+        // One that reads no instruction file is told them here.
+        instruction:
+            botFilesCover(
+              liveAgents.descriptorOf(agentId ?? '')?.instructionFiles ??
+                  const [],
+            )
+            ? kBotSwitchInstruction
+            : withBotPreamble(kBotSwitchInstruction),
+        permissionMode: agentId == null ? null : botMode(agentId).canonical,
+      );
+    },
+    permissionFor: (agentId) => botMode(agentId).canonical,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  )..start();
+  data.botWork = bot;
+  sessionQueue.refreshAll();
   // Recordings the server writes itself (slice 5b): a terminal's output as
   // an asciicast, and its own machine's devices.
   final recordings = RecordingToolSet.over(
@@ -2460,6 +2539,7 @@ Future<int> _serve(
   await launchGate.dispose();
   await delegationStarts.cancel();
   await delegations.close();
+  bot.close();
   handoffSweep.cancel();
   toolImageSweep.cancel();
   backups.cancel();

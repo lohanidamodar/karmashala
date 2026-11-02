@@ -64,9 +64,10 @@ class WorkspaceToolSet extends ServerToolSet {
         ),
       );
     }
-    final repositories = RepositoryDao(
-      _context.database,
-    ).getByProject(projectId);
+    final hidden = ProjectDao(_context.database).getById(projectId)?.isBot;
+    final repositories = hidden ?? false
+        ? const <Repository>[]
+        : RepositoryDao(_context.database).getByProject(projectId);
     if (repositories.isEmpty) {
       return runTool(
         () => throw StateError(
@@ -86,7 +87,7 @@ class WorkspaceToolSet extends ServerToolSet {
       // Who else is standing here: without occupancy, fan-out candidates
       // sharing every repository but the primary one could not notice each
       // other.
-      final rows = SessionDao(_context.database).getAll();
+      final rows = SessionDao(_context.database).getPublic();
       return <String, Object?>{
         'projectId': projectId,
         'checkouts': <Object?>[

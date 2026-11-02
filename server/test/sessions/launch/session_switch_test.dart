@@ -264,6 +264,43 @@ void main() {
     );
   }
 
+  group('the bot', () {
+    setUp(
+      () =>
+          database.execute("UPDATE sessions SET role = 'bot' WHERE id = 's1';"),
+    );
+
+    test('switches only to a chat form', () async {
+      await expectLater(
+        continuations.switchAgent(sessionId: 's1', targetInstallationId: 'c1'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('chat'),
+          ),
+        ),
+      );
+      expect(rows().getById('s1')!.agentInstallationId, 'a1');
+    });
+
+    test('is neither forked nor handed off', () async {
+      await expectLater(
+        continuations.fork(sessionId: 's1', instruction: 'go'),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        continuations.handoff(
+          sessionId: 's1',
+          targetInstallationId: 'c1',
+          instruction: 'go',
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(rows().getAll().length, 1);
+    });
+  });
+
   test('the first switch writes span 0 and 1, ends the old agent as '
       'switched and starts the new one in the same row', () async {
     await launches.resume('s1');

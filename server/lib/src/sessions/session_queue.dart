@@ -72,6 +72,7 @@ class SessionQueue implements ResumeQueue {
     required this.status,
     TurnSettlement? turns,
     this.resumesOnSend,
+    this.wakes,
     this.resumeStopped,
     this.takesOpeningMessage,
     this.takesInputMidTurn,
@@ -116,6 +117,12 @@ class SessionQueue implements ResumeQueue {
   /// Whether row [String] speaks ACP, so a send resumes it when nothing runs
   /// it.
   final bool Function(String sessionId)? resumesOnSend;
+
+  /// Whether a stopped row [String] is resumed for anything in its queue, a
+  /// server's own message too: the bot, whose process comes and goes unseen,
+  /// so a report or an approval's outcome must reach it. One exception to
+  /// "only a new message resumes"; every other parent behaves as before.
+  final bool Function(String sessionId)? wakes;
 
   /// Resumes row [String] that nothing runs, [prompt] its opening message
   /// when given — `ServerSessionLauncher.resume`.
@@ -507,6 +514,36 @@ class SessionQueue implements ResumeQueue {
     );
   }
 
+  /// Puts the server's own [text] into [sessionId]'s queue: durable, and
+  /// delivered once, when its turn ends or at once when idle.
+  /// [postNotice] for what is no reason to spend a turn: it wakes nothing, and
+  /// goes with [sessionId]'s next message, in that one turn. Kept in the row's
+  /// origin, so a restart holds it back as well. Delivered alone only to a
+  /// session running again with nothing else to say.
+  QueuedMessage postQuiet(String sessionId, String text, {String? originId}) =>
+      postNotice(sessionId, text, originId: '$_quietOrigin${originId ?? ''}');
+
+  static const _quietOrigin = 'quiet:';
+
+  static bool _isQuiet(QueuedMessage message) =>
+      message.origin == QueuedMessageOrigin.automation &&
+      (message.originId?.startsWith(_quietOrigin) ?? false);
+
+  /// Whether something waiting for [sessionId] is worth waking it for.
+  bool _wakesNow(String sessionId) =>
+      (wakes?.call(sessionId) ?? false) &&
+      dao
+          .open(sessionId)
+          .any((m) => m.state == QueuedMessageState.queued && !_isQuiet(m));
+
+  QueuedMessage postNotice(String sessionId, String text, {String? originId}) =>
+      _post(
+        sessionId,
+        text,
+        origin: QueuedMessageOrigin.automation,
+        originId: originId,
+      );
+
   /// Queues [text] from the server itself, waking [sessionId] when idle but
   /// never lifting a pause nor resuming it.
   QueuedMessage _post(
@@ -849,6 +886,19 @@ class SessionQueue implements ResumeQueue {
       _withQueued.remove(sessionId);
       return null;
     }
+    // Quiet notices go in the next real message's one turn, wherever they
+    // sit: a person's message goes ahead of a server's.
+    final waiting = [
+      for (final message in dao.open(sessionId))
+        if (message.state == QueuedMessageState.queued) message,
+    ];
+    final real = _isQuiet(head)
+        ? waiting.where((message) => !_isQuiet(message)).firstOrNull
+        : head;
+    final carried = real == null
+        ? const <QueuedMessage>[]
+        : waiting.where(_isQuiet).toList();
+    if (real != null) head = real;
     if (head.origin == QueuedMessageOrigin.delegation &&
         head.state == QueuedMessageState.queued) {
       switch (restate?.call(head)) {
@@ -887,9 +937,21 @@ class SessionQueue implements ResumeQueue {
     var delivered = false;
     String? why;
     try {
-      await deliver(sessionId, head.text);
+      await deliver(
+        sessionId,
+        [for (final notice in carried) notice.text, head.text].join('\n\n'),
+      );
       delivered = true;
       _finish(head, QueuedMessageState.delivered);
+      for (final notice in carried) {
+        dao.transition(
+          notice.id,
+          from: QueuedMessageState.queued,
+          to: QueuedMessageState.delivering,
+          now: _now(),
+        );
+        _finish(notice, QueuedMessageState.delivered);
+      }
       log?.call('queue $sessionId: ${head.id} delivered');
     } on DataRefused catch (refusal) {
       why = refusal.message;
@@ -1380,6 +1442,7 @@ class SessionQueue implements ResumeQueue {
   }
 
   bool _nothingRuns(String sessionId) =>
+      !_wakesNow(sessionId) &&
       !_inFlight.contains(sessionId) &&
       !_resumedForHead.contains(sessionId) &&
       status.acpRuntimeOf(sessionId) == null &&

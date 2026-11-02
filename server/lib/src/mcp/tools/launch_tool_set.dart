@@ -19,6 +19,7 @@ import 'package:karmashala_session_engine/store.dart'
         kReportModeEachTurn,
         kReportModeFinal,
         kReportModeNone,
+        kReportModeOnce,
         kReportModes;
 
 import '../../automations/daemon_agents.dart';
@@ -212,7 +213,10 @@ class LaunchToolSet extends ServerToolSet {
     final named = (args['report'] as String?)?.trim() ?? '';
     final legacy = (args['mode'] as String?)?.trim() ?? '';
     final String mode;
-    if (named.isNotEmpty) {
+    if (_isBot(callerSessionId)) {
+      // It hears a session it started once, whatever it or a setting names.
+      mode = named == kReportModeNone ? named : kReportModeOnce;
+    } else if (named.isNotEmpty) {
       mode = _checkedReport(named);
     } else if (legacy.isNotEmpty) {
       mode = switch (legacy) {
@@ -231,6 +235,17 @@ class LaunchToolSet extends ServerToolSet {
     if (mode != kReportModeNone) _canReportTo(callerSessionId);
     return mode;
   }
+
+  bool _isBot(String? callerSessionId) =>
+      callerSessionId != null &&
+      (SessionDao(_context.database).getById(callerSessionId)?.isBot ?? false);
+
+  /// [report] as [callerSessionId] may have it: the bot's `once` stands for
+  /// any report at all.
+  String _forCaller(String report, String? callerSessionId) =>
+      report != kReportModeNone && _isBot(callerSessionId)
+      ? kReportModeOnce
+      : report;
 
   static String _checkedReport(String report) => kReportModes.contains(report)
       ? report
@@ -309,6 +324,10 @@ class LaunchToolSet extends ServerToolSet {
     kReportModeNone =>
       'Session $id runs on its own and reports nothing. delegation_set_report '
           'changes that; delegations shows where it stands.',
+    kReportModeOnce =>
+      'End your turn now rather than polling: the first of a report, a '
+          'finished turn, a block, a failure or session $id ending reaches '
+          'you once, as a message from Karmashala. Nothing after that does.',
     kReportModeFinal =>
       'End your turn now rather than polling: when session $id reports with '
           'report_to_parent, stops blocked or failed, finishes a turn without '
@@ -399,7 +418,10 @@ class LaunchToolSet extends ServerToolSet {
     Map<String, dynamic> args,
     String? callerSessionId,
   ) {
-    final report = _checkedReport((args['report'] as String?)?.trim() ?? '');
+    final report = _forCaller(
+      _checkedReport((args['report'] as String?)?.trim() ?? ''),
+      callerSessionId,
+    );
     final childId = (args['sessionId'] as String?)?.trim() ?? '';
     final child = childId.isEmpty
         ? null
@@ -616,9 +638,12 @@ class LaunchToolSet extends ServerToolSet {
     // Only an async run reports; one that waits answers in the call.
     final report = !reportsBack
         ? kReportModeNone
-        : namedReport.isEmpty
-        ? kReportModeFinal
-        : _checkedReport(namedReport);
+        : _forCaller(
+            namedReport.isEmpty
+                ? kReportModeFinal
+                : _checkedReport(namedReport),
+            callerSessionId,
+          );
     final turns = this.turns;
     if (turns == null && !reportsBack) {
       throw StateError(

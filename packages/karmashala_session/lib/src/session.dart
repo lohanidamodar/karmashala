@@ -11,6 +11,13 @@ import 'session_status.dart';
 /// read when a row is inserted, and never a client's to supply on a row.
 const String kOperateNewSessionsKey = 'sessions.operate_by_default.v1';
 
+/// [Session.role] of the server's bot: one lasting conversation, hidden from
+/// everything a person lists. Only the server writes it (`SessionDao.insertBot`).
+const String kSessionRoleBot = 'bot';
+
+/// The agent the bot runs on, by its chat-form id; absent is the default agent.
+const String kBotAgentKey = 'bot.agent.v1';
+
 class Session {
   const Session({
     required this.id,
@@ -34,6 +41,8 @@ class Session {
     this.worktreeRemovedAt,
     this.titleByUser = false,
     this.operatorGranted = false,
+    this.role,
+    this.viaBot = false,
   });
 
   final String id;
@@ -103,6 +112,19 @@ class Session {
   /// without it an agent still has devices, the browser, builds and its shell.
   final bool operatorGranted;
 
+  /// What this row is for the server, beyond a session; null is an ordinary
+  /// one. Only [kSessionRoleBot] exists. A client never supplies it: the store
+  /// ignores it on an ordinary insert.
+  final String? role;
+
+  /// Whether the bot started this session. Told on the wire only, in place of
+  /// its parent: a client treats a bot parent as no parent, so the row has no
+  /// [parentSessionId] there. Never stored; the store's rows read false.
+  final bool viaBot;
+
+  /// Whether this row is the server's bot.
+  bool get isBot => role == kSessionRoleBot;
+
   /// The row on the wire, as the server's data API carries it.
   Map<String, Object?> toJson() => {
     'id': id,
@@ -127,6 +149,8 @@ class Session {
     if (worktreeRemovedAt case final at?) 'worktreeRemovedAt': jsonDate(at),
     'titleByUser': titleByUser,
     if (operatorGranted) 'operatorGranted': true,
+    'role': ?role,
+    if (viaBot) 'viaBot': true,
   };
 
   /// Throws [FormatException] on a row out of shape. A word this build does
@@ -162,6 +186,9 @@ class Session {
     titleByUser: jsonBool(json, 'titleByUser'),
     // Absent from an older server's rows: not granted.
     operatorGranted: json['operatorGranted'] == true,
+    // Both absent from an older server's rows: an ordinary session.
+    role: jsonOptionalString(json, 'role'),
+    viaBot: json['viaBot'] == true,
   );
 
   bool get isArchived => archivedAt != null;
@@ -200,6 +227,8 @@ class Session {
     DateTime? worktreeRemovedAt,
     bool? titleByUser,
     bool? operatorGranted,
+    String? role,
+    bool? viaBot,
   }) => Session(
     id: id ?? this.id,
     repositoryId: repositoryId ?? this.repositoryId,
@@ -222,6 +251,8 @@ class Session {
     worktreeRemovedAt: worktreeRemovedAt ?? this.worktreeRemovedAt,
     titleByUser: titleByUser ?? this.titleByUser,
     operatorGranted: operatorGranted ?? this.operatorGranted,
+    role: role ?? this.role,
+    viaBot: viaBot ?? this.viaBot,
   );
 
   @override
@@ -247,7 +278,9 @@ class Session {
       other.archivedAt == archivedAt &&
       other.worktreeRemovedAt == worktreeRemovedAt &&
       other.titleByUser == titleByUser &&
-      other.operatorGranted == operatorGranted;
+      other.operatorGranted == operatorGranted &&
+      other.role == role &&
+      other.viaBot == viaBot;
 
   @override
   int get hashCode => Object.hashAll([
@@ -272,6 +305,8 @@ class Session {
     worktreeRemovedAt,
     titleByUser,
     operatorGranted,
+    role,
+    viaBot,
   ]);
 
   @override

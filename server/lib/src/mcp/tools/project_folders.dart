@@ -14,6 +14,7 @@ import 'package:karmashala_session/session.dart'
 import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:path/path.dart' as p;
 
+import '../../bot/bot_instructions.dart';
 import 'checkout_reach.dart';
 import 'server_tool_context.dart';
 
@@ -49,6 +50,9 @@ const String kKarmashalaFolder = 'karmashala';
 /// The folder under [kKarmashalaFolder] that sessions without a project run
 /// in, one subfolder each.
 const String kScratchFolder = 'scratch';
+
+/// The folder under [kKarmashalaFolder] the server's bot runs in.
+const String kBotFolder = 'bot';
 
 /// What a session without a project is called on disk, and so in the
 /// workspace: the day, up to five words of [hint] — lower-case, letters and
@@ -241,6 +245,113 @@ class ProjectFolders {
         ));
     await _recorded(added);
     return checkout;
+  }
+
+  /// The bot's folder, `~/karmashala/bot`, under its hidden project: made and
+  /// `git init`ed the first time, because checkpoints need a tree, and given
+  /// its instruction files every time, so a new build's words reach it. Its
+  /// `MEMORY.md` is made once and never touched again.
+  Future<Repository> createBotCheckout(ExecutionEnvironment target) async {
+    final root = await _makeBotFolder(target);
+    final location = EnvironmentPath(environmentId: target.id, path: root);
+    await _writeBotFiles(target, root);
+    final existing = ProjectDao(_context.database).botIn(target.id);
+    final repositories = RepositoryDao(_context.database);
+    if (existing != null) {
+      final checkout = repositories.getByProject(existing.id).firstOrNull;
+      if (checkout != null) return checkout;
+    }
+    // As the server, not a client: `projects.create` refuses this kind.
+    final created = _context.data.applyAsServer(
+      ProjectCreate(
+        projectName: 'Bot',
+        root: location,
+        projectKind: Project.botKind,
+        found: [DiscoveredRepository(name: kBotFolder, path: location)],
+      ),
+    );
+    _context.data.botRowsMoved();
+    return created.repositories.firstOrNull ??
+        repositories.getByLocation(location).firstOrNull ??
+        (throw RepositoryDiscoveryException(
+          'The bot folder $root was made but could not be recorded.',
+        ));
+  }
+
+  Future<String> _makeBotFolder(ExecutionEnvironment target) async {
+    final runner = _reach.runners.forEnvironment(target);
+    if (_isPosix(target)) {
+      final result = await runner.run(
+        _shellScript(
+          'TARGET="\$HOME/$kKarmashalaFolder/$kBotFolder"\n'
+          'mkdir -p "\$TARGET" && cd "\$TARGET" && '
+          '{ [ -d .git ] || git init -q . ; } && pwd\n',
+        ),
+      );
+      if (!result.ok) {
+        throw RepositoryDiscoveryException(
+          'Could not make the bot folder on ${target.name}: '
+          '${result.stderr.trim()}',
+        );
+      }
+      return result.stdout.trim().split('\n').last.trim();
+    }
+    final path = p.join(localHome, kKarmashalaFolder, kBotFolder);
+    Directory(path).createSync(recursive: true);
+    if (!Directory(p.join(path, '.git')).existsSync()) {
+      await _gitInit(runner, path);
+    }
+    return path;
+  }
+
+  /// Rewrites [kBotFiles], which are the server's, leaves `MEMORY.md`, which
+  /// is the bot's, and keeps all of them out of git.
+  Future<void> _writeBotFiles(ExecutionEnvironment target, String root) async {
+    final names = [...kBotFiles.keys, kBotMemoryFile];
+    if (_isPosix(target)) {
+      final quoted = "'${root.replaceAll("'", r"'\''")}'";
+      final script = StringBuffer('cd $quoted || exit 3\nmkdir -p .git/info\n');
+      for (final MapEntry(key: name, value: text) in kBotFiles.entries) {
+        script
+          ..write("cat > $name <<'KARMASHALA_EOF'\n")
+          ..write(text.endsWith('\n') ? text : '$text\n')
+          ..write('KARMASHALA_EOF\n');
+      }
+      script.write('[ -e $kBotMemoryFile ] || : > $kBotMemoryFile\n');
+      for (final name in names) {
+        script.write(
+          'grep -qxF $name .git/info/exclude 2>/dev/null || '
+          'echo $name >> .git/info/exclude\n',
+        );
+      }
+      final result = await _reach.runners
+          .forEnvironment(target)
+          .run(_shellScript(script.toString()));
+      if (!result.ok) {
+        throw RepositoryDiscoveryException(
+          'Could not write the bot\'s instructions on ${target.name}: '
+          '${result.stderr.trim()}',
+        );
+      }
+      return;
+    }
+    for (final MapEntry(key: name, value: text) in kBotFiles.entries) {
+      File(p.join(root, name)).writeAsStringSync(text);
+    }
+    final memory = File(p.join(root, kBotMemoryFile));
+    if (!memory.existsSync()) memory.writeAsStringSync('');
+    final info = Directory(p.join(root, '.git', 'info'))
+      ..createSync(recursive: true);
+    final exclude = File(p.join(info.path, 'exclude'));
+    final excluded = exclude.existsSync()
+        ? exclude.readAsLinesSync().toSet()
+        : <String>{};
+    for (final name in names) {
+      if (excluded.contains(name)) continue;
+      final raw = exclude.existsSync() ? exclude.readAsStringSync() : '';
+      final separator = raw.isEmpty || raw.endsWith('\n') ? '' : '\n';
+      exclude.writeAsStringSync('$separator$name\n', mode: FileMode.append);
+    }
   }
 
   /// Undoes [createScratchCheckout] for a launch that failed in it: the

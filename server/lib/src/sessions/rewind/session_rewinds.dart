@@ -122,6 +122,9 @@ class SessionRewinds {
     final session =
         sessions.getById(sessionId) ??
         (throw StateError('This session no longer exists.'));
+    if (session.isBot) {
+      throw StateError('The bot\'s conversation cannot be rewound.');
+    }
     if (session.isArchived) {
       throw StateError('This session is archived; restore it to rewind.');
     }

@@ -27,6 +27,17 @@ class McpToolRelay {
   /// The session a checkpoint belongs to, or null when there is none.
   final String? Function(String checkpointId)? checkpointOwner;
 
+  /// Why a call may not run yet, in the words the caller reads, having
+  /// recorded it for a person's approval; null when it may. Asks of every
+  /// authenticated caller and holds only the bot's (`BotApprovals.hold`). Set
+  /// by `serve`, since it answers through what the relay's own tools built.
+  String? Function(
+    String tool,
+    Map<String, dynamic> arguments,
+    String callerSessionId,
+  )?
+  approvalGate;
+
   /// The tools the server runs.
   final ServerTools tools;
 
@@ -58,6 +69,27 @@ class McpToolRelay {
         !granted(callerSessionId)) {
       return Future.error(McpToolRelayFailure(mcpOperatorRefusal(tool)));
     }
+    // Beside the grant: never held open, so nothing here waits for a person.
+    if (callerSessionId != null && tools.serves(tool)) {
+      final held = approvalGate?.call(tool, arguments, callerSessionId);
+      if (held != null) return Future.error(McpToolRelayFailure(held));
+    }
+    return _run(tool, arguments, callerSessionId);
+  }
+
+  /// Runs a call a person approved, as [callerSessionId], past both gates:
+  /// only `BotApprovals` calls this, with exactly what it recorded.
+  Future<Object?> runApproved(
+    String tool,
+    Map<String, dynamic> arguments,
+    String callerSessionId,
+  ) => _run(tool, arguments, callerSessionId);
+
+  Future<Object?> _run(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) {
     final here = tools.call(tool, arguments, callerSessionId);
     if (here != null) return here;
     return Future.error(

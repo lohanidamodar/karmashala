@@ -1230,6 +1230,10 @@ class DataClient {
           _setQuickAccess(pins);
         case OperateByDefaultChanged(:final enabled):
           _setOperateByDefault(enabled);
+        // Told only to a client that asked (`bot.subscribe`), and this one
+        // has not yet: the bot's panel is a round of its own.
+        case BotRowChanged() || BotApprovalChanged() || BotAgentChanged():
+          break;
         case StoresChanged(:final view):
           storesView = view;
           if (!_storesChanges.isClosed) _storesChanges.add(view);
