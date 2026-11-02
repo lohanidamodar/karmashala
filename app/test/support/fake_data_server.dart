@@ -626,6 +626,8 @@ class FakeDataServer {
           quickAccessPins = [...pins];
         case OperateByDefaultChanged(:final enabled):
           operateNewSessions = enabled;
+        case BotRowChanged() || BotApprovalChanged() || BotAgentChanged():
+          break;
         case StoresChanged() ||
             StoresProgress() ||
             StoreAppChanged() ||
@@ -1027,6 +1029,9 @@ class FakeDataServer {
       FilesWorkRequest() => throw StateError('answered in FakeDataLink.send'),
       SessionTranscriptRequest() => throw const DataRefused.unavailable(
         'this fake reads no transcripts',
+      ),
+      BotRequest() => throw const DataRefused.unavailable(
+        'this fake has no bot',
       ),
       final ArtifactsRequest<Object?> r => _handleArtifacts(r),
       final PipelinesRequest<Object?> r => pipelineRows._handle(r, changes),
