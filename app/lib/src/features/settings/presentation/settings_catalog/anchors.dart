@@ -280,6 +280,13 @@ enum SettingsAnchor {
     'sandbox',
   ]),
   usage(SettingsSectionId.agents, 'Usage & limits', ['usage', 'limits']),
+  newSessionGrant(SettingsSectionId.agents, 'New sessions', [
+    'operate',
+    'operator',
+    'karmashala',
+    'new sessions',
+    'default',
+  ]),
   agentUpdates(SettingsSectionId.agents, 'Agent updates', [
     'update',
     'updates',
@@ -476,6 +483,8 @@ enum SettingsAnchor {
     serverStorage => caps.hostsServer && caps.serverSettings,
     // Made and restored by this machine's server, from its own disk.
     dataBackup || dataRestore => caps.hostsServer && caps.serverSettings,
+    // An older server has no such setting.
+    newSessionGrant => caps.operateByDefault,
     _ => true,
   };
 }

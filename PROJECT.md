@@ -1476,6 +1476,13 @@ catalogue is gated, and everything else is outside the grant.
 still has devices, the browser, builds, terminals and its shell. A tool that
 turns out to drive another session joins the gate.
 
+**"Let new sessions operate Karmashala"** is a server setting, off by default,
+kept under a reserved key and changed only by `sessions.operateByDefault.set`.
+`SessionDao.insert` stamps it on every new row and ignores the row's own value,
+so a client cannot supply the grant and a new creation path cannot forget it. A
+row that needs another value (the live test seed) writes it after inserting.
+Filling a waiting row keeps the grant it was inserted with.
+
 ## 25. Plan and task tools in chat sessions
 
 The plan card draws what an agent's own plan tool publishes, and on

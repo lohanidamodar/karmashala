@@ -39,6 +39,7 @@ import 'agent_path_section.dart' show AgentExecutableRows;
 import 'agents_group_section.dart';
 import 'agents_header_strip.dart';
 import 'agents_pages.dart' show AgentUpdatesSection, ChildReportSection;
+import 'new_session_grant_section.dart';
 import 'permissions_page.dart' show PermissionAxisDropdown;
 import 'settings_catalog.dart';
 import 'settings_notice.dart';
@@ -177,6 +178,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
           anchors: {
             SettingsAnchor.usage,
             SettingsAnchor.agentUpdates,
+            SettingsAnchor.newSessionGrant,
             SettingsAnchor.detection,
           },
           children: [
@@ -190,6 +192,10 @@ class AgentsAndAccountsBody extends ConsumerWidget {
             ),
             AgentMcpEntrySection(),
             ChildReportSection(),
+            SettingsAnchorTarget(
+              anchor: SettingsAnchor.newSessionGrant,
+              child: NewSessionGrantSection(),
+            ),
             SettingsAnchorTarget(
               anchor: SettingsAnchor.detection,
               child: AgentDetectionSection(),

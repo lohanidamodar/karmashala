@@ -175,6 +175,12 @@ class FakeDataServer {
   /// The folders pinned to every file browser.
   List<QuickAccessPin> quickAccessPins = [];
 
+  /// "Let new sessions operate Karmashala".
+  bool operateNewSessions = false;
+
+  /// What a change to it is refused with, when a test wants that.
+  String? operateRefusal;
+
   /// The workspace domain's four tables, shaped like the server's DAOs so a
   /// test seeds them the way the server's store is written. A write here
   /// after a client connected reaches it as another client's change.
@@ -618,6 +624,8 @@ class FakeDataServer {
           break;
         case QuickAccessChanged(:final pins):
           quickAccessPins = [...pins];
+        case OperateByDefaultChanged(:final enabled):
+          operateNewSessions = enabled;
         case StoresChanged() ||
             StoresProgress() ||
             StoreAppChanged() ||
@@ -868,6 +876,14 @@ class FakeDataServer {
       final WorktreesRequest<Object?> r => worktreeRows._handle(r, changes),
       final SnippetsRequest<Object?> r => snippetRows._handle(r, changes),
       final QuickAccessRequest r => _quickAccess(r, changes),
+      SessionsOperateByDefaultSet(:final enabled) => () {
+        if (operateRefusal case final words?) {
+          throw DataRefused.denied(words);
+        }
+        operateNewSessions = enabled;
+        changes.add(OperateByDefaultChanged(enabled: enabled));
+        return const DataAck();
+      }(),
       final CheckpointsRequest<Object?> r => checkpointRows._handle(r, changes),
       final CheckpointWorkRequest<Object?> r => checkpointWork._handle(r),
       final VerificationRequest<Object?> r => verificationRows._handle(
@@ -1301,6 +1317,9 @@ class FakeDataServer {
     origin._subscribed = true;
     // What the server keeps now, told to this window alone as it joins.
     origin.tell(attention._greeting());
+    if (operateNewSessions) {
+      origin.tell(const [OperateByDefaultChanged(enabled: true)]);
+    }
     return const DataAck();
   }
 
