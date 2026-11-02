@@ -2038,6 +2038,9 @@ Future<int> _serve(
     run: mcpTools.runApproved,
     post: (sessionId, text, approvalId) =>
         sessionQueue.postNotice(sessionId, text, originId: approvalId),
+    queueQuietly: (sessionId, text, approvalId) =>
+        sessionQueue.postQuiet(sessionId, text, originId: approvalId),
+    live: prompts.status.holds,
     announce: data.announce,
     raise: attention.attention.raise,
     retire: (id) {

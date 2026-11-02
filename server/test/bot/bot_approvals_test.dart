@@ -270,6 +270,60 @@ void main() {
     });
   });
 
+  group('expiry and a bot nothing runs', () {
+    late bool live;
+    late List<String> quiet;
+
+    setUp(() {
+      live = false;
+      quiet = [];
+      approvals.close();
+      approvals = BotApprovals(
+        database: db,
+        run: relay.runApproved,
+        post: (sessionId, text, originId) => posted.add((sessionId, text)),
+        queueQuietly: (sessionId, text, originId) => quiet.add(text),
+        live: (_) => live,
+        announce: told.addAll,
+        now: () => now,
+        newId: () => 'ap${raisedIds++}',
+      );
+      relay.approvalGate = approvals.hold;
+    });
+
+    test('stopped: the notice waits, and wakes nothing', () async {
+      await refused('session_end', {'sessionId': 'plain'});
+      now = now.add(const Duration(minutes: 11));
+      approvals.sweep();
+      expect(posted, isEmpty);
+      expect(quiet.single, contains('Nothing ran'));
+    });
+
+    test('live: it is delivered as ever', () async {
+      live = true;
+      await refused('session_end', {'sessionId': 'plain'});
+      now = now.add(const Duration(minutes: 11));
+      approvals.sweep();
+      expect(posted.single.$2, contains('Nothing ran'));
+      expect(quiet, isEmpty);
+    });
+
+    test('No wakes it, because a person just acted', () async {
+      await refused('session_end', {'sessionId': 'plain'});
+      await approvals.answer(pendingId(), approve: false, by: 'app');
+      expect(posted, hasLength(1));
+      expect(quiet, isEmpty);
+    });
+
+    test('Yes wakes it', () async {
+      await refused('session_end', {'sessionId': 'plain'});
+      await approvals.answer(pendingId(), approve: true, by: 'app');
+      await approvals.settled;
+      expect(posted, hasLength(1));
+      expect(quiet, isEmpty);
+    });
+  });
+
   group('a restart', () {
     test('a pending request survives, and can be answered', () async {
       await refused('session_end', {'sessionId': 'plain'});

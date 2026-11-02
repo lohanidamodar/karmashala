@@ -162,6 +162,52 @@ void main() {
       expect(dao.hasWaiting('s1'), isTrue);
     });
 
+    test('a quiet notice does not wake it', () async {
+      over(wakes: (id) => id == 's1').postQuiet('s1', 'It expired.');
+      await pumpEventQueue();
+      expect(delivered, isEmpty);
+      expect(dao.hasWaiting('s1'), isTrue);
+    });
+
+    test('nor does a restart, or the sweep, deliver it', () async {
+      final first = over(wakes: (id) => id == 's1');
+      first.postQuiet('s1', 'It expired.');
+      await first.close();
+      over(wakes: (id) => id == 's1').refreshAll();
+      await pumpEventQueue();
+      expect(delivered, isEmpty);
+    });
+
+    test('it goes with the next message, in that one turn', () async {
+      final queue = over(wakes: (id) => id == 's1');
+      queue.postQuiet('s1', 'It expired.');
+      queue.postQuiet('s1', 'So did this.');
+      await pumpEventQueue();
+      queue.postNotice('s1', 'It reports.');
+      await pumpEventQueue();
+      expect(delivered, hasLength(1));
+      expect(delivered.single, contains('It expired.'));
+      expect(delivered.single, contains('So did this.'));
+      expect(delivered.single, endsWith('It reports.'));
+      expect(dao.hasWaiting('s1'), isFalse);
+    });
+
+    test('a person\'s send carries it too', () async {
+      final queue = over(wakes: (id) => id == 's1');
+      queue.postQuiet('s1', 'It expired.');
+      await pumpEventQueue();
+      final admitted = queue.admit(
+        's1',
+        'Hello',
+        origin: QueuedMessageOrigin.app,
+      );
+      expect(admitted, isA<AdmitQueued>());
+      await pumpEventQueue();
+      expect(delivered.single, contains('It expired.'));
+      expect(delivered.single, endsWith('Hello'));
+      expect(dao.hasWaiting('s1'), isFalse);
+    });
+
     test('what waited through a restart goes when the queue starts', () async {
       final first = over();
       first.postNotice('s1', 'It reports.');

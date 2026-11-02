@@ -66,7 +66,9 @@ String botApprovalSummary(
 /// the request ([answer]) and **the server itself** runs the recorded call, so
 /// the agent never retries it and only what the person saw can run. No, or
 /// expiry after [kBotApprovalLifetime], runs nothing. Either way one message
-/// tells the bot how it ended ([post]), resuming it if it was stopped.
+/// tells the bot how it ended ([post]), resuming it if it was stopped; but an
+/// expiry has nobody behind it, so a stopped bot hears it with its next turn
+/// ([queueQuietly]).
 ///
 /// This covers Karmashala tools the bot itself calls, and only those: what
 /// its agent runs in its own shell is governed by its permission mode, and a
@@ -77,6 +79,8 @@ class BotApprovals {
     required this.run,
     required this.post,
     required this.announce,
+    this.queueQuietly,
+    this.live,
     this.raise,
     this.retire,
     this.log,
@@ -97,6 +101,15 @@ class BotApprovals {
 
   /// Puts [String] text in row [String]'s queue, durably, naming the request.
   final void Function(String sessionId, String text, String approvalId) post;
+
+  /// Keeps an expiry's notice for row [String]'s next turn, waking nothing:
+  /// nobody is there, so it is no reason to spend one. Null posts it.
+  final void Function(String sessionId, String text, String approvalId)?
+  queueQuietly;
+
+  /// Whether something runs row [String] now; a live bot hears an expiry as it
+  /// hears anything. Null counts as live.
+  final bool Function(String sessionId)? live;
 
   /// Tells every client (a [BotView] keeps it to the bot's followers).
   final void Function(List<DataChange> changes) announce;
@@ -295,6 +308,7 @@ class BotApprovals {
         request,
         BotApprovalState.expired,
         outcome: 'Nobody answered in time. Nothing ran.',
+        nobodyThere: true,
         tell:
             '[Karmashala] Nobody answered in time: ${request.summary}. Nothing '
             'ran. Do not try again unless they ask.',
@@ -322,6 +336,7 @@ class BotApprovals {
     BotApprovalState state, {
     required String outcome,
     String? tell,
+    bool nobodyThere = false,
   }) {
     _store.finish(request.id, state: state, outcome: outcome);
     announce([BotApprovalChanged(_store.getById(request.id)!)]);
@@ -329,7 +344,11 @@ class BotApprovals {
         state != BotApprovalState.interrupted) {
       retire?.call(itemId(request.id));
     }
-    if (tell != null) post(request.sessionId, tell, request.id);
+    if (tell != null) {
+      final stopped = !(live?.call(request.sessionId) ?? true);
+      final send = nobodyThere && stopped ? queueQuietly ?? post : post;
+      send(request.sessionId, tell, request.id);
+    }
     log?.call('bot: ${request.id} ${state.name}: $outcome');
   }
 }

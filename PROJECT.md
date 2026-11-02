@@ -1595,7 +1595,9 @@ is not done. The call fails rather than succeeds because tools declare an
 conditional `UPDATE`, and the server runs exactly the recorded call as the bot
 (`runApproved`), so nothing can run twice and only what the person saw can run.
 No, or expiry after 10 minutes, runs nothing. The outcome goes to the bot as one
-queued message, which resumes a stopped bot. A call a stop cut off is
+queued message, which resumes a stopped bot, because a person just acted. An
+expiry has nobody behind it: a stopped bot is not woken, and the notice goes
+with its next turn (`SessionQueue.postQuiet`). A call a stop cut off is
 `interrupted`: it is never run again, and the bot is told it may have run.
 `session_end` on a session the bot started needs no approval.
 
