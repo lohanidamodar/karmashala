@@ -83,7 +83,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
   Future<void> _send(String text) async {
     // `/operator` first: typing it is the person letting this session operate
     // Karmashala. It is taken off the message; alone, it is the whole act.
-    final afterOperator = textAfterOperatorCommand(text);
+    final afterOperator = widget.bot ? null : textAfterOperatorCommand(text);
     if (afterOperator != null) {
       await setOperatorGrant(
         context,
@@ -167,7 +167,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
           // Mode, model and stats are on the pane's status bar (owner,
           // 2026-09-28); switching agent is the composer's (2026-10-03).
           chips: [
-            if (caps.switchAgent)
+            if (caps.switchAgent && !widget.bot)
               SwitchAgentControl(sessionId: widget.sessionId),
           ],
           // Read when the menu opens, never watched: the footer is
@@ -233,6 +233,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
             // Flexible like the queue: with the keyboard up it gives way, and
             // the box stays in sight.
             Flexible(child: BackgroundRunsStrip(sessionId: widget.sessionId)),
+            ?widget.footerLead,
             // Gives way like the strips: at a large text size it scrolls
             // rather than push the box away.
             if (ref.watch(stopEscalatedProvider(widget.sessionId)))

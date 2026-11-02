@@ -377,6 +377,15 @@ List<ShellChord> _buildChords() => [
     does: 'Open Agent dashboard',
     skipsShell: true,
   ),
+  // M for message. Shifted like Usage's, so a focused pane loses nothing.
+  ShellChord(
+    activator: commandActivator(LogicalKeyboardKey.keyM, shift: true),
+    intent: OpenBotIntent(),
+    command: 'bot.toggle',
+    label: _commandLabel('M', shift: true),
+    does: 'Open or close the bot',
+    skipsShell: true,
+  ),
   // Tabs, shifted because a shell owns the bare keys — ^W deletes a word, ^T
   // transposes. The bare pair is declared too but left to the shell by default.
   ShellChord(

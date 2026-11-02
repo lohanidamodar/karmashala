@@ -7,6 +7,7 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/agents/presentation/toolbar_usage_strip.dart';
+import '../../features/bot/presentation/bot_button.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
@@ -66,6 +67,10 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
                 ],
                 const Expanded(child: _QuickOpenSlot()),
                 const _BarDivider(),
+                BotButton(
+                  key: const ValueKey('title-bar-bot'),
+                  chord: shellChordLabel<OpenBotIntent>(),
+                ),
                 const _NewButton(key: ValueKey('title-bar-new')),
                 const _RestoredSessionsBadge(),
                 const _FocusModeToggle(),

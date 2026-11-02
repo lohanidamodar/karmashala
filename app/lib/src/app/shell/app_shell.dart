@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,10 +15,13 @@ import 'side_panel.dart';
 import 'side_panel_state.dart';
 import 'workbench.dart';
 
+import '../../core/capabilities/capabilities.dart';
 import '../../core/data/data_providers.dart';
 import '../../core/data/metadata_keys.dart';
 import '../../core/lifecycle/before_quit.dart';
 import '../../features/automations/application/resume_announcer.dart';
+import '../../features/bot/application/bot_providers.dart';
+import '../../features/bot/presentation/bot_surface.dart';
 import '../../features/automations/application/scheduled_resume_observer.dart';
 import '../../features/automations/application/usage_limit_notices.dart';
 import '../../features/stores/application/store_changes.dart';
@@ -300,6 +304,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(usageForecastNoticesProvider);
     // And for what the server has to say of a session it delivered to.
     ref.watch(serverSessionNoticesProvider);
+    // And for the bot, which a link follows only once it has asked.
+    ref.watch(botFollowerProvider);
+    ref.watch(botUnreadProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
     // And for an archived session, whose tabs here close.
@@ -364,9 +371,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     // rotation between the two.
     if (ShellWidth.of(MediaQuery.sizeOf(context).width).isCompact) {
       _trackWidthClass(ShellWidth.compact);
-      return const ShellShortcuts(child: PhoneShell());
+      return const ShellShortcuts(
+        child: BotPhoneSheetHost(child: PhoneShell()),
+      );
     }
     _pinDashboard();
+    final botOpen =
+        ref.watch(botPanelProvider) &&
+        ref.watch(capabilitiesProvider.select((c) => c.bot));
     // The macOS menu bar is mounted above this, in `KarmashalaApp`.
     return ShellShortcuts(
       child: Scaffold(
@@ -456,6 +468,18 @@ class _AppShellState extends ConsumerState<AppShell> {
                         explorerWidth: _explorerDrag ?? explorerWidth,
                         panelWidth: _panelDrag ?? panelWidth,
                       ),
+                    ),
+                  if (botOpen)
+                    Positioned(
+                      key: const ValueKey('shell-bot'),
+                      top: Insets.sm,
+                      bottom: Insets.sm,
+                      right: Insets.sm,
+                      width: math.min(
+                        Chrome.botPanelWidth,
+                        constraints.maxWidth - Insets.lg,
+                      ),
+                      child: const BotFloatingPanel(),
                     ),
                   // Asks from sessions not on screen float at the
                   // workbench's top right corner (board N1), clear of the

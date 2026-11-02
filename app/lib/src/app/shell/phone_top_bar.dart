@@ -9,6 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../core/capabilities/capabilities.dart';
 import '../../core/lifecycle/server_switcher.dart';
+import '../../features/bot/presentation/bot_button.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
 import '../../features/overview/application/overview_drawer.dart';
@@ -40,6 +41,7 @@ class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
     title: const PhoneHostSwitcher(),
     actions: [
       const LinkRouteChip(),
+      const BotButton(touch: true),
       const _SearchButton(),
       const _NeedsYouCount(),
       const SizedBox(width: Insets.xs),

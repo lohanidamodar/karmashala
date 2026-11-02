@@ -5,6 +5,8 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/data/data_providers.dart';
+import '../../features/bot/application/bot_providers.dart';
 import '../../features/notifications/application/notification_providers.dart'
     show focusWatchedSession;
 import '../../features/sessions/application/session_providers.dart';
@@ -27,6 +29,9 @@ enum SessionReveal {
 
   /// It is gone — archived or deleted — and the dashboard opened instead.
   gone,
+
+  /// The bot, in its panel: it has no tab, card or row anywhere else.
+  bot,
 }
 
 /// Shows [openId]: its open tab when this window has one, else the Agent
@@ -40,6 +45,10 @@ SessionReveal revealSession(
   bool imported = false,
 }) {
   final read = container.read;
+  if (read(dataClientProvider).botIds.contains(openId)) {
+    read(botPanelProvider.notifier).open();
+    return SessionReveal.bot;
+  }
   final phone = read(phoneShellRouterProvider).current;
   if (imported) {
     if (focusWatchedSession(container, openId: openId, imported: true)) {

@@ -12,6 +12,8 @@ import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../bot/application/bot_providers.dart';
+
 import '../../../app/shell/phone_routes.dart';
 import '../../../app/shell/reveal_session.dart';
 import '../../../core/capabilities/capabilities.dart';
@@ -318,8 +320,12 @@ final attentionPresenterProvider = Provider<AttentionPresenter>((ref) {
 /// selection stays, but nothing of it is on screen.
 Set<String> visibleAgentSessionIds(ProviderContainer container) {
   final read = container.read;
-  if (phoneSessionPageDown(container)) return const {};
   final ids = <String>{};
+  // The panel is on screen wherever the phone's tabs are.
+  if (read(botPanelProvider)) {
+    if (read(botSessionIdProvider) case final bot?) ids.add(bot);
+  }
+  if (phoneSessionPageDown(container)) return ids;
   final nativeId = read(selectedSessionIdProvider);
   if (nativeId != null) {
     ids.add(nativeId);

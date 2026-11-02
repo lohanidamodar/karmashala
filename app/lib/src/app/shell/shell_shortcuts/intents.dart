@@ -182,6 +182,11 @@ class BrowseFilesIntent extends Intent {
   const BrowseFilesIntent();
 }
 
+/// Opens or closes the bot.
+class OpenBotIntent extends Intent {
+  const OpenBotIntent();
+}
+
 class OpenAboutIntent extends Intent {
   const OpenAboutIntent();
 }

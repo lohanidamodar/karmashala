@@ -41,12 +41,14 @@ mixin _TranscriptTurnActions on ConsumerState<SessionTranscriptView> {
     final caps = ref.watch(capabilitiesProvider);
     final canSend = caps.maySend && (active || caps.mayStart);
     final canFork =
+        !widget.bot &&
         caps.mayStart &&
         !ref
             .read(sessionHandoffServiceProvider)
             .forkPlanFor(widget.sessionId)
             .isRefused;
-    final rewindable = ref.watch(sessionRewindableProvider(widget.sessionId));
+    final rewindable =
+        !widget.bot && ref.watch(sessionRewindableProvider(widget.sessionId));
     // A rewind restores files from the same checkpoints a fork would.
     final chain = canFork || rewindable
         ? ref.watch(sessionCheckpointsProvider(widget.sessionId)).value

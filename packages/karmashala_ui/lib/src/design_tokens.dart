@@ -879,6 +879,12 @@ class Chrome {
   /// gutter above and below in a 30px row, tall enough to still be a target.
   static const control = 26.0;
 
+  /// The bot's floating panel, over whatever the person is doing.
+  static const botPanelWidth = 420.0;
+
+  /// The share of a phone's height the bot's sheet takes.
+  static const botSheetShare = 0.88;
+
   /// The diameter of a status dot. Read at a glance and never on its own:
   /// `StatusDot` requires a label, because a colour is not a state.
   static const dot = 7.0;

@@ -128,8 +128,19 @@ class SessionTranscriptView extends ConsumerStatefulWidget {
     this.holdForPrompt = false,
     this.seenUntil,
     this.resumesInBackground = false,
+    this.bot = false,
+    this.footerLead,
     super.key,
   });
+
+  /// The bot's conversation, in its panel: the server refuses it a fork, a
+  /// rewind and a handoff, and its agent is switched from the panel's header,
+  /// so none of those are offered here, and it holds its grant already.
+  final bool bot;
+
+  /// Drawn over the box, among the strips: the bot's approvals. Bounded by a
+  /// [Flexible] of its own when it can grow.
+  final Widget? footerLead;
 
   /// See [ChatTranscriptView.seenUntil].
   final DateTime? seenUntil;
