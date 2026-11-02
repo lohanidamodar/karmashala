@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/data/data_providers.dart';
+import '../../bot/application/bot_providers.dart';
 
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -248,7 +248,7 @@ class _AttentionInboxViewState extends ConsumerState<AttentionInboxView> {
     onOpen: () {
       // No session to reveal: the bot's items open its panel.
       if (item.kind == InboxItemKind.botApproval ||
-          ref.read(dataClientProvider).botIds.contains(item.session.openId)) {
+          ref.read(botSessionsProvider).contains(item.session.openId)) {
         return controller.openBot(item);
       }
       // The server tells every window to show the app in the Stores tab.

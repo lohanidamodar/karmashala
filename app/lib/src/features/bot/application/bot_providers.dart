@@ -95,6 +95,27 @@ final botSessionIdProvider = Provider<String?>(
   (ref) => ref.watch(botStateProvider.select((s) => s?.session?.id)),
 );
 
+/// Whether this client's link is up. The bot's button and panel both ask.
+final botConnectedProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(dataConnectionProvider).value?.state == DataLinkState.connected,
+);
+
+/// Every session id this client has known as the bot, cleared ones included:
+/// a live read, because the set grows without a change to watch.
+class BotSessions {
+  BotSessions(this._client);
+
+  final DataClient _client;
+
+  Set<String> get ids => _client.botIds;
+  bool contains(String? id) => _client.botIds.contains(id);
+}
+
+final botSessionsProvider = Provider<BotSessions>(
+  (ref) => BotSessions(ref.watch(dataClientProvider)),
+);
+
 /// Whether a turn holds the bot: Clear and the switcher wait for it.
 final botTurnRunningProvider = Provider<bool>((ref) {
   final id = ref.watch(botSessionIdProvider);

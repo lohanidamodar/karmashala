@@ -4,8 +4,6 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/capabilities/capabilities.dart';
-import '../../../core/data/data_client.dart';
-import '../../../core/data/data_providers.dart';
 import '../application/bot_providers.dart';
 import 'bot_panel.dart' show notConnected;
 
@@ -27,9 +25,7 @@ class BotButton extends ConsumerWidget {
     if (!ref.watch(capabilitiesProvider.select((c) => c.bot))) {
       return const SizedBox.shrink();
     }
-    final connected =
-        ref.watch(dataConnectionProvider).value?.state ==
-        DataLinkState.connected;
+    final connected = ref.watch(botConnectedProvider);
     final attention = ref.watch(botAttentionProvider);
     final selected = ref.watch(botPanelProvider);
     final scheme = Theme.of(context).colorScheme;

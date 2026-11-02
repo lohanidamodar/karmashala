@@ -12,8 +12,6 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/workbench_tabs.dart' show openSettingsTab;
 import '../../../core/capabilities/capabilities.dart';
-import '../../../core/data/data_client.dart';
-import '../../../core/data/data_providers.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../sessions/presentation/message_composer.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
@@ -73,8 +71,7 @@ class _BotBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(botStateProvider);
-    final connection = ref.watch(dataConnectionProvider).value;
-    final connected = connection?.state == DataLinkState.connected;
+    final connected = ref.watch(botConnectedProvider);
     final failure = ref.watch(botReadFailureProvider);
     final sending = ref.watch(botFirstSendProvider);
     final id = state?.session?.id;
@@ -199,7 +196,7 @@ class _BotEmptyState extends ConsumerState<_BotEmpty> {
     // draft as it goes, which is after this mounts.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _box.text.isNotEmpty) return;
-      final bots = ref.read(dataClientProvider).botIds;
+      final bots = ref.read(botSessionsProvider).ids;
       for (final id in [...bots, _unsentDraft]) {
         final words = _parked.take(id)?.text;
         if (words == null) continue;

@@ -139,7 +139,10 @@ class _BotApprovalCardState extends ConsumerState<BotApprovalCard> {
                 SelectableText(
                   _call,
                   key: const ValueKey('bot-approval-call'),
-                  style: muted?.copyWith(fontFamily: 'monospace'),
+                  style: muted?.copyWith(
+                    fontFamily: kMonoFamily,
+                    fontFamilyFallback: kMonoFallback,
+                  ),
                 ),
               ],
               if (_refusal case final refusal?) ...[

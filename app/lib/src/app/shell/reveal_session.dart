@@ -5,7 +5,6 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/data/data_providers.dart';
 import '../../features/bot/application/bot_providers.dart';
 import '../../features/notifications/application/notification_providers.dart'
     show focusWatchedSession;
@@ -45,7 +44,7 @@ SessionReveal revealSession(
   bool imported = false,
 }) {
   final read = container.read;
-  if (read(dataClientProvider).botIds.contains(openId)) {
+  if (read(botSessionsProvider).contains(openId)) {
     read(botPanelProvider.notifier).open();
     return SessionReveal.bot;
   }
