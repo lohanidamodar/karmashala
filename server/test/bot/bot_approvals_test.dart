@@ -228,6 +228,10 @@ void main() {
       expect(posted.single.$1, 'bot');
       expect(posted.single.$2, contains('it ran'));
       expect(posted.single.$2, contains('do not run it again'));
+      final line = botNoticeLine(posted.single.$2);
+      expect(line, startsWith('Approval: Yes.'));
+      expect(line, isNot(contains('do not run it again')));
+      expect(line, isNot(contains('Say in one short line')));
     });
 
     test('a failure is told as a failure', () async {
@@ -252,6 +256,11 @@ void main() {
       expect(tool.ran, isEmpty);
       expect(posted.single.$2, contains('No'));
       expect(posted.single.$2, contains('Nothing ran'));
+      final line = botNoticeLine(posted.single.$2);
+      expect(line, startsWith('Approval: No.'));
+      expect(line, contains('Nothing ran'));
+      expect(line, isNot(contains('Do not try again')));
+      expect(posted.single.$2, contains('Do not try again'));
       expect(retired, ['botApproval:$id']);
     });
 

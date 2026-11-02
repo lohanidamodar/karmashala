@@ -1504,7 +1504,9 @@ One lasting conversation per server, reachable from every client of it (the
 design is `docs/superpowers/specs/2026-11-02-karmashala-bot-design.md`). It is a
 session row, so transcript, composer, asks, agent switching, resume and usage
 come free: `sessions.role = 'bot'`, at most one unarchived (a partial unique
-index), in a hidden project of `kind = 'bot'` at `~/karmashala/bot`. The row is
+index), in a hidden project of `kind = 'bot'` at `~/karmashala/bot`. A probe keeps
+that folder in its data folder instead (`botFolderFor`), so a test run never
+writes what a real bot reads. The row is
 made on the first message, never at startup. `server/lib/src/bot/` holds it.
 
 ### The wire contract
@@ -1561,6 +1563,10 @@ heard of, a cleared one's too, while `reportsFor` still answers the panel. A
 follow's greeting can tell a status before the row that says whose it is, so a
 reader that took it in is told a removal. Running drops the processes of those
 rows.
+
+An approval's outcome reaches the agent whole, as a queued message. Its first
+line is for people (`botNotice`): a client draws only that, as a note, and the
+rest stays with the agent.
 
 The panel is one view, `BotPanelView`, framed as a floating panel at 600 and up
 and a phone sheet below; `botPanelProvider` is the one truth, so it survives

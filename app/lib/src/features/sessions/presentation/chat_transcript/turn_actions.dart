@@ -336,7 +336,11 @@ String transcriptTurnMarkdown(List<ChatMessage> messages, int index) {
     switch (message.role) {
       case 'user':
         final words = _personsWords(message);
-        if (words.isNotEmpty) under('You', words);
+        if (botNoticeLine(message.text) case final line?) {
+          under('Karmashala', line);
+        } else if (words.isNotEmpty) {
+          under('You', words);
+        }
       case 'agent':
         final (_, clean) = splitThinking(
           message.text,

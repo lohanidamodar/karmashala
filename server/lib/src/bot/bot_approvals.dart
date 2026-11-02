@@ -116,11 +116,13 @@ class BotApprovals {
         request,
         BotApprovalState.interrupted,
         outcome: 'The server stopped while it was running.',
-        tell:
-            '[Karmashala] The server stopped while it was running a call the '
-            'person approved: ${request.summary}. It may have run, in part or '
-            'whole, and it was not run again. Check what happened with your '
-            'tools before you say anything about it.',
+        tell: botNotice(
+          'Yes. ${request.summary}. The server stopped while it ran, so it '
+              'may have run.',
+          'The person approved this. It may have run, in part or whole, and '
+              'it was not run again. Check what happened with your tools before '
+              'you say anything about it.',
+        ),
       );
     }
     sweep();
@@ -230,9 +232,10 @@ class BotApprovals {
         taken,
         BotApprovalState.denied,
         outcome: 'The person said No. Nothing ran.',
-        tell:
-            '[Karmashala] The person said No to: ${taken.summary}. Nothing '
-            'ran. Do not try again unless they ask.',
+        tell: botNotice(
+          'No. ${taken.summary}. Nothing ran.',
+          'The person said No. Do not try again unless they ask.',
+        ),
       );
       return _store.getById(id)!;
     }
@@ -255,16 +258,19 @@ class BotApprovals {
       );
       final words = _words(result);
       outcome = words;
-      tell =
-          '[Karmashala] The person said Yes to: ${request.summary}. The server '
-          'ran it once, so do not run it again. Result:\n\n$words\n\nSay in '
-          'one short line what happened.';
+      tell = botNotice(
+        'Yes. ${request.summary}. It ran.',
+        'The person said Yes. The server ran it once, so do not run it again. '
+            'Result:\n\n$words\n\nSay in one short line what happened.',
+      );
     } on Object catch (error) {
       final words = boundedText('$error', kBotOutcomeMaxChars).$1;
       outcome = 'It failed: $words';
-      tell =
-          '[Karmashala] The person said Yes to: ${request.summary}. The server '
-          'ran it once and it failed: $words\n\nSay so in one short line.';
+      tell = botNotice(
+        'Yes. ${request.summary}. It failed.',
+        'The person said Yes. The server ran it once and it failed: '
+            '$words\n\nSay so in one short line.',
+      );
     }
     if (_closed) return;
     _end(request, BotApprovalState.done, outcome: outcome, tell: tell);
@@ -287,9 +293,10 @@ class BotApprovals {
         BotApprovalState.expired,
         outcome: 'Nobody answered in time. Nothing ran.',
         nobodyThere: true,
-        tell:
-            '[Karmashala] Nobody answered in time: ${request.summary}. Nothing '
-            'ran. Do not try again unless they ask.',
+        tell: botNotice(
+          'Nobody answered in time. ${request.summary}. Nothing ran.',
+          'Do not try again unless they ask.',
+        ),
       );
     }
   }

@@ -29,7 +29,10 @@ String transcriptTurnText(List<ChatMessage> messages, int index) {
     final message = messages[i];
     switch (message.role) {
       case 'user':
-        parts.add('You:\n${splitScratchPreamble(message.text).rest}');
+        parts.add(switch (botNoticeLine(message.text)) {
+          final line? => 'Karmashala:\n$line',
+          null => 'You:\n${splitScratchPreamble(message.text).rest}',
+        });
       case 'agent':
         final (_, clean) = splitThinking(
           message.text,
