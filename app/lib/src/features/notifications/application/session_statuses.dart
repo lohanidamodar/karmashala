@@ -20,11 +20,17 @@ export 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
 class SessionStatuses {
   SessionStatuses(this._client, {required this.clock}) {
     _subscription = _client.attentionChanges.listen(_onChange);
+    _bots = _client.botChanges.listen(_onBot);
+    _knownBots = {..._client.botIds};
   }
 
   final DataClient _client;
   final Clock clock;
   late final StreamSubscription<AttentionChange> _subscription;
+  late final StreamSubscription<BotState?> _bots;
+
+  /// The bot rows said gone from [statusChanges]' readers.
+  late Set<String> _knownBots;
 
   final _changes = StreamController<void>.broadcast(sync: true);
   final _statusChanges = StreamController<SessionStatusEntry>.broadcast(
@@ -33,11 +39,15 @@ class SessionStatuses {
   final _removals = StreamController<String>.broadcast(sync: true);
   final _coverage = StreamController<WatchCoverage?>.broadcast(sync: true);
 
-  /// Every watched session now.
-  List<SessionStatusEntry> get entries =>
-      List.unmodifiable(_client.sessionStatuses.values);
+  /// Every watched session now. Not the bot's: a follower is told its status,
+  /// which only the panel reads, by id ([reportsFor]). Running and the lists
+  /// are built from this and from [statusChanges].
+  List<SessionStatusEntry> get entries => List.unmodifiable([
+    for (final entry in _client.sessionStatuses.values)
+      if (!_client.botIds.contains(entry.openId)) entry,
+  ]);
 
-  int get trackedCount => _client.sessionStatuses.length;
+  int get trackedCount => entries.length;
 
   /// How much of the watch set the server's last cycle reached, or null
   /// before it has said.
@@ -115,7 +125,10 @@ class SessionStatuses {
   void _onChange(AttentionChange change) {
     switch (change) {
       case SessionStatusChanged(:final entry):
-        if (!_statusChanges.isClosed) _statusChanges.add(entry);
+        if (!_statusChanges.isClosed &&
+            !_client.botIds.contains(entry.openId)) {
+          _statusChanges.add(entry);
+        }
       case SessionStatusRemoved(:final openId):
         if (!_removals.isClosed) _removals.add(openId);
       case WatchCoverageChanged(:final coverage):
@@ -127,7 +140,17 @@ class SessionStatuses {
     if (!_changes.isClosed) _changes.add(null);
   }
 
+  /// A follow's greeting can tell a status before the row that says whose it
+  /// is: a reader that took it in lets it go now.
+  void _onBot(BotState? _) {
+    for (final id in _client.botIds.difference(_knownBots)) {
+      if (!_removals.isClosed) _removals.add(id);
+    }
+    _knownBots = {..._client.botIds};
+  }
+
   void dispose() {
+    unawaited(_bots.cancel());
     unawaited(_subscription.cancel());
     unawaited(_changes.close());
     unawaited(_statusChanges.close());

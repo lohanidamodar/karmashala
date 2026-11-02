@@ -507,6 +507,12 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['checkpoint', 'rewind', 'undo', 'retention', 'keep'],
   ),
   SettingsEntry(
+    'Agent the bot runs on',
+    anchor: SettingsAnchor.bot,
+    description: 'Default agent, or any agent with a chat form.',
+    keywords: ['bot', 'agent', 'assistant', 'chat'],
+  ),
+  SettingsEntry(
     'Let new sessions operate Karmashala',
     anchor: SettingsAnchor.newSessionGrant,
     description:

@@ -18,6 +18,8 @@ import '../../features/settings/presentation/settings_catalog.dart'
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/settings/application/settings_controller.dart';
+import '../../core/capabilities/capabilities.dart';
+import '../../features/bot/application/bot_providers.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
@@ -556,6 +558,14 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           BrowseFilesIntent: CallbackAction<BrowseFilesIntent>(
             onInvoke: (intent) {
               openFilesTabHere(ref);
+              return null;
+            },
+          ),
+          OpenBotIntent: CallbackAction<OpenBotIntent>(
+            onInvoke: (intent) {
+              if (ref.read(capabilitiesProvider).bot) {
+                ref.read(botPanelProvider.notifier).toggle();
+              }
               return null;
             },
           ),

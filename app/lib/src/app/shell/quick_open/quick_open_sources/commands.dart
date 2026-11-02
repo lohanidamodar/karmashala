@@ -320,6 +320,15 @@ extension _CommandSources on QuickOpenSources {
         opensTab: true,
         onSelect: () => openSettingsTab(ref),
       ),
+      if (ref.read(capabilitiesProvider).bot)
+        _command(
+          'Open bot',
+          subtitle: 'One conversation that manages your sessions',
+          icon: AppIcons.robot,
+          shortcut: shellCommandLabel('bot.toggle'),
+          keywords: const ['bot', 'assistant', 'ask', 'chat'],
+          onSelect: () => ref.read(botPanelProvider.notifier).open(),
+        ),
       _command(
         'Open Usage',
         subtitle: 'Each account’s limits over time, and where the tokens went',

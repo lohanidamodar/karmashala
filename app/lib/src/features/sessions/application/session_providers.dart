@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show BotState;
 import 'package:karmashala_session/session.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -34,7 +36,29 @@ final sessionsDataProvider = Provider<SessionsData>((ref) {
     client.applyingBatch ? held.add(change) : notify(change);
   }
 
+  // The bot's row is in no copy, so its moves are said here: a view of its
+  // conversation watches it by id like any other.
+  var botRow = client.bot?.session;
+  void botMoved(BotState? state) {
+    final was = botRow;
+    final now = state?.session;
+    botRow = now;
+    if (was == now) return;
+    if (was != null && was.id != now?.id) {
+      publish(SessionChange.removed(was.id), overridesLocal: true);
+    }
+    if (now != null) {
+      publish(
+        sessionChangeOf(
+          ReplicaChange(now.id, was?.id == now.id ? was : null, now),
+        ),
+        overridesLocal: true,
+      );
+    }
+  }
+
   final subscriptions = <StreamSubscription<Object?>>[
+    client.botChanges.listen(botMoved),
     client.batchEnds.listen((_) {
       if (held.isEmpty) return;
       final merged = mergedSessionChange(held);

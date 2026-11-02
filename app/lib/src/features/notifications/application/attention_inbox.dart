@@ -9,6 +9,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../app/shell/phone_routes.dart' show phoneWorkbenchProvider;
 import '../../../app/shell/reveal_session.dart';
 import '../../../core/data/data_providers.dart';
+import '../../bot/application/bot_providers.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
 import '../../overview/application/overview_seen.dart';
 import '../../sessions/application/session_status_providers.dart';
@@ -87,6 +88,8 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     // A phone's session page coming up or going down; never moves on a desktop.
     ref.listen(phoneWorkbenchProvider, (_, _) => _syncViewed());
     ref.listen(overviewSeenProvider, _peeked);
+    ref.listen(botPanelProvider, (_, _) => _syncViewed());
+    ref.listen(botSessionIdProvider, (_, _) => _syncViewed());
     // What this window already shows is said at once: nothing about it is
     // news, here or at the server.
     final looking = _lookingAt();
@@ -135,6 +138,15 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     _send(InboxOpen(item.id));
   }
 
+  /// Opens the bot's panel for [item]: there is no session to reveal, here
+  /// or in any other window, so the server is told only that it was seen.
+  void openBot(InboxItem item) {
+    final id = item.session.openId;
+    state = state.viewed({id});
+    _send(InboxViewed([id]));
+    ref.read(botPanelProvider.notifier).open();
+  }
+
   /// Opens the next session that needs you — one waiting on an answer, not
   /// one that merely finished — through [open].
   bool openNext() {
@@ -169,6 +181,9 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
   Set<String> _lookingAt() {
     final looking = <String>{};
     if (!ref.read(windowFocusedProvider)) return looking;
+    if (ref.read(botPanelProvider)) {
+      if (ref.read(botSessionIdProvider) case final bot?) looking.add(bot);
+    }
     if (phoneSessionPageDown(ref.container)) return looking;
     final native = ref.read(selectedSessionIdProvider);
     if (native != null) looking.add(native);

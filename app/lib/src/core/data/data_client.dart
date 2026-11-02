@@ -527,6 +527,84 @@ class DataClient {
     }
   }
 
+  /// The server's bot as last told; null until a link has followed it
+  /// (`bot.subscribe`). Kept across a dropped link, for the panel to draw, and
+  /// replaced whole when the next link follows.
+  BotState? bot;
+
+  /// Every bot row this client has heard of, a cleared one's too: what is
+  /// left out of everything built from statuses, and what opens the panel.
+  final botIds = <String>{};
+
+  final _botChanges = StreamController<BotState?>.broadcast(sync: true);
+
+  /// [bot] each time it moves.
+  Stream<BotState?> get botChanges => _botChanges.stream;
+
+  /// Takes in [state] whole: the answer to a bot request.
+  void applyBot(BotState state) {
+    if (state.session case final row?) botIds.add(row.id);
+    bot = state;
+    if (!_botChanges.isClosed) _botChanges.add(state);
+  }
+
+  void _applyBotRow(Session row) {
+    botIds.add(row.id);
+    final was = bot;
+    // Nothing to keep it in yet: the follow's answer says it whole.
+    if (was == null) return;
+    // A late word about a row already replaced moves nothing.
+    if (row.isArchived && was.session?.id != row.id) return;
+    applyBot(
+      BotState(
+        session: row.isArchived ? null : row,
+        agents: was.agents,
+        agentId: was.agentId,
+        agentSetting: was.agentSetting,
+        notice: was.notice,
+        approvals: row.isArchived ? const [] : was.approvals,
+      ),
+    );
+  }
+
+  void applyBotApproval(BotApproval approval) {
+    final was = bot;
+    if (was == null) return;
+    final others = [
+      for (final other in was.approvals)
+        if (other.id != approval.id) other,
+    ];
+    final pending = approval.state == BotApprovalState.pending;
+    applyBot(
+      BotState(
+        session: was.session,
+        agents: was.agents,
+        agentId: was.agentId,
+        agentSetting: was.agentSetting,
+        notice: was.notice,
+        approvals: pending
+            ? ([...others, approval]
+                ..sort((a, b) => a.requestedAt.compareTo(b.requestedAt)))
+            : others,
+      ),
+    );
+  }
+
+  void _applyBotAgent(BotAgentChanged change) {
+    final was = bot;
+    if (was == null) return;
+    applyBot(
+      BotState(
+        session: was.session,
+        agents: was.agents,
+        agentId: change.agentId,
+        agentSetting: change.agentSetting,
+        notice: change.notice,
+        approvals: was.approvals,
+      ),
+    );
+  }
+
   /// The app stores as the server holds them, as last told; null until the
   /// server has said. Never a credential: summaries only.
   StoresView? storesView;
@@ -1230,10 +1308,13 @@ class DataClient {
           _setQuickAccess(pins);
         case OperateByDefaultChanged(:final enabled):
           _setOperateByDefault(enabled);
-        // Told only to a client that asked (`bot.subscribe`), and this one
-        // has not yet: the bot's panel is a round of its own.
-        case BotRowChanged() || BotApprovalChanged() || BotAgentChanged():
-          break;
+        // Told only to a client that asked (`bot.subscribe`).
+        case BotRowChanged(:final row):
+          _applyBotRow(row);
+        case BotApprovalChanged(:final approval):
+          applyBotApproval(approval);
+        case final BotAgentChanged change:
+          _applyBotAgent(change);
         case StoresChanged(:final view):
           storesView = view;
           if (!_storesChanges.isClosed) _storesChanges.add(view);
@@ -1455,6 +1536,7 @@ class DataClient {
     unawaited(_secretRequestChanges.close());
     unawaited(_quickAccessChanges.close());
     unawaited(_operateByDefaultChanges.close());
+    unawaited(_botChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storeChangeNotices.close());
     unawaited(_storesProgress.close());

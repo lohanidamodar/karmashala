@@ -7,6 +7,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../features/agents/application/agent_providers.dart';
+import '../../features/bot/application/bot_providers.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/notifications/application/notification_providers.dart';
@@ -70,13 +71,17 @@ final offScreenAsksProvider = Provider<List<OffScreenAsk>>((ref) {
   // The session shown, not the active tab: one with no pane of ours is shown
   // in its place, and the tab behind it is the one off screen.
   final onScreen = ref.watch(onScreenSessionIdProvider);
+  // The bot's own asks are in its panel when that is up.
+  final botShown = ref.watch(botPanelProvider)
+      ? ref.watch(botSessionIdProvider)
+      : null;
   final registry = ref.read(sessionStatusRegistryProvider);
   final agents = ref.read(agentRegistryProvider);
   final answerable = ref.read(sessionAnswerableProvider);
   final projectOf = ref.read(sessionProjectNameProvider);
   return [
     for (final MapEntry(key: openId, value: source) in waiting.entries)
-      if (openId != onScreen)
+      if (openId != onScreen && openId != botShown)
         if (registry.reportForOpenId(openId) case final report?
             when report.waiting == AgentWaitKind.approval)
           OffScreenAsk(

@@ -325,6 +325,8 @@ const _drawsNothingWhenEmpty = {
   SettingsAnchor.executables,
   // Drawn only on a server that announces the setting; this one announces none.
   SettingsAnchor.newSessionGrant,
+  // The same: this server has no bot.
+  SettingsAnchor.bot,
 };
 
 /// Opens every folded agent card on the page, by its Expand button.

@@ -10,6 +10,7 @@ import '../../../core/capabilities/capabilities.dart';
 import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../automations/presentation/automations_settings_link.dart';
 import '../../backup/presentation/data_backup_section.dart';
+import '../../bot/presentation/bot_settings_section.dart';
 import '../../backup/presentation/data_restore_section.dart';
 import '../../workflows/application/workflows_state.dart';
 import '../../checkpoints/presentation/checkpoint_settings_section.dart';
@@ -182,6 +183,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   ),
 
   SettingsAnchor.newSessionGrant => const NewSessionGrantSection(),
+  SettingsAnchor.bot => const BotSettingsSection(),
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),
   SettingsAnchor.defaultModel => const DefaultModelSection(),
   SettingsAnchor.detection => const AgentDetectionSection(),

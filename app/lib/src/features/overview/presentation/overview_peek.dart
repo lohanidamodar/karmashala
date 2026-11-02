@@ -29,8 +29,6 @@ import '../../git/presentation/diff_view.dart';
 import '../../sessions/presentation/slot_wait_notice.dart';
 import '../../sessions/presentation/hunk_review.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../sessions/application/session_chat_source.dart'
-    show ChatsShownOutsideGroups, chatsShownOutsideGroupsProvider;
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/checkout_occupancy_views.dart'
     show SharedCheckoutBadge;
@@ -41,6 +39,7 @@ import '../../sessions/presentation/permission_mode_chip.dart';
 import '../../sessions/presentation/session_environment_mark.dart';
 import '../../sessions/presentation/session_mode_picker.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
+import '../../sessions/presentation/shown_chat.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/terminal_theme_controller.dart';
@@ -199,7 +198,7 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
               child: BoardEditCommand(sessionId: id, onDone: focus.stopEditing),
             ),
           Expanded(
-            child: _ShownChat(
+            child: ChatShownOutsideGroups(
               child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
             ),
           ),

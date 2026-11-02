@@ -1,47 +1,6 @@
 // The peek's views: chat visibility, terminal, files and sub-sessions.
 part of '../overview_peek.dart';
 
-/// Counts the peek's chat as on screen while it is up: no workbench group
-/// shows it, so the chat gate would otherwise never read a terminal
-/// session's transcript.
-class _ShownChat extends ConsumerStatefulWidget {
-  const _ShownChat({required this.child});
-
-  final Widget child;
-
-  @override
-  ConsumerState<_ShownChat> createState() => _ShownChatState();
-}
-
-class _ShownChatState extends ConsumerState<_ShownChat> {
-  late final ChatsShownOutsideGroups _shown;
-  var _counted = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _shown = ref.read(chatsShownOutsideGroupsProvider.notifier);
-    // After the frame: a provider is not changed while the tree builds.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _shown.add();
-      _counted = true;
-    });
-  }
-
-  @override
-  void dispose() {
-    if (_counted) {
-      final shown = _shown;
-      Future.microtask(shown.remove);
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-
 /// The session's own terminal pane, live: what is typed here goes to it.
 class _PeekTerminal extends ConsumerWidget {
   const _PeekTerminal({required this.paneId});

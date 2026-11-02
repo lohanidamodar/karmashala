@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show ProjectFoldersCreate, SessionsOperateByDefaultSet;
+    show BotOpen, ProjectFoldersCreate, SessionsOperateByDefaultSet;
 import 'package:karmashala_remote/remote.dart'
     show AttachTier, Capability, CapabilitySet;
 import 'package:karmashala_terminal_runtime/host_link.dart'
@@ -333,6 +333,13 @@ final class Capabilities {
   /// server keeps it and a phone may start sessions.
   bool get operateByDefault =>
       serverOffers(SessionsOperateByDefaultSet.feature) && mayStart;
+
+  /// The server has a bot. An older one has none: the button is not drawn.
+  bool get bot => serverOffers(BotOpen.feature);
+
+  /// The bot can be started, switched and cleared from here: all three are
+  /// `start_session` to a phone.
+  bool get manageBot => bot && mayStart;
 
   /// New Project can make a missing folder and record a root without a scan;
   /// an older server ignores both and scans.

@@ -39,6 +39,17 @@ class SessionsData extends SessionRowsIndex {
 
   final DataClient _client;
 
+  /// The bot's row answers a lookup and no list, as at the server: everything
+  /// the conversation reads by id works, and nothing that lists sessions can
+  /// find it.
+  @override
+  Session? getById(String id) {
+    final row = super.getById(id);
+    if (row != null) return row;
+    final bot = _client.bot?.session;
+    return bot?.id == id ? bot : null;
+  }
+
   /// Whether the server has answered: before it, no row is known.
   bool get isPrimed => _client.sessions.isPrimed;
 
@@ -161,10 +172,8 @@ class SessionsData extends SessionRowsIndex {
 
   /// Archives [ids] and their ended descendants as one request, answered with
   /// what the server did — a live session is left and named.
-  Future<SessionsArchived> archive(Iterable<String> ids) => _client.write(
-    SessionsArchive(ids.toList()),
-    domain: DataDomain.sessions,
-  );
+  Future<SessionsArchived> archive(Iterable<String> ids) =>
+      _client.write(SessionsArchive(ids.toList()), domain: DataDomain.sessions);
 
   /// Shows [ids] and their archived descendants again, as one request.
   Future<SessionsArchived> unarchive(Iterable<String> ids) => _client.write(

@@ -39,9 +39,10 @@ class WorkingSessions extends Notifier<Set<String>> {
 
   void _prune(SessionStatuses registry) {
     if (state.isEmpty) return;
+    final watched = {for (final entry in registry.entries) entry.openId};
     final kept = {
       for (final id in state)
-        if (_isWorking(registry, id)) id,
+        if (watched.contains(id) && _isWorking(registry, id)) id,
     };
     if (kept.length != state.length) state = kept;
   }

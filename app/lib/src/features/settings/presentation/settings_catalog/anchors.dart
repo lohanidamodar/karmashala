@@ -280,6 +280,12 @@ enum SettingsAnchor {
     'sandbox',
   ]),
   usage(SettingsSectionId.agents, 'Usage & limits', ['usage', 'limits']),
+  bot(SettingsSectionId.agents, 'Bot', [
+    'bot',
+    'assistant',
+    'default agent',
+    'chat',
+  ]),
   newSessionGrant(SettingsSectionId.agents, 'New sessions', [
     'operate',
     'operator',
@@ -485,6 +491,7 @@ enum SettingsAnchor {
     dataBackup || dataRestore => caps.hostsServer && caps.serverSettings,
     // An older server has no such setting.
     newSessionGrant => caps.operateByDefault,
+    bot => caps.manageBot,
     _ => true,
   };
 }

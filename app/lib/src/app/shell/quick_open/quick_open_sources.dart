@@ -22,6 +22,7 @@ import 'package:karmashala_conversations/karmashala_conversations.dart';
 import '../../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
 import '../../../features/automations/application/scheduled_resume_providers.dart';
+import '../../../features/bot/application/bot_providers.dart';
 import '../../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/onboarding/presentation/quick_start_card.dart';
