@@ -60,7 +60,7 @@ final class BotView {
   List<DataChange> changes(
     List<DataChange> changes, {
     required bool follower,
-  }) => isEmpty
+  }) => isEmpty && follower
       ? changes
       : [for (final change in changes) ?_change(change, follower: follower)];
 

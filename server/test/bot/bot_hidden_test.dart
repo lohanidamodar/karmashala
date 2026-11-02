@@ -2,9 +2,12 @@ import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_host/src/bot/bot_view.dart';
+import 'package:karmashala_host/src/data/bot_work.dart';
+import 'package:karmashala_host/src/serve/server_features.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_remote/remote.dart' show Capability, CapabilitySet;
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/lineage.dart' show SessionLink;
 import 'package:karmashala_session/session.dart';
@@ -12,6 +15,12 @@ import 'package:karmashala_session/transcript.dart' show SessionRecap;
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
+
+class _Bot implements BotWork {
+  @override
+  Future<Object?> handle(BotRequest<Object?> request, {String? device}) async =>
+      const BotState();
+}
 
 /// The bot's row and project exist for the server and for nobody else: not
 /// in a snapshot, not in an incremental change, not after a restart, and not
@@ -325,6 +334,67 @@ void main() {
     final fresh = AppDatabase.memory();
     addTearDown(fresh.close);
     expect(BotView.of(fresh).isEmpty, isTrue);
+  });
+
+  test('on a server with no row yet, the bot\'s own changes still stay with '
+      'those who follow', () {
+    final fresh = AppDatabase.memory();
+    addTearDown(fresh.close);
+    final none = BotView.of(fresh);
+    const change = BotAgentChanged(agentId: 'claude-acp');
+    expect(none.changes(const [change], follower: false), isEmpty);
+    expect(none.changes(const [change], follower: true), hasLength(1));
+  });
+
+  test('a phone needs its grants for the bot, as for what it stands for', () {
+    final limited = CapabilitySet.of([Capability.viewSessions]);
+    expect(phoneRefusal(const BotStateRead(), grants: limited), isNull);
+    expect(phoneRefusal(const BotSubscribe(), grants: limited), isNull);
+    expect(phoneRefusal(const BotOpen(), grants: limited), contains('start'));
+    expect(phoneRefusal(const BotClear(), grants: limited), contains('start'));
+    expect(
+      phoneRefusal(const BotAgentSet(null), grants: limited),
+      contains('start'),
+    );
+    expect(
+      phoneRefusal(
+        const BotApprovalAnswer('x', approve: true),
+        grants: limited,
+      ),
+      contains('approve'),
+    );
+  });
+
+  test(
+    'every bot request is answered later, and unavailable with no bot',
+    () async {
+      expect(DataSession.isAnsweredLater(const BotStateRead()), isTrue);
+      await expectLater(
+        older.handleLater(const BotStateRead()),
+        throwsA(
+          isA<DataRefused>().having(
+            (r) => r.code,
+            'code',
+            DataRefusalCode.unavailable,
+          ),
+        ),
+      );
+    },
+  );
+
+  test('bot.subscribe makes a link a follower, and only that link', () async {
+    service.botWork = _Bot();
+    await older.handleLater(const BotSubscribe());
+    service.announceSessions(['bot']);
+    expect(all(toldOlder).whereType<BotRowChanged>(), hasLength(1));
+    final other = <DataChanges>[];
+    service.open(other.add).handle(const DataSubscribe());
+    service.announceSessions(['bot']);
+    expect(all(other).whereType<BotRowChanged>(), isEmpty);
+  });
+
+  test('the server advertises the capability', () {
+    expect(kServerFeatures, contains(BotOpen.feature));
   });
 
   test(

@@ -1497,3 +1497,120 @@ off**; the CLIs do, and nothing here overrides them.
 - **Codex 0.160** reads `update_plan` from its own `[tools]` config
   (`tools.update_plan`); the bridge's `thread/start` carries only `cwd` and the
   MCP servers, so a thread has whatever the person's Codex config says.
+
+## 26. The bot
+
+One lasting conversation per server, reachable from every client of it (the
+design is `docs/superpowers/specs/2026-11-02-karmashala-bot-design.md`). It is a
+session row, so transcript, composer, asks, agent switching, resume and usage
+come free: `sessions.role = 'bot'`, at most one unarchived (a partial unique
+index), in a hidden project of `kind = 'bot'` at `~/karmashala/bot`. The row is
+made on the first message, never at startup. `server/lib/src/bot/` holds it.
+
+### The wire contract
+
+A client reads `bot` in `welcome.features` first (`BotOpen.feature`); an older
+server has none of this, and a client hides the button. Every call is answered
+later and returns `BotState` unless it says otherwise.
+
+| Request | What it does |
+| --- | --- |
+| `bot.state` | The bot as it stands. Creates nothing. |
+| `bot.subscribe` | The same, and this link follows the bot until it closes: ask again after a reconnect. |
+| `bot.open` | Returns the row, making it first. Call it as the person sends their first message, then send as usual. `unavailable` with no chat agent. |
+| `bot.agent.set {agentId?}` | Saves the agent (null is "Default agent") and switches an existing row in place. `conflict` mid-turn, nothing saved; `invalid` for an agent with no chat form. |
+| `bot.clear` | Clear conversation. `conflict` while a turn runs. The client asks for confirmation first. |
+| `bot.approval.answer {id, approve}` | A person's Yes or No; returns the `BotApproval`. `conflict` when already answered or expired. Yes does not wait for the call. |
+
+`BotState`: `session` (null before the first message and after a clear),
+`agents` (empty: no chat agent on the server, the panel explains and links to
+Agents), `agentId`, `agentSetting` (null is the default), `notice` (a plain
+reason to show), `approvals` (pending, oldest first).
+
+A follower is told `botRowChanged` (an archived row was cleared),
+`botAgentChanged` and `botApprovalChanged`, plus the bot's own
+`sessionStatusChanged`, `sessionQueueChanged`, inbox items and so on. A client
+that never follows is told none of it, which is how an older client stays
+unaware, and its inbox has the bot's items taken out. **A follower's status map
+therefore holds the bot's row: Running and anything built from statuses must
+leave out `BotState.session.id`.**
+
+The conversation itself is an ordinary session's: `sessions.send`,
+`sessions.transcript`, `sessions.queue.*`, `sessions.interrupt`,
+`sessions.setMode`, with `BotState.session.id`. `SessionTranscriptView` works as
+it is. A send to a cleared row is refused in words, and the client calls
+`bot.open` again. Inbox items of kind `botApproval` (and any item whose
+`session.openId` is the bot) open the panel, not a session.
+
+A session the bot started reaches every client with no `parentSessionId` and
+`viaBot: true`, so nothing folds it under a parent; that flag is the "via Bot"
+label. It exists on the wire only.
+
+A phone needs `start_session` for `bot.open`, `bot.clear` and `bot.agent.set`,
+and `approve` for an answer.
+
+### Hidden from people, known to the server
+
+`SessionDao.getAll` and direct lookups stay complete. `BotView`
+(`bot_view.dart`) is the one place a reply or a change passes on its way to a
+link; a new change that names a session must be added to its `_sessionOf`, or it
+reaches every client. Readers that list sessions use `getPublic` and
+`getClaimingLivePublic`; readers that keep the server running use `getAll` and
+may. A cleared row stays hidden, and a client that learns the id cannot delete,
+archive, unarchive or attach under it. The bot is refused fork, handoff and
+rewind, takes no launch slot and answers to no limit, and is continued or
+resumed by no automation, rule, interrupted-turn sweep or usage-limit resume.
+
+The grant is the store's: `insertBot` sets it and `write` cannot clear it, so it
+holds whatever the global setting says. No client path reaches `insertBot`, and
+`SessionDao.insert` ignores a row's own `role`.
+
+### What it runs on
+
+Chat (ACP) forms on the server's own machine only. The setting, else a person's
+default in its chat form, else Claude, else the first chat agent, with `notice`
+saying so when it stands in for a default with no chat form. It runs at the
+agent's `autoRun` rung or the nearest below, never bypass.
+
+Its instructions are `AGENTS.md` and `CLAUDE.md` in its folder, rewritten as a
+build changes them; an agent that reads neither is told in its first message.
+`MEMORY.md` beside them is the bot's own and is never rewritten. After 30 idle
+minutes its process stops, unseen; the next message or report resumes the same
+conversation. Clear conversation detaches what it started, expires its
+approvals, then ends and archives the row. `MEMORY.md` stays.
+
+### What the gate promises
+
+Karmashala tools the bot itself calls that cannot be undone ask first. **That is
+all: it is not a sandbox.** Commands its agent runs are governed by its own
+permission mode, and a session it starts or messages by that session's, so the
+bot can reach through another agent what its own call would have to ask for.
+
+A tool call cannot be held open: the bridge bounds it, and an approval after
+that bound could run what the agent already saw fail. So `McpToolRelay.call`
+asks `approvalGate` beside the operator grant, and a `destructive` call from the
+bot is recorded in `bot_approvals` and answered at once as a failure saying it
+is not done. The call fails rather than succeeds because tools declare an
+`outputSchema` such an answer would not meet. Yes consumes the row with one
+conditional `UPDATE`, and the server runs exactly the recorded call as the bot
+(`runApproved`), so nothing can run twice and only what the person saw can run.
+No, or expiry after 10 minutes, runs nothing. The outcome goes to the bot as one
+queued message, which resumes a stopped bot. A call a stop cut off is
+`interrupted`: it is never run again, and the bot is told it may have run.
+`session_end` on a session the bot started needs no approval.
+
+### What it hears
+
+`open_new_session` from the bot reports in the mode `once`, which only the
+server chooses: the first of a report, a finished turn past the settle hold, a
+block, a failure or the process ending is told, and the delegation closes. A
+person may go on in that session and the bot hears no more. `session_send` from
+the bot itself arms one more outcome, as it does for any parent.
+
+Delivery is a queued message, durable and resuming a stopped bot: the one
+exception to `parentReachable`, carried by `SessionQueue.wakes`. Queued rows
+outlive a restart. As everywhere, a row caught mid-delivery by a stop is failed
+rather than sent twice, so that narrow window is at-most-once.
+
+`open_session` refuses the bot an imported session in words: resuming one opens
+an external terminal on the window's machine.

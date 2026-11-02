@@ -307,6 +307,10 @@ class ServerBot implements BotWork {
     approvals.clear(row.id);
     cancelQueue(row.id);
     await end(row.id);
+    // A row that never ran has no end to record, and must not read as live.
+    if (_sessions.getById(row.id)?.status.claimsLive ?? false) {
+      _sessions.updateStatus(row.id, SessionStatus.completed);
+    }
     _sessions.markArchived(row.id, _now());
     _idleSince = null;
     _data.announceSessions([row.id]);

@@ -2080,7 +2080,14 @@ Future<int> _serve(
       await continuations.switchAgent(
         sessionId: sessionId,
         targetInstallationId: installationId,
-        instruction: kBotSwitchInstruction,
+        // One that reads no instruction file is told them here.
+        instruction:
+            botFilesCover(
+              liveAgents.descriptorOf(agentId ?? '')?.instructionFiles ??
+                  const [],
+            )
+            ? kBotSwitchInstruction
+            : withBotPreamble(kBotSwitchInstruction),
         permissionMode: agentId == null ? null : botMode(agentId).canonical,
       );
     },

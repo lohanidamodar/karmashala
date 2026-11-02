@@ -358,6 +358,16 @@ void main() {
       },
     );
 
+    test('a row that never ran does not stay live', () async {
+      sessions.updateStatus(row.id, SessionStatus.running);
+      await bot.handle(const BotClear());
+      expect(sessions.getById(row.id)!.status, SessionStatus.completed);
+      expect(
+        sessions.getClaimingLive().map((s) => s.id),
+        isNot(contains(row.id)),
+      );
+    });
+
     test('the next open makes a new row in the same folder', () async {
       await bot.handle(const BotClear());
       final next = (await bot.handle(const BotOpen()) as BotState).session!;
