@@ -13,7 +13,10 @@ void main() {
     expect(text, contains('session_archive'));
     expect(text, contains('session_unarchive'));
     expect(text, contains('merged or handed back'));
-    expect(sessions.tools, containsAll(['session_archive', 'session_unarchive']));
+    expect(
+      sessions.tools,
+      containsAll(['session_archive', 'session_unarchive']),
+    );
   });
 
   test('the server instructions say the same in a sentence', () {
@@ -41,7 +44,11 @@ void main() {
       expect(annotations.destructive, isFalse, reason: 'it is undone');
       expect(annotations.idempotent, isTrue);
       expect(annotations.movesAttention, isFalse);
-      expect(mcpToolNeedsOperatorGrant(tool), isFalse, reason: tool);
+      expect(
+        mcpToolNeedsOperatorGrant(tool, {'sessionId': 'other'}, 'me'),
+        isFalse,
+        reason: 'its own rule, descendants only: $tool',
+      );
       expect(kMcpToolListings[tool]?.category, McpToolCategory.sessions);
     }
   });

@@ -3,60 +3,93 @@
 /// `automation_propose` and `webhook_create` only propose one, saved off.
 library;
 
-/// Tools that change something and still need no grant: the records an agent
-/// keeps of its own work, and a draft the person sends or not. Everything
-/// else a session may call that is not read-only acts — on other sessions,
-/// terminals, the working tree, projects, devices, the browser, builds — and
-/// needs the person to have let **that session** operate Karmashala.
-const Set<String> kMcpUngatedWrites = {
-  'checkpoint_capture',
-  'todo_add',
-  'todo_done',
-  'note_add',
-  'decision_record',
-  'review_thread_add',
-  'review_thread_reply',
-  'review_thread_status',
-  'verification_start',
-  'verification_note',
-  'verification_finish',
-  'snippet_add',
-  // Only the caller's own thread: an artifact belongs to its session.
-  'artifact_show',
-  'artifact_update',
-  // Only the caller's own thread, as an artifact.
-  'visualize',
-  'session_rename',
-  'session_draft',
-  // Only the caller's own ended descendants, and undone by unarchive.
-  'session_archive',
-  'session_unarchive',
-  // Reaches only the session that started the caller, which asked for it.
-  'report_to_parent',
-  // A card in the caller's own thread: the owner saves a secret or declines.
-  'request_secret',
+/// Tools that always reach another session or agent, so need the person to
+/// have let **the calling session** operate Karmashala. Operate Karmashala is
+/// about other agents and sessions: devices, the browser, builds, projects and
+/// terminals are outside it (owner, 2026-11-02). It is not a sandbox.
+const Set<String> kMcpOperatorTools = {
+  'open_new_session',
+  'open_session',
+  'subagent_run',
+  'session_send',
+  'session_answer',
+  'session_end',
+  'session_handoff',
+  'session_fork',
+  'session_fork_from_checkpoint',
+  'session_rewind',
+  'delegation_set_report',
+  'delegation_detach',
+  'pipeline_run',
+  'pipeline_approve',
+  'worktree_remove',
+  // It can type into an agent's pane.
+  'snippet_insert',
 };
 
-/// Whether calling [tool] from a session needs the person's operator grant
-/// for it (`Session.operatorGranted`, owner 2026-10-01). A tool this
-/// catalogue does not know is treated as one that acts.
-bool mcpToolNeedsOperatorGrant(String tool) {
-  final annotations = kMcpToolAnnotations[tool];
-  if (annotations == null) return true;
-  return !annotations.readOnly && !kMcpUngatedWrites.contains(tool);
+/// Tools free on the caller's own session and gated on any other.
+const Set<String> _kMcpOperatorToolsOnOthers = {
+  'session_rename',
+  'session_draft',
+  'session_checkout_attach',
+  'session_checkout_detach',
+};
+
+/// Whether calling [tool] with [arguments] from [callerSessionId] needs the
+/// person's operator grant (`Session.operatorGranted`). A tool this catalogue
+/// does not know is treated as one that needs it.
+///
+/// [checkpointOwner] says which session a checkpoint belongs to, since
+/// restoring another session's checkpoint rolls back that session's work.
+/// With no answer the checkpoint counts as someone else's.
+bool mcpToolNeedsOperatorGrant(
+  String tool,
+  Map<String, dynamic> arguments,
+  String? callerSessionId, {
+  String? Function(String checkpointId)? checkpointOwner,
+}) {
+  if (!kMcpToolAnnotations.containsKey(tool)) return true;
+  if (kMcpOperatorTools.contains(tool)) return true;
+  if (_kMcpOperatorToolsOnOthers.contains(tool)) {
+    return _namesAnotherSession(arguments, callerSessionId);
+  }
+  return switch (tool) {
+    // Plain close detaches; a kill can end the agents in the tab.
+    'terminal_close' => arguments['kill'] == true,
+    'checkpoint_restore' =>
+      callerSessionId == null ||
+          _checkpointOwner(arguments, checkpointOwner) != callerSessionId,
+    _ => false,
+  };
+}
+
+/// Mirrors `targetSessionOf`: an absent or blank id means the caller.
+bool _namesAnotherSession(Map<String, dynamic> arguments, String? caller) {
+  final named = arguments['sessionId'];
+  if (named == null) return false;
+  if (named is! String) return true;
+  final id = named.trim();
+  return id.isNotEmpty && id != caller;
+}
+
+String? _checkpointOwner(
+  Map<String, dynamic> arguments,
+  String? Function(String checkpointId)? owner,
+) {
+  final id = arguments['id'];
+  return id is String ? owner?.call(id) : null;
 }
 
 /// What an agent reads when [tool] is refused for want of the grant: what
 /// happened, what still works, and how the person gives it.
 String mcpOperatorRefusal(String tool) =>
-    '$tool acts on Karmashala beyond this session\'s own records, and the '
+    '$tool, called this way, reaches other sessions and agents, and the '
     'person has not let this session operate Karmashala. NOTHING WAS DONE. '
     'Ask them to turn on "Operate Karmashala" for this session (the session '
     'bar, or its Session sheet on a phone), or to start their next message '
-    'with /operator. Reading works without it — list_sessions, '
-    'session_transcript, terminal_output and the other read tools — and so '
-    'do your own todos, notes, decisions, verification records, checkpoint '
-    'captures and session_draft.';
+    'with /operator. Without it you can still read Karmashala, use devices, '
+    'the browser, builds, projects and terminals, and act on your own '
+    'session.';
 
 /// The behaviour of one tool, as `tools/list` reports it.
 class McpToolAnnotations {

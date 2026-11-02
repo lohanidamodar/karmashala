@@ -853,6 +853,7 @@ Future<int> _serve(
   // Which sessions the person let operate Karmashala: read per call, so
   // a grant given a moment ago counts on the next tool call.
   final grantRows = SessionDao(database);
+  final grantCheckpoints = CheckpointDao(database);
   final worktreeTools = WorktreeToolSet(
     tools,
     reach: reach,
@@ -864,6 +865,7 @@ Future<int> _serve(
   final mcpTools = McpToolRelay(
     operatorGranted: (sessionId) =>
         grantRows.getById(sessionId)?.operatorGranted ?? false,
+    checkpointOwner: (id) => grantCheckpoints.getById(id)?.sessionId,
     tools: ServerTools([
       const InstructionsToolSet(),
       InventoryToolSet(
