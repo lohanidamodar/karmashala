@@ -16,15 +16,18 @@ void main() {
   });
 
   test('showing and updating an artifact need no grant', () {
-    expect(mcpToolNeedsOperatorGrant('artifact_show'), isFalse);
-    expect(mcpToolNeedsOperatorGrant('artifact_update'), isFalse);
+    expect(mcpToolNeedsOperatorGrant('artifact_show', const {}, 'me'), isFalse);
+    expect(
+      mcpToolNeedsOperatorGrant('artifact_update', const {}, 'me'),
+      isFalse,
+    );
     expect(kMcpToolAnnotations['artifact_list']!.readOnly, isTrue);
   });
 
   test('the instructions teach visualize, with an example', () {
     expect(kKarmashalaMcpInstructions, contains('visualize'));
     expect(kKarmashalaMcpInstructions, contains('"kind": "progress"'));
-    expect(mcpToolNeedsOperatorGrant('visualize'), isFalse);
+    expect(mcpToolNeedsOperatorGrant('visualize', const {}, 'me'), isFalse);
   });
 
   test('the artifact tools are listed under their own heading', () {

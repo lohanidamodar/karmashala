@@ -6,6 +6,11 @@ import 'session_status.dart';
 
 /// A unit of work targeting one repository, run by one agent installation, with
 /// an explicit per-session choice of worktree or repository root.
+/// The server's own setting "Let new sessions operate Karmashala": `app_metadata`
+/// holds `true` while it is on. Written through `sessions.operateByDefault.set`,
+/// read when a row is inserted, and never a client's to supply on a row.
+const String kOperateNewSessionsKey = 'sessions.operate_by_default.v1';
+
 class Session {
   const Session({
     required this.id,
@@ -92,10 +97,10 @@ class Session {
   /// sync leaves a row alone. Recorded, not remembered: a restart forgot it.
   final bool titleByUser;
 
-  /// Whether the person let this session's agent **operate Karmashala**: the
-  /// tools that act — start, send to or end sessions, run terminals, restore
-  /// checkpoints, drive devices, builds — beyond reading and its own records.
-  /// Off until granted, per session (owner, 2026-10-01).
+  /// Whether the person let this session's agent **operate Karmashala**: start,
+  /// message and end other sessions and agents (owner, 2026-11-02). Set per
+  /// session, from the server's setting when the row is made. Not a sandbox:
+  /// without it an agent still has devices, the browser, builds and its shell.
   final bool operatorGranted;
 
   /// The row on the wire, as the server's data API carries it.

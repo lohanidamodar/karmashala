@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
+import 'package:karmashala_remote/remote.dart' show Capability, CapabilitySet;
 import 'package:karmashala_ui/tokens.dart' show UiDensity;
 
 /// A server feature reaches a surface as one named getter on [Capabilities],
@@ -36,6 +37,37 @@ void main() {
     expect(withFeatures(const {'acpSessions'}).chatViaServer, isFalse);
     expect(
       withFeatures(const {'sessions.transcript', 'acpSessions'}).chatViaServer,
+      isTrue,
+    );
+  });
+
+  test('operateByDefault needs the feature and a grant to start sessions', () {
+    const feature = {'sessions.operateByDefault'};
+    expect(withFeatures(const {}).operateByDefault, isFalse);
+    expect(withFeatures(feature).operateByDefault, isTrue);
+    expect(
+      Capabilities(
+        client: client,
+        server: ServerOffer(
+          sameMachine: false,
+          grants: CapabilitySet.of(const [Capability.phoneClient]),
+          features: feature,
+        ),
+      ).operateByDefault,
+      isFalse,
+    );
+    expect(
+      Capabilities(
+        client: client,
+        server: ServerOffer(
+          sameMachine: false,
+          grants: CapabilitySet.of(const [
+            Capability.phoneClient,
+            Capability.startSession,
+          ]),
+          features: feature,
+        ),
+      ).operateByDefault,
       isTrue,
     );
   });

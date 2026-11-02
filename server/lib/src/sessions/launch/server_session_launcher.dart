@@ -627,7 +627,7 @@ class ServerSessionLauncher {
     );
     sessions.insertWithPrimaryRepository(row);
     launcher.onRowWritten?.call(id);
-    return row;
+    return sessions.getById(id) ?? row;
   }
 
   /// Starts a launch the gate granted after it waited — after a restart too.

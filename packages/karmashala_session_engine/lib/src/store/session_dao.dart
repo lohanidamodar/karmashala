@@ -12,7 +12,11 @@ class SessionDao implements SessionStatusStore {
 
   final AppDatabase _db;
 
+  /// Inserts a new row. Every row is born here, so its grant to operate
+  /// Karmashala is the server's setting now and [session]'s own value is
+  /// ignored: no client or launch path supplies it. [write] changes it after.
   void insert(Session session) {
+    final operates = _db.readMetadata(kOperateNewSessionsKey) == 'true';
     _db.execute(
       'INSERT INTO sessions '
       '(id, repository_id, agent_installation_id, title, use_worktree, '
@@ -47,7 +51,7 @@ class SessionDao implements SessionStatusStore {
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
         _iso(session.worktreeRemovedAt),
         intFromBool(session.titleByUser),
-        intFromBool(session.operatorGranted),
+        intFromBool(operates),
       ],
     );
   }

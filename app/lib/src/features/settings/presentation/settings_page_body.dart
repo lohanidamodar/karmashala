@@ -1,4 +1,5 @@
 import 'about_page.dart';
+import 'new_session_grant_section.dart';
 import 'notifications_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -180,6 +181,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
     section: WorkflowsSection.automations,
   ),
 
+  SettingsAnchor.newSessionGrant => const NewSessionGrantSection(),
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),
   SettingsAnchor.defaultModel => const DefaultModelSection(),
   SettingsAnchor.detection => const AgentDetectionSection(),

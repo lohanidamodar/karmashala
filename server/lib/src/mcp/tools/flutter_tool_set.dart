@@ -299,9 +299,7 @@ class FlutterToolSet extends ServerToolSet {
   Future<Object?> _config(Map<String, dynamic> args) async {
     final action = (args['action'] as String?)?.trim() ?? '';
     if (action == 'list') {
-      throw ArgumentError(
-        'Listing is flutter_run_configs, which needs no operator grant.',
-      );
+      throw ArgumentError('Listing is flutter_run_configs.');
     }
     final (store, projectId) = _projectConfigs(args);
     String name() {

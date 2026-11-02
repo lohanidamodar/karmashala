@@ -237,6 +237,17 @@ void main() {
       await openList(tester);
       expect(inList(find.textContaining('Operate')), findsOneWidget);
       expect(inList(find.byType(OperatorChip)), findsNothing);
+      final tip = tester.widget<Tooltip>(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('session-list:operator')),
+              matching: find.byType(Tooltip),
+            )
+            .first,
+      );
+      expect(tip.message, contains('other sessions and agents'));
+      expect(tip.message, contains('not a sandbox'));
+      expect(tip.message, isNot(contains('reads Karmashala')));
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('session-list:operator')),

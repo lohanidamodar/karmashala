@@ -234,6 +234,9 @@ sealed class DataRequest<R> {
       SectionsReorder.name => SectionsReorder(args.strings('ids')),
       SectionDelete.name => SectionDelete(args.string('id')),
       SessionsList.name => const SessionsList(),
+      SessionsOperateByDefaultSet.name => SessionsOperateByDefaultSet(
+        enabled: args.boolean('enabled'),
+      ),
       SessionCreate.name => SessionCreate(
         args.value('session', Session.fromJson),
         repositories: args.strings('repositories', orEmpty: true),

@@ -109,7 +109,7 @@ class _SessionMoreButtonState extends ConsumerState<SessionMoreButton> {
                           key: const ValueKey('session-more-operator'),
                           onPressed: _letOperate,
                           icon: const Icon(
-                            AppIcons.shield,
+                            AppIcons.robot,
                             size: Chrome.iconSmall,
                           ),
                           label: const Text('Let it operate Karmashala'),

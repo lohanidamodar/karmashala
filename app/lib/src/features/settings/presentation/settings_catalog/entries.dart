@@ -507,6 +507,14 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['checkpoint', 'rewind', 'undo', 'retention', 'keep'],
   ),
   SettingsEntry(
+    'Let new sessions operate Karmashala',
+    anchor: SettingsAnchor.newSessionGrant,
+    description:
+        'Every new session may start, message and end other sessions and '
+        'agents.',
+    keywords: ['operate', 'operator', 'grant', 'default', 'new sessions'],
+  ),
+  SettingsEntry(
     'Let agents update themselves in Karmashala sessions',
     anchor: SettingsAnchor.agentUpdates,
     description:

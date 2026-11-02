@@ -318,10 +318,16 @@ void main() {
     );
   });
 
-  test('proposing needs the operator grant; list does not', () {
-    expect(mcpToolNeedsOperatorGrant('webhook_create'), isTrue);
-    expect(mcpToolNeedsOperatorGrant('automation_propose'), isTrue);
-    expect(mcpToolNeedsOperatorGrant('webhook_list'), isFalse);
+  test('proposing and listing are outside the operator grant', () {
+    expect(
+      mcpToolNeedsOperatorGrant('webhook_create', const {}, 'me'),
+      isFalse,
+    );
+    expect(
+      mcpToolNeedsOperatorGrant('automation_propose', const {}, 'me'),
+      isFalse,
+    );
+    expect(mcpToolNeedsOperatorGrant('webhook_list', const {}, 'me'), isFalse);
     expect(kMcpToolAnnotations['webhook_list']!.readOnly, isTrue);
     expect(
       [for (final s in tools.schemas) s['name']],

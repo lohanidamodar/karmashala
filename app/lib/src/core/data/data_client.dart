@@ -511,6 +511,22 @@ class DataClient {
     if (!_quickAccessChanges.isClosed) _quickAccessChanges.add(pins);
   }
 
+  /// The server's "Let new sessions operate Karmashala", as last told. A new
+  /// link starts from off: the server greets it only while it is on.
+  bool operateByDefault = false;
+
+  final _operateByDefaultChanges = StreamController<bool>.broadcast(sync: true);
+
+  /// The setting each time it changes, here or on another client.
+  Stream<bool> get operateByDefaultChanges => _operateByDefaultChanges.stream;
+
+  void _setOperateByDefault(bool enabled) {
+    operateByDefault = enabled;
+    if (!_operateByDefaultChanges.isClosed) {
+      _operateByDefaultChanges.add(enabled);
+    }
+  }
+
   /// The app stores as the server holds them, as last told; null until the
   /// server has said. Never a credential: summaries only.
   StoresView? storesView;
@@ -1212,6 +1228,8 @@ class DataClient {
           }
         case QuickAccessChanged(:final pins):
           _setQuickAccess(pins);
+        case OperateByDefaultChanged(:final enabled):
+          _setOperateByDefault(enabled);
         case StoresChanged(:final view):
           storesView = view;
           if (!_storesChanges.isClosed) _storesChanges.add(view);
@@ -1273,6 +1291,7 @@ class DataClient {
     forgeReadings.clear();
     // Greeted only when something is pinned: silence means none.
     if (quickAccessPins.isNotEmpty) _setQuickAccess(const []);
+    if (operateByDefault) _setOperateByDefault(false);
   }
 
   Future<void> _attach(DataEndpoint endpoint) async {
@@ -1431,6 +1450,7 @@ class DataClient {
     unawaited(_envChanges.close());
     unawaited(_secretRequestChanges.close());
     unawaited(_quickAccessChanges.close());
+    unawaited(_operateByDefaultChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storeChangeNotices.close());
     unawaited(_storesProgress.close());

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show ProjectFoldersCreate;
+    show ProjectFoldersCreate, SessionsOperateByDefaultSet;
 import 'package:karmashala_remote/remote.dart'
     show AttachTier, Capability, CapabilitySet;
 import 'package:karmashala_terminal_runtime/host_link.dart'
@@ -328,6 +328,11 @@ final class Capabilities {
   /// A top-level session can be attached under a parent, where a phone may
   /// start sessions.
   bool get attachSessions => serverOffers('sessions.attach') && mayStart;
+
+  /// Settings can change "Let new sessions operate Karmashala", where the
+  /// server keeps it and a phone may start sessions.
+  bool get operateByDefault =>
+      serverOffers(SessionsOperateByDefaultSet.feature) && mayStart;
 
   /// New Project can make a missing folder and record a root without a scan;
   /// an older server ignores both and scans.

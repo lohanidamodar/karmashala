@@ -17,12 +17,15 @@ class McpToolRelayFailure implements Exception {
 /// when none is open. A server tool is never timed out here — `session_wait`
 /// and `terminal_run` block for as long as their own arguments say.
 class McpToolRelay {
-  McpToolRelay({ServerTools? tools, this.operatorGranted})
+  McpToolRelay({ServerTools? tools, this.operatorGranted, this.checkpointOwner})
     : tools = tools ?? ServerTools();
 
   /// Whether the person let session [sessionId] operate Karmashala. Null
   /// grants every session — a relay with no store to ask.
   final bool Function(String sessionId)? operatorGranted;
+
+  /// The session a checkpoint belongs to, or null when there is none.
+  final String? Function(String checkpointId)? checkpointOwner;
 
   /// The tools the server runs.
   final ServerTools tools;
@@ -37,14 +40,21 @@ class McpToolRelay {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
-    // A tool that acts, called from a session the person has not let operate
-    // Karmashala, is refused before it runs. A caller in no session is the
-    // person's own tooling, set up by them outside any session.
+    // A call that reaches other sessions or agents, from a session the person
+    // has not let operate Karmashala, is refused before it runs. A caller in
+    // no session is the person's own tooling, set up by them outside any
+    // session. [callerSessionId] is the authenticated caller, so a `sessionId`
+    // argument naming it is the caller's own session.
     final granted = operatorGranted;
     if (callerSessionId != null &&
         granted != null &&
         tools.serves(tool) &&
-        mcpToolNeedsOperatorGrant(tool) &&
+        mcpToolNeedsOperatorGrant(
+          tool,
+          arguments,
+          callerSessionId,
+          checkpointOwner: checkpointOwner,
+        ) &&
         !granted(callerSessionId)) {
       return Future.error(McpToolRelayFailure(mcpOperatorRefusal(tool)));
     }

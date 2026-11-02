@@ -74,9 +74,15 @@ void seedStore(Directory dataDir, {bool seededSessionOperates = false}) {
         useWorktree: false,
         status: SessionStatus.created,
         createdAt: t0,
-        operatorGranted: seededSessionOperates,
       ),
     );
+    // A row is born with the server's setting, so the seed writes it after.
+    if (seededSessionOperates) {
+      final rows = SessionDao(database);
+      rows.write(
+        rows.getById(seededSessionId)!.copyWith(operatorGranted: true),
+      );
+    }
     // This machine, as agent discovery records it.
     database.execute(
       'INSERT INTO execution_environments (id, kind, name, created_at) '

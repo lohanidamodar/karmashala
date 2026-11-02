@@ -207,11 +207,8 @@ class HostedStart {
 /// (`karmashala_<sessionId>`), at [columns]×[rows] — on this machine, or on
 /// the SSH box its launch names (slice 5d). `ServerTerminals` in `serve`, so
 /// the agent is one of the server's terminals like any pane.
-typedef AgentTerminalOpener = Future<void> Function(
-  AgentPaneLaunch launch,
-  int columns,
-  int rows,
-);
+typedef AgentTerminalOpener =
+    Future<void> Function(AgentPaneLaunch launch, int columns, int rows);
 
 /// Starts an agent as a session this host owns: the row first, then the PTY
 /// under the row's host id, so a client attaches to it as to any other hosted
@@ -496,12 +493,15 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
             ? null
             : (launch.parentLink ?? SessionLink.spawn),
       );
-      // A row that waited for a slot is filled in, not inserted again.
-      if (launch.id != null &&
-          sessions.getById(id)?.status == SessionStatus.created) {
+      // A row that waited for a slot is filled in, not inserted again, and
+      // keeps the grant it was given when it was inserted.
+      final waiting = launch.id == null ? null : sessions.getById(id);
+      if (waiting?.status == SessionStatus.created) {
+        session = session.copyWith(operatorGranted: waiting!.operatorGranted);
         sessions.write(session);
       } else {
         sessions.insertWithPrimaryRepository(session);
+        session = sessions.getById(id) ?? session;
       }
     }
     for (final extra in launch.additionalRepositoryIds) {
