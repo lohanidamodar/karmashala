@@ -3,6 +3,7 @@ import 'package:agent_cli/process.dart'
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/data/data_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../flutter_apps/application/attached_apps.dart';
@@ -49,7 +50,9 @@ class RunningController extends Notifier<RunningSnapshot> {
         reading = _fromPorts(await _client.listeningPorts());
       }
       if (!ref.mounted) return;
-      state = RunningSnapshot(reading: reading);
+      state = RunningSnapshot(
+        reading: withoutBot(reading, ref.read(dataClientProvider).botIds),
+      );
     } on Object catch (error) {
       if (!ref.mounted) return;
       state = RunningSnapshot(reading: state.reading, error: '$error');
@@ -67,6 +70,21 @@ class RunningController extends Notifier<RunningSnapshot> {
     await refresh();
     return null;
   }
+
+  /// [reading] without the bot's own processes: it is in no list, here as
+  /// everywhere.
+  static RunningReading withoutBot(
+    RunningReading reading,
+    Set<String> botIds,
+  ) => RunningReading(
+    serverPid: reading.serverPid,
+    checkedAt: reading.checkedAt,
+    notes: reading.notes,
+    processes: [
+      for (final process in reading.processes)
+        if (!botIds.contains(process.agentSessionId)) process,
+    ],
+  );
 
   /// An older server's answer: only the ports under panes, and nothing it
   /// would stop.

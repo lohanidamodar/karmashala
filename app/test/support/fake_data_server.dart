@@ -131,6 +131,7 @@ part 'fake_env_vault.dart';
 part 'fake_github_access.dart';
 part 'fake_stores.dart';
 part 'fake_pipelines.dart';
+part 'fake_bot.dart';
 
 /// **The one fake Karmashala server the app's tests talk to** — in memory,
 /// no database, no `DataService`. It answers the data protocol the way the
@@ -338,6 +339,9 @@ class FakeDataServer {
   /// The server's launch path: starts, resumes, handoffs, forks — nothing
   /// spawned; the rows it writes are told.
   late final sessionWork = FakeSessionWork._(this);
+
+  /// The server's bot.
+  late final bot = FakeBot._(this);
 
   /// The window a person last used, as `client.active` last said.
   String? focusedPaneId;
@@ -1030,9 +1034,7 @@ class FakeDataServer {
       SessionTranscriptRequest() => throw const DataRefused.unavailable(
         'this fake reads no transcripts',
       ),
-      BotRequest() => throw const DataRefused.unavailable(
-        'this fake has no bot',
-      ),
+      final BotRequest<Object?> r => bot._handle(r, origin),
       final ArtifactsRequest<Object?> r => _handleArtifacts(r),
       final PipelinesRequest<Object?> r => pipelineRows._handle(r, changes),
       final SessionInputRequest<Object?> r => sessionWork._input(r),

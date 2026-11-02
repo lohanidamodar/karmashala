@@ -68,9 +68,11 @@ class LiveAgentStatuses extends Notifier<Map<String, AgentActivityStatus>> {
   /// A session that stops being watched leaves without a last status.
   void _prune(SessionStatuses registry) {
     if (state.isEmpty) return;
+    final watched = {for (final entry in registry.entries) entry.openId};
     final kept = {
       for (final MapEntry(key: id, value: status) in state.entries)
-        if (_grouping(registry.reportForOpenId(id)?.status) == status)
+        if (watched.contains(id) &&
+            _grouping(registry.reportForOpenId(id)?.status) == status)
           id: status,
     };
     if (kept.length != state.length) state = Map.unmodifiable(kept);
