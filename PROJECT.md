@@ -1549,6 +1549,29 @@ label. It exists on the wire only.
 A phone needs `start_session` for `bot.open`, `bot.clear` and `bot.agent.set`,
 and `approve` for an answer.
 
+### The client
+
+`features/bot/` holds it. `botFollowerProvider` (watched by the shell) asks
+`bot.subscribe` on every connection, which creates nothing; `DataClient.bot`
+keeps the answer, moved by the three bot changes. The row is in no copy:
+`SessionsData.getById` answers it and no list does, as at the server, so
+everything the conversation reads by id works. `SessionStatuses.entries` and
+`statusChanges` leave out `DataClient.botIds`, every bot row this client has
+heard of, a cleared one's too, while `reportsFor` still answers the panel. A
+follow's greeting can tell a status before the row that says whose it is, so a
+reader that took it in is told a removal. Running drops the processes of those
+rows.
+
+The panel is one view, `BotPanelView`, framed as a floating panel at 600 and up
+and a phone sheet below; `botPanelProvider` is the one truth, so it survives
+navigation and a window crossing 600. The first message goes through its own
+box, because `SessionTranscriptView` needs a row: `bot.open`, then a send as any
+session. `SessionTranscriptView(bot: true)` offers no fork, rewind, Switch agent
+or `/operator`, and `footerLead` puts the approvals over the box. `revealSession`
+and the inbox open the panel for a bot row, so nothing tries to show it as a
+session. The dot is `botAttentionProvider`: an approval or a question waiting,
+else an unseen inbox item or a reply that came while the panel was shut.
+
 ### Hidden from people, known to the server
 
 `SessionDao.getAll` and direct lookups stay complete. `BotView`

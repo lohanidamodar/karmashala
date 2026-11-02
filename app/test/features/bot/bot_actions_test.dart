@@ -9,6 +9,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
 
+import '../../support/fixtures.dart';
 import 'bot_support.dart';
 
 InboxItem botItem(
@@ -59,6 +60,28 @@ void main() {
       }
       expect(client.connection.state, DataLinkState.connected);
       expect(rig.bot.asked.whereType<BotSubscribe>(), hasLength(2));
+    });
+
+    test('agents found after the follow reach the panel', () async {
+      rig.bot.agents = const [];
+      final container = await rig.container();
+      expect(container.read(botStateProvider)!.agents, isEmpty);
+
+      // The server finished looking: this is how a fresh start goes.
+      rig.bot.agents = const [
+        BotAgent(agentId: 'claude-acp', name: 'Claude', installationId: 'a1'),
+      ];
+      final client = container.read(dataClientProvider);
+      client.installations.applyAt(
+        'a9',
+        agentInstallation(id: 'a9'),
+        rig.server.revision + 1,
+      );
+      await pumpEventQueue();
+
+      expect(container.read(botStateProvider)!.agents, hasLength(1));
+      expect(rig.bot.session, isNull, reason: 'reading makes nothing');
+      expect(rig.bot.asked.whereType<BotOpen>(), isEmpty);
     });
 
     test('a follow refused says why', () async {

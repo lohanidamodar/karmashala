@@ -38,27 +38,41 @@ final botReadFailureProvider = NotifierProvider<BotReadFailure, String?>(
 final botFollowerProvider = Provider<void>((ref) {
   final client = ref.watch(dataClientProvider);
   if (!ref.watch(capabilitiesProvider.select((c) => c.bot))) return;
-  void follow() => unawaited(
+  void ask(BotRequest<BotState> request) => unawaited(
     client
-        .send(const BotSubscribe())
+        .send(request)
         .then(
           (reply) {
             client.applyBot(reply.value);
-            ref.read(botReadFailureProvider.notifier).set(null);
+            if (ref.mounted) {
+              ref.read(botReadFailureProvider.notifier).set(null);
+            }
           },
           onError: (Object error) {
-            _log.warning('Could not follow the bot: $error');
+            _log.warning('Could not read the bot: $error');
+            if (!ref.mounted) return;
             ref
                 .read(botReadFailureProvider.notifier)
                 .set(error is DataRefused ? error.message : '$error');
           },
         ),
   );
-  if (client.connection.state == DataLinkState.connected) follow();
+  bool connected() => client.connection.state == DataLinkState.connected;
+  if (connected()) ask(const BotSubscribe());
   final changes = client.connectionChanges.listen((connection) {
-    if (connection.state == DataLinkState.connected) follow();
+    if (connection.state == DataLinkState.connected) {
+      ask(const BotSubscribe());
+    }
   });
-  ref.onDispose(changes.cancel);
+  // No change says the list of agents moved, and on a fresh start the server
+  // finds them after the first follow: read again, which creates nothing.
+  final installed = client.installations.changes.listen((_) {
+    if (connected() && client.bot != null) ask(const BotStateRead());
+  });
+  ref.onDispose(() {
+    unawaited(changes.cancel());
+    unawaited(installed.cancel());
+  });
 });
 
 /// The bot as this client last heard it; null until a link has followed it.
