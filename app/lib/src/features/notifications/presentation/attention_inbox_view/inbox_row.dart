@@ -47,7 +47,7 @@ String inboxOpenLabel(InboxItem item) => isStoreInboxItem(item)
   InboxItemKind kind,
   SemanticColors semantic,
 ) => switch (kind) {
-  InboxItemKind.needsApproval => (
+  InboxItemKind.needsApproval || InboxItemKind.botApproval => (
     icon: AppIcons.shield,
     color: semantic.attention,
   ),

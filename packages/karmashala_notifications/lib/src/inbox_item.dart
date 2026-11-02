@@ -77,7 +77,11 @@ enum InboxItemKind {
   pipelineWaiting,
 
   /// A pipeline run failed; it goes when the run is retried or skipped on.
-  pipelineFailed;
+  pipelineFailed,
+
+  /// The bot asks before a call that cannot be undone; it goes when a person
+  /// answers or the request expires. Opens the bot's panel, not a session.
+  botApproval;
 
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
@@ -101,7 +105,8 @@ enum InboxItemKind {
     InboxItemKind.automationProposed ||
     InboxItemKind.waitingForSlot ||
     InboxItemKind.pipelineWaiting ||
-    InboxItemKind.pipelineFailed => InboxRetirement.source,
+    InboxItemKind.pipelineFailed ||
+    InboxItemKind.botApproval => InboxRetirement.source,
   };
 
   /// Whether a new turn of its session settles this: what the last turn
@@ -137,6 +142,7 @@ enum InboxItemKind {
       this != InboxItemKind.storeAttention &&
       this != InboxItemKind.pipelineWaiting &&
       this != InboxItemKind.pipelineFailed &&
+      this != InboxItemKind.botApproval &&
       reason?.interruptsAt(NotifyLevel.whenNeeded) != true;
 
   /// The news reason this kind files, where it has one.
@@ -156,7 +162,8 @@ enum InboxItemKind {
     InboxItemKind.storeNews ||
     InboxItemKind.waitingForSlot ||
     InboxItemKind.pipelineWaiting ||
-    InboxItemKind.pipelineFailed => null,
+    InboxItemKind.pipelineFailed ||
+    InboxItemKind.botApproval => null,
   };
 
   String get label => switch (this) {
@@ -176,6 +183,7 @@ enum InboxItemKind {
     InboxItemKind.waitingForSlot => 'Waiting for a slot',
     InboxItemKind.pipelineWaiting => 'Pipeline waits for you',
     InboxItemKind.pipelineFailed => 'Pipeline failed',
+    InboxItemKind.botApproval => 'Bot asks to approve',
   };
 
   /// The kind written on the wire. A kind added after 1.31 travels as
@@ -189,7 +197,8 @@ enum InboxItemKind {
     InboxItemKind.storeNews ||
     InboxItemKind.waitingForSlot ||
     InboxItemKind.pipelineWaiting ||
-    InboxItemKind.pipelineFailed => InboxItemKind.followUp.name,
+    InboxItemKind.pipelineFailed ||
+    InboxItemKind.botApproval => InboxItemKind.followUp.name,
     _ => name,
   };
 
