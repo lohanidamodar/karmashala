@@ -402,7 +402,8 @@ class _QueuedBubble extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        if (message.editable)
+                        if (message.editable &&
+                            botNoticeLine(message.text) == null)
                           TextButton(
                             key: ValueKey('queued-edit-${message.id}'),
                             style: compact,
@@ -441,7 +442,7 @@ class _QueuedBubble extends ConsumerWidget {
                     _ClampedText(
                       key: ValueKey('queued-text-${message.id}'),
                       id: message.id,
-                      text: message.text,
+                      text: queuedMessageWords(message),
                       style: theme.textTheme.bodyMedium,
                     ),
                     if (failed && message.error != null)
@@ -522,10 +523,17 @@ String? queuedSenderWords(
   return switch (message.origin) {
     QueuedMessageOrigin.mcp => 'From $named',
     QueuedMessageOrigin.delegation => 'Results from $named',
+    QueuedMessageOrigin.automation when botNoticeLine(message.text) != null =>
+      'From Karmashala',
     QueuedMessageOrigin.automation => 'From a scheduled resume',
     _ => null,
   };
 }
+
+/// What a person reads of [message]: for the server's word about an approval
+/// its line, as the transcript draws it, without what it tells the agent.
+String queuedMessageWords(QueuedMessage message) =>
+    botNoticeLine(message.text) ?? message.text;
 
 /// Delivers queued [message] now, ahead of the rest; a refusal is said.
 Future<void> sendQueuedMessageNow(

@@ -31,7 +31,8 @@ import 'package:agent_cli/read.dart'
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_automations/automations.dart'
     show AutomationAttribution;
-import 'package:karmashala_session/session.dart' show splitScratchPreamble;
+import 'package:karmashala_session/session.dart'
+    show botNoticeLine, splitScratchPreamble;
 import '../../automations/presentation/automation_sent_label.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'chat_cards/plan_update_card.dart';

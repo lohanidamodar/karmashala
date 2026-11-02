@@ -231,6 +231,11 @@ class _ChatMessageTile extends StatelessWidget {
     // A background run reporting back: the harness's row, not theirs.
     'user' when taskNotificationLine(message.text) != null =>
       _BackgroundRunNote(text: taskNotificationLine(message.text)!),
+    // The server's word about an approval: a line, and what it tells the
+    // agent stays with the agent.
+    'user' when botNoticeLine(message.text) != null => _TranscriptNote(
+      text: botNoticeLine(message.text)!,
+    ),
     'user' => _UserMessageCard(
       message: message,
       onSaveNote: onSaveNote,

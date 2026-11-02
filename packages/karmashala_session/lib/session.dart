@@ -4,6 +4,7 @@
 library;
 
 export 'src/bot_approval.dart';
+export 'src/bot_notice.dart';
 export 'src/checkout_occupancy.dart';
 export 'src/queued_message.dart';
 export 'src/scratch_preamble.dart';

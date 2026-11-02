@@ -782,6 +782,7 @@ Future<int> _serve(
     tools,
     reach,
     onRecorded: agentWork.imports.checkoutsRecorded,
+    botFolder: botFolderFor(environment ?? Platform.environment, dataDirectory),
   );
   final liveness = SessionLiveness(status.holds);
   final worktrees = daemonWorktrees(
@@ -2040,6 +2041,12 @@ Future<int> _serve(
         sessionQueue.postNotice(sessionId, text, originId: approvalId),
     queueQuietly: (sessionId, text, approvalId) =>
         sessionQueue.postQuiet(sessionId, text, originId: approvalId),
+    terminalTitle: (id) {
+      for (final record in terminals.records) {
+        if (record.sessionId == id || record.paneId == id) return record.title;
+      }
+      return null;
+    },
     live: prompts.status.holds,
     announce: data.announce,
     raise: attention.attention.raise,

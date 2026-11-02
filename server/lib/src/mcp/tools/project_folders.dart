@@ -54,6 +54,16 @@ const String kScratchFolder = 'scratch';
 /// The folder under [kKarmashalaFolder] the server's bot runs in.
 const String kBotFolder = 'bot';
 
+/// Where a server keeps the bot's folder when it is not `~/karmashala/bot`: a
+/// probe keeps it under [dataDirectory], so what a test run writes there never
+/// becomes what a real bot reads. Null on a real server. The spellings are the
+/// app's (`ProbeMode`), so a probe it counts as one is one here too.
+String? botFolderFor(Map<String, String> environment, String dataDirectory) {
+  final probe = (environment['KARMASHALA_PROBE'] ?? '').trim().toLowerCase();
+  if (!const {'1', 'true', 'yes', 'on'}.contains(probe)) return null;
+  return p.join(dataDirectory, kBotFolder);
+}
+
 /// What a session without a project is called on disk, and so in the
 /// workspace: the day, up to five words of [hint] — lower-case, letters and
 /// digits, hyphenated — and [id], so two sessions with one prompt on one day
@@ -107,10 +117,12 @@ class ProjectFolders {
     this.presence = const LocalCheckoutPresenceProbe(),
     CheckoutsRecorded? onRecorded,
     String? localHome,
+    String? botFolder,
     DateTime Function()? now,
     Random? random,
   }) : _onRecorded = onRecorded,
        _localHome = localHome,
+       _botFolder = botFolder,
        _now = now ?? DateTime.now,
        _random = random;
 
@@ -120,6 +132,9 @@ class ProjectFolders {
   final CheckoutPresenceProbe presence;
   final CheckoutsRecorded? _onRecorded;
   final String? _localHome;
+
+  /// [botFolderFor]'s answer: where the bot lives instead of its usual place.
+  final String? _botFolder;
   final DateTime Function() _now;
   final Random? _random;
 
@@ -259,7 +274,14 @@ class ProjectFolders {
     final repositories = RepositoryDao(_context.database);
     if (existing != null) {
       final checkout = repositories.getByProject(existing.id).firstOrNull;
-      if (checkout != null) return checkout;
+      if (checkout != null) {
+        if (_botFolder == null || checkout.path.path == root) return checkout;
+        // A probe that recorded the real folder before it had its own moves
+        // off it; nothing is taken from the folder it leaves.
+        final moved = checkout.copyWith(path: location);
+        repositories.update(moved);
+        return moved;
+      }
     }
     // As the server, not a client: `projects.create` refuses this kind.
     final created = _context.data.applyAsServer(
@@ -296,7 +318,7 @@ class ProjectFolders {
       }
       return result.stdout.trim().split('\n').last.trim();
     }
-    final path = p.join(localHome, kKarmashalaFolder, kBotFolder);
+    final path = _botFolder ?? p.join(localHome, kKarmashalaFolder, kBotFolder);
     Directory(path).createSync(recursive: true);
     if (!Directory(p.join(path, '.git')).existsSync()) {
       await _gitInit(runner, path);

@@ -84,10 +84,12 @@ Map<int, TurnFooter> turnFooters(
 }
 
 /// The person's own message: not an interruption the CLI wrote in their name,
-/// nor one still waiting in the queue.
+/// not the server's word about an approval, nor one still waiting in the
+/// queue.
 bool _opensTurn(ChatMessage message) =>
     message.role == 'user' &&
     !message.queued &&
+    botNoticeLine(message.text) == null &&
     !_interruptionNote.hasMatch(message.text.trim());
 
 TurnEnding? _endingOf(ChatMessage message) => switch (message.role) {
