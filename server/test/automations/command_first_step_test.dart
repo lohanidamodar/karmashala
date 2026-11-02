@@ -210,7 +210,8 @@ void main() {
         AutomationShell.powershell,
       );
       expect(result.exitCode, 4);
-      expect(result.output.trim(), folder.path);
+      // PowerShell prints the long form; the temp folder can be a short one.
+      expect(result.output.trim(), folder.resolveSymbolicLinksSync());
     }, skip: windows ? false : 'Windows only');
 
     test('cmd reads a hostile value with !NAME! and never runs it', () async {
