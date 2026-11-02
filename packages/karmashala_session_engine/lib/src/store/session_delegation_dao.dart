@@ -5,6 +5,11 @@ import 'package:karmashala_store/database.dart';
 const String kReportModeNone = 'none';
 const String kReportModeFinal = 'final';
 const String kReportModeEachTurn = 'each_turn';
+
+/// The bot's: the first of a report, a finished turn, a block, a failure or
+/// the process ending is told, and the delegation closes. The server chooses
+/// it for the bot; no agent can, so it is not in [kReportModes].
+const String kReportModeOnce = 'once';
 const List<String> kReportModes = [
   kReportModeNone,
   kReportModeFinal,

@@ -21,6 +21,10 @@ class Project {
   /// in its own folder beneath. The rules key on this, never on the path.
   static const String scratchKind = 'scratch';
 
+  /// The [kind] of the hidden project the server's bot runs in: one, at
+  /// `~/karmashala/bot`, listed nowhere.
+  static const String botKind = 'bot';
+
   final String id;
   final String name;
 
@@ -28,6 +32,8 @@ class Project {
   final String? kind;
 
   bool get isScratch => kind == scratchKind;
+
+  bool get isBot => kind == botKind;
 
   /// The project's root folder, bound to its execution environment.
   final EnvironmentPath root;

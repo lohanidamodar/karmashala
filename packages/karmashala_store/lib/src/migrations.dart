@@ -107,6 +107,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   92: _migrateToV92,
   93: _migrateToV93,
   94: _migrateToV94,
+  95: _migrateToV95,
 };
 
 /// The migrations that rebuild a table, run with foreign keys off.

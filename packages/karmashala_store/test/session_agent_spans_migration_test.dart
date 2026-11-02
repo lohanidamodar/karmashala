@@ -9,7 +9,7 @@ void main() {
   setUp(() => db = AppDatabase.memory());
   tearDown(() => db.close());
 
-  test('the head is 94', () => expect(db.schemaVersion, 94));
+  test('the head is 95', () => expect(db.schemaVersion, 95));
 
   test('v72 creates session_agent_spans', () {
     final columns = db

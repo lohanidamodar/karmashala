@@ -1397,3 +1397,37 @@ void _migrateToV94(Database db) {
     db.execute('ALTER TABLE ssh_hosts ADD COLUMN $column TEXT;');
   }
 }
+
+/// The server's bot: a nullable `sessions.role`, at most one unarchived row
+/// holding one, and what the bot asked a person to approve, kept so a request
+/// outlives a restart. Additive: an older server reads a bot as a plain row.
+void _migrateToV95(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(sessions);')
+      .map((row) => row['name'] as String);
+  if (!columns.contains('role')) {
+    db.execute('ALTER TABLE sessions ADD COLUMN role TEXT;');
+  }
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_bot ON sessions(role) '
+    'WHERE role IS NOT NULL AND archived_at IS NULL;',
+  );
+  db.execute(
+    'CREATE TABLE IF NOT EXISTS bot_approvals ('
+    'id TEXT PRIMARY KEY, '
+    'session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, '
+    'tool TEXT NOT NULL, '
+    'arguments TEXT NOT NULL, '
+    'summary TEXT NOT NULL, '
+    'state TEXT NOT NULL, '
+    'requested_at TEXT NOT NULL, '
+    'expires_at TEXT NOT NULL, '
+    'decided_at TEXT, '
+    'decided_by TEXT, '
+    'outcome TEXT);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_bot_approvals_state '
+    'ON bot_approvals(state, expires_at);',
+  );
+}
