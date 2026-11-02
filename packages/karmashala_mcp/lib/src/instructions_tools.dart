@@ -102,6 +102,14 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
       'open_session',
     ],
     body: '''
+**Operate Karmashala is a per-session grant from the person.** With it you may
+start, message and end other sessions and agents. Without it those calls are
+refused and nothing happens; renaming another session, drafting to it and
+changing its checkouts are refused too, and so are killing a terminal and
+restoring another session's checkpoint. Your own session stays yours to act on.
+This is not a sandbox: devices, the browser, builds, terminals and your shell
+do not depend on it, and they can have effects outside Karmashala.
+
 **A successful `session_send` means the text was delivered, and nothing else.**
 
 `session_send` goes through the same `SessionActions.continueSession` path the

@@ -1,4 +1,5 @@
 import 'package:karmashala_mcp/catalogue.dart';
+import 'package:karmashala_mcp/instructions.dart';
 import 'package:test/test.dart';
 
 const _noArguments = <String, dynamic>{};
@@ -145,6 +146,13 @@ void main() {
     for (final tool in kMcpToolAnnotations.keys) {
       expect(() => _gated(tool), returnsNormally, reason: tool);
     }
+  });
+
+  test('the sessions guide says what the grant covers, and is no sandbox', () {
+    final sessions = kMcpGuides.firstWhere((g) => g.topic == 'sessions');
+    expect(sessions.body, contains('Operate Karmashala'));
+    expect(sessions.body, contains('other sessions and agents'));
+    expect(sessions.body, contains('not a sandbox'));
   });
 
   group('the refusal', () {

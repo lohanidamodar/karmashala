@@ -577,8 +577,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   'checks_run': McpToolAnnotations(movesAttention: true),
   'checks_results': McpToolAnnotations.read,
 
-  // Webhooks. Creating one arms a URL anyone holding it can call, so it is a
-  // write the operator grant covers; nothing is called by creating it.
+  // Webhooks. Creating one only proposes it, saved off for the owner to turn on;
+  // nothing is armed or called by creating it.
   'webhook_list': McpToolAnnotations.read,
   'webhook_create': McpToolAnnotations(movesAttention: false),
   'automation_propose': McpToolAnnotations(movesAttention: false),

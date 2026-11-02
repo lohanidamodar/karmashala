@@ -1462,7 +1462,21 @@ the relay — each works on the one per-user host there, the owner's included.
 The tests are `test/core/probe/`. Each guarded seam has a non-probe twin that
 proves the fixture can observe the write, so a green run is not an empty one.
 
-## 24. Plan and task tools in chat sessions
+## 24. Operate Karmashala
+
+`Session.operatorGranted` is the person's word that a session's agent may start,
+message and end other sessions and agents. The relay checks it on every tool
+call (`mcpToolNeedsOperatorGrant`, with the tool's arguments and the
+authenticated caller). `kMcpOperatorTools` is always gated; four tools are gated
+only when `sessionId` names another session; `terminal_close` when it kills;
+`checkpoint_restore` on another session's checkpoint. Any tool missing from the
+catalogue is gated, and everything else is outside the grant.
+
+**It is not a sandbox, and copy must not imply one.** Without the grant an agent
+still has devices, the browser, builds, terminals and its shell. A tool that
+turns out to drive another session joins the gate.
+
+## 25. Plan and task tools in chat sessions
 
 The plan card draws what an agent's own plan tool publishes, and on
 2026-10-04 neither chat bridge had one. **Karmashala does not switch them

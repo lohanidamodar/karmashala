@@ -1267,6 +1267,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('session-more-operator')));
       await tester.pumpAndSettle();
+      expect(
+        find.textContaining('start, message and end other sessions and agents'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('not a sandbox'), findsOneWidget);
+      expect(find.textContaining('drive devices'), findsNothing);
       await tester.tap(find.text('Let it operate'));
       await tester.pumpAndSettle();
       expect(server.sessionRows.getById('s1')!.operatorGranted, isTrue);

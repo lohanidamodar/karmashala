@@ -22,9 +22,18 @@ String? textAfterOperatorCommand(String text) {
 /// The line the agent reads ahead of a message that granted it: the tools
 /// that were refused a moment ago now run, and it should know without trying.
 const String kOperatorGrantedNote =
-    '(Karmashala: the person has let this session operate Karmashala — its '
-    'tools that act, such as starting or sending to sessions, running '
-    'terminals, restoring checkpoints and driving devices, now run for you.)';
+    '(Karmashala: the person has let this session operate Karmashala — you '
+    'may now start, message and end other sessions and agents.)';
+
+/// What a session with the grant may do, in every place that describes it.
+const String kOperatorGrantedHelp =
+    'This agent may start, message and end other sessions and agents.';
+
+/// What a session without the grant may not do. Not a sandbox, so it says so.
+const String kOperatorNotGrantedHelp =
+    'This agent cannot start, message or end other sessions and agents. This '
+    'is not a sandbox: it can still use devices, the browser, builds and its '
+    'shell.';
 
 /// Lets session [sessionId]'s agent operate Karmashala, or takes it back.
 /// Turning it on from the chip asks first ([confirm]); `/operator` does not,
@@ -45,11 +54,10 @@ Future<bool> setOperatorGrant(
       builder: (context) => AlertDialog(
         title: Text('Let "${row.title}" operate Karmashala?'),
         content: const Text(
-          'Its agent will be able to act through Karmashala, not only read it: '
-          'start, send to and end sessions, run commands in terminals, '
-          'restore checkpoints, add projects and worktrees, drive devices and '
-          'the browser, and run builds. Other sessions are not affected, and '
-          'you can take it back here at any time.',
+          'Its agent will be able to start, message and end other sessions '
+          'and agents. This switch is not a sandbox: without it, an agent can '
+          'still use devices, the browser, builds and its shell. You can take '
+          'it back here at any time.',
         ),
         actions: [
           TextButton(
@@ -75,10 +83,9 @@ Future<bool> setOperatorGrant(
   return true;
 }
 
-/// **Whether this session's agent may operate Karmashala** (owner,
-/// 2026-10-01): off, it reads — sessions, transcripts, terminals, devices —
-/// and keeps its own todos, notes and verification records; on, the tools
-/// that act run for it too. Per session, and the person's alone to change.
+/// **Whether this session's agent may operate Karmashala**: on, it may start,
+/// message and end other sessions and agents (owner, 2026-11-02). Per session,
+/// and the person's alone to change. Off is not a sandbox.
 class OperatorChip extends ConsumerWidget {
   const OperatorChip({
     required this.sessionId,
@@ -102,17 +109,15 @@ class OperatorChip extends ConsumerWidget {
     return Tooltip(
       key: onlyWhenOn ? const ValueKey('session-operator-badge') : null,
       message: on
-          ? 'This agent may operate Karmashala: start, send to and end '
-                'sessions, run terminals, restore checkpoints, drive devices '
-                'and builds. Click to take it back.'
-          : 'This agent reads Karmashala but cannot act on it. Click to let '
-                'it operate Karmashala — or start a message with /operator.',
+          ? '$kOperatorGrantedHelp Click to take it back.'
+          : '$kOperatorNotGrantedHelp Click to let it operate Karmashala — or '
+                'start a message with /operator.',
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.sm),
         onTap: () => setOperatorGrant(context, ref, sessionId, granted: !on),
         child: PickerFace(
-          icon: on ? AppIcons.robot : AppIcons.shield,
-          label: on ? 'Operates' : 'Read-only',
+          icon: AppIcons.robot,
+          label: on ? 'Operates' : 'Not operating',
           // The badge keeps to its word: the tooltip says what it operates.
           qualifiers: onlyWhenOn ? const [] : const ['Karmashala'],
         ),

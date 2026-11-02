@@ -316,8 +316,8 @@ class _AgentRow extends ConsumerWidget {
   }
 }
 
-/// **Operate Karmashala**, once, as a switch: on, the agent's tools that act
-/// run for it. Turning it on asks first.
+/// **Operate Karmashala**, once, as a switch: on, the agent may start, message
+/// and end other sessions and agents. Turning it on asks first.
 class _OperateRow extends ConsumerWidget {
   const _OperateRow({required this.sessionId});
 
@@ -333,14 +333,12 @@ class _OperateRow extends ConsumerWidget {
         setOperatorGrant(context, ref, sessionId, granted: granted);
     return Tooltip(
       message: on
-          ? 'This agent may operate Karmashala: start, send to and end '
-                'sessions, run terminals, restore checkpoints, drive devices '
-                'and builds.'
-          : 'This agent reads Karmashala but cannot act on it — or start a '
-                'message with /operator.',
+          ? kOperatorGrantedHelp
+          : '$kOperatorNotGrantedHelp Start a message with /operator to let '
+                'it.',
       child: FactRow(
         key: const ValueKey('session-list:operator'),
-        icon: on ? AppIcons.robot : AppIcons.shield,
+        icon: AppIcons.robot,
         label: 'Operate Karmashala',
         onTap: () => set(!on),
         value: SettingsCompactSwitch(

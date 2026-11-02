@@ -92,10 +92,10 @@ class Session {
   /// sync leaves a row alone. Recorded, not remembered: a restart forgot it.
   final bool titleByUser;
 
-  /// Whether the person let this session's agent **operate Karmashala**: the
-  /// tools that act — start, send to or end sessions, run terminals, restore
-  /// checkpoints, drive devices, builds — beyond reading and its own records.
-  /// Off until granted, per session (owner, 2026-10-01).
+  /// Whether the person let this session's agent **operate Karmashala**: start,
+  /// message and end other sessions and agents (owner, 2026-11-02). Set per
+  /// session, from the server's setting when the row is made. Not a sandbox:
+  /// without it an agent still has devices, the browser, builds and its shell.
   final bool operatorGranted;
 
   /// The row on the wire, as the server's data API carries it.
