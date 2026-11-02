@@ -10,6 +10,8 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
 import 'package:karmashala_host/src/mcp/tools/launch_tool_set.dart';
+import 'package:karmashala_host/src/sessions/delegation_results.dart'
+    show DelegatedChild;
 import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
 import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
@@ -167,6 +169,87 @@ void main() {
       reason: 'no session asked, so nothing says it is not a person',
     );
     window.close();
+  });
+
+  group('the bot', () {
+    late List<DelegatedChild> delegated;
+
+    setUp(() {
+      delegated = [];
+      tools = LaunchToolSet(
+        context,
+        launches: launches,
+        delegate: delegated.add,
+      );
+      SessionDao(database).insertBot(
+        Session(
+          id: 'bot',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Bot',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: t0,
+        ),
+      );
+    });
+
+    test('hears a session it starts once, and is its parent', () async {
+      final answer =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'title': 'Fix it',
+                'prompt': 'go',
+              }, 'bot')!)
+              as Map;
+      expect(delegated.single.reportMode, kReportModeOnce);
+      expect(answer['report'], kReportModeOnce);
+      final child = SessionDao(
+        database,
+      ).getById(answer['sessionId'] as String)!;
+      expect(child.parentSessionId, 'bot');
+    });
+
+    test('whatever report it names, but none', () async {
+      await tools.call('open_new_session', {
+        'projectId': 'p1',
+        'report': 'each_turn',
+        'prompt': 'one',
+      }, 'bot');
+      expect(delegated.single.reportMode, kReportModeOnce);
+      final silent =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'report': 'none',
+                'prompt': 'two',
+              }, 'bot')!)
+              as Map;
+      expect(silent['report'], kReportModeNone);
+    });
+
+    test('an ordinary session cannot choose once', () async {
+      insertCaller('caller');
+      await expectLater(
+        tools.call('open_new_session', {
+          'projectId': 'p1',
+          'report': 'once',
+        }, 'caller'),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('what it starts takes the global setting, not its grant', () async {
+      final answer =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'prompt': 'go',
+              }, 'bot')!)
+              as Map;
+      final child = SessionDao(
+        database,
+      ).getById(answer['sessionId'] as String)!;
+      expect(child.operatorGranted, isFalse);
+    });
   });
 
   test('a session another session started is shown behind the person\'s '

@@ -72,6 +72,7 @@ class SessionQueue implements ResumeQueue {
     required this.status,
     TurnSettlement? turns,
     this.resumesOnSend,
+    this.wakes,
     this.resumeStopped,
     this.takesOpeningMessage,
     this.takesInputMidTurn,
@@ -116,6 +117,12 @@ class SessionQueue implements ResumeQueue {
   /// Whether row [String] speaks ACP, so a send resumes it when nothing runs
   /// it.
   final bool Function(String sessionId)? resumesOnSend;
+
+  /// Whether a stopped row [String] is resumed for anything in its queue, a
+  /// server's own message too: the bot, whose process comes and goes unseen,
+  /// so a report or an approval's outcome must reach it. One exception to
+  /// "only a new message resumes"; every other parent behaves as before.
+  final bool Function(String sessionId)? wakes;
 
   /// Resumes row [String] that nothing runs, [prompt] its opening message
   /// when given — `ServerSessionLauncher.resume`.
@@ -506,6 +513,16 @@ class SessionQueue implements ResumeQueue {
       originId: originId,
     );
   }
+
+  /// Puts the server's own [text] into [sessionId]'s queue: durable, and
+  /// delivered once, when its turn ends or at once when idle.
+  QueuedMessage postNotice(String sessionId, String text, {String? originId}) =>
+      _post(
+        sessionId,
+        text,
+        origin: QueuedMessageOrigin.automation,
+        originId: originId,
+      );
 
   /// Queues [text] from the server itself, waking [sessionId] when idle but
   /// never lifting a pause nor resuming it.
@@ -1380,6 +1397,7 @@ class SessionQueue implements ResumeQueue {
   }
 
   bool _nothingRuns(String sessionId) =>
+      !(wakes?.call(sessionId) ?? false) &&
       !_inFlight.contains(sessionId) &&
       !_resumedForHead.contains(sessionId) &&
       status.acpRuntimeOf(sessionId) == null &&

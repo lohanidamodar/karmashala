@@ -8,7 +8,8 @@ import 'package:karmashala_session_engine/store.dart'
         SessionDelegationDao,
         kReportModeEachTurn,
         kReportModeFinal,
-        kReportModeNone;
+        kReportModeNone,
+        kReportModeOnce;
 
 import '../status/child_turn_wait.dart';
 import 'session_queue.dart';
@@ -43,7 +44,7 @@ class DelegatedChild {
     this.reportMode = kReportModeEachTurn,
   });
 
-  /// `none`, `final` or `each_turn` (`kReportModes`).
+  /// `none`, `final` or `each_turn` (`kReportModes`), or the bot's `once`.
   final String reportMode;
 
   final String childId;
@@ -231,7 +232,7 @@ class DelegationResults {
 
   /// Whether a report may be queued for [String]: it exists, is neither
   /// ended nor archived, and something runs it. Never true of a parent a
-  /// report would have to resume.
+  /// report would have to resume, but for the bot, whose queue resumes it.
   final bool Function(String parentId) parentReachable;
 
   /// Settles when [String]'s first turn since [DateTime] does —
@@ -406,6 +407,8 @@ class DelegationResults {
     if (_detached.contains(childId)) return;
     final row = store.byChild(childId);
     if (row == null || row.isOpen || row.reportMode == kReportModeNone) return;
+    // `once` was told; what the child does next is its person's.
+    if (row.reportMode == kReportModeOnce) return;
     if (row.reportVia != kReportViaTurn ||
         row.reportState != ChildTurnState.ended.name) {
       return;
@@ -527,7 +530,9 @@ class DelegationResults {
     // Its own word says more than a quiet turn end before it.
     _held.remove(report.childId)?.cancel();
     final row = store.byChild(report.childId);
-    final delivery = row?.reportMode == kReportModeNone
+    final once = row?.reportMode == kReportModeOnce;
+    final delivery =
+        row?.reportMode == kReportModeNone || (once && !row!.isOpen)
         ? ReportDelivery.notWanted
         : parentReachable(report.parentId)
         ? ReportDelivery.delivered
@@ -548,6 +553,10 @@ class DelegationResults {
       text: text,
       delivered: delivery == ReportDelivery.delivered,
     );
+    if (once) {
+      _watched.remove(report.childId);
+      store.close(report.childId, at: at);
+    }
     if (!recorded) {
       store.put(
         SessionDelegation(
@@ -669,11 +678,13 @@ class DelegationResults {
     // A later turn settling says what a held quiet end would have.
     _held.remove(id)?.cancel();
     final mode = store.byChild(id)?.reportMode ?? child.reportMode;
+    // `once` hears what `final` hears, the first time.
+    final quiet = mode == kReportModeFinal || mode == kReportModeOnce;
     if (outcome.idle) {
       _watched.remove(id);
       final row = store.byChild(id);
       // Under `final` the child ending is its last word, unless it gave one.
-      if (mode == kReportModeFinal &&
+      if (quiet &&
           row != null &&
           row.isOpen &&
           row.reportVia != kReportViaChild) {
@@ -738,12 +749,9 @@ class DelegationResults {
     }
     // `final` hears of a turn that merely finished only when the child did
     // not report it: a child gone quiet must not look like one still working.
-    final unreported =
-        mode == kReportModeFinal &&
-        !over &&
-        outcome.state == ChildTurnState.done;
+    final unreported = quiet && !over && outcome.state == ChildTurnState.done;
     final wanted =
-        mode != kReportModeFinal ||
+        !quiet ||
         over ||
         unreported ||
         outcome.state == ChildTurnState.blocked ||
@@ -955,9 +963,13 @@ class DelegationResults {
         },
         delivered: reachable,
       );
+      final once = store.byChild(childId)?.reportMode == kReportModeOnce;
       final over =
-          result.outcome.state == ChildTurnState.ended || result.ended == true;
+          once ||
+          result.outcome.state == ChildTurnState.ended ||
+          result.ended == true;
       if (over) {
+        if (once) _watched.remove(childId);
         store.close(childId, at: _now());
         continue;
       }

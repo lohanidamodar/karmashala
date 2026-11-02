@@ -79,7 +79,9 @@ void main() {
   DelegationResults tracker({
     Duration settleWindow = const Duration(milliseconds: 20),
     bool Function(String sessionId)? isWorking,
+    bool Function(String parentId)? parentReachable,
   }) => DelegationResults(
+    parentReachable: parentReachable,
     turnOf: (childId, since) => turns.firstTurn(
       childId,
       bound: const Duration(minutes: 5),
@@ -1083,6 +1085,168 @@ void main() {
         expect(delivered['c1'], isNull);
       },
     );
+  });
+
+  group('once: the bot hears the first outcome, then nothing', () {
+    DelegatedChild once(String id) => DelegatedChild(
+      childId: id,
+      parentId: 'parent',
+      title: 'Task $id',
+      agent: 'Claude Code',
+      startedAt: t0,
+      reportMode: kReportModeOnce,
+    );
+
+    Future<void> works(String id, String answer) async {
+      hook(id, 'UserPromptSubmit');
+      await pumpEventQueue();
+      clock = clock.add(const Duration(minutes: 1));
+      answers[id] = answer;
+      answeredAt[id] = clock;
+      hook(id, 'Stop');
+      await settle();
+    }
+
+    ParentReport says(String text) => ParentReport(
+      childId: 'c1',
+      parentId: 'parent',
+      title: 'Task c1',
+      agent: 'Claude Code',
+      status: ReportStatus.done,
+      text: text,
+    );
+
+    test(
+      'a finished turn past the hold is told, and later turns are not',
+      () async {
+        await runTerminal('parent');
+        hook('parent', 'Stop');
+        await runTerminal('c1');
+        delegations.watch(once('c1'));
+        await works('c1', 'First pass.');
+        expect(delivered['parent'], hasLength(1));
+        expect(delivered['parent']!.single, contains('First pass.'));
+        expect(SessionDelegationDao(database).byChild('c1')!.isOpen, isFalse);
+        expect(delegations.watching('parent'), isEmpty);
+
+        await works('c1', 'A person went on with it.');
+        expect(delivered['parent'], hasLength(1));
+      },
+    );
+
+    test('a child\'s own report is told, and closes it', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(once('c1'));
+      await pumpEventQueue();
+      expect(delegations.report(says('Done.')), ReportDelivery.delivered);
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(delivered['parent']!.single, contains('Done.'));
+      final row = SessionDelegationDao(database).byChild('c1')!;
+      expect(row.isOpen, isFalse);
+      expect(row.reportDelivered, isTrue);
+    });
+
+    test('a second report goes nowhere', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(once('c1'));
+      await pumpEventQueue();
+      delegations.report(says('Done.'));
+      await settle();
+      expect(delegations.report(says('And more.')), ReportDelivery.notWanted);
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+    });
+
+    test('a turn that goes on by itself inside the hold is not told', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      await delegations.close();
+      delegations = tracker(
+        settleWindow: const Duration(milliseconds: 200),
+        isWorking: (id) => true,
+      );
+      delegations.watch(once('c1'));
+      await works('c1', 'Still going.');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(delivered['parent'], isNull);
+      expect(SessionDelegationDao(database).byChild('c1')!.isOpen, isTrue);
+    });
+
+    test('the process ending is told', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(once('c1'));
+      await pumpEventQueue();
+      pty.handles.last.finish(0);
+      await settle();
+      expect(delivered['parent'], hasLength(1));
+      expect(delivered['parent']!.single, contains('ended'));
+      expect(SessionDelegationDao(database).byChild('c1')!.isOpen, isFalse);
+    });
+
+    test('started again after it closed, nothing is followed', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      await runTerminal('c1');
+      delegations.watch(once('c1'));
+      await pumpEventQueue();
+      pty.handles.last.finish(0);
+      await settle();
+      await runTerminal('c1');
+      delegations.started('c1');
+      expect(delegations.watching('parent'), isEmpty);
+      await works('c1', 'Later.');
+      expect(delivered['parent'], hasLength(1));
+    });
+
+    test(
+      'a stopped bot still gets it, in its queue, to be resumed for',
+      () async {
+        await delegations.close();
+        delegations = tracker(parentReachable: (_) => true);
+        await runTerminal('c1');
+        delegations.watch(once('c1'));
+        await pumpEventQueue();
+        expect(delegations.report(says('Done.')), ReportDelivery.delivered);
+        final kept = queue.list('parent');
+        expect(kept, hasLength(1));
+        expect(kept.single.text, contains('Done.'));
+      },
+    );
+
+    test('kept across a restart: a report still waiting is not lost or '
+        'repeated', () async {
+      await delegations.close();
+      delegations = tracker(parentReachable: (_) => true);
+      await runTerminal('c1');
+      delegations.watch(once('c1'));
+      await pumpEventQueue();
+      delegations.report(says('Done.'));
+      await delegations.close();
+      delegations = tracker(parentReachable: (_) => true)..start();
+      await settle();
+      expect(queue.list('parent'), hasLength(1));
+      expect(delegations.watching('parent'), isEmpty);
+    });
+
+    test('detached, what waits for the bot is taken back', () async {
+      await delegations.close();
+      delegations = tracker(parentReachable: (_) => true);
+      queue.restate = delegations.restate;
+      await runTerminal('c1');
+      delegations.watch(once('c1'));
+      await pumpEventQueue();
+      delegations.report(says('Done.'));
+      delegations.detach('c1', parentId: 'parent');
+      expect(queue.list('parent'), isEmpty);
+    });
   });
 
   group('a parent that is gone', () {

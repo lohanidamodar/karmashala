@@ -228,6 +228,63 @@ void main() {
         refusedWith('Session not found'),
       );
     });
+
+    test('the bot does not open an imported session, and says so', () async {
+      database.execute(
+        'INSERT INTO imported_sessions (id, repository_id, source, '
+        'external_id, environment_id, title, preview, file_path, store_home, '
+        'is_subagent, updated_at, created_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        [
+          'imp1',
+          'r1',
+          AgentIds.claudeCode,
+          'ext-9',
+          'local',
+          'Old chat',
+          '',
+          '/tmp/x.jsonl',
+          '/tmp',
+          0,
+          '$t0',
+          '$t0',
+        ],
+      );
+      SessionDao(database).insertBot(
+        Session(
+          id: 'bot',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Bot',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: t0,
+        ),
+      );
+      final told = window();
+      await expectLater(
+        open.call('open_session', {'id': 'imp1'}, 'bot'),
+        refusedWith('Sessions list'),
+      );
+      expect(told.whereType<OpenImportedSession>(), isEmpty);
+    });
+
+    test('the bot resumes a native session in place', () async {
+      SessionDao(database).insertBot(
+        Session(
+          id: 'bot',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Bot',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: t0,
+        ),
+      );
+      await (open.call('open_session', {'id': 's1'}, 'bot') as Future<Object?>)
+          .timeout(const Duration(seconds: 5));
+      expect(registry.find('karmashala_s1'), isNotNull);
+    });
   });
 
   group('snippet_insert', () {

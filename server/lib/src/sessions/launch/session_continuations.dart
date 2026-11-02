@@ -677,6 +677,7 @@ class SessionContinuations {
     final session =
         sessions.getById(sessionId) ??
         (throw const LaunchTargetMissing('This session no longer exists.'));
+    _refuseBot(session);
     final plan = forkPlanFor(sessionId);
     if (plan.isRefused) throw StateError(plan.explanation);
     if (!plan.isNative) {
@@ -770,6 +771,12 @@ class SessionContinuations {
       );
     }
     final context = _contextFor(session, targetInstallationId);
+    if (session.isBot && !_speaksAcp(context.installation.agentId)) {
+      throw StateError(
+        'The bot runs only on a chat form, and ${context.agentName} is not '
+        'one.',
+      );
+    }
     final sourceAgentId = rows
         .installation(session.agentInstallationId)
         ?.agentId;
@@ -965,6 +972,7 @@ class SessionContinuations {
     final session =
         sessions.getById(sessionId) ??
         (throw const LaunchTargetMissing('This session no longer exists.'));
+    _refuseBot(session);
     if (instruction.trim().isEmpty) {
       throw StateError(
         'Say what the next agent should do. The packet carries the '
@@ -1044,6 +1052,7 @@ class SessionContinuations {
     final work =
         forks ??
         (throw StateError('This server keeps no checkpoints to fork from.'));
+    if (sessions.getById(sessionId) case final session?) _refuseBot(session);
     final checkpoints = work.forkCheckpoints(
       sessionId: sessionId,
       checkpointId: checkpointId,
@@ -1365,6 +1374,16 @@ class SessionContinuations {
       installation: installation,
       descriptor: registry.byId(installation.agentId),
       agentName: registry.displayNameFor(installation.agentId),
+    );
+  }
+
+  /// The bot's conversation is one and stays one: only its agent changes
+  /// ([switchAgent]). A branch of it would be a second, visible session.
+  void _refuseBot(Session session) {
+    if (!session.isBot) return;
+    throw StateError(
+      'The bot has one conversation, so it cannot be forked or handed off. '
+      'Start a session for the work instead.',
     );
   }
 

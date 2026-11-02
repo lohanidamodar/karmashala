@@ -108,6 +108,16 @@ class OpenSessionToolSet extends ServerToolSet {
         'where': _where(shown),
       };
     }
+    // An imported session resumes only in an external terminal on the window's
+    // machine, which fails on a phone and stacks windows on a desktop.
+    if (callerSessionId != null &&
+        (_sessions.getById(callerSessionId)?.isBot ?? false)) {
+      throw StateError(
+        '"${imported.displayTitle}" is imported, so it was not resumed: the '
+        'bot does not open external terminals. Tell the person it was not '
+        'resumed, and to open it from the Sessions list.',
+      );
+    }
     if (!_context.data.tellIntent(OpenImportedSession(imported.id))) {
       throw StateError(_noWindow('Opening an imported CLI session'));
     }

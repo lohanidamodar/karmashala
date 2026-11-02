@@ -7,6 +7,8 @@ import 'package:karmashala_conversations/karmashala_conversations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/src/mcp/tools/inventory_tool_set.dart';
 import 'package:karmashala_host/src/sessions/session_active_models.dart';
+import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session_engine/store.dart' show SessionDao;
 import 'package:test/test.dart';
 
 import 'tool_harness.dart';
@@ -98,6 +100,49 @@ void main() {
       expect(row['cli'], terminal.chatId);
       expect(row['agent'], 'Claude Code');
       expect(row['form'], 'chat');
+    });
+  });
+
+  group('the bot', () {
+    setUp(() {
+      final db = h.context.database;
+      final at = h.now.toIso8601String();
+      db.execute(
+        'INSERT INTO projects (id, name, root_environment_id, root_path, '
+        'created_at, kind) VALUES (?, ?, ?, ?, ?, ?);',
+        ['pb', 'Bot', h.here.id, '/home/me/karmashala/bot', at, 'bot'],
+      );
+      db.execute(
+        'INSERT INTO repositories (id, project_id, name, environment_id, '
+        'path, created_at) VALUES (?, ?, ?, ?, ?, ?);',
+        ['rb', 'pb', 'bot', h.here.id, '/home/me/karmashala/bot', at],
+      );
+      final installation =
+          db.query('SELECT id FROM agent_installations LIMIT 1;').single['id']!
+              as String;
+      SessionDao(db).insertBot(
+        Session(
+          id: 'bot',
+          repositoryId: 'rb',
+          agentInstallationId: installation,
+          title: 'Bot',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: h.now,
+        ),
+      );
+    });
+
+    test('is in neither list_projects nor list_sessions', () async {
+      final projects = await list('list_projects');
+      expect(projects.map((p) => p['id']), isNot(contains('pb')));
+      final sessions = await list('list_sessions');
+      expect(sessions.map((s) => s['id']), isNot(contains('bot')));
+    });
+
+    test('and an ordinary project is untouched', () async {
+      expect((await list('list_projects')).map((p) => p['id']), contains('p1'));
+      expect((await list('list_sessions')).map((s) => s['id']), contains('s1'));
     });
   });
 

@@ -21,6 +21,7 @@ import 'package:path/path.dart' as p;
 import '../../automations/daemon_agents.dart';
 import '../../automations/daemon_checkout_facts.dart';
 import '../../automations/hosted_agent_launcher.dart';
+import '../../bot/bot_instructions.dart';
 import '../../domain/session_registry.dart';
 import 'capacity/launch_slots.dart';
 import 'capacity/session_launch_gate.dart';
@@ -369,16 +370,26 @@ class ServerSessionLauncher {
         freshConversation &&
         inScratch &&
         await _instructScratch(installation, launchDirectory);
+    // The bot's first turn, on an agent that reads none of its folder's
+    // instruction files, is told in words; a resume was told already.
+    final bot = reused?.isBot ?? false;
+    final botDeclared =
+        registryOfAgents.byId(installation.agentId)?.instructionFiles ??
+        const <String>[];
     final prompt = freshConversation && inScratch && !toldByFile
         ? withScratchPreamble(launchDirectory.path, attributed)
+        : bot && restarting && !botFilesCover(botDeclared)
+        ? withBotPreamble(attributed)
         : attributed;
-    if (inScratch) await _trustScratch(installation, launchDirectory);
+    if (inScratch || bot) await _trustScratch(installation, launchDirectory);
 
     final rowId = reused?.id ?? waitingRowId ?? launcher.newId();
     var reserved = reservation;
     final gate = this.gate;
+    // The bot takes no slot and answers to no limit.
     if (reserved == null &&
         gate != null &&
+        !bot &&
         spec.surface != SessionSurface.external) {
       final label =
           reused?.title ??
@@ -528,6 +539,14 @@ class ServerSessionLauncher {
     final row =
         sessions.getById(sessionId) ??
         (throw const LaunchTargetMissing('This session no longer exists.'));
+    // A cleared bot never starts again: a resume here would write a new,
+    // visible row. The next message asks `bot.open` for a new one.
+    if (row.isBot && row.isArchived) {
+      throw StateError(
+        'This conversation was cleared, so the message was not sent. Send it '
+        'again to start a new one.',
+      );
+    }
     if (restart) {
       final conversation = row.externalSessionId;
       if (conversation == null || conversation.isEmpty) {

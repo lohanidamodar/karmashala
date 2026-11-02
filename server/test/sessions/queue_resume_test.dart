@@ -134,6 +134,46 @@ void main() {
     temp.deleteSync(recursive: true);
   });
 
+  group('a queue that wakes its session: the bot', () {
+    SessionQueue over({bool Function(String)? wakes}) {
+      var n = 0;
+      final queue = SessionQueue(
+        dao: dao,
+        status: status,
+        wakes: wakes,
+        resumesOnSend: (_) => true,
+        newId: () => 'q${++n}',
+        now: () => t0,
+      )..deliver = ((_, text) async => delivered.add(text));
+      addTearDown(queue.close);
+      return queue..start();
+    }
+
+    test('the server\'s own message resumes a stopped bot', () async {
+      over(wakes: (id) => id == 's1').postNotice('s1', 'It reports.');
+      await pumpEventQueue();
+      expect(delivered, ['It reports.']);
+    });
+
+    test('and no other stopped session', () async {
+      over().postNotice('s1', 'It reports.');
+      await pumpEventQueue();
+      expect(delivered, isEmpty);
+      expect(dao.hasWaiting('s1'), isTrue);
+    });
+
+    test('what waited through a restart goes when the queue starts', () async {
+      final first = over();
+      first.postNotice('s1', 'It reports.');
+      await first.close();
+      delivered.clear();
+      dao.head('s1');
+      over(wakes: (id) => id == 's1').refreshAll();
+      await pumpEventQueue();
+      expect(delivered, ['It reports.']);
+    });
+  });
+
   SessionQueue queueOver({bool takesOpeningMessage = true}) {
     var n = 0;
     final queue = SessionQueue(
