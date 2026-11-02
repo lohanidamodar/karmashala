@@ -6,6 +6,8 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_ui/icons.dart';
+
+import '../../bot/presentation/bot_settings_section.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -179,6 +181,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
             SettingsAnchor.usage,
             SettingsAnchor.agentUpdates,
             SettingsAnchor.newSessionGrant,
+            SettingsAnchor.bot,
             SettingsAnchor.detection,
           },
           children: [
@@ -195,6 +198,10 @@ class AgentsAndAccountsBody extends ConsumerWidget {
             SettingsAnchorTarget(
               anchor: SettingsAnchor.newSessionGrant,
               child: NewSessionGrantSection(),
+            ),
+            SettingsAnchorTarget(
+              anchor: SettingsAnchor.bot,
+              child: BotSettingsSection(),
             ),
             SettingsAnchorTarget(
               anchor: SettingsAnchor.detection,
