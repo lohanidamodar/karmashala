@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_host/src/bot/bot_instructions.dart';
+import 'package:karmashala_host/src/mcp/tools/project_folders.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
 import 'package:path/path.dart' as p;
@@ -63,6 +64,74 @@ void main() {
     expect(
       RepositoryDao(fixture.database).getByProject(first.projectId).length,
       1,
+    );
+  });
+
+  group('in a probe', () {
+    late String probeFolder;
+    late ProjectFolders probe;
+
+    setUp(() {
+      probeFolder = p.join(fixture.path('probe-data'), kBotFolder);
+      probe = ProjectFolders(
+        fixture.context,
+        fixture.reach,
+        localHome: fixture.home,
+        botFolder: probeFolder,
+      );
+    });
+
+    String real() => p.join(fixture.home, kKarmashalaFolder, kBotFolder);
+
+    test('it lives under the data folder, and the real one is left', () async {
+      final checkout = await probe.createBotCheckout(host());
+      expect(checkout.path.path, probeFolder);
+      expect(Directory(p.join(probeFolder, '.git')).existsSync(), isTrue);
+      expect(File(p.join(probeFolder, kBotMemoryFile)).existsSync(), isTrue);
+      expect(Directory(real()).existsSync(), isFalse);
+    });
+
+    test('a probe that recorded the real folder moves off it', () async {
+      final before = await fixture.folders.createBotCheckout(host());
+      final memory = File(p.join(real(), kBotMemoryFile))
+        ..writeAsStringSync('what the real bot knows');
+
+      final after = await probe.createBotCheckout(host());
+
+      expect(after.id, before.id);
+      expect(after.path.path, probeFolder);
+      expect(
+        RepositoryDao(fixture.database).getById(before.id)!.path.path,
+        probeFolder,
+      );
+      expect(memory.readAsStringSync(), 'what the real bot knows');
+      expect(
+        File(p.join(probeFolder, kBotMemoryFile)).readAsStringSync(),
+        isEmpty,
+      );
+    });
+  });
+
+  group('botFolderFor', () {
+    final data = p.join('data', 'probe');
+
+    test('a real server keeps ~/karmashala/bot', () {
+      expect(botFolderFor(const {}, data), isNull);
+      expect(botFolderFor(const {'KARMASHALA_PROBE': '0'}, data), isNull);
+      expect(botFolderFor(const {'KARMASHALA_PROBE': ''}, data), isNull);
+    });
+
+    test(
+      'a probe, in every spelling the app accepts, keeps it in its data',
+      () {
+        for (final word in const ['1', 'true', 'YES', ' on ']) {
+          expect(
+            botFolderFor({'KARMASHALA_PROBE': word}, data),
+            p.join(data, kBotFolder),
+            reason: word,
+          );
+        }
+      },
     );
   });
 

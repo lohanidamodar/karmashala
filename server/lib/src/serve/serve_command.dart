@@ -782,6 +782,7 @@ Future<int> _serve(
     tools,
     reach,
     onRecorded: agentWork.imports.checkoutsRecorded,
+    botFolder: botFolderFor(environment ?? Platform.environment, dataDirectory),
   );
   final liveness = SessionLiveness(status.holds);
   final worktrees = daemonWorktrees(
