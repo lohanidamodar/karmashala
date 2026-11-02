@@ -171,7 +171,7 @@ class DeliveryWatch {
     final looking = lookingAt?.call() ?? const <String>{};
     final rows =
         [
-          for (final row in _sessions.getAll())
+          for (final row in _sessions.getPublic())
             if (!row.isArchived &&
                 (row.status.claimsLive ||
                     looking.contains(row.id) ||

@@ -338,7 +338,7 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       followUps: followUps,
       resumes: resumes,
       facts: facts,
-      liveSessions: sessions.getClaimingLive,
+      liveSessions: sessions.getClaimingLivePublic,
       isRunning: (id) => running(id) != null || liveAcp(id) != null,
       start: (automation, note, variables) => startWebhookRun(
         automation,
@@ -359,7 +359,11 @@ class DaemonAutomations implements ChecksWork, AutomationWork {
       automations: automations,
       scheduler: scheduler,
       preflight: preflight,
-      sessionOf: sessions.getById,
+      // The bot is no rule's event, nor any rule's target.
+      sessionOf: (id) {
+        final row = sessions.getById(id);
+        return row?.isBot ?? false ? null : row;
+      },
       isLive: (id) => running(id) != null || liveAcp(id) != null,
       statusOf: (id) => agentStatusOf?.call(id)?.report,
       now: now,

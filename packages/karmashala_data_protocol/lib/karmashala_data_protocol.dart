@@ -9,6 +9,7 @@ export 'src/activity_values.dart';
 export 'src/agent_work_values.dart';
 export 'src/attention_values.dart';
 export 'src/automation_values.dart';
+export 'src/bot_values.dart';
 export 'src/browser_values.dart';
 export 'src/capacity_values.dart';
 export 'src/data_change.dart';

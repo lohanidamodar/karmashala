@@ -357,6 +357,8 @@ class SessionsHandler {
 
   FollowUp? raiseFollowUp(FollowUpRaise request, List<DataChange> changes) {
     final asked = request.followUp;
+    // The bot's process comes and goes unseen: nothing of it is left to do.
+    if (_sessions.getById(asked.sessionId)?.isBot ?? false) return null;
     final raised = _followUps.raise(
       FollowUp(
         sessionId: asked.sessionId,

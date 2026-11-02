@@ -2,6 +2,8 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_store/database.dart';
 
+import '../domain/project.dart';
+
 /// Data-access for [Repository] rows — a project's checkouts. Hand-written
 /// SQL, no codegen.
 class RepositoryDao {
@@ -69,6 +71,17 @@ class RepositoryDao {
   List<Repository> getAll() {
     final rows = _db.query(
       'SELECT * FROM repositories ORDER BY created_at, id;',
+    );
+    return rows.map(_fromRow).toList();
+  }
+
+  /// [getAll] without the bot's checkout: what a reader that places
+  /// conversations in checkouts walks, so nothing lands in a hidden one.
+  List<Repository> getPublic() {
+    final rows = _db.query(
+      'SELECT * FROM repositories WHERE project_id NOT IN '
+      '(SELECT id FROM projects WHERE kind = ?) ORDER BY created_at, id;',
+      [Project.botKind],
     );
     return rows.map(_fromRow).toList();
   }

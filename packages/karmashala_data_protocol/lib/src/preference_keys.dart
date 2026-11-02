@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:karmashala_session/session.dart' show kOperateNewSessionsKey;
+import 'package:karmashala_session/session.dart'
+    show kBotAgentKey, kOperateNewSessionsKey;
 
 /// Which `app_metadata` keys are client preferences — readable and writable
 /// through the data API — and which belong to the server or to a domain that
@@ -30,6 +31,9 @@ abstract final class PreferenceKeys {
     // "Let new sessions operate Karmashala": written through
     // `sessions.operateByDefault.set`, which a phone needs a grant for.
     kOperateNewSessionsKey,
+    // The agent the bot runs on: written through `bot.agent.set`, which checks
+    // it has a chat form.
+    kBotAgentKey,
   };
 
   /// Domains whose keys their own store writes (worktree setup) — not a

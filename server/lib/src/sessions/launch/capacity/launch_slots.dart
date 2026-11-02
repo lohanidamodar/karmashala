@@ -27,7 +27,7 @@ List<SlotHolder> liveSlotHolders({
   required bool Function(String sessionId) holds,
   required AgentActivityStatus? Function(String sessionId) activityOf,
 }) => [
-  for (final row in sessions.getClaimingLive())
+  for (final row in sessions.getClaimingLivePublic())
     if (!row.isArchived &&
         holds(row.id) &&
         activityOf(row.id) != AgentActivityStatus.idle)

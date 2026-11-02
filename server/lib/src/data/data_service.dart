@@ -10,6 +10,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_git/git.dart'
     show WorktreeSetup, WorktreeSetupReport;
+import 'package:karmashala_projects/karmashala_projects.dart' show Project;
 import 'package:karmashala_core/util.dart' as core show Clock;
 import 'package:karmashala_remote/remote.dart' show Capability, CapabilitySet;
 import 'package:karmashala_store/database.dart';
@@ -17,6 +18,7 @@ import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../activity/activity_log.dart';
 import '../artifacts/server_artifacts.dart';
+import '../bot/bot_view.dart';
 import '../pipelines/server_pipelines.dart' show PipelinesWork;
 import '../domain/uuid.dart';
 import '../sessions/session_input.dart';
@@ -28,6 +30,7 @@ import '../sessions/session_transcripts.dart';
 import '../stores/store_desk.dart';
 import 'agent_work.dart';
 import 'attention_work.dart';
+import 'bot_work.dart';
 import 'acp_agents_handler.dart';
 import 'automations_handler.dart';
 import 'conversations_handler.dart';
@@ -185,6 +188,10 @@ class DataService {
   /// fork, an end), set by `serve`; without it that work is refused
   /// `unavailable`.
   SessionWork? sessionWork;
+
+  /// The server's bot (`bot.*`), set by `serve`; without it that work is
+  /// refused `unavailable`.
+  BotWork? botWork;
 
   /// What agents showed in their threads (`artifacts.*`), set by `serve`;
   /// without it that work is refused `unavailable`.
@@ -558,8 +565,59 @@ class DataService {
     for (final watcher in List.of(watchers)) {
       watcher(batch.changes);
     }
+    for (final change in batch.changes) {
+      if (change case SessionRowChanged(:final session) when session.isBot) {
+        _botView = null;
+      } else if (change case ProjectChanged(
+        :final project,
+      ) when project.isBot) {
+        _botView = null;
+      }
+    }
+    final view = botView;
     for (final link in _links) {
-      if (link != origin && link._subscribed) link._deliver(batch);
+      if (link == origin || !link._subscribed) continue;
+      link._deliver(
+        DataChanges(
+          batch.revision,
+          List.unmodifiable(
+            view.changes(batch.changes, follower: link._followsBot),
+          ),
+        ),
+      );
+    }
+  }
+
+  BotView? _botView;
+
+  /// What a client may not see of the bot, kept between batches: a status
+  /// moves far more often than a bot row is born.
+  BotView get botView => _botView ??= BotView.of(_database);
+
+  /// Reads the bot's rows again, after the server made one.
+  void botRowsMoved() => _botView = null;
+
+  /// Why [origin] may not ask [request]: the bot's row and project are the
+  /// server's, and a client that learnt their ids is refused them.
+  void _refuseBotRows(DataSession? origin, DataRequest<Object?> request) {
+    if (origin == null) return;
+    final view = botView;
+    bool bot(Iterable<String> ids) => ids.any(view.rows.contains);
+    final refused = switch (request) {
+      SessionDelete(:final id) => bot([id]),
+      SessionsDeleteMany(:final sessionIds) => bot(sessionIds),
+      SessionsArchive(:final ids) => bot(ids),
+      SessionsUnarchive(:final ids) => bot(ids),
+      ProjectDelete(:final id) => view.projects.contains(id),
+      ProjectUpdate(:final id) => view.projects.contains(id),
+      ProjectCreate(:final projectKind) => projectKind == Project.botKind,
+      _ => false,
+    };
+    if (refused) {
+      throw const DataRefused.invalid(
+        "That is the server's own bot, which only the server changes. Clear "
+        'its conversation from its panel.',
+      );
     }
   }
 
@@ -583,6 +641,7 @@ class DataService {
         'grant administering this server',
       );
     }
+    _refuseBotRows(origin, request);
     final changes = <DataChange>[];
     final Object? result;
     try {
@@ -614,6 +673,7 @@ class DataService {
         EnvVaultRequest() ||
         GithubAccessRequest() ||
         SecretRequestWork() ||
+        BotRequest() ||
         StoreRequest() => throw DataRefused.invalid(
           '${request.kind} is answered asynchronously',
         ),
@@ -803,6 +863,9 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
 
   final void Function(DataChanges changes) _deliver;
   var _subscribed = false;
+
+  /// Whether this client asked to be told of the bot ([followBot]).
+  var _followsBot = false;
   var _signOfLife = 0;
   String? _focusedPaneId;
 
@@ -816,7 +879,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
   /// the disk ([isAnsweredLater]) is refused here: [handleLater] it.
   DataReply<R> handle<R>(DataRequest<R> request) {
     _refuseForPhone(request);
-    return _service._handle(this, request);
+    return _viewed(_service._handle(this, request));
   }
 
   /// Whether [request] is answered when its work is done rather than at
@@ -845,12 +908,54 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is EnvVaultRequest ||
       request is GithubAccessRequest ||
       request is SecretRequestWork ||
+      request is BotRequest ||
       request is StoreRequest;
+
+  /// [reply] as this link reads it ([BotView]).
+  DataReply<R> _viewed<R>(DataReply<R> reply) {
+    final view = _service.botView;
+    return DataReply(
+      view.result(reply.value, follower: _followsBot) as R,
+      reply.revision,
+      reply.changes.isEmpty
+          ? reply.changes
+          : List.unmodifiable(
+              view.changes(reply.changes, follower: _followsBot),
+            ),
+    );
+  }
+
+  /// From now on this link is told of the bot, and of what is standing now:
+  /// its status and the inbox with its items in. A link follows only while it
+  /// lives; nothing is kept for a client that goes.
+  void followBot() {
+    _followsBot = true;
+    final rows = _service.botView.rows;
+    tell([
+      for (final change
+          in _service.attentionWork?.greeting() ?? const <DataChange>[])
+        if (change is InboxChanged ||
+            (change is SessionStatusChanged &&
+                rows.contains(change.entry.openId)))
+          change,
+    ]);
+  }
 
   /// Answers any request: at once, or when its work is done. What agent work
   /// writes is told to every client, this one too, as it is written.
-  Future<DataReply<R>> handleLater<R>(DataRequest<R> request) async {
+  Future<DataReply<R>> handleLater<R>(DataRequest<R> request) async =>
+      _viewed(await _handleLater(request));
+
+  Future<DataReply<R>> _handleLater<R>(DataRequest<R> request) async {
     _refuseForPhone(request);
+    if (request case final BotRequest<Object?> asked) {
+      final work =
+          _service.botWork ??
+          (throw const DataRefused.unavailable('this server has no bot'));
+      if (request is BotSubscribe) followBot();
+      final result = await work.handle(asked, device: device);
+      return DataReply(result as R, _service._revision);
+    }
     if (request is ConversationsCatchUp) {
       final changed = await _service.conversations.catchUp();
       return DataReply(changed as R, _service._revision);
@@ -1171,8 +1276,9 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       ..._service._sessions.operateByDefaultGreeting(),
       for (final greeter in _service.greeters) ...greeter(),
     ];
-    if (greeting.isNotEmpty) {
-      _deliver(DataChanges(_service._revision, List.unmodifiable(greeting)));
+    final viewed = _service.botView.changes(greeting, follower: _followsBot);
+    if (viewed.isNotEmpty) {
+      _deliver(DataChanges(_service._revision, List.unmodifiable(viewed)));
     }
     return const DataAck();
   }
@@ -1242,6 +1348,10 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionEdit(:final patch) when patch.touchesOperatorGrant =>
       Capability.startSession,
     SessionsOperateByDefaultSet() => Capability.startSession,
+    // The bot starts and ends sessions at a person's word, and a Yes runs
+    // what it asked for.
+    BotApprovalAnswer() => Capability.approve,
+    BotOpen() || BotClear() || BotAgentSet() => Capability.startSession,
     SessionStart() ||
     SessionResume() ||
     SessionFork() ||

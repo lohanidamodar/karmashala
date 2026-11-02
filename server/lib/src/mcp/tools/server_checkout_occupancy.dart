@@ -53,7 +53,7 @@ List<CheckoutOccupant> serverCheckoutOccupants(
   return [
     for (final session in sessionsWritingIn(
       directory,
-      among: SessionDao(context.database).getAll(),
+      among: SessionDao(context.database).getPublic(),
       directoriesOf: directoriesOf,
       pathsMatch: samePath,
       mayWrite: mayWrite,

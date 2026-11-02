@@ -237,6 +237,16 @@ InterruptedTurnPlan planInterruptedTurns(
   final resume = <({String sessionId, OpenTurn turn})>[];
   final skipped = <InterruptedTurnSkip>[];
   for (final MapEntry(key: id, value: turn) in open.entries) {
+    // The bot takes a turn only when messaged or reported to, and a stop is
+    // nothing a person hears of: its next message resumes it.
+    if (sessionOf(id)?.isBot ?? false) {
+      skipped.add((
+        sessionId: id,
+        reason: 'it is the bot, which waits to be messaged',
+        forAPerson: false,
+      ));
+      continue;
+    }
     final reason = _refusal(
       sessionOf(id),
       turn,

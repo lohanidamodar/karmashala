@@ -41,7 +41,9 @@ class SessionSyncRows {
   /// Rows this sync wrote, over its life: the cost claims' numerator.
   int writes = 0;
 
-  List<Repository> repositories() => _repositories.getAll();
+  /// Where a conversation can be placed: never the bot's folder, whose row
+  /// names its own conversation.
+  List<Repository> repositories() => _repositories.getPublic();
 
   Repository? repository(String id) => _repositories.getById(id);
 

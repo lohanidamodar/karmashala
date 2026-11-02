@@ -15,6 +15,9 @@ const String kOperateNewSessionsKey = 'sessions.operate_by_default.v1';
 /// everything a person lists. Only the server writes it (`SessionDao.insertBot`).
 const String kSessionRoleBot = 'bot';
 
+/// The agent the bot runs on, by its chat-form id; absent is the default agent.
+const String kBotAgentKey = 'bot.agent.v1';
+
 class Session {
   const Session({
     required this.id,
