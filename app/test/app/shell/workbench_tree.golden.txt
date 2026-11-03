@@ -3917,6 +3917,8 @@ WorkbenchView
                                                                                                       Flexible
                                                                                                         BackgroundRunsStrip
                                                                                                           SizedBox
+                                                                                                      ChatAskLead
+                                                                                                        SizedBox
                                                                                                       ConstrainedBox
                                                                                                         Consumer
                                                                                                           MessageComposer
@@ -4183,12 +4185,6 @@ WorkbenchView
                                                                                                                                                                                                                                                                                             RichText
           _SessionBar
             Column
-              ColoredBox
-                SecretRequestCard
-                  SizedBox
-              ColoredBox
-                ApprovalRequestCard
-                  SizedBox
               _ZenDimmed
                 MouseRegion
                   Focus

@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/agents/application/agent_providers.dart'
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -205,18 +204,12 @@ class RecordingPromptAnswers implements PromptAnswering {
   AgentScreenMenu? menuOnScreen(String sessionId) => menu;
 }
 
-/// The chat with the ask dock under it, as the workbench mounts them.
+/// The chat, whose ask dock is over its own box (owner, 2026-11-03), as the
+/// workbench mounts it.
 Widget chatWithDock(ProviderContainer container) => UncontrolledProviderScope(
   container: container,
   child: const MaterialApp(
-    home: Scaffold(
-      body: Column(
-        children: [
-          Expanded(child: SessionTranscriptView(sessionId: 's1')),
-          ApprovalRequestCard(sessionId: 's1', docked: true),
-        ],
-      ),
-    ),
+    home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
   ),
 );
 

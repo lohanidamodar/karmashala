@@ -234,10 +234,41 @@ class _DockButton extends StatelessWidget {
       attention,
     );
     final touch = _Docked.touchOf(context);
-    // No key caps on a phone: there is no Enter or Esc to press.
-    final hint = touch ? null : keyHint;
     final more = detail;
-    final button = FilledButton(
+    final button = LayoutBuilder(
+      builder: (context, box) => _face(
+        context,
+        // No key caps on a phone: there is no Enter or Esc to press.
+        hint: touch || box.maxWidth < _dockKeyCapMinWidth ? null : keyHint,
+        touch: touch,
+        more: more,
+        primary: primary,
+        attention: attention,
+        ink: ink,
+        tones: tones,
+        scheme: scheme,
+        theme: theme,
+      ),
+    );
+    final message = tooltip;
+    return message == null || message.isEmpty
+        ? button
+        : Tooltip(message: message, child: button);
+  }
+
+  Widget _face(
+    BuildContext context, {
+    required String? hint,
+    required bool touch,
+    required String? more,
+    required bool primary,
+    required Color attention,
+    required Color ink,
+    required SurfaceTones tones,
+    required ColorScheme scheme,
+    required ThemeData theme,
+  }) {
+    return FilledButton(
       style: FilledButton.styleFrom(
         backgroundColor: primary ? attention : tones.selected,
         foregroundColor: primary ? ink : scheme.onSurface,
@@ -293,10 +324,6 @@ class _DockButton extends StatelessWidget {
         ],
       ),
     );
-    final message = tooltip;
-    return message == null || message.isEmpty
-        ? button
-        : Tooltip(message: message, child: button);
   }
 }
 

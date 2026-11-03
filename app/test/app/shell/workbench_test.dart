@@ -44,6 +44,7 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/launch.dart';
+import 'package:karmashala/src/features/sessions/presentation/message_composer.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
@@ -1405,9 +1406,7 @@ void main() {
     expect(find.byType(ApprovalRequestCard), findsNothing);
   });
 
-  testWidgets('the chat docks the ask above the pane\'s status line', (
-    tester,
-  ) async {
+  testWidgets('the chat docks the ask over its box', (tester) async {
     // The ask dock (UI overhaul spec §5): the amber "this session is blocked
     // on you" with the answers one click away.
     seedAPendingApproval();
@@ -1418,9 +1417,9 @@ void main() {
     await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
 
-    // The pane's status bar is the same in both views (owner, 2026-09-28), so
-    // the ask docks over it — one card, not a second copy in the chat. The
-    // way back to the terminal is the bar's own view switch.
+    // Over the box a reply is typed in (owner, 2026-11-03) — one card, not a
+    // second copy in the bar. The way back to the terminal is the bar's own
+    // view switch.
     final card = find.byType(ApprovalRequestCard);
     expect(card, findsOneWidget);
     expect(
@@ -1432,7 +1431,7 @@ void main() {
     expect(find.byTooltip('Terminal view'), findsOneWidget);
     expect(
       tester.getBottomLeft(card).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.byType(SessionAgentChip)).dy),
+      lessThanOrEqualTo(tester.getTopLeft(find.byType(MessageComposer)).dy),
     );
   });
 

@@ -111,23 +111,14 @@ class _SessionBar extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // **The ask dock** (spec §5, board N1): what the agent is waiting on,
-        // answerable here, floating on the pane's own surface just above the
-        // line that describes it — outside the bar, so the amber panel sits
-        // on the terminal's tone with a margin all round, in Zen as well.
-        // Nothing at all while it is not waiting. Chat only (owner,
-        // 2026-09-30): on the terminal the prompt is on screen to answer.
-        // An agent asking for a secret: answered here in either view, since
-        // a terminal has nowhere to type one.
-        if (sessionId != null)
+        // **The ask dock** (spec §5, board N1) is over the chat's own box
+        // (owner, 2026-11-03): ChatAskLead. On the terminal the prompt is on
+        // screen to answer (owner, 2026-09-30), but an agent asking for a
+        // secret is answered here, since a terminal has nowhere to type one.
+        if (sessionId != null && onTerminal)
           ColoredBox(
             color: tones.term,
             child: SecretRequestCard(sessionId: sessionId),
-          ),
-        if (sessionId != null && !onTerminal)
-          ColoredBox(
-            color: tones.term,
-            child: ApprovalRequestCard(sessionId: sessionId, docked: true),
           ),
         _ZenDimmed(
           dim: zen,

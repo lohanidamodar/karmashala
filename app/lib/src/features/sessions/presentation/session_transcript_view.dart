@@ -102,6 +102,7 @@ import 'stop_escalation_line.dart';
 import 'delegation_card.dart';
 import 'session_failed_state.dart';
 import 'background_runs_strip.dart';
+import 'chat_ask_lead.dart';
 
 part 'session_transcript_view/chat_messages.dart';
 part 'session_transcript_view/details.dart';
@@ -139,7 +140,8 @@ class SessionTranscriptView extends ConsumerStatefulWidget {
   /// so none of those are offered here, and it holds its grant already.
   final bool bot;
 
-  /// Drawn over the box, among the strips: the bot's approvals. Bounded by a
+  /// Drawn over the box, among the strips: what the session waits on — a
+  /// [ChatAskLead] unless given — or the bot's approvals. Bounded by a
   /// [Flexible] of its own when it can grow.
   final Widget? footerLead;
 

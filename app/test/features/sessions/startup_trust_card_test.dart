@@ -2,8 +2,9 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala/src/app/shell/workbench.dart'
+    show CompactWorkbenchScope;
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
-import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 
@@ -139,19 +140,16 @@ void main() {
   }
 }
 
-/// The chat with the dock under it: the desktop's, or the touch dock the
-/// compact workbench mounts on a phone.
-Widget _chat(ProviderContainer container, {required bool touch}) =>
-    UncontrolledProviderScope(
-      container: container,
-      child: MaterialApp(
-        home: Scaffold(
-          body: Column(
-            children: [
-              const Expanded(child: SessionTranscriptView(sessionId: 's1')),
-              ApprovalRequestCard(sessionId: 's1', docked: true, touch: touch),
-            ],
-          ),
-        ),
-      ),
-    );
+/// The chat with the dock over its box: the desktop's, or the touch dock of
+/// the compact workbench on a phone.
+Widget _chat(ProviderContainer container, {required bool touch}) {
+  // The phone's chat holds its box while a prompt is open, as the compact
+  // workbench mounts it.
+  final chat = SessionTranscriptView(sessionId: 's1', holdForPrompt: touch);
+  return UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      home: Scaffold(body: touch ? CompactWorkbenchScope(child: chat) : chat),
+    ),
+  );
+}

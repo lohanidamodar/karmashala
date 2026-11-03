@@ -81,18 +81,12 @@ class _CompactSessionBar extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ColoredBox(
-          color: tones.term,
-          child: SecretRequestCard(sessionId: sessionId, touch: true),
-        ),
-        if (!onTerminal)
+        // In the chat both are over its box (ChatAskLead); a terminal has
+        // nowhere to type a secret.
+        if (onTerminal)
           ColoredBox(
             color: tones.term,
-            child: ApprovalRequestCard(
-              sessionId: sessionId,
-              docked: true,
-              touch: true,
-            ),
+            child: SecretRequestCard(sessionId: sessionId, touch: true),
           ),
         Container(
           constraints: const BoxConstraints(minHeight: Touch.target),

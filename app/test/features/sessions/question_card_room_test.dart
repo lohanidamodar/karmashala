@@ -256,9 +256,12 @@ void main() {
       3000,
     );
     await tester.pumpAndSettle();
+    // The card under its call: scrolled away, the dock over the box holds
+    // the same answers, but the hint is a way back to the question itself.
+    final inlineSend = find.descendant(of: inline, matching: send);
     bool onScreen() =>
-        send.evaluate().isNotEmpty &&
-        (Offset.zero & size).contains(tester.getCenter(send));
+        inlineSend.evaluate().isNotEmpty &&
+        (Offset.zero & size).contains(tester.getCenter(inlineSend));
     expect(onScreen(), isFalse);
 
     // Where the hint is drawn: the disabled field under it takes no taps, so

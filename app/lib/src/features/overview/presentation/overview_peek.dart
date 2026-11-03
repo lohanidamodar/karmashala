@@ -69,61 +69,23 @@ part 'overview_peek/peek_views.dart';
 
 /// The session's own conversation, as its tab draws it: streaming, with its
 /// asks and its composer — which, for a session nothing runs, resumes it
-/// here rather than in a tab. A test puts a stand-in here.
+/// here rather than in a tab. What it waits on is over its box, as in a
+/// chat tab (ChatAskLead). A test puts a stand-in here.
 final overviewPeekChatProvider =
     Provider<Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)>(
-      (ref) => overviewPeekChat,
+      (ref) =>
+          (entry, seenUntil) => entry.native != null
+          ? SessionTranscriptView(
+              key: ValueKey('overview-peek-chat:${entry.id}'),
+              sessionId: entry.id,
+              seenUntil: seenUntil,
+              resumesInBackground: true,
+            )
+          : ImportedSessionView(
+              key: ValueKey('overview-peek-chat:${entry.id}'),
+              sessionId: entry.id,
+            ),
     );
-
-/// The real [overviewPeekChatProvider]: what the session waits on sits over
-/// its box, as the bot's approvals do.
-Widget overviewPeekChat(WorkspaceSessionEntry entry, DateTime? seenUntil) =>
-    entry.native != null
-    ? SessionTranscriptView(
-        key: ValueKey('overview-peek-chat:${entry.id}'),
-        sessionId: entry.id,
-        seenUntil: seenUntil,
-        resumesInBackground: true,
-        footerLead: OverviewPeekAsk(sessionId: entry.id),
-      )
-    : ImportedSessionView(
-        key: ValueKey('overview-peek-chat:${entry.id}'),
-        sessionId: entry.id,
-      );
-
-/// The share of the chat's footer what it waits on may take against the
-/// strips beside it, which take one each — as the bot's approvals.
-const _peekAskShare = 6;
-
-/// **What a peeked session waits on**, over the box it would otherwise be
-/// typed into (owner, 2026-11-03). A prompt read only off the screen —
-/// Codex's — has no call in the chat to hang under, and was in no card here;
-/// one drawn under its call already, the approval card steps aside for.
-class OverviewPeekAsk extends StatelessWidget {
-  const OverviewPeekAsk({required this.sessionId, super.key});
-
-  final String sessionId;
-
-  @override
-  Widget build(BuildContext context) => Flexible(
-    flex: _peekAskShare,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SecretRequestCard(sessionId: sessionId),
-        // Bounded: a tall ask scrolls in it rather than push the box away.
-        Flexible(
-          child: ApprovalRequestCard(
-            sessionId: sessionId,
-            docked: true,
-            touch: UiDensity.of(context).isTouch,
-          ),
-        ),
-      ],
-    ),
-  );
-}
 
 /// The pane that hosts [String] session's terminal on this machine, or null.
 final overviewSessionPaneProvider = Provider.autoDispose

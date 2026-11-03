@@ -33,6 +33,10 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
   /// The most of the footer the composer may take; the strips get the rest.
   static const _composerShare = 0.7;
 
+  /// The same while the chat's dock is over it: what it waits on gets the
+  /// room, and a long draft scrolls in the box.
+  static const _composerShareAsked = 0.35;
+
   /// The key of the message last sent and not yet taken, kept so a retry of
   /// the same words is the same request to the server; a new message mints
   /// its own.
@@ -235,7 +239,12 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
             // Flexible like the queue: with the keyboard up it gives way, and
             // the box stays in sight.
             Flexible(child: BackgroundRunsStrip(sessionId: widget.sessionId)),
-            ?widget.footerLead,
+            // What it waits on, just over where a reply is typed (owner,
+            // 2026-11-03); the bot answers its own approvals in its strip.
+            widget.footerLead ??
+                (widget.bot
+                    ? const SizedBox.shrink()
+                    : ChatAskLead(sessionId: widget.sessionId)),
             // Gives way like the strips: at a large text size it scrolls
             // rather than push the box away.
             if (ref.watch(stopEscalatedProvider(widget.sessionId)))
@@ -250,7 +259,13 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
             ConstrainedBox(
               // A long draft may not crowd an approval out of sight.
               constraints: BoxConstraints(
-                maxHeight: box.maxHeight * _composerShare,
+                maxHeight:
+                    box.maxHeight *
+                    (widget.footerLead == null &&
+                            !widget.bot &&
+                            ref.watch(chatAskShownProvider(widget.sessionId))
+                        ? _composerShareAsked
+                        : _composerShare),
               ),
               child: !widget.holdForPrompt
                   ? composer(prompted: false)

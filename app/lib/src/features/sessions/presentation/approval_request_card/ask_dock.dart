@@ -14,6 +14,10 @@ const double _dockButtonFontSize = 12.5;
 /// keeps the whole of them.
 const double _dockOptionMaxWidth = 320;
 
+/// Below this a button keeps its words and drops its key cap, which cannot
+/// shrink: a side panel's dock ran past its edge.
+const double _dockKeyCapMinWidth = 140;
+
 /// **The ask dock** (spec §5, board N1): an amber panel above the pane's
 /// status line saying who asks, where, in the agent's own words, and the
 /// answers one click away — then "Answer in the terminal" for anything the
