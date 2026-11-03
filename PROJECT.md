@@ -1570,7 +1570,11 @@ rest stays with the agent.
 
 The panel is one view, `BotPanelView`, framed as a floating panel at 600 and up
 and a phone sheet below; `botPanelProvider` is the one truth, so it survives
-navigation and a window crossing 600. The first message goes through its own
+navigation and a window crossing 600. Pinned (`botPinned`, this device's), it
+docks in a column of its own where the workbench keeps its floor
+(`ShellLayout.botFits`) and floats elsewhere and in Zen. It is then up from the
+start and takes the keys only when asked (`askKeys`), and its chord moves the
+keys in and out rather than closing it. The first message goes through its own
 box, because `SessionTranscriptView` needs a row: `bot.open`, then a send as any
 session. `SessionTranscriptView(bot: true)` offers no fork, rewind, Switch agent
 or `/operator`, and `footerLead` puts the approvals over the box. `revealSession`

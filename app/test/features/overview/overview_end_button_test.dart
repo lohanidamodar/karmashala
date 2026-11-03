@@ -8,8 +8,9 @@ import 'package:karmashala/src/features/sessions/application/host_lifecycle/host
 import 'mission_fixture.dart';
 
 /// **A family's Stop under a thumb** (round 120): always drawn, as tall as
-/// the ⋯, from a 360 px phone at 1.6x text without overflow; End is in the
-/// ⋯, not on the footer; an ended family has Archive in Stop's place.
+/// the ⋯, from a 360 px phone at 1.6x text without overflow; End is the
+/// footer's power button as well as in the ⋯; an ended family has Archive in
+/// Stop's place and no End.
 void main() {
   late Directory dir;
 
@@ -84,4 +85,68 @@ void main() {
       },
     );
   }
+
+  group('the power button', () {
+    Finder end(String id) => find.byKey(ValueKey('overview-family-end:$id'));
+
+    Future<void> board(WidgetTester tester, {required bool runs}) async {
+      await pumpMission(
+        tester,
+        fixture: MissionFixture.full(),
+        prefsDir: dir,
+        size: const Size(1440, 900),
+        overrides: [
+          sessionRunningOnHostProvider.overrideWithValue((_) => runs),
+        ],
+      );
+    }
+
+    Future<void> reveal(WidgetTester tester, Finder finder) async {
+      await tester.scrollUntilVisible(finder, 200, scrollable: hybridList);
+      await settleMission(tester);
+    }
+
+    testWidgets('on a running session it asks, and No ends nothing', (
+      tester,
+    ) async {
+      await board(tester, runs: true);
+      await reveal(tester, end('ks-r30'));
+      await tester.tap(end('ks-r30'));
+      await settleMission(tester);
+      expect(find.text('End session'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await settleMission(tester);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(end('ks-r30'), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('with nothing running it stays, disabled, and says why', (
+      tester,
+    ) async {
+      await board(tester, runs: false);
+      await reveal(tester, end('ks-r30'));
+      expect(tester.widget<OutlinedButton>(end('ks-r30')).onPressed, isNull);
+      expect(find.byTooltip('Nothing is running this session'), findsWidgets);
+      await unmountMission(tester);
+    });
+
+    testWidgets('an ended session has none, and keeps its place', (
+      tester,
+    ) async {
+      await board(tester, runs: false);
+      final archive = find.byWidgetPredicate(
+        (w) =>
+            w is OutlinedButton &&
+            w.key is ValueKey<String> &&
+            (w.key! as ValueKey<String>).value.startsWith(
+              'overview-done-archive:',
+            ),
+      );
+      await reveal(tester, archive.first);
+      final key = tester.widget(archive.first).key! as ValueKey<String>;
+      expect(end(key.value.split(':').last), findsNothing);
+      await unmountMission(tester);
+    });
+  });
 }

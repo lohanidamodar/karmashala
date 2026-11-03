@@ -39,9 +39,9 @@ class _SpyMessage extends OverviewQuickMessage {
   }
 }
 
-/// **A family card's footer** (rounds 119 and 120): the same ⋯, Stop or
-/// Archive, and Message in every state at the card's end; the card's tap
-/// opens the chat; End in ⋯; the ask marker opens the drawer; and Message
+/// **A family card's footer** (rounds 119 and 120): the same ⋯, End, Stop or
+/// Archive, and Message in every state at the card's end, all icon buttons;
+/// the card's tap opens the chat; the ask marker opens the drawer; and Message
 /// turning the footer into a one-line message box in place.
 void main() {
   late Directory dir;

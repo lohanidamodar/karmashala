@@ -16,6 +16,8 @@ import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_turn_interrupt.dart';
 import '../../sessions/application/session_turn_stop.dart';
+import '../../sessions/presentation/end_session_action.dart'
+    show sessionHasLiveProcess;
 import '../../sessions/presentation/stop_children_offer.dart';
 import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
@@ -777,9 +779,10 @@ class _SayLines extends ConsumerWidget {
   }
 }
 
-/// A family's footer, one fixed height and the same three slots in every
-/// state, so nothing moves sideways: the drag handle at its start, then, at
-/// the card's end, ⋯, Stop (Archive once it ended) and Message. Message
+/// A family's footer, one fixed height and the same places in every state,
+/// so nothing moves sideways: the drag handle at its start, then, at the
+/// card's end, icon buttons for ⋯, End, Stop (Archive once it ended) and
+/// Message. End asks first, since Stop beside it only interrupts. Message
 /// turns the footer itself into a one-line message box, the same height, so
 /// the card never resizes. Opening the chat is the card's own tap.
 class _FamilyFooter extends ConsumerStatefulWidget {
@@ -834,14 +837,11 @@ class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
     final scheme = Theme.of(context).colorScheme;
     final density = UiDensity.of(context);
     final compact = density.compactButton;
-    final scaler = MediaQuery.textScalerOf(context);
-    final messageSlot = WidthClass.scaleBreakpoint(
-      Chrome.familyPrimarySlot,
-      scaler,
-    );
-    final sideSlot = WidthClass.scaleBreakpoint(
-      Chrome.familySecondarySlot,
-      scaler,
+    // Under a thumb the face stays compact, and as wide as its target.
+    final size = density.isTouch ? Touch.target : Chrome.familyAction;
+    final face = _iconFace(
+      compact,
+      Size(size, density.isTouch ? Touch.compactControl : size),
     );
     final drag = !density.isTouch && laneKey != null && laneRoots.length > 1;
     final caps = ref.watch(capabilitiesProvider);
@@ -854,8 +854,6 @@ class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
         ? kStartNotGranted
         : null;
     final stop = _stopState(card, caps);
-    Widget label(String text) =>
-        Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
     final menu = Builder(
       builder: (button) => Tooltip(
         message: 'More',
@@ -863,10 +861,7 @@ class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
         // as text.
         child: OutlinedButton(
           key: ValueKey('overview-card-menu:${card.id}'),
-          style: (compact ?? const ButtonStyle()).copyWith(
-            padding: const WidgetStatePropertyAll(
-              EdgeInsets.symmetric(horizontal: Insets.sm),
-            ),
+          style: face.copyWith(
             foregroundColor: WidgetStatePropertyAll(scheme.onSurfaceVariant),
           ),
           onPressed: () => showOverviewFamilyMenu(
@@ -884,143 +879,111 @@ class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
         ),
       ),
     );
+    Widget icon(IconData glyph, String label) =>
+        Icon(glyph, size: density.iconSize(Chrome.icon), semanticLabel: label);
+    final Widget secondary;
+    if (ended) {
+      final family = node.children.isNotEmpty;
+      final left = overviewFamilyToArchive(node);
+      secondary = OverviewArchiveGate(
+        sessionId: card.id,
+        builder: (resuming) => Tooltip(
+          message: family ? 'Archive the family' : 'Archive',
+          child: OutlinedButton(
+            key: ValueKey(
+              family
+                  ? 'overview-archive-family:${card.id}'
+                  : 'overview-done-archive:${card.id}',
+            ),
+            style: face,
+            onPressed: resuming || left.isEmpty
+                ? null
+                : () =>
+                      unawaited(archiveFamilyFromDashboard(context, ref, node)),
+            child: icon(AppIcons.tray, 'Archive'),
+          ),
+        ),
+      );
+    } else {
+      secondary = Tooltip(
+        message: stop.why ?? 'Stop this turn; the session keeps running',
+        child: OutlinedButton(
+          key: ValueKey('overview-interrupt:${card.id}'),
+          style: face,
+          onPressed: stop.why == null ? () => _interrupt(context, card) : null,
+          child: icon(AppIcons.stop, 'Stop'),
+        ),
+      );
+    }
+    // Stays in its place with nothing to end, so nothing beside it moves;
+    // an ended session leaves the place empty.
+    final runs = !ended && sessionHasLiveProcess(ref, card.id);
+    final end = Tooltip(
+      message: runs ? 'End session' : 'Nothing is running this session',
+      child: OutlinedButton(
+        key: ValueKey('overview-family-end:${card.id}'),
+        style: face.copyWith(
+          foregroundColor: WidgetStatePropertyAll(scheme.onSurfaceVariant),
+        ),
+        onPressed: runs
+            ? () =>
+                  unawaited(endFromDashboard(context, ref, card, confirm: true))
+            : null,
+        child: icon(AppIcons.power, 'End session'),
+      ),
+    );
+    final send = Tooltip(
+      message: noMessage ?? 'Message',
+      child: FilledButton.tonal(
+        key: ValueKey('overview-family-message:${card.id}'),
+        style: face,
+        onPressed: noMessage == null
+            ? () => setState(() => _replying = true)
+            : null,
+        child: icon(AppIcons.chatCircle, 'Message'),
+      ),
+    );
+    Widget place(Widget? child, {Key? key}) => SizedBox.square(
+      key: key,
+      dimension: size,
+      child: child == null
+          ? null
+          : Align(alignment: AlignmentDirectional.centerEnd, child: child),
+    );
+    const gap = SizedBox(width: Insets.xs);
     return SizedBox(
       height: Touch.target,
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final lead = drag ? Chrome.control : 0.0;
-          // ⋯'s face, its gaps and the two slots; where they do not fit, as
-          // on a phone at large text, Stop and Archive draw as icons and
-          // Message takes what is left.
-          const gaps = Insets.xs * 2;
-          final room = box.maxWidth - lead - Touch.target - gaps;
-          final iconOnly = messageSlot + sideSlot > room;
-          final side = iconOnly ? Touch.target : sideSlot;
-          final message = (iconOnly ? room - side : messageSlot).clamp(
-            0.0,
-            messageSlot,
-          );
-          final Widget secondary;
-          if (ended) {
-            final family = node.children.isNotEmpty;
-            final left = overviewFamilyToArchive(node);
-            secondary = OverviewArchiveGate(
-              sessionId: card.id,
-              builder: (resuming) {
-                final key = ValueKey(
-                  family
-                      ? 'overview-archive-family:${card.id}'
-                      : 'overview-done-archive:${card.id}',
-                );
-                final onPressed = resuming || left.isEmpty
-                    ? null
-                    : () => unawaited(
-                        archiveFamilyFromDashboard(context, ref, node),
-                      );
-                return Tooltip(
-                  message: family ? 'Archive the family' : 'Archive',
-                  child: iconOnly
-                      ? OutlinedButton(
-                          key: key,
-                          style: _iconFace(compact),
-                          onPressed: onPressed,
-                          child: Icon(
-                            AppIcons.tray,
-                            size: density.iconSize(Chrome.icon),
-                            semanticLabel: 'Archive',
-                          ),
-                        )
-                      : OutlinedButton(
-                          key: key,
-                          style: compact,
-                          onPressed: onPressed,
-                          child: label('Archive'),
-                        ),
-                );
-              },
-            );
-          } else {
-            final key = ValueKey('overview-interrupt:${card.id}');
-            final onPressed = stop.why == null
-                ? () => _interrupt(context, card)
-                : null;
-            secondary = Tooltip(
-              message: stop.why ?? 'Stop this turn; the session keeps running',
-              child: iconOnly
-                  ? OutlinedButton(
-                      key: key,
-                      style: _iconFace(compact),
-                      onPressed: onPressed,
-                      child: Icon(
-                        AppIcons.stop,
-                        size: density.iconSize(Chrome.icon),
-                        semanticLabel: 'Stop',
-                      ),
-                    )
-                  : OutlinedButton(
-                      key: key,
-                      style: compact,
-                      onPressed: onPressed,
-                      child: label('Stop'),
-                    ),
-            );
-          }
-          final send = FilledButton.tonal(
-            key: ValueKey('overview-family-message:${card.id}'),
-            style: compact,
-            onPressed: noMessage == null
-                ? () => setState(() => _replying = true)
-                : null,
-            child: label('Message'),
-          );
-          return Row(
-            children: [
-              SizedBox(
-                width: lead,
-                child: drag
-                    ? Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: _DragHandle(card: card),
-                      )
-                    : null,
+      child: Row(
+        children: [
+          if (drag)
+            SizedBox(
+              width: Chrome.control,
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: _DragHandle(card: card),
               ),
-              const Spacer(),
-              menu,
-              const SizedBox(width: Insets.xs),
-              SizedBox(
-                key: ValueKey('overview-family-secondary:${card.id}'),
-                width: side,
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: SizedBox(width: side, child: secondary),
-                ),
-              ),
-              const SizedBox(width: Insets.xs),
-              SizedBox(
-                key: ValueKey('overview-family-primary:${card.id}'),
-                width: message,
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: SizedBox(
-                    width: message,
-                    child: noMessage == null
-                        ? send
-                        : Tooltip(message: noMessage, child: send),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+            ),
+          const Spacer(),
+          place(menu),
+          gap,
+          place(ended ? null : end),
+          gap,
+          place(
+            secondary,
+            key: ValueKey('overview-family-secondary:${card.id}'),
+          ),
+          gap,
+          place(send, key: ValueKey('overview-family-primary:${card.id}')),
+        ],
       ),
     );
   }
 
-  /// A Stop or Archive drawn as its icon alone: a square face.
-  ButtonStyle _iconFace(ButtonStyle? compact) =>
+  /// A footer button: its icon on a face of [size].
+  ButtonStyle _iconFace(ButtonStyle? compact, Size size) =>
       (compact ?? const ButtonStyle()).copyWith(
         padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-        minimumSize: const WidgetStatePropertyAll(Size.square(Chrome.control)),
+        minimumSize: WidgetStatePropertyAll(size),
       );
 
   /// Whether Stop may interrupt [card] now, and why not when it may not.
