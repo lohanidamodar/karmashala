@@ -122,6 +122,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     setState(() => _panelDrag = null);
   }
 
+  /// Told as the room for the context panel is, and for the same reason.
+  void _reportBotDocked(bool docked) {
+    if (ref.read(botDockedProvider) == docked) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(botDockedProvider.notifier).report(docked: docked);
+    });
+  }
+
   /// The shell is the only thing that knows the window's width, and a provider
   /// cannot be written mid-build, so the reading lands after the frame.
   void _reportPanelRoom(bool hasRoom) {
@@ -371,6 +379,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // rotation between the two.
     if (ShellWidth.of(MediaQuery.sizeOf(context).width).isCompact) {
       _trackWidthClass(ShellWidth.compact);
+      _reportBotDocked(false);
       return const ShellShortcuts(
         child: BotPhoneSheetHost(child: PhoneShell()),
       );
@@ -379,6 +388,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     final botOpen =
         ref.watch(botPanelProvider) &&
         ref.watch(capabilitiesProvider.select((c) => c.bot));
+    final botPinned = ref.watch(
+      settingsControllerProvider.select((s) => s.botPinned),
+    );
     // The macOS menu bar is mounted above this, in `KarmashalaApp`.
     return ShellShortcuts(
       child: Scaffold(
@@ -397,8 +409,21 @@ class _AppShellState extends ConsumerState<AppShell> {
               // widths, where it is a menu in the title bar; what is left is
               // what the sidebar, workbench and panel share.
               final stripShown = !zen && !width.isCompact;
-              final available =
+              final beside =
                   constraints.maxWidth - (stripShown ? kActivityStripWidth : 0);
+              // A pinned bot docks where the workbench keeps its floor beside
+              // it and the sidebar; elsewhere, and in Zen, it floats.
+              final botDocked =
+                  botOpen &&
+                  botPinned &&
+                  !zen &&
+                  !overlays &&
+                  ShellLayout.botFits(
+                    available: beside,
+                    explorerColumn: shell.explorerPaneVisible,
+                  );
+              _reportBotDocked(botDocked);
+              final available = beside - (botDocked ? Chrome.botPanelWidth : 0);
               // Drawn closed on the layout that folds them, so a narrowing
               // window never flashes a sheet it is about to take away.
               final sidebarOpen = !folding && shell.explorerPaneVisible;
@@ -449,6 +474,12 @@ class _AppShellState extends ConsumerState<AppShell> {
                           setState(() => _panelDrag = layout.clampPanel(value)),
                       onResizeEnd: _savePanelWidth,
                     ),
+                  if (botDocked)
+                    const SizedBox(
+                      key: ValueKey('shell-bot-dock'),
+                      width: Chrome.botPanelWidth,
+                      child: BotDesktopPanel(docked: true),
+                    ),
                 ],
               );
               return Stack(
@@ -469,7 +500,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                         panelWidth: _panelDrag ?? panelWidth,
                       ),
                     ),
-                  if (botOpen)
+                  if (botOpen && !botDocked)
                     Positioned(
                       key: const ValueKey('shell-bot'),
                       top: Insets.sm,
@@ -479,7 +510,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                         Chrome.botPanelWidth,
                         constraints.maxWidth - Insets.lg,
                       ),
-                      child: const BotFloatingPanel(),
+                      child: const BotDesktopPanel(),
                     ),
                   // Asks from sessions not on screen float at the
                   // workbench's top right corner (board N1), clear of the
@@ -661,6 +692,18 @@ class ShellLayout {
       panelWidth: panel,
       panelMaxWidth: panelMaxWidth,
     );
+  }
+
+  /// Whether the bot's column leaves the workbench its floor, beside the
+  /// sidebar at its least.
+  static bool botFits({
+    required double available,
+    required bool explorerColumn,
+  }) {
+    final explorer = explorerColumn
+        ? explorerMin + ResizeHandle.thickness
+        : 0.0;
+    return available - explorer - Chrome.botPanelWidth >= workbenchFloor;
   }
 
   /// Whether an open context panel would get a body beside the workbench floor.

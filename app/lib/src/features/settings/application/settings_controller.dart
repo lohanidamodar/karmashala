@@ -90,6 +90,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Docks the bot's panel beside the workbench, or floats it again.
+  void setBotPinned(bool value) {
+    state = state.copyWith(botPinned: value);
+    _save();
+  }
+
   /// Which agents the Explorer shows; empty is "every agent". Written sorted,
   /// so a reordered identical choice is not a change `Settings ==` reports.
   void setExplorerAgentFilter(Set<String> agentIds) {

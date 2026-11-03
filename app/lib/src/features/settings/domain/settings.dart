@@ -144,6 +144,7 @@ class Settings {
     this.quietAfterMinutes = defaultQuietAfterMinutes,
     this.notesEnabled = true,
     this.hideEmptySections = true,
+    this.botPinned = false,
     this.explorerAgentFilter = const [],
     this.hiddenSidePanelSurfaces = const [],
     this.explorerProjectDetails = true,
@@ -401,6 +402,10 @@ class Settings {
   /// Whether the Explorer folds away a saved section that is currently empty.
   final bool hideEmptySections;
 
+  /// The bot's panel docks beside the workbench, rather than floating over
+  /// it, where the window has room. This device's choice.
+  final bool botPinned;
+
   /// The `AgentDescriptor.id`s the Explorer is narrowed to, empty for "every
   /// agent". Persisted, so the header names what it is holding back.
   final List<String> explorerAgentFilter;
@@ -533,6 +538,7 @@ class Settings {
     int? quietAfterMinutes,
     bool? notesEnabled,
     bool? hideEmptySections,
+    bool? botPinned,
     List<String>? explorerAgentFilter,
     List<String>? hiddenSidePanelSurfaces,
     bool? explorerProjectDetails,
@@ -629,6 +635,7 @@ class Settings {
     quietAfterMinutes: quietAfterMinutes ?? this.quietAfterMinutes,
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
+    botPinned: botPinned ?? this.botPinned,
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
     hiddenSidePanelSurfaces:
         hiddenSidePanelSurfaces ?? this.hiddenSidePanelSurfaces,
@@ -741,6 +748,7 @@ class Settings {
     'quietAfterMinutes',
     'notesEnabled',
     'hideEmptySections',
+    'botPinned',
     'explorerAgentFilter',
     'hiddenSidePanelSurfaces',
     'explorerProjectDetails',
@@ -829,6 +837,7 @@ class Settings {
     'quietAfterMinutes': quietAfterMinutes,
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
+    'botPinned': botPinned,
     'explorerAgentFilter': explorerAgentFilter,
     if (hiddenSidePanelSurfaces.isNotEmpty)
       'hiddenSidePanelSurfaces': hiddenSidePanelSurfaces,
@@ -1064,6 +1073,7 @@ class Settings {
       notesEnabled: json['notesEnabled'] is bool
           ? json['notesEnabled'] as bool
           : true,
+      botPinned: json['botPinned'] == true,
       hideEmptySections: json['hideEmptySections'] is bool
           ? json['hideEmptySections'] as bool
           : true,
@@ -1165,6 +1175,7 @@ class Settings {
       other.quietAfterMinutes == quietAfterMinutes &&
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
+      other.botPinned == botPinned &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
       _listEquals(other.hiddenSidePanelSurfaces, hiddenSidePanelSurfaces) &&
       other.explorerProjectDetails == explorerProjectDetails &&
@@ -1251,7 +1262,7 @@ class Settings {
             resumeMessages.entries.map((e) => Object.hash(e.key, e.value)),
           ),
         ),
-        hideEmptySections,
+        Object.hash(hideEmptySections, botPinned),
         Object.hashAll(explorerAgentFilter),
         Object.hashAll(hiddenSidePanelSurfaces),
         explorerProjectDetails,

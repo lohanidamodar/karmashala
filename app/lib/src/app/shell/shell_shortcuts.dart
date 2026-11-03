@@ -564,7 +564,7 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           OpenBotIntent: CallbackAction<OpenBotIntent>(
             onInvoke: (intent) {
               if (ref.read(capabilitiesProvider).bot) {
-                ref.read(botPanelProvider.notifier).toggle();
+                ref.read(botPanelProvider.notifier).chord();
               }
               return null;
             },

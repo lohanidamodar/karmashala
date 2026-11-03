@@ -31,7 +31,7 @@ Future<void> pumpHost(WidgetTester tester, ProviderContainer container) async {
                             bottom: 0,
                             right: 0,
                             width: Chrome.botPanelWidth,
-                            child: BotFloatingPanel(),
+                            child: BotDesktopPanel(),
                           ),
                       ],
                     )
@@ -54,7 +54,7 @@ void main() {
     bool typingInPanel() {
       final context = FocusManager.instance.primaryFocus?.context;
       return context?.findAncestorWidgetOfExactType<EditableText>() != null &&
-          context?.findAncestorWidgetOfExactType<BotFloatingPanel>() != null;
+          context?.findAncestorWidgetOfExactType<BotDesktopPanel>() != null;
     }
 
     testWidgets('the box of an empty bot takes them as the panel opens', (

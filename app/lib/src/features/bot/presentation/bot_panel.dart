@@ -16,6 +16,7 @@ import '../../notes/application/composer_draft.dart';
 import '../../sessions/presentation/message_composer.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
 import '../../sessions/presentation/shown_chat.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_catalog.dart'
     show SettingsSectionId;
 import '../application/bot_providers.dart';
@@ -52,7 +53,7 @@ class BotPanelView extends ConsumerWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _BotHeader(onClose: onClose),
+        _BotHeader(onClose: onClose, phone: phone),
         const Divider(height: 1),
         Expanded(
           child: _BotBody(phone: phone, onClose: onClose),
@@ -223,6 +224,7 @@ class _BotEmptyState extends ConsumerState<_BotEmpty> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(botBoxKeysProvider, (_, _) => _focus.value++);
     final caps = ref.watch(capabilitiesProvider);
     final refusal = !caps.maySend
         ? kPromptNotGranted
@@ -271,11 +273,15 @@ class _BotEmptyState extends ConsumerState<_BotEmpty> {
           key: const ValueKey('bot-first-message'),
           controller: _box,
           focusRequests: _focus,
-          takesKeysOnOpen: () => true,
+          takesKeysOnOpen: ref.read(botPanelProvider.notifier).takeKeys,
           attaches: false,
           enabled: refusal == null,
           hintText: refusal ?? 'Ask the bot…',
-          onSend: ref.read(botActionsProvider).sendFirst,
+          // The conversation's box replaces this one, and takes the keys.
+          onSend: (words) {
+            ref.read(botPanelProvider.notifier).askKeys();
+            return ref.read(botActionsProvider).sendFirst(words);
+          },
         ),
       ],
     );
@@ -283,9 +289,10 @@ class _BotEmptyState extends ConsumerState<_BotEmpty> {
 }
 
 class _BotHeader extends ConsumerWidget {
-  const _BotHeader({required this.onClose});
+  const _BotHeader({required this.onClose, required this.phone});
 
   final VoidCallback onClose;
+  final bool phone;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -319,6 +326,7 @@ class _BotHeader extends ConsumerWidget {
               child: BotAgentSwitcher(),
             ),
           ),
+          if (!phone) const _BotPin(),
           const _BotOverflow(),
           IconButton(
             key: const ValueKey('bot-close'),
@@ -330,6 +338,29 @@ class _BotHeader extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Docks the panel beside the workbench, or floats it again.
+class _BotPin extends ConsumerWidget {
+  const _BotPin();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final density = UiDensity.of(context);
+    final pinned = ref.watch(
+      settingsControllerProvider.select((s) => s.botPinned),
+    );
+    return IconButton(
+      key: const ValueKey('bot-pin'),
+      tooltip: pinned ? 'Unpin the bot' : 'Pin the bot to the side',
+      isSelected: pinned,
+      visualDensity: density.controlDensity,
+      iconSize: density.icon,
+      icon: Icon(pinned ? AppIcons.pushPinFill : AppIcons.pushPin),
+      onPressed: () =>
+          ref.read(settingsControllerProvider.notifier).setBotPinned(!pinned),
     );
   }
 }
@@ -352,6 +383,7 @@ class _BotOverflow extends ConsumerWidget {
       destructive: true,
     );
     if (!yes) return;
+    ref.read(botPanelProvider.notifier).askKeys();
     try {
       await actions.clear();
     } on DataRefused catch (refusal) {

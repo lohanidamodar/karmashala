@@ -8,18 +8,21 @@ import '../application/bot_providers.dart';
 import 'bot_panel.dart';
 
 /// **The desktop's bot**: a floating panel at the right of the window, over
-/// whatever the person is doing. Nothing under it is held back, and it stays
-/// up across navigation until closed. The shell places it.
-class BotFloatingPanel extends ConsumerStatefulWidget {
-  const BotFloatingPanel({super.key});
+/// whatever the person is doing, or with [docked] a column beside it. Nothing
+/// under it is held back, and it stays up across navigation until closed. The
+/// shell places it.
+class BotDesktopPanel extends ConsumerStatefulWidget {
+  const BotDesktopPanel({this.docked = false, super.key});
+
+  final bool docked;
 
   @override
-  ConsumerState<BotFloatingPanel> createState() => _BotFloatingPanelState();
+  ConsumerState<BotDesktopPanel> createState() => _BotDesktopPanelState();
 }
 
-class _BotFloatingPanelState extends ConsumerState<BotFloatingPanel> {
+class _BotDesktopPanelState extends ConsumerState<BotDesktopPanel> {
   /// What had the keys before the box took them: a terminal, the board.
-  final _before = FocusManager.instance.primaryFocus;
+  FocusNode? _before = FocusManager.instance.primaryFocus;
   final _inside = FocusNode(
     debugLabel: 'bot-panel',
     canRequestFocus: false,
@@ -46,8 +49,37 @@ class _BotFloatingPanelState extends ConsumerState<BotFloatingPanel> {
     super.dispose();
   }
 
+  /// The chord on a docked panel: in to the box, or back to what had the keys.
+  void _chord() {
+    if (!_inside.hasFocus) {
+      _before = FocusManager.instance.primaryFocus;
+      ref.read(botBoxKeysProvider.notifier).take();
+      return;
+    }
+    final before = _before;
+    if (before?.context != null) {
+      before!.requestFocus();
+    } else {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(botChordProvider, (_, _) => _chord());
+    final view = Focus(
+      focusNode: _inside,
+      child: BotPanelView(onClose: ref.read(botPanelProvider.notifier).close),
+    );
+    final scheme = Theme.of(context).colorScheme;
+    if (widget.docked) {
+      return Material(
+        key: const ValueKey('bot-panel'),
+        color: scheme.surface,
+        shape: Border(left: BorderSide(color: scheme.outlineVariant)),
+        child: view,
+      );
+    }
     final tones = SurfaceTones.of(context);
     return DecoratedBox(
       key: const ValueKey('bot-panel'),
@@ -56,18 +88,13 @@ class _BotFloatingPanelState extends ConsumerState<BotFloatingPanel> {
         boxShadow: Shadows.floating,
       ),
       child: Material(
-        color: Theme.of(context).colorScheme.surface,
+        color: scheme.surface,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.lg),
           side: BorderSide(color: tones.floatingLine),
         ),
-        child: Focus(
-          focusNode: _inside,
-          child: BotPanelView(
-            onClose: ref.read(botPanelProvider.notifier).close,
-          ),
-        ),
+        child: view,
       ),
     );
   }

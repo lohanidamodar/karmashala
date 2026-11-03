@@ -14,6 +14,7 @@ import '../../notifications/application/attention_inbox.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_input.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../../settings/application/settings_controller.dart';
 
 final _log = AppLogger.named('bot');
 
@@ -132,16 +133,78 @@ final botTurnRunningProvider = Provider<bool>((ref) {
 
 /// Whether the panel is up. A provider, not widget state, so it stays open
 /// across navigation and across a window crossing 600 px.
+///
+/// A pinned panel is up from the start, its box leaving the keys where they
+/// are: only a person opening it, or a box replacing the one they typed in,
+/// asks for them ([askKeys]).
 class BotPanel extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() => ref.read(settingsControllerProvider).botPinned;
 
-  void open() => state = true;
+  var _keysAsked = false;
+
+  void open() {
+    if (!state) askKeys();
+    state = true;
+  }
+
   void close() => state = false;
-  void toggle() => state = !state;
+
+  void toggle() => state ? close() : open();
+
+  /// The next box up takes the keys.
+  void askKeys() => _keysAsked = true;
+
+  /// Whether a box should take the keys; the first to ask spends it.
+  bool takeKeys() {
+    final asked = _keysAsked;
+    _keysAsked = false;
+    return asked;
+  }
+
+  /// The bot's chord. A docked panel stays where it is, so the chord moves
+  /// the keys in and out of it; a floating one comes and goes.
+  void chord() {
+    if (ref.read(botDockedProvider)) {
+      ref.read(botChordProvider.notifier).press();
+    } else {
+      toggle();
+    }
+  }
 }
 
 final botPanelProvider = NotifierProvider<BotPanel, bool>(BotPanel.new);
+
+/// Whether the panel is docked now: reported by the shell, the only thing
+/// that knows the window's width.
+class BotDocked extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void report({required bool docked}) => state = docked;
+}
+
+final botDockedProvider = NotifierProvider<BotDocked, bool>(BotDocked.new);
+
+/// Ticks for the docked panel: the chord was pressed.
+class BotChord extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void press() => state++;
+}
+
+final botChordProvider = NotifierProvider<BotChord, int>(BotChord.new);
+
+/// Ticks for whichever box the panel draws: take the keys.
+class BotBoxKeys extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void take() => state++;
+}
+
+final botBoxKeysProvider = NotifierProvider<BotBoxKeys, int>(BotBoxKeys.new);
 
 /// Whether the first message is on its way: the box it was typed in stays up
 /// until it has gone, and keeps the words if it does not.

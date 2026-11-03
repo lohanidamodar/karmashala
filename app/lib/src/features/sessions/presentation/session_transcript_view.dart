@@ -70,6 +70,7 @@ import '../application/session_turn_stop.dart';
 import 'package:agent_cli/descriptors.dart'
     show AgentActivityStatus, AgentStatusReport, AgentWorkingDetail;
 import '../application/session_ui_providers.dart';
+import '../../bot/application/bot_providers.dart';
 import '../../media/application/session_media_providers.dart'
     show sessionImageFetchProvider;
 import '../data/server_transcripts.dart';
@@ -209,17 +210,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
   @override
   final _composerFocus = ValueNotifier<int>(0);
 
-  /// The bot's box takes the keys when its panel opens, not each time the
-  /// footer is rebuilt under whatever the person went on to do.
-  var _botOpened = false;
-
   @override
   bool _takesKeysOnOpen() {
-    if (widget.bot) {
-      final first = !_botOpened;
-      _botOpened = true;
-      return first;
-    }
+    if (widget.bot) return ref.read(botPanelProvider.notifier).takeKeys();
     final asked = ref
         .read(composerKeysAskProvider.notifier)
         .take(widget.sessionId);
@@ -648,6 +641,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
     // Kept alive while the view is: Esc reads it, and a read of a provider
     // nobody holds would start from "loading".
     ref.listen(sessionTurnWorkingProvider(widget.sessionId), (_, _) {});
+    ref.listen(botBoxKeysProvider, (_, _) {
+      if (widget.bot) _composerFocus.value++;
+    });
     // Its card opened again, this box already up: after the frame, as the
     // board takes the keys when a card is opened.
     ref.listen(composerKeysAskProvider, (_, asked) {
