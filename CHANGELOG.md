@@ -17,6 +17,13 @@ installs claim the same version name.
 
 ---
 
+## 1.34.20 — 2026-11-03 (build 87)
+
+- **Opening a chat puts you in its box.** A chat opened from a dashboard card, and the bot opened by its button, shortcut or quick open, focus the message box. Walking sessions with ↑ and ↓ and a session waiting on an answer keep the dashboard's keys. Esc in an empty box closes the chat, and it stops a running turn only once something was typed. Closing the bot gives the keys back to what had them. Phones are unchanged.
+- **The whole card opens its chat.** A click on a dashboard card's footer gaps or padding opens its chat, as the title does, rather than closing the open one; a right click or long press there opens the card's menu.
+- **The card's footer is icon buttons, with End on it.** ⋯, a power button for End, Stop or Archive, and Message sit in fixed places. End asks first, is disabled with its reason when nothing runs the session, and is gone once the session ended.
+- **The bot can be pinned.** The pin in its header docks it as a column on the right where the window has room; it floats elsewhere and in Zen. Pinned, it is up from the start without taking the keys, and Ctrl+Shift+M moves the keys into its box and back. The choice is per device.
+
 ## 1.34.19 — 2026-11-03 (build 86)
 
 - **A bot to talk to.** Each server has one bot and one lasting conversation, reached from the Bot button, Ctrl+Shift+M or "Open bot" in quick open, as a panel on desktop and a sheet on a phone. It answers about your sessions, does small things itself and starts normal sessions for bigger work, and it never appears on the dashboard or in session lists. It runs on an agent's chat form, chosen in Settings or switched from the panel, and the conversation carries on across a switch. Clear starts a new conversation and keeps its MEMORY.md.
