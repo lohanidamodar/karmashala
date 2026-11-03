@@ -116,6 +116,86 @@ void main() {
     expect(evidence.deny, isNull);
   });
 
+  group('an approval drawn from a call', () {
+    final since = DateTime.utc(2026, 11, 3, 3, 18, 54);
+    AgentStatusReport askingAbout(String call) =>
+        _asking(AgentWaitKind.approval).withAsk(
+          toolAsk: AgentToolAsk(
+            toolName: 'Bash',
+            input: const {'command': 'ls'},
+            at: since,
+            toolUseId: call,
+          ),
+          waitingSince: since,
+        );
+
+    // A tall prompt is redrawn with other rows above its choices, and a
+    // resize wraps them anew: the screen's id moves while the call's stays
+    // (session f3976069, 2026-11-03).
+    test('answers its prompt however the screen has redrawn it', () async {
+      final terminals = _Terminals(
+        claude,
+        FixtureMenuScreen.fixture('claude-code-trust-prompt', marker: '❯'),
+      )..status = askingAbout('toolu_1');
+
+      final answer = await answersOver(terminals).answer(
+        ApprovalAnswerRequest(
+          sessionId: 's1',
+          approve: true,
+          ask: PromptAsk(
+            waitingSince: since,
+            toolUseId: 'toolu_1',
+            menuId: 'the-rows-it-was-drawn-with',
+          ),
+        ),
+      );
+
+      expect(answer.answered, 'Yes, I trust this folder');
+    });
+
+    test('is refused once the status names another call', () async {
+      final terminals = _Terminals(
+        claude,
+        FixtureMenuScreen.fixture('claude-code-trust-prompt', marker: '❯'),
+      )..status = askingAbout('toolu_2');
+
+      await expectLater(
+        answersOver(terminals).answer(
+          ApprovalAnswerRequest(
+            sessionId: 's1',
+            approve: true,
+            ask: PromptAsk(waitingSince: since, toolUseId: 'toolu_1'),
+          ),
+        ),
+        throwsA(
+          isA<SessionPromptRefusal>().having((r) => r.stale, 'stale', true),
+        ),
+      );
+      expect(terminals.screenOf!.sent, isEmpty);
+    });
+
+    test('with no call, a menu drawn otherwise is still refused', () async {
+      final terminals = _Terminals(
+        claude,
+        FixtureMenuScreen.fixture('claude-code-trust-prompt', marker: '❯'),
+      )..status = _asking(AgentWaitKind.approval);
+
+      await expectLater(
+        answersOver(terminals).answer(
+          const ApprovalAnswerRequest(
+            sessionId: 's1',
+            approve: true,
+            ask: PromptAsk(menuId: 'the-rows-it-was-drawn-with'),
+          ),
+        ),
+        throwsA(
+          isA<SessionPromptRefusal>().having((r) => r.stale, 'stale', true),
+        ),
+      );
+      expect(terminals.screenOf!.sent, isEmpty);
+    });
+  });
+
   test('a question answer naming another call is refused', () async {
     final terminals = _Terminals(claude, null)
       ..status = _asking(AgentWaitKind.question)

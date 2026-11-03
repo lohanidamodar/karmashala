@@ -124,7 +124,11 @@ class SessionPromptAnswers implements PromptAnswering {
     final answer = await _approvals.answer(
       sessionId,
       approve: request.approve,
-      menuId: ask?.menuId,
+      // A call the status still ties to this prompt names it; the screen's
+      // rows do not. A tall prompt is redrawn with other rows above its
+      // choices and a resize wraps them anew, so the menu's id moves while
+      // the same prompt waits, and was refusing it.
+      menuId: ask?.toolUseId != null ? null : ask?.menuId,
       decidedBy: request.decidedBy,
       decidedBySessionId: request.decidedBySessionId,
     );
