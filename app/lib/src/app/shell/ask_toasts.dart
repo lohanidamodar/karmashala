@@ -88,16 +88,43 @@ final offScreenAsksProvider = Provider<List<OffScreenAsk>>((ref) {
             openId: openId,
             label: source.label,
             imported: source.imported,
-            detail: report.evidence.isEmpty ? null : report.evidence.last,
+            detail: askToastDetail(report, agents.byId(report.agentId)?.menus),
             project: projectOf(openId),
             prompt: PromptAsk.drawnFrom(report),
             canAnswer:
                 answerable(openId) &&
-                agents.byId(report.agentId)?.approval.approve != null &&
-                agents.byId(report.agentId)?.approval.deny != null,
+                askToastAnswers(agents.byId(report.agentId), report),
           ),
   ];
 });
+
+/// What a toast quotes of [report]'s ask: the prompt of the menu its screen
+/// shows — its last rows, where a command and its reason sit — else the
+/// status's last line. That line, for a prompt read off a screen, is the
+/// prompt's footer: Codex's toast said only "Press enter to confirm or esc to
+/// cancel" (owner, 2026-11-03).
+String? askToastDetail(AgentStatusReport report, AgentMenuSupport? menus) {
+  final rows = [
+    for (final row in menuQuotedBy(report, menus)?.prompt ?? const <String>[])
+      if (row.trim().isNotEmpty) row.trim(),
+  ];
+  if (rows.isNotEmpty) {
+    return rows.sublist(rows.length > 3 ? rows.length - 3 : 0).join('\n');
+  }
+  return report.evidence.isEmpty ? null : report.evidence.last;
+}
+
+/// Whether a toast's Yes and No can answer [report]'s ask: the agent names a
+/// key for each, or its menu on screen has an option for No. Codex names no
+/// key to decline, and its command prompt's "No, and tell Codex what to do
+/// differently" is how one does.
+bool askToastAnswers(AgentDescriptor? agent, AgentStatusReport report) {
+  if (agent == null || agent.approval.approve == null) return false;
+  if (agent.approval.deny != null) return true;
+  final menus = agent.menus;
+  final menu = menuQuotedBy(report, menus);
+  return menu != null && menus!.negativeIn(menu) != null;
+}
 
 /// The most toasts drawn at once; the Inbox holds the rest.
 const int kMaxAskToasts = 3;

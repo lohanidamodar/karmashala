@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/ask_toasts.dart';
@@ -74,5 +75,56 @@ void main() {
     );
     await pump(tester, quiet, answerable: false);
     expect(find.text('Lake generator polish needs you'), findsOneWidget);
+  });
+  group("Codex's command prompt, read off its screen", () {
+    final codex = AgentRegistry.builtIn.byId(AgentIds.codex)!;
+    final report = AgentStatusReport(
+      agentId: AgentIds.codex,
+      sessionId: 'c1',
+      status: AgentActivityStatus.awaitingApproval,
+      source: AgentStatusSource.terminalGrid,
+      observedAt: DateTime.utc(2026, 11, 3),
+      waiting: AgentWaitKind.approval,
+      evidence: const [
+        '  Would you like to run the following command?',
+        '',
+        '  Environment: local',
+        '',
+        '  Reason: May I create the requested consolidation branch?',
+        '',
+        r'  $ git switch -c feature/typing-games',
+        '',
+        '› 1. Yes, proceed (y)',
+        "  2. Yes, and don't ask again for commands that start with `git switch -c` (p)",
+        '  3. No, and tell Codex what to do differently (esc)',
+        '',
+        '• Press enter to confirm or esc to cancel',
+      ],
+    );
+
+    test('the toast quotes the command and its reason, not the footer', () {
+      final detail = askToastDetail(report, codex.menus)!;
+      expect(detail, contains(r'$ git switch -c feature/typing-games'));
+      expect(detail, contains('Reason: May I create'));
+      expect(detail, isNot(contains('Press enter')));
+    });
+
+    test('Yes and No answer it, through the menu', () {
+      expect(askToastAnswers(codex, report), isTrue);
+    });
+
+    test('with no menu on screen, No has nothing to press', () {
+      final bare = AgentStatusReport(
+        agentId: AgentIds.codex,
+        sessionId: 'c1',
+        status: AgentActivityStatus.awaitingApproval,
+        source: AgentStatusSource.terminalGrid,
+        observedAt: DateTime.utc(2026, 11, 3),
+        waiting: AgentWaitKind.approval,
+        evidence: const ['Press enter to continue'],
+      );
+      expect(askToastAnswers(codex, bare), isFalse);
+      expect(askToastDetail(bare, codex.menus), 'Press enter to continue');
+    });
   });
 }
