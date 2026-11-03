@@ -17,6 +17,11 @@ installs claim the same version name.
 
 ---
 
+## 1.34.22 — 2026-11-03 (build 89)
+
+- **What a session waits on sits just over its message box.** An approval, a question or a secret it asks for is drawn over the box a reply is typed in — in a chat tab, on the phone and in the dashboard's chat — rather than under it, by the status line. The box gives it the room while it shows, and a pane too short for its answers scrolls the whole card.
+- **The dashboard's chat fills its panel again.** Since 1.34.21 it stopped halfway down, with the bottom half kept for an approval even when nothing waited.
+
 ## 1.34.21 — 2026-11-03 (build 88)
 
 - **An approval from the chat or the dashboard is no longer refused as "the prompt changed".** A tall permission prompt is redrawn with other rows above its choices, and a resize wraps them anew, so the prompt as read off the screen kept changing while the same prompt waited. Where the status still ties the prompt to the call the card was drawn from, that call is what identifies it.
