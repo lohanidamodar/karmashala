@@ -269,6 +269,8 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
         headFocused: _headFocused,
         pad: pad,
         surface: surface,
+        onOpen: () => widget.onOpen(root),
+        onMenu: (at) => showOverviewFamilyMenu(context, ref, node, at: at),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -363,10 +365,18 @@ class _FamilyFrame extends ConsumerStatefulWidget {
     required this.headFocused,
     required this.pad,
     required this.surface,
+    required this.onOpen,
+    required this.onMenu,
     required this.child,
   });
 
   final OverviewCard card;
+
+  /// A tap, and a long press or secondary tap at a point, on what nothing
+  /// inside the card took: its footer's gaps and its padding. They are the
+  /// card's, as the title's are, not the board's, which would close the peek.
+  final VoidCallback onOpen;
+  final ValueChanged<Offset?> onMenu;
 
   /// The sub-sessions this card draws, or folds away.
   final Set<String> inside;
@@ -397,45 +407,53 @@ class _FamilyFrameState extends ConsumerState<_FamilyFrame> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: ValueListenableBuilder<bool>(
-        valueListenable: widget.headFocused,
-        builder: (context, focused, child) {
-          final ringed = widget.selected || lit || focused;
-          return Container(
-            key: ValueKey('overview-family:${card.id}'),
-            // The footer's target is taller than its buttons: the card's
-            // bottom edge gives back that slack, so the space under them
-            // reads as the space over the avatar.
-            padding: EdgeInsets.fromLTRB(
-              widget.pad,
-              widget.pad,
-              widget.pad,
-              Insets.xs,
-            ),
-            decoration: BoxDecoration(
-              color: widget.surface,
-              borderRadius: radius,
-              border: Border.all(
-                color: _hovered && !touch
-                    ? scheme.outline
-                    : scheme.outlineVariant,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // The header says what a tap does; this only widens where it lands.
+        excludeFromSemantics: true,
+        onTap: widget.onOpen,
+        onLongPress: () => widget.onMenu(null),
+        onSecondaryTapUp: (details) => widget.onMenu(details.globalPosition),
+        child: ValueListenableBuilder<bool>(
+          valueListenable: widget.headFocused,
+          builder: (context, focused, child) {
+            final ringed = widget.selected || lit || focused;
+            return Container(
+              key: ValueKey('overview-family:${card.id}'),
+              // The footer's target is taller than its buttons: the card's
+              // bottom edge gives back that slack, so the space under them
+              // reads as the space over the avatar.
+              padding: EdgeInsets.fromLTRB(
+                widget.pad,
+                widget.pad,
+                widget.pad,
+                Insets.xs,
               ),
-            ),
-            // Always there, so lighting it never remounts the card and takes
-            // the keys from a row inside it.
-            foregroundDecoration: BoxDecoration(
-              borderRadius: radius,
-              border: ringed
-                  ? Border.all(
-                      color: scheme.primary,
-                      width: StateLayers.focusRingWidth * 2,
-                    )
-                  : null,
-            ),
-            child: child,
-          );
-        },
-        child: widget.child,
+              decoration: BoxDecoration(
+                color: widget.surface,
+                borderRadius: radius,
+                border: Border.all(
+                  color: _hovered && !touch
+                      ? scheme.outline
+                      : scheme.outlineVariant,
+                ),
+              ),
+              // Always there, so lighting it never remounts the card and takes
+              // the keys from a row inside it.
+              foregroundDecoration: BoxDecoration(
+                borderRadius: radius,
+                border: ringed
+                    ? Border.all(
+                        color: scheme.primary,
+                        width: StateLayers.focusRingWidth * 2,
+                      )
+                    : null,
+              ),
+              child: child,
+            );
+          },
+          child: widget.child,
+        ),
       ),
     );
   }

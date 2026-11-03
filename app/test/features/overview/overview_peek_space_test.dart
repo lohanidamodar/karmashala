@@ -1,8 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/gestures.dart' show HitTestResult;
+import 'package:flutter/gestures.dart' show HitTestResult, kSecondaryButton;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -103,6 +105,61 @@ void main() {
     await openPeek(tester, const Size(900, 900), scale: 1.6);
     await expectSharesSpace(tester);
     await unmountMission(tester);
+  });
+
+  group('the space inside a card is the card', () {
+    String idOf(Finder tree) =>
+        (tree.evaluate().first.widget.key! as ValueKey<String>).value.substring(
+          'overview-family:'.length,
+        );
+
+    /// A gap in [tree]'s footer, or with [edge] the padding under it.
+    Offset gap(WidgetTester tester, Finder tree, {bool edge = false}) {
+      final card = tester.getRect(tree);
+      return Offset(
+        card.left + card.width * 0.3,
+        card.bottom - (edge ? Insets.xs / 2 : Touch.target / 2 + Insets.xs),
+      );
+    }
+
+    Future<ProviderContainer> board1440(WidgetTester tester) => pumpMission(
+      tester,
+      fixture: MissionFixture.full(),
+      prefsDir: dir,
+      size: const Size(1440, 900),
+    );
+
+    testWidgets('a footer gap opens its chat', (tester) async {
+      final c = await board1440(tester);
+      await tester.tapAt(gap(tester, trees.first));
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, idOf(trees.first));
+      await unmountMission(tester);
+    });
+
+    testWidgets('with a chat open, it moves the chat and does not close it', (
+      tester,
+    ) async {
+      final c = await board1440(tester);
+      final other = idOf(trees.at(1));
+      c.read(overviewFocusProvider.notifier).peek(idOf(trees.first));
+      await settleMission(tester);
+      await tester.tapAt(
+        gap(tester, find.byKey(ValueKey('overview-family:$other')), edge: true),
+      );
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, other);
+      await unmountMission(tester);
+    });
+
+    testWidgets('a secondary tap there opens the card menu', (tester) async {
+      final c = await board1440(tester);
+      await tester.tapAt(gap(tester, trees.first), buttons: kSecondaryButton);
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).peeked, isNull);
+      expect(find.byKey(const ValueKey('session-menu:archive')), findsWidgets);
+      await unmountMission(tester);
+    });
   });
 
   testWidgets('narrow, the peek gives way first, down to its minimum', (
