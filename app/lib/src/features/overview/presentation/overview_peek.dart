@@ -202,6 +202,21 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
               child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
             ),
           ),
+          // What it waits on, docked under the chat as a chat tab draws it.
+          // A prompt read only off the screen — Codex's — has no call to hang
+          // under, and was in no card here. One drawn under its call in the
+          // chat already, this steps aside for.
+          if (entry.native != null) ...[
+            SecretRequestCard(sessionId: id),
+            // Never more than the chat's half: a tall ask scrolls in it.
+            Flexible(
+              child: ApprovalRequestCard(
+                sessionId: id,
+                docked: true,
+                touch: UiDensity.of(context).isTouch,
+              ),
+            ),
+          ],
         ],
       ),
       OverviewPeekTab.terminal => _PeekTerminal(paneId: pane!),

@@ -147,7 +147,9 @@ class _DockButtonRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: Insets.sm),
-        _AnswerInTerminal(sessionId: sessionId),
+        // Wraps its words in a narrow pane — the dashboard's chat — rather
+        // than push the row past its edge.
+        Flexible(child: _AnswerInTerminal(sessionId: sessionId)),
       ],
     );
   }
