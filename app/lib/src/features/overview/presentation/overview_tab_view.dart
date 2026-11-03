@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_core/util.dart' show Clock;
 import 'package:karmashala_ui/icons.dart';
@@ -16,6 +17,7 @@ import '../../sessions/application/session_chat_source.dart'
     show composersHoldingTextProvider;
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
+import '../../sessions/application/session_ui_providers.dart';
 import '../application/overview_batch.dart';
 import '../application/overview_board.dart';
 import '../application/overview_drawer.dart';
@@ -37,6 +39,7 @@ import 'overview_pins.dart';
 import 'overview_queue_card.dart';
 import 'overview_resume_picker.dart';
 import 'overview_triage.dart';
+import '../../sessions/presentation/message_composer.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';

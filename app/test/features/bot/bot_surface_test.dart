@@ -50,6 +50,82 @@ void main() {
 
   setUp(() => rig = BotRig());
 
+  group('the keys', () {
+    bool typingInPanel() {
+      final context = FocusManager.instance.primaryFocus?.context;
+      return context?.findAncestorWidgetOfExactType<EditableText>() != null &&
+          context?.findAncestorWidgetOfExactType<BotFloatingPanel>() != null;
+    }
+
+    testWidgets('the box of an empty bot takes them as the panel opens', (
+      tester,
+    ) async {
+      sizeWindow(tester, const Size(1280, 800));
+      final container = await rig.container();
+      await pumpHost(tester, container);
+      await tester.tap(find.byKey(const ValueKey('bot-button')));
+      await tester.pumpAndSettle();
+      expect(typingInPanel(), isTrue);
+    });
+
+    testWidgets('the box of a conversation takes them too', (tester) async {
+      sizeWindow(tester, const Size(1280, 800));
+      botRow(rig);
+      final container = await rig.container();
+      await pumpHost(tester, container);
+      container.read(botPanelProvider.notifier).toggle();
+      await tester.pumpAndSettle();
+      expect(typingInPanel(), isTrue);
+    });
+
+    testWidgets('closing gives them back to what had them', (tester) async {
+      sizeWindow(tester, const Size(1280, 800));
+      final container = await rig.container();
+      await pumpHost(tester, container);
+      final earlier = FocusNode(debugLabel: 'earlier');
+      addTearDown(earlier.dispose);
+      final attachment = earlier.attach(
+        tester.element(find.byKey(const ValueKey('bot-button'))),
+      );
+      addTearDown(attachment.detach);
+      attachment.reparent();
+      earlier.requestFocus();
+      await tester.pump();
+      container.read(botPanelProvider.notifier).open();
+      await tester.pumpAndSettle();
+      expect(earlier.hasFocus, isFalse);
+      container.read(botPanelProvider.notifier).close();
+      await tester.pumpAndSettle();
+      expect(earlier.hasFocus, isTrue);
+    });
+
+    testWidgets('keys taken elsewhere meanwhile stay there', (tester) async {
+      sizeWindow(tester, const Size(1280, 800));
+      final container = await rig.container();
+      await pumpHost(tester, container);
+      final earlier = FocusNode(debugLabel: 'earlier');
+      final later = FocusNode(debugLabel: 'later');
+      addTearDown(earlier.dispose);
+      addTearDown(later.dispose);
+      final context = tester.element(find.byKey(const ValueKey('bot-button')));
+      final first = earlier.attach(context);
+      final second = later.attach(context);
+      addTearDown(first.detach);
+      addTearDown(second.detach);
+      first.reparent();
+      second.reparent();
+      earlier.requestFocus();
+      await tester.pump();
+      container.read(botPanelProvider.notifier).open();
+      await tester.pumpAndSettle();
+      later.requestFocus();
+      await tester.pump();
+      container.read(botPanelProvider.notifier).close();
+      await tester.pumpAndSettle();
+      expect(later.hasFocus, isTrue);
+    });
+  });
+
   group('the button', () {
     testWidgets('an older server has no button', (tester) async {
       final container = await rig.container(features: const {'sessions.send'});

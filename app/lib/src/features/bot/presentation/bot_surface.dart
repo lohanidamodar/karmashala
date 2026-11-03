@@ -10,11 +10,44 @@ import 'bot_panel.dart';
 /// **The desktop's bot**: a floating panel at the right of the window, over
 /// whatever the person is doing. Nothing under it is held back, and it stays
 /// up across navigation until closed. The shell places it.
-class BotFloatingPanel extends ConsumerWidget {
+class BotFloatingPanel extends ConsumerStatefulWidget {
   const BotFloatingPanel({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BotFloatingPanel> createState() => _BotFloatingPanelState();
+}
+
+class _BotFloatingPanelState extends ConsumerState<BotFloatingPanel> {
+  /// What had the keys before the box took them: a terminal, the board.
+  final _before = FocusManager.instance.primaryFocus;
+  final _inside = FocusNode(
+    debugLabel: 'bot-panel',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+  var _heldKeys = false;
+
+  /// Here, not in [dispose]: the panel's own nodes are gone by then.
+  @override
+  void deactivate() {
+    _heldKeys = _inside.hasFocus;
+    super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _inside.dispose();
+    final before = _before;
+    if (_heldKeys && before != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (before.context != null) before.requestFocus();
+      });
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tones = SurfaceTones.of(context);
     return DecoratedBox(
       key: const ValueKey('bot-panel'),
@@ -29,7 +62,12 @@ class BotFloatingPanel extends ConsumerWidget {
           borderRadius: BorderRadius.circular(Radii.lg),
           side: BorderSide(color: tones.floatingLine),
         ),
-        child: BotPanelView(onClose: ref.read(botPanelProvider.notifier).close),
+        child: Focus(
+          focusNode: _inside,
+          child: BotPanelView(
+            onClose: ref.read(botPanelProvider.notifier).close,
+          ),
+        ),
       ),
     );
   }

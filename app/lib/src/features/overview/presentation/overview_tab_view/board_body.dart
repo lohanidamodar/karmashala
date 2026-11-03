@@ -62,6 +62,33 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     _showSheet(card);
   }
 
+  /// A card opened by the person: its box takes the keys, to type in. Not
+  /// a session waiting on an answer, which the board's keys give, and not
+  /// [_goTo] walking the peek, which ↑ and ↓ would stop.
+  void _openToType(OverviewCard card) {
+    _open(card);
+    if (_inSheet || UiDensity.of(context).isTouch) return;
+    if (_sections().queue.any((waiting) => waiting.id == card.id)) return;
+    ref.read(composerKeysAskProvider.notifier).ask(card.id);
+  }
+
+  /// Esc in a chat's box, when nothing there wanted it, is Esc on the board:
+  /// an empty box closes its peek, as it did before the box took the keys.
+  /// One with words in it stays open and hands the board the keys.
+  KeyEventResult _leaveBox(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape) {
+      return KeyEventResult.ignored;
+    }
+    final field = FocusManager.instance.primaryFocus?.context;
+    if (field?.findAncestorWidgetOfExactType<MessageComposer>() == null) {
+      return KeyEventResult.ignored;
+    }
+    _focus.requestFocus();
+    _closePeekFromBoard();
+    return KeyEventResult.handled;
+  }
+
   var _sheetOpen = false;
 
   /// A peek asked for from outside the board — New session's — before its
@@ -234,7 +261,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         ref.read(overviewBoardProvider),
         ref.read(overviewFocusProvider).selected,
       );
-      if (selected != null) _open(selected);
+      if (selected != null) _openToType(selected);
     }, enabled: (_) => ref.read(overviewFocusProvider).selected != null),
     OverviewApproveIntent: _Triage<OverviewApproveIntent>(
       (intent) async {
@@ -528,7 +555,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
                   ? null
                   : _closePeekFromBoard,
               child: OverviewHybrid(
-                onOpen: _open,
+                onOpen: _openToType,
                 onEdit: (card) => _open(card, editing: true),
                 onTerminal: _terminal,
                 onAnswered: _advance,
@@ -607,6 +634,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           child: Focus(
             focusNode: _focus,
             autofocus: true,
+            onKeyEvent: _leaveBox,
             // A click anywhere on the board gives it the keys, unless a field
             // has them; a field or a terminal clicked takes them back after.
             child: Listener(

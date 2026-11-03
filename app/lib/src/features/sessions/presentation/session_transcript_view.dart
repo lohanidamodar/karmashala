@@ -209,6 +209,29 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
   @override
   final _composerFocus = ValueNotifier<int>(0);
 
+  /// The bot's box takes the keys when its panel opens, not each time the
+  /// footer is rebuilt under whatever the person went on to do.
+  var _botOpened = false;
+
+  @override
+  bool _takesKeysOnOpen() {
+    if (widget.bot) {
+      final first = !_botOpened;
+      _botOpened = true;
+      return first;
+    }
+    final asked = ref
+        .read(composerKeysAskProvider.notifier)
+        .take(widget.sessionId);
+    if (asked) _wordsWhenOpened = _composer.text;
+    return asked;
+  }
+
+  /// The box's words when opening its card gave it the keys, until they
+  /// change. Till then Esc is the board's and closes the peek: it was pressed
+  /// to leave, and must not stop a turn just because the box took the keys.
+  String? _wordsWhenOpened;
+
   /// Held rather than read in [dispose]: `ref` is unusable once the element is
   /// on its way out, and the draft has to be parked exactly then.
   late final ComposerDrafts _drafts;
@@ -252,6 +275,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
   /// stay open over. After the frame: text set while the tree builds may not
   /// change a provider then.
   void _tellHolding() {
+    if (_composer.text != _wordsWhenOpened) _wordsWhenOpened = null;
     final holding = _composer.text.trim().isNotEmpty;
     final id = widget.sessionId;
     if (holding == _held && id == _heldFor) return;
@@ -624,6 +648,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView>
     // Kept alive while the view is: Esc reads it, and a read of a provider
     // nobody holds would start from "loading".
     ref.listen(sessionTurnWorkingProvider(widget.sessionId), (_, _) {});
+    // Its card opened again, this box already up: after the frame, as the
+    // board takes the keys when a card is opened.
+    ref.listen(composerKeysAskProvider, (_, asked) {
+      if (asked != widget.sessionId) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!ref.read(composerKeysAskProvider.notifier).take(asked!)) return;
+        _wordsWhenOpened = _composer.text;
+        _composerFocus.value++;
+      });
+    });
     // Board N2's "Stop · Esc", from anywhere in the chat: the composer, the
     // conversation, a button. Only while the turn runs — the action is
     // disabled otherwise, so the key falls through to whatever else Esc

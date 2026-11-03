@@ -9,6 +9,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
   StreamController<List<String>> get _dropped;
   ValueNotifier<int> get _filesQueued;
   ValueNotifier<int> get _composerFocus;
+  bool _takesKeysOnOpen();
   void _say(String message);
   void _showAsk();
   void _backToComposer(String text);
@@ -184,6 +185,7 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
           takeServerFiles: _takeQueuedFiles,
           serverFilesWaiting: _filesQueued,
           focusRequests: _composerFocus,
+          takesKeysOnOpen: _takesKeysOnOpen,
           attaches: caps.mayAttach,
           camera: () => devicePhotosFor(context, ref),
           enabled: !prompted && refusal == null,
@@ -294,7 +296,8 @@ class _StopTurnAction extends Action<_StopTurnIntent> {
   final _SessionTranscriptViewState _view;
 
   @override
-  bool isEnabled(_StopTurnIntent intent) => _view.mounted && _view._stoppable;
+  bool isEnabled(_StopTurnIntent intent) =>
+      _view.mounted && _view._stoppable && _view._wordsWhenOpened == null;
 
   @override
   Object? invoke(_StopTurnIntent intent) {

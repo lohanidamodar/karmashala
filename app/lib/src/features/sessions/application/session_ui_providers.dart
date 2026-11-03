@@ -163,5 +163,25 @@ class SessionsStarting extends Notifier<Set<String>> {
   }
 }
 
+/// The session whose box the person opened it to type in: taken once, by
+/// that session's box when it is up, which can be after the transcript loads.
+class ComposerKeysAsk extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void ask(String sessionId) => state = sessionId;
+
+  /// Whether [sessionId] was asked for; it is not asked for again.
+  bool take(String sessionId) {
+    if (state != sessionId) return false;
+    state = null;
+    return true;
+  }
+}
+
+final composerKeysAskProvider = NotifierProvider<ComposerKeysAsk, String?>(
+  ComposerKeysAsk.new,
+);
+
 final sessionsStartingProvider =
     NotifierProvider<SessionsStarting, Set<String>>(SessionsStarting.new);

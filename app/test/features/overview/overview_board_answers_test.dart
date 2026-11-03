@@ -7,20 +7,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
+import 'package:karmashala/src/features/explorer/application/workspace_session_entry.dart';
 import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_queue_card.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart'
+    show overviewTyping;
 import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_input.dart'
     show sessionSendRepliesProvider;
+import 'package:karmashala/src/features/sessions/application/session_chat_source.dart'
+    show composersHoldingTextProvider;
 import 'package:karmashala/src/features/sessions/application/session_queue_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show SessionSent;
 import 'package:karmashala_session/session.dart'
     show QueuedMessage, QueuedMessageOrigin, QueuedMessageState;
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
+import 'package:karmashala/src/features/sessions/presentation/message_composer.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
 import 'package:karmashala_remote/remote.dart';
 
@@ -176,6 +183,7 @@ void main() {
     Size size = const Size(1440, 900),
     bool phone = false,
     CapabilitySet? grants,
+    Widget Function(WorkspaceSessionEntry entry, DateTime? seenUntil)? peekChat,
   }) async {
     final recorder = _Recorder(menu: alwaysMenu);
     final container = await pumpMission(
@@ -200,6 +208,7 @@ void main() {
           ),
         ],
         panes: const {'term': 'pane-term'},
+        peekChat: peekChat,
       ),
       prefsDir: dir,
       size: size,
@@ -672,6 +681,81 @@ void main() {
       expect(peeked(c), 'ks-r21');
       await press(tester, LogicalKeyboardKey.keyN);
       expect(peeked(c), isIn(['ask-q', 'term']));
+      await unmountMission(tester);
+    });
+
+    testWidgets('a card opened to type in asks for its box', (tester) async {
+      final (c, _) = await pump(tester);
+      c.read(overviewFocusProvider.notifier).select('ks-r32');
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(peeked(c), 'ks-r32');
+      expect(c.read(composerKeysAskProvider), 'ks-r32');
+      await unmountMission(tester);
+    });
+
+    testWidgets('a card waiting on an answer keeps the board keys', (
+      tester,
+    ) async {
+      final (c, _) = await pump(tester);
+      c.read(overviewFocusProvider.notifier).select('ask-q');
+      await press(tester, LogicalKeyboardKey.enter);
+      expect(peeked(c), 'ask-q');
+      expect(c.read(composerKeysAskProvider), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('walking the peek does not ask for a box', (tester) async {
+      final (c, _) = await pump(tester);
+      c.read(overviewFocusProvider.notifier).peek('ks-r32');
+      await settleMission(tester);
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(peeked(c), isNot('ks-r32'));
+      expect(c.read(composerKeysAskProvider), isNull);
+      await unmountMission(tester);
+    });
+
+    Future<ProviderContainer> inTheBox(WidgetTester tester) async {
+      final (c, _) = await pump(
+        tester,
+        peekChat: (entry, _) => MessageComposer(
+          key: ValueKey('box:${entry.id}'),
+          hintText: 'Message the agent…',
+          onSend: (_) async {},
+        ),
+      );
+      c.read(overviewFocusProvider.notifier).peek('ks-r32');
+      await settleMission(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('box:ks-r32')),
+          matching: find.byType(TextField),
+        ),
+      );
+      await settleMission(tester);
+      expect(overviewTyping(), isTrue);
+      return c;
+    }
+
+    testWidgets('Esc in an empty box closes the peek', (tester) async {
+      final c = await inTheBox(tester);
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(overviewTyping(), isFalse);
+      expect(peeked(c), isNull);
+      await unmountMission(tester);
+    });
+
+    testWidgets('Esc in a box with words gives the board the keys', (
+      tester,
+    ) async {
+      final c = await inTheBox(tester);
+      c
+          .read(composersHoldingTextProvider.notifier)
+          .mark('ks-r32', holding: true);
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(overviewTyping(), isFalse);
+      expect(peeked(c), 'ks-r32');
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      expect(peeked(c), isNot('ks-r32'));
       await unmountMission(tester);
     });
 

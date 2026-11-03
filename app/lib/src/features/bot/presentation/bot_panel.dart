@@ -271,6 +271,7 @@ class _BotEmptyState extends ConsumerState<_BotEmpty> {
           key: const ValueKey('bot-first-message'),
           controller: _box,
           focusRequests: _focus,
+          takesKeysOnOpen: () => true,
           attaches: false,
           enabled: refusal == null,
           hintText: refusal ?? 'Ask the bot…',

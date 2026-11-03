@@ -103,6 +103,7 @@ class MessageComposer extends StatefulWidget {
     this.takeServerFiles,
     this.serverFilesWaiting,
     this.focusRequests,
+    this.takesKeysOnOpen,
     this.files,
     this.working = false,
     this.uncertain = false,
@@ -191,6 +192,10 @@ class MessageComposer extends StatefulWidget {
   /// a message put back in it to edit.
   final Listenable? focusRequests;
 
+  /// Read once, after the box first draws: whether it was opened to be typed
+  /// in. Never at touch density, where the keyboard would cover the chat.
+  final bool Function()? takesKeysOnOpen;
+
   /// The box's files, for a host that keeps them with its draft. Supplied
   /// means owned, like [controller].
   final ComposerFilesController? files;
@@ -268,6 +273,12 @@ class _MessageComposerState extends State<MessageComposer>
     _bindFiles(widget.files);
     // Files queued before this box existed — while the transcript loaded.
     _scheduleDrain();
+    // After the frame: the board asks for the keys as a peek opens.
+    if (widget.takesKeysOnOpen case final wanted?) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && wanted() && !_touch) _takeFocus();
+      });
+    }
   }
 
   void _takeFocus() {

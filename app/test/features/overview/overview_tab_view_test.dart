@@ -23,6 +23,7 @@ import 'package:karmashala/src/features/overview/presentation/overview_triage.da
 import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_turn_stop.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -400,6 +401,36 @@ void main() {
       server.requests.where((k) => k == SessionsArchive.name),
       hasLength(1),
     );
+  });
+
+  testBoard('a running chat opened from its card: Esc leaves it running', (
+    tester,
+  ) async {
+    final c = await pump(tester, const Size(1440, 900));
+    await tester.tap(find.text('Chat busy').first);
+    await settle(tester);
+    final peek = find.byKey(const ValueKey('overview-peek'));
+    expect(peek, findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+    expect(peek, findsNothing);
+    expect(c.read(turnStopsProvider), isNot(contains('busy')));
+  });
+
+  testBoard('a running chat typed in: Esc stops the turn', (tester) async {
+    final c = await pump(tester, const Size(1440, 900));
+    await tester.tap(find.text('Chat busy').first);
+    await settle(tester);
+    final peek = find.byKey(const ValueKey('overview-peek'));
+    await tester.enterText(
+      find.descendant(of: peek, matching: find.byType(TextField)).last,
+      'and then the tests',
+    );
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+    expect(c.read(turnStopsProvider), contains('busy'));
+    await tester.pump(kStopEscalationAfter);
   });
 
   testBoard('the arrows move between cards and Enter peeks', (tester) async {
