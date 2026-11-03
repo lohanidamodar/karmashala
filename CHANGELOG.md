@@ -17,6 +17,12 @@ installs claim the same version name.
 
 ---
 
+## 1.34.21 — 2026-11-03 (build 88)
+
+- **An approval from the chat or the dashboard is no longer refused as "the prompt changed".** A tall permission prompt is redrawn with other rows above its choices, and a resize wraps them anew, so the prompt as read off the screen kept changing while the same prompt waited. Where the status still ties the prompt to the call the card was drawn from, that call is what identifies it.
+- **The dashboard's chat shows what its session waits on.** A Codex command approval, which only its screen shows, now docks under the chat with its command and every option, as a chat tab does; a card drawn under its call in the chat is not drawn twice.
+- **An ask's popup says what is asked, and answers Codex.** It quotes the prompt's last rows — the command and its reason — rather than its footer, and offers Yes and No for Codex through its menu.
+
 ## 1.34.20 — 2026-11-03 (build 87)
 
 - **Opening a chat puts you in its box.** A chat opened from a dashboard card, and the bot opened by its button, shortcut or quick open, focus the message box. Walking sessions with ↑ and ↓ and a session waiting on an answer keep the dashboard's keys. Esc in an empty box closes the chat, and it stops a running turn only once something was typed. Closing the bot gives the keys back to what had them. Phones are unchanged.
