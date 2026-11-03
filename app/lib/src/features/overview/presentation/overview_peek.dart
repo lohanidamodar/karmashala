@@ -189,35 +189,42 @@ class _OverviewPeekState extends ConsumerState<OverviewPeek> {
         : focus.showTab;
 
     final Widget body = switch (tab) {
-      OverviewPeekTab.chat => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (editing && card.column == BoardColumn.needsYou)
-            Padding(
-              padding: const EdgeInsets.all(Insets.md),
-              child: BoardEditCommand(sessionId: id, onDone: focus.stopEditing),
-            ),
-          Expanded(
-            child: ChatShownOutsideGroups(
-              child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
-            ),
-          ),
-          // What it waits on, docked under the chat as a chat tab draws it.
-          // A prompt read only off the screen — Codex's — has no call to hang
-          // under, and was in no card here. One drawn under its call in the
-          // chat already, this steps aside for.
-          if (entry.native != null) ...[
-            SecretRequestCard(sessionId: id),
-            // Never more than the chat's half: a tall ask scrolls in it.
-            Flexible(
-              child: ApprovalRequestCard(
-                sessionId: id,
-                docked: true,
-                touch: UiDensity.of(context).isTouch,
+      OverviewPeekTab.chat => LayoutBuilder(
+        builder: (context, box) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (editing && card.column == BoardColumn.needsYou)
+              Padding(
+                padding: const EdgeInsets.all(Insets.md),
+                child: BoardEditCommand(
+                  sessionId: id,
+                  onDone: focus.stopEditing,
+                ),
+              ),
+            Expanded(
+              child: ChatShownOutsideGroups(
+                child: ref.watch(overviewPeekChatProvider)(entry, _seenUntil),
               ),
             ),
+            // What it waits on, docked under the chat as a chat tab draws it.
+            // A prompt read only off the screen — Codex's — has no call to hang
+            // under, and was in no card here. One drawn under its call in the
+            // chat already, this steps aside for.
+            if (entry.native != null) ...[
+              SecretRequestCard(sessionId: id),
+              // Never more than half the peek: a tall ask scrolls in it. A cap,
+              // not a Flexible — that kept the half even with nothing waiting.
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: box.maxHeight / 2),
+                child: ApprovalRequestCard(
+                  sessionId: id,
+                  docked: true,
+                  touch: UiDensity.of(context).isTouch,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
       OverviewPeekTab.terminal => _PeekTerminal(paneId: pane!),
       OverviewPeekTab.files => _PeekFiles(card: card, files: files),

@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_prompt_answers.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
+import 'package:karmashala/src/features/sessions/presentation/shown_chat.dart';
 
 import 'mission_fixture.dart';
 
@@ -86,6 +87,43 @@ void main() {
       find.descendant(of: peek, matching: find.textContaining('git switch')),
       findsWidgets,
     );
+    await unmountMission(tester);
+  });
+
+  // The dock once sat in a Flexible beside the chat's Expanded, which kept
+  // half the peek for it even when nothing waited: the chat and its box
+  // stopped halfway down (owner, 2026-11-03).
+  testWidgets('with nothing waiting the chat fills the peek', (tester) async {
+    final c = await pumpMission(
+      tester,
+      fixture: MissionFixture(
+        sessions: [
+          (
+            id: id,
+            title: 'Typing games',
+            project: 'p-beej',
+            machine: 'windows',
+            agent: AgentIds.codex,
+            state: AgentState.working,
+            age: const Duration(minutes: 3),
+            parent: null,
+            report: null,
+          ),
+        ],
+      ),
+      prefsDir: dir,
+      size: const Size(1440, 900),
+      waiting: true,
+    );
+    c.read(overviewFocusProvider.notifier).peek(id);
+    await settleMission(tester);
+    final body = find.byKey(const ValueKey('overview-peek-body'));
+    final chat = find.descendant(
+      of: body,
+      matching: find.byType(ChatShownOutsideGroups),
+    );
+    expect(chat, findsOneWidget);
+    expect(tester.getRect(chat).bottom, tester.getRect(body).bottom);
     await unmountMission(tester);
   });
 }
