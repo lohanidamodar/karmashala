@@ -25,6 +25,13 @@ void main() {
       'Trust this folder? Codex can read, edit, and run files here',
       ['Trust and continue', 'Quit'],
     ),
+    // 0.166.0, captured in a ConPTY in a fresh git repository (2026-11-04).
+    (
+      AgentIds.codex,
+      'codex-trust-prompt-0.166',
+      'Trust this folder? Codex can read, edit, and run files here',
+      ['Trust and continue', 'Quit'],
+    ),
     (
       AgentIds.antigravity,
       'antigravity-trust-prompt',

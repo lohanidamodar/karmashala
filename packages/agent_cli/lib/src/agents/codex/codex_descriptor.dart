@@ -721,10 +721,23 @@ const codexDescriptor = AgentDescriptor(
   // (`Update now` / `Skip` / `Skip until next version`) matches neither on
   // purpose, so approve refuses rather than running an updater. No cancel is
   // declared safe: on 0.160.0 Esc, `q` and `2` all quit at folder trust.
+  //
+  // Every Codex menu numbers its options, and the composer and the messages
+  // sent to it share their `› `: only a numbered run is a menu. 0.166.0
+  // draws a command approval two blank rows under the transcript with no
+  // edge between, and redraws the transcript while it waits; the prompt
+  // stops at its heading, or at that gap, or the menu's id moved under the
+  // answer and it was refused (hosted sessions' recorded output,
+  // 2026-11-04). The redraw can leave one blank row there, not two, so the
+  // headings come first: the four approvals' in the 0.166.0 binary, and
+  // folder trust's.
   menus: AgentMenuSupport(
     markers: ['›'],
     affirmative: [r'^Yes\b', r'^Trust and continue$'],
     negative: [r'^No\b', r'^Quit$'],
+    numbered: true,
+    promptGap: 2,
+    promptHeadings: [r'^Would you like to .+\?$', r'^Folder access$'],
   ),
   // **Codex has images, and not through this door.** `codex --help` and
   // `codex exec --help` (codex-cli 0.153.4) both carry `-i, --image <FILE>...

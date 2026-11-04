@@ -186,6 +186,171 @@ void main() {
     });
   });
 
+  // Rows from hosted Codex 0.166 sessions, replayed from their recorded output
+  // (2026-11-04), paths neutralised. The command approval has no rule above
+  // it: what the menu reads as its prompt ran up into the transcript, which
+  // Codex redraws while it waits — so the id changed under a waiting answer,
+  // and the answer was refused as "the prompt changed".
+  group('Codex 0.166', () {
+    final codexMenus = AgentRegistry.builtIn.byId(AgentIds.codex)!.menus!;
+
+    List<String> approval(List<String> transcript, {List<String>? options}) => [
+      ...transcript,
+      '',
+      '',
+      '  Would you like to run the following command?',
+      '',
+      '  Environment: local',
+      '',
+      '  Reason: May I run Dart package setup outside the sandbox?',
+      '',
+      r'  $ dart pub get *> pub_get.log; $result = $LASTEXITCODE;',
+      r'  Get-Content pub_get.log; exit $result',
+      '',
+      '',
+      ...?options,
+      if (options == null) ...[
+        '› 1. Yes, proceed (y)',
+        "  2. Yes, and don't ask again for commands that start with `dart pub",
+        '     get` (p)',
+        '  3. No, and tell Codex what to do differently (esc)',
+      ],
+      '',
+      '  Press enter to confirm or esc to cancel',
+    ];
+
+    test('a command approval reads its own words, not the transcript', () {
+      final menu = readScreenMenu(
+        approval(const [
+          '• Exited (status 255) dart pub get',
+          '  └ #9      main (dartdev.dart:13)',
+          '    + 24 lines (ctrl+t to expand)',
+          '• Running dart pub get *> pub_get.log',
+          '    + Show details',
+        ]),
+        codexMenus,
+      )!;
+      expect(menu.options, [
+        'Yes, proceed (y)',
+        "Yes, and don't ask again for commands that start with `dart pub "
+            'get` (p)',
+        'No, and tell Codex what to do differently (esc)',
+      ]);
+      expect(menu.prompt.first, 'Would you like to run the following command?');
+      expect(menu.prompt.last, r'Get-Content pub_get.log; exit $result');
+    });
+
+    test('the transcript redrawn above a waiting approval keeps its id', () {
+      final before = readScreenMenu(
+        approval(const ['• Running dart pub get', '    + Show details']),
+        codexMenus,
+      )!;
+      final after = readScreenMenu(
+        approval(const [
+          '• Viewed image 21_dusk2.png',
+          '    + Show details',
+          '• Edited 2 files (+82 -0)',
+          '• Running dart pub get',
+          '    + Show details',
+        ]),
+        codexMenus,
+      )!;
+      expect(after.id, before.id);
+    });
+
+    test('a redraw that leaves one blank row still ends at the heading', () {
+      final apart = readScreenMenu(
+        approval(const ['• Ran dart pub get', '  └ Resolving dependencies...']),
+        codexMenus,
+      )!;
+      final rows = approval(const [
+        '• Ran dart pub get',
+        '  └ Resolving dependencies...',
+        '    Downloading pack',
+      ]);
+      // One of the two blank rows under the transcript drawn over.
+      rows.removeAt(3);
+      final close = readScreenMenu(rows, codexMenus)!;
+      expect(
+        close.prompt.first,
+        'Would you like to run the following command?',
+      );
+      expect(close.id, apart.id);
+    });
+
+    test('the footer under a menu still drawing is not an option', () {
+      final menu = readScreenMenu(
+        approval(
+          const [],
+          options: const [
+            '› 1. Yes, proceed (y)',
+            '  2. Yes, and don\'t ask again for commands that start with `dart`',
+            '  3. No, and tell Codex',
+            r'  GPT-6.1 Terra medium · ~\work\demo',
+            '  ? for shortcuts                    ⚠ 1 warning · f2 to view',
+          ],
+        ),
+        codexMenus,
+      )!;
+      expect(menu.options, hasLength(3));
+      expect(menu.options.last, 'No, and tell Codex');
+    });
+
+    test('options left over from an earlier draw are not this menu', () {
+      final menu = readScreenMenu(const [
+        '  Trust this folder? Codex can read, edit, and run files here.',
+        '',
+        '  1. Trust and continue',
+        '  2. Quit',
+        '› 1. Trust and continue',
+        '  2. Quit',
+        '',
+        '  enter continue · esc quit',
+      ], codexMenus)!;
+      expect(menu.options, ['Trust and continue', 'Quit']);
+      expect(menu.highlighted, 0);
+    });
+
+    test('a message sent to Codex, wrapped, is no menu', () {
+      expect(
+        readScreenMenu(const [
+          '  Worked for 6m 21s • 7:23 AM',
+          '',
+          '',
+          '› [message from the Karmashala session "Tiny Temple: 3D cozy temple',
+          '  game (flutter_scene on beej)" (4272b910-9135-4724-9321-',
+          '  6bf9aadfff3e)]',
+          '',
+          '› Ask Codex to do anything',
+          '',
+          r'  GPT-6.1 Terra medium · ~\work\demo',
+        ], codexMenus),
+        isNull,
+      );
+    });
+
+    test('folder trust reads whole, its prompt from the heading', () {
+      final menu = readScreenMenu(const [
+        '╰──────────────────────────────────────────────╯',
+        '',
+        '  Folder access',
+        r'  C:\work\demo',
+        '',
+        '  Trust this folder? Codex can read, edit, and run files here, subject',
+        '  to your permission settings. Your trust decision will be saved.',
+        '',
+        '› 1. Trust and continue',
+        '  2. Quit',
+        '',
+        '  enter continue · esc quit',
+      ], codexMenus)!;
+      expect(menu.options, ['Trust and continue', 'Quit']);
+      expect(menu.prompt.first, 'Folder access');
+      expect(codexMenus.affirmativeIn(menu), 0);
+      expect(codexMenus.negativeIn(menu), 1);
+    });
+  });
+
   // What approve and deny mean on each menu, by the adapters' own declarations:
   // an option by its words, never the highlight.
   group('the options approve and deny choose', () {

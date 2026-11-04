@@ -63,7 +63,28 @@ class AgentMenuSupport {
     this.affirmative = const [],
     this.negative = const [],
     this.cancelDeclines = const [],
+    this.numbered = false,
+    this.promptGap,
+    this.promptHeadings = const [],
   });
+
+  /// The rows that open a prompt, as regular expressions over a row's words
+  /// (case-insensitive): read up to one, the prompt ends there — nothing
+  /// above it is the menu's, however the screen around it was redrawn.
+  final List<String> promptHeadings;
+
+  /// Every option is drawn `1. …`, `2. …` in order, so only such a run is
+  /// one menu: a footer row, a sent message's wrapped lines or a copy left
+  /// by an earlier draw sits in the options' column too, unnumbered or
+  /// numbered afresh, and is none of its options.
+  final bool numbered;
+
+  /// The blank rows that end a prompt above its options, or null when only
+  /// the panel's edge does. Codex 0.166 draws a command approval with no edge
+  /// above it, two blank rows under the transcript, which it redraws while
+  /// the approval waits: read past them, the menu's id moved under a waiting
+  /// answer.
+  final int? promptGap;
 
   /// The glyph at the start of the highlighted row (`❯`, `›`), followed by one
   /// space before the option's text.
@@ -164,11 +185,16 @@ AgentScreenMenu? _menuAt(List<String> rows, int at, AgentMenuSupport support) {
   final checklist = _checklistAt(rows, at, textColumn);
   if (checklist != null) return checklist;
   if (row.length <= textColumn || row[textColumn] == ' ') return null;
+  int? numberOf(String r) => support.numbered
+      ? int.tryParse(_number.matchAsPrefix(r, textColumn)?[1] ?? '')
+      : null;
+  if (support.numbered && numberOf(row) == null) return null;
 
   bool isOption(String r) =>
       r.length > textColumn &&
       r.substring(0, textColumn).trim().isEmpty &&
-      r[textColumn] != ' ';
+      r[textColumn] != ' ' &&
+      (!support.numbered || numberOf(r) != null);
   // A long option wrapped by the agent itself continues further in.
   bool isContinuation(String r) =>
       r.trim().isNotEmpty &&
@@ -189,6 +215,37 @@ AgentScreenMenu? _menuAt(List<String> rows, int at, AgentMenuSupport support) {
       (isOption(rows[bottom + 1]) || isContinuation(rows[bottom + 1]))) {
     bottom++;
   }
+  if (support.numbered) {
+    // Only the run counting up through the highlight: a number that does not
+    // follow the one before starts another list.
+    int numberAt(int i) => numberOf(i == at ? row : rows[i])!;
+    bool optionAt(int i) => i == at || isOption(rows[i]);
+    int? previousOption(int i) {
+      for (var j = i - 1; j >= top; j--) {
+        if (optionAt(j)) return j;
+      }
+      return null;
+    }
+
+    for (var i = at; i > top;) {
+      final before = previousOption(i);
+      if (before == null) break;
+      if (numberAt(before) != numberAt(i) - 1) {
+        top = i;
+        break;
+      }
+      i = before;
+    }
+    var last = at;
+    for (var i = at + 1; i <= bottom; i++) {
+      if (!optionAt(i)) continue;
+      if (numberAt(i) != numberAt(last) + 1) {
+        bottom = i - 1;
+        break;
+      }
+      last = i;
+    }
+  }
 
   final options = <String>[];
   var highlighted = -1;
@@ -203,11 +260,19 @@ AgentScreenMenu? _menuAt(List<String> rows, int at, AgentMenuSupport support) {
   }
   if (options.length < 2 || highlighted < 0) return null;
   return AgentScreenMenu(
-    prompt: _promptAbove(rows, top),
+    prompt: _promptAbove(
+      rows,
+      top,
+      gap: support.promptGap,
+      headings: support.promptHeadings,
+    ),
     options: options,
     highlighted: highlighted,
   );
 }
+
+/// An option's number, `1.` to `99.`, and the space after it.
+final _number = RegExp(r'(\d{1,2})\.\s');
 
 /// A checklist whose highlight is on row [at]: rows of `[✔] name` or
 /// `[ ] name` starting in [textColumn], then one row whose words sit in the
@@ -278,14 +343,29 @@ AgentScreenMenu? _checklistAt(List<String> rows, int at, int textColumn) {
 
 final _box = RegExp(r'\[(.)\] ');
 
-/// The rows above the options that say what is asked, up to the panel's edge.
-List<String> _promptAbove(List<String> rows, int top) {
+/// The rows above the options that say what is asked, up to the panel's edge
+/// or one of [headings], whichever is nearer — or, with a [gap], up to that
+/// many blank rows in a row above its words.
+List<String> _promptAbove(
+  List<String> rows,
+  int top, {
+  int? gap,
+  List<String> headings = const [],
+}) {
+  final opens = [for (final h in headings) RegExp(h, caseSensitive: false)];
   final prompt = <String>[];
+  var blanks = 0;
   for (var i = top - 1; i >= 0 && prompt.length < _promptRows; i--) {
     final text = rows[i].trim();
-    if (text.isEmpty) continue;
+    if (text.isEmpty) {
+      // The blank rows between the words and the options are no edge.
+      if (gap != null && prompt.isNotEmpty && ++blanks >= gap) break;
+      continue;
+    }
+    blanks = 0;
     if (_isRule(text)) break;
     prompt.insert(0, text);
+    if (opens.any((o) => o.hasMatch(text))) break;
   }
   return prompt;
 }
