@@ -12,6 +12,7 @@ import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session_engine/store.dart';
 
+import '../../data/workspace_handler.dart' show environmentKinds;
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 
@@ -80,17 +81,31 @@ class InventoryToolSet extends ServerToolSet {
     return null;
   }
 
-  List<Map<String, Object?>> _listProjects() => [
-    for (final project in _projects.getAll()..sort(compareProjects))
-      if (!project.isBot)
-        {
-          'id': project.id,
-          'name': project.name,
-          'environmentId': project.environmentId,
-          'path': project.root.path,
-          if (project.kind != null) 'kind': project.kind,
-        },
-  ];
+  List<Map<String, Object?>> _listProjects() {
+    final all = _projects.getAll()..sort(compareProjects);
+    final kinds = environmentKinds(_context.database);
+    // A project at a folder an older one already is: a duplicate, which
+    // project_merge folds into the one named here.
+    final duplicateOf = <String, String>{
+      for (final (:keep, :duplicates) in duplicateProjects(
+        all,
+        (id) => kinds[id],
+      ))
+        for (final duplicate in duplicates) duplicate.id: keep.id,
+    };
+    return [
+      for (final project in all)
+        if (!project.isBot)
+          {
+            'id': project.id,
+            'name': project.name,
+            'environmentId': project.environmentId,
+            'path': project.root.path,
+            if (project.kind != null) 'kind': project.kind,
+            'duplicateOf': ?duplicateOf[project.id],
+          },
+    ];
+  }
 
   List<Map<String, Object?>> _listSessions({String? query, String? cli}) {
     final needle = query ?? '';
@@ -315,7 +330,9 @@ const List<Map<String, Object?>> inventoryToolSchemas = [
     'description':
         'List the projects known to Karmashala (name, environment, path). '
         'A project with kind "scratch" is the folder sessions without a '
-        'project run in, one per environment.',
+        'project run in, one per environment. A project with duplicateOf is '
+        'a second registration of an older project\'s folder; project_merge '
+        'folds it into that one.',
     'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
   },
   {

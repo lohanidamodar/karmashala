@@ -961,6 +961,8 @@ class FakeDataServer {
       final ProjectUpdate r => _updateProject(r, changes),
       ProjectsFile(:final placements) => _fileProjects(placements, changes),
       ProjectDelete(:final id) => _deleteProject(id, changes),
+      // No app screen merges projects yet; the fake drops the duplicate.
+      ProjectMerge(:final id) => _deleteProject(id, changes),
       ProjectsUsingEnvironment(:final environmentId) => [
         for (final p in projectRows.getAll())
           if (p.environmentId == environmentId) p.name,

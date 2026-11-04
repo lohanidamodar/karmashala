@@ -111,6 +111,7 @@ class DataService {
         return () => [...sessions(), ...comparisons(), ...worktrees()];
       },
       liveAcpSessions: () => liveAcpSessions(),
+      checkoutsMoving: (ids) => _sessions.checkoutsMoving(ids),
     );
   }
 
@@ -609,6 +610,8 @@ class DataService {
       SessionsArchive(:final ids) => bot(ids),
       SessionsUnarchive(:final ids) => bot(ids),
       ProjectDelete(:final id) => view.projects.contains(id),
+      ProjectMerge(:final id, :final into) =>
+        view.projects.contains(id) || view.projects.contains(into),
       ProjectUpdate(:final id) => view.projects.contains(id),
       ProjectCreate(:final projectKind) => projectKind == Project.botKind,
       _ => false,
@@ -757,6 +760,7 @@ class DataService {
         final ProjectUpdate r => _workspace.updateProject(r, changes),
         final ProjectsFile r => _workspace.fileProjects(r, changes),
         final ProjectDelete r => _workspace.deleteProject(r, changes),
+        final ProjectMerge r => _workspace.mergeProject(r, changes),
         final ProjectsUsingEnvironment r => _workspace.projectsUsing(r),
         final CheckoutsAdd r => _workspace.addCheckouts(r, changes),
         final CheckoutsRetire r => _workspace.retireCheckouts(r, changes),

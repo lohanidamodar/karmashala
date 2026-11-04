@@ -1,8 +1,11 @@
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show ProjectMerge;
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
 
+import '../../data/workspace_handler.dart' show projectAtFolder;
 import 'checkout_reach.dart';
 import 'project_folders.dart';
 import 'server_tool_context.dart';
@@ -39,6 +42,7 @@ class ProjectToolSet extends ServerToolSet {
       return switch (tool) {
         'project_add' => _add(arguments),
         'project_update' => _update(arguments),
+        'project_merge' => _merge(arguments),
         _ => throw ArgumentError('Unknown tool: $tool'),
       };
     } on Object catch (error, stack) {
@@ -66,6 +70,27 @@ class ProjectToolSet extends ServerToolSet {
       );
     }
     if (!_reach.reaches(environment)) return null;
+
+    // A folder already in the workspace is answered with its project, not a
+    // second one: an agent once added its own folder again only to learn its
+    // checkout's id, and every session after it was filed under the copy.
+    if (path != null) {
+      final root = EnvironmentPath(environmentId: environment.id, path: path);
+      if (projectAtFolder(_context.database, root) case final existing?) {
+        final checkouts = RepositoryDao(
+          _context.database,
+        ).getByProject(existing.id);
+        return Future.value(<String, Object?>{
+          ..._describe(existing),
+          'alreadyInWorkspace': true,
+          'checkouts': [for (final c in checkouts) _describeCheckout(c)],
+          'count': checkouts.length,
+          'summary':
+              'That folder is already the project "${existing.name}"; '
+              'nothing was added. Use its projectId and checkouts.',
+        });
+      }
+    }
 
     // The name is the folder's own when the caller did not choose one, which
     // is what the dialog fills in for a person.
@@ -153,6 +178,49 @@ class ProjectToolSet extends ServerToolSet {
     });
   }
 
+  /// Two projects at one folder become one: the data service moves every
+  /// row, and only the emptied project's own row goes. What moved is counted
+  /// before the write, so the answer says what the merge carried.
+  Future<Object?>? _merge(Map<String, dynamic> args) {
+    final projectId = _text(args['projectId']);
+    final into = _text(args['into']);
+    if (projectId == null || into == null) {
+      throw ArgumentError(
+        'projectId (the duplicate) and into (the project to keep) are both '
+        'required. list_projects marks a duplicate with duplicateOf.',
+      );
+    }
+    return runTool(() async {
+      final db = _context.database;
+      final checkouts = RepositoryDao(db).getByProject(projectId);
+      final ids = [for (final c in checkouts) c.id];
+      final sessions = ids.isEmpty
+          ? 0
+          : db
+                    .query(
+                      'SELECT COUNT(*) AS n FROM sessions WHERE repository_id '
+                      'IN (${List.filled(ids.length, '?').join(', ')});',
+                      ids,
+                    )
+                    .first['n']!
+                as int;
+      _context.write(ProjectMerge(id: projectId, into: into));
+      final kept = ProjectDao(db).getById(into)!;
+      return <String, Object?>{
+        ..._describe(kept),
+        'removedProjectId': projectId,
+        'sessionsMoved': sessions,
+        'checkoutsMerged': checkouts.length,
+        'summary':
+            'Merged into "${kept.name}": $sessions '
+            '${sessions == 1 ? 'session' : 'sessions'} and '
+            '${checkouts.length} '
+            '${checkouts.length == 1 ? 'checkout' : 'checkouts'} moved, the '
+            'duplicate project removed. Nothing on disk was touched.',
+      };
+    });
+  }
+
   Map<String, Object?> _describe(Project project) => <String, Object?>{
     'projectId': project.id,
     'name': project.name,
@@ -196,7 +264,11 @@ const List<Map<String, Object?>> projectToolSchemas = [
         'already there, clone a Git repository into one, or both. Every Git '
         'checkout beneath the folder is discovered and recorded, and any CLI '
         'sessions those checkouts already have are imported. Use this rather '
-        'than telling the user to open the New Project dialog.',
+        'than telling the user to open the New Project dialog. A folder '
+        'that is already a project — however its path is spelled — is NOT '
+        'added again: the answer is that project, with alreadyInWorkspace '
+        'true. To find the checkout you are working in, call list_checkouts '
+        'with no projectId; never add your own folder to learn its id.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -245,6 +317,8 @@ const List<Map<String, Object?>> projectToolSchemas = [
           'type': 'array',
           'items': {'type': 'object'},
         },
+        'alreadyInWorkspace': {'type': 'boolean'},
+        'summary': {'type': 'string'},
       },
       'required': ['projectId', 'name', 'path', 'checkouts', 'count'],
     },
@@ -310,6 +384,45 @@ const List<Map<String, Object?>> projectToolSchemas = [
         },
       },
       'required': ['projectId', 'name', 'path'],
+    },
+  },
+  {
+    'name': 'project_merge',
+    'description':
+        'Fold a duplicate project into the one to keep: two projects '
+        'registered at one folder (list_projects marks the newer with '
+        'duplicateOf). Its sessions, checkouts, notes, todos and settings '
+        'move to the kept project, and then the duplicate\'s entry is '
+        'removed. **Nothing on disk is touched** and no session or history '
+        'is deleted. Refused when the two are different folders. There is no '
+        'undo: the duplicate\'s id is gone afterwards, so confirm with the '
+        'user which one to keep before calling.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'projectId': {
+          'type': 'string',
+          'description': 'The duplicate, which is removed.',
+        },
+        'into': {
+          'type': 'string',
+          'description': 'The project to keep, which gets everything.',
+        },
+      },
+      'required': ['projectId', 'into'],
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'projectId': {'type': 'string'},
+        'name': {'type': 'string'},
+        'path': {'type': 'string'},
+        'removedProjectId': {'type': 'string'},
+        'sessionsMoved': {'type': 'number'},
+        'checkoutsMerged': {'type': 'number'},
+        'summary': {'type': 'string'},
+      },
+      'required': ['projectId', 'removedProjectId', 'sessionsMoved'],
     },
   },
 ];

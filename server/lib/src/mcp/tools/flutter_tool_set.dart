@@ -206,7 +206,14 @@ class FlutterToolSet extends ServerToolSet {
 
   // --- flutter_run -------------------------------------------------------------
 
-  Future<Object?> _run(Map<String, dynamic> args, String? caller) async {
+  Future<Object?> _run(Map<String, dynamic> given, String? caller) async {
+    // No checkoutId means the caller's own checkout: an agent that could not
+    // name its own once added its folder as a second project to get one.
+    final named = (given['checkoutId'] as String?)?.trim() ?? '';
+    final own = named.isEmpty && caller != null && caller.isNotEmpty
+        ? rows.checkoutOfSession(caller)
+        : null;
+    final args = own == null ? given : {...given, 'checkoutId': own};
     final action = (args['action'] as String?)?.trim() ?? '';
     final configured = (args['configuration'] as String?)?.trim() ?? '';
     if (configured.isNotEmpty && action != 'run') {

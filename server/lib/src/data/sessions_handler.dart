@@ -215,6 +215,26 @@ class SessionsHandler {
   /// What deleting [checkoutIds] takes with it, read before the delete: the
   /// sessions on them (and their recaps), the imported history they hold,
   /// and the other sessions' links to them. Applied as changes after.
+  /// The sessions on [checkoutIds] or spanning one, read before a merge
+  /// moves them, and told as they stand after it.
+  List<DataChange> Function() checkoutsMoving(List<String> checkoutIds) {
+    final moving = checkoutIds.toSet();
+    final ids = <String>{
+      for (final id in moving)
+        ..._sessions.getByRepository(id).map((s) => s.id),
+      for (final entry in _links.all().entries)
+        if (entry.value.any((link) => moving.contains(link.repositoryId)))
+          entry.key,
+    };
+    return () => [
+      for (final id in ids)
+        if (_sessions.getById(id) case final session?) ...[
+          SessionRowChanged(session),
+          SessionLinksChanged(id, _links.linksFor(id)),
+        ],
+    ];
+  }
+
   List<DataChange> Function() checkoutsGoing(List<String> checkoutIds) {
     final going = checkoutIds.toSet();
     final sessions = [

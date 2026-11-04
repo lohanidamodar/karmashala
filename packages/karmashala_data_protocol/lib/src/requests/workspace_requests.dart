@@ -216,6 +216,26 @@ final class ProjectDelete extends _AckRequest {
   Map<String, Object?> argumentsToJson() => {'id': id};
 }
 
+/// Folds the project [id] into [into], two projects at one folder: its
+/// sessions, checkouts, notes, todos and settings move to [into] — a
+/// checkout [into] already has at the same place takes its sessions — and
+/// then the emptied project's row goes. Nothing on disk is touched, and
+/// nothing recorded is deleted. Refused for two different folders.
+final class ProjectMerge extends _AckRequest {
+  const ProjectMerge({required this.id, required this.into});
+
+  static const String name = 'projects.merge';
+
+  final String id;
+  final String into;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'id': id, 'into': into};
+}
+
 /// The names of the projects that keep an environment from being removed:
 /// rooted there, with a checkout there, or with a session run by an agent
 /// installed there. Sorted.

@@ -12,8 +12,9 @@ EnvironmentPath projectOfCheckout(
   final id = (args['checkoutId'] as String?)?.trim() ?? '';
   if (id.isEmpty) {
     throw ArgumentError(
-      'checkoutId is required. list_checkouts has the ids, and the id is '
-      'what says which environment the commands run in.',
+      'checkoutId is required. list_checkouts has the ids — with no '
+      'projectId it lists your own project, your checkout marked yours — and '
+      'the id is what says which environment the commands run in.',
     );
   }
   final repository = rows.repository(id);

@@ -27,6 +27,14 @@ class CheckoutRows {
     );
   }
 
+  /// The id of the checkout the session [sessionId] works in, or null.
+  String? checkoutOfSession(String sessionId) {
+    final rows = _db.query('SELECT repository_id FROM sessions WHERE id = ?;', [
+      sessionId,
+    ]);
+    return rows.isEmpty ? null : rows.first['repository_id'] as String?;
+  }
+
   /// Whether [projectId] is the Scratch project — the folder sessions without
   /// a project run in (`Project.scratchKind`, spelled out here so this reader
   /// stays free of the projects package).

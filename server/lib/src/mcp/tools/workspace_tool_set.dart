@@ -50,17 +50,29 @@ class WorkspaceToolSet extends ServerToolSet {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) => switch (tool) {
-    'list_checkouts' => _listCheckouts(arguments['projectId'] as String?),
+    'list_checkouts' => _listCheckouts(
+      arguments['projectId'] as String?,
+      callerSessionId,
+    ),
     'project_rescan' => _rescan(arguments['projectId'] as String?),
     'delivery_status' => _deliveryStatus(arguments, callerSessionId),
     _ => runTool(() => throw ArgumentError('Unknown tool: $tool')),
   };
 
-  Future<Object?>? _listCheckouts(String? projectId) {
+  Future<Object?>? _listCheckouts(String? requested, String? caller) {
+    // With no projectId, the caller's own: what a session needs to learn the
+    // checkout it is working in. Without this an agent that wanted its own
+    // checkout id (flutter_run takes one) added its folder as a second
+    // project to get one.
+    final own = requested == null || requested.isEmpty
+        ? _checkoutOf(caller)
+        : null;
+    final projectId = own?.projectId ?? requested;
     if (projectId == null || projectId.isEmpty) {
       return runTool(
         () => throw ArgumentError(
-          'projectId is required. list_projects has the ids.',
+          'projectId is required here: this call comes from no session with '
+          'a checkout. list_projects has the ids.',
         ),
       );
     }
@@ -94,6 +106,7 @@ class WorkspaceToolSet extends ServerToolSet {
           for (final repository in repositories)
             <String, Object?>{
               'repositoryId': repository.id,
+              if (own?.id == repository.id) 'yours': true,
               'name': repository.name,
               'path': repository.path.path,
               'environmentId': repository.path.environmentId,
@@ -137,6 +150,17 @@ class WorkspaceToolSet extends ServerToolSet {
             'start in a new worktree to work apart. Nothing is locked.',
       };
     });
+  }
+
+  /// The checkout the session [sessionId] works in, or null.
+  Repository? _checkoutOf(String? sessionId) {
+    if (sessionId == null || sessionId.isEmpty) return null;
+    final rows = _context.database.query(
+      'SELECT repository_id FROM sessions WHERE id = ?;',
+      [sessionId],
+    );
+    final id = rows.isEmpty ? null : rows.first['repository_id'] as String?;
+    return id == null ? null : RepositoryDao(_context.database).getById(id);
   }
 
   /// Re-reads a project's directory for checkouts it does not know about,
@@ -284,16 +308,19 @@ const List<Map<String, Object?>> workspaceToolSchemas = [
         'the checkout is free. writersHere narrows it to the live '
         'sessions that may write there (not read-only), with their agent and '
         'whether they are working or idle: if it names anyone, prefer a new '
-        'worktree (worktree_create) over sharing.',
+        'worktree (worktree_create) over sharing. Omit projectId for your '
+        'own project: the checkout you are working in is marked yours — the '
+        'checkoutId flutter_run and the other checkout tools take.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         'projectId': {
           'type': 'string',
-          'description': 'Which project, from list_projects.',
+          'description':
+              'Which project, from list_projects. Omit for the project of '
+              'the session calling.',
         },
       },
-      'required': ['projectId'],
     },
     'outputSchema': {
       'type': 'object',
@@ -305,6 +332,7 @@ const List<Map<String, Object?>> workspaceToolSchemas = [
             'type': 'object',
             'properties': {
               'repositoryId': {'type': 'string'},
+              'yours': {'type': 'boolean'},
               'name': {'type': 'string'},
               'path': {'type': 'string'},
               'environmentId': {'type': 'string'},

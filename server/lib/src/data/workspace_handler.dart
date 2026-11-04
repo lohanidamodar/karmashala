@@ -1,3 +1,4 @@
+import 'package:agent_cli/process.dart' show EnvironmentKind, EnvironmentPath;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_notes/karmashala_notes.dart' show recordIdProblem;
@@ -19,7 +20,10 @@ class WorkspaceHandler {
     List<DataChange> Function() Function(List<String> checkoutIds)?
     checkoutsGoing,
     Set<String> Function()? liveAcpSessions,
+    List<DataChange> Function() Function(List<String> checkoutIds)?
+    checkoutsMoving,
   }) : _checkoutsGoing = checkoutsGoing,
+       _checkoutsMoving = checkoutsMoving,
        _liveAcpSessions = liveAcpSessions,
        _workspaces = WorkspaceDao(_db),
        _projects = ProjectDao(_db),
@@ -36,6 +40,11 @@ class WorkspaceHandler {
   /// the delete and told after it.
   final List<DataChange> Function() Function(List<String> checkoutIds)?
   _checkoutsGoing;
+
+  /// What a merge moving sessions off checkouts tells the sessions domain:
+  /// read before the move, told after it.
+  final List<DataChange> Function() Function(List<String> checkoutIds)?
+  _checkoutsMoving;
 
   /// The session ids an ACP runtime of the server is running right now. The
   /// server owns those processes; a project is not deleted out from under
@@ -118,6 +127,18 @@ class WorkspaceHandler {
     _requireEnvironment(request.root.environmentId);
     final workspaceId = request.workspaceId;
     if (workspaceId != null) _workspace(workspaceId);
+    // One folder is one project. A second registration once came from an
+    // agent that needed its own checkout's id and added its folder again; it
+    // is refused here, whoever sends it, naming the project already there.
+    if (request.projectKind == null) {
+      if (projectAtFolder(_db, request.root) case final existing?) {
+        throw DataRefused(
+          DataRefusalCode.conflict,
+          '${existing.name} is already in the workspace at that folder '
+          '(project ${existing.id}).',
+        );
+      }
+    }
     final project = Project(
       id: _newId(),
       name: name,
@@ -270,6 +291,142 @@ class WorkspaceHandler {
       if (_todos.getById(id) case final todo?) changes.add(TodoChanged(todo));
     }
     return const DataAck();
+  }
+
+  /// Folds [ProjectMerge.id] into [ProjectMerge.into] — two projects at one
+  /// folder — moving every row that names it or its checkouts, then removes
+  /// the emptied project. A checkout [ProjectMerge.into] already has at the
+  /// same place takes the other's sessions and history; any other checkout
+  /// moves across whole, keeping its id. Nothing is deleted that a row still
+  /// names, and nothing on disk is touched.
+  DataAck mergeProject(ProjectMerge request, List<DataChange> changes) {
+    if (request.id == request.into) {
+      throw const DataRefused.invalid('A project cannot merge into itself.');
+    }
+    final from = _project(request.id);
+    final into = _project(request.into);
+    if (from.kind != null || into.kind != null) {
+      throw const DataRefused.invalid(
+        "Scratch and bot projects are the server's own and do not merge.",
+      );
+    }
+    final kinds = environmentKinds(_db);
+    if (projectFolderKey(from.root, kinds[from.root.environmentId]) !=
+        projectFolderKey(into.root, kinds[into.root.environmentId])) {
+      throw DataRefused.invalid(
+        '${from.name} and ${into.name} are different folders, so they are '
+        'not duplicates. Only two projects at one folder merge.',
+      );
+    }
+    final checkouts = _repositories.getByProject(from.id);
+    final kept = _repositories.getByProject(into.id);
+    // Each of [from]'s checkouts: the one [into] has at that place, or null
+    // to move it across as it is.
+    final target = <String, Repository?>{
+      for (final checkout in checkouts)
+        checkout.id: kept
+            .where(
+              (other) =>
+                  other.environmentId == checkout.environmentId &&
+                  samePath(other.path.path, checkout.path.path),
+            )
+            .firstOrNull,
+    };
+    final told = _checkoutsMoving?.call([
+      for (final checkout in checkouts) checkout.id,
+    ]);
+    final notes = [
+      for (final note in _notes.list())
+        if (note.projectId == from.id) note.id,
+    ];
+    final todos = [
+      for (final todo in _todos.list())
+        if (todo.projectId == from.id) todo.id,
+    ];
+    final references = _referencingColumns();
+    _db.transaction(() {
+      for (final MapEntry(key: id, value: same) in target.entries) {
+        if (same == null) {
+          _db.execute('UPDATE repositories SET project_id = ? WHERE id = ?;', [
+            into.id,
+            id,
+          ]);
+          continue;
+        }
+        // OR IGNORE: a row the kept checkout already has its own copy of
+        // (one session spanning both) stays, and goes with the duplicate.
+        for (final (table, column) in references.repositories) {
+          _db.execute(
+            'UPDATE OR IGNORE "$table" SET "$column" = ? WHERE "$column" = ?;',
+            [same.id, id],
+          );
+        }
+      }
+      for (final (table, column) in references.projects) {
+        _db.execute(
+          'UPDATE OR IGNORE "$table" SET "$column" = ? WHERE "$column" = ?;',
+          [into.id, from.id],
+        );
+      }
+      final chosen = from.defaultRepositoryId;
+      if (into.defaultRepositoryId == null && chosen != null) {
+        _db.execute(
+          'UPDATE projects SET default_repository_id = ? WHERE id = ?;',
+          [target[chosen]?.id ?? chosen, into.id],
+        );
+      }
+      _projects.delete(from.id);
+    });
+    changes
+      ..add(ProjectRemoved(from.id))
+      ..add(ProjectChanged(_project(into.id)));
+    for (final MapEntry(key: id, value: same) in target.entries) {
+      if (same == null) {
+        changes.add(RepositoryChanged(_repositories.getById(id)!));
+      } else {
+        changes.add(RepositoryRemoved(id));
+      }
+    }
+    changes.addAll(told?.call() ?? const []);
+    for (final id in notes) {
+      if (_notes.getById(id) case final note?) changes.add(NoteChanged(note));
+    }
+    for (final id in todos) {
+      if (_todos.getById(id) case final todo?) changes.add(TodoChanged(todo));
+    }
+    return const DataAck();
+  }
+
+  /// Every column that names a checkout or a project, read from the schema
+  /// so a table added later is moved too: the foreign keys, and the plain
+  /// `repository_id` / `project_id` columns of the logs that keep no key.
+  /// The ownership links themselves — a checkout's project, a project's
+  /// default — are the merge's own to write.
+  ({List<(String, String)> repositories, List<(String, String)> projects})
+  _referencingColumns() {
+    final repositories = <(String, String)>{};
+    final projects = <(String, String)>{};
+    final tables = _db.query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' "
+      "AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';",
+    );
+    for (final row in tables) {
+      final table = row['name']! as String;
+      if (table == 'projects' || table == 'repositories') continue;
+      for (final key in _db.query('PRAGMA foreign_key_list("$table");')) {
+        final column = key['from']! as String;
+        if (key['table'] == 'repositories') repositories.add((table, column));
+        if (key['table'] == 'projects') projects.add((table, column));
+      }
+      for (final column in _db.query('PRAGMA table_info("$table");')) {
+        final name = column['name']! as String;
+        if (name == 'repository_id' || name == 'source_repository_id') {
+          repositories.add((table, name));
+        }
+        if (name == 'project_id') projects.add((table, name));
+      }
+    }
+    return (repositories: repositories.toList(), projects: projects.toList());
   }
 
   List<String> projectsUsing(ProjectsUsingEnvironment request) =>
@@ -438,3 +595,25 @@ class WorkspaceHandler {
     }
   }
 }
+
+/// The ordinary project whose root is the folder [root] names, however it is
+/// spelled ([projectFolderKey]'s rule), or null. Scratch and bot projects are
+/// the server's own and never count.
+Project? projectAtFolder(AppDatabase db, EnvironmentPath root) {
+  final kinds = environmentKinds(db);
+  final key = projectFolderKey(root, kinds[root.environmentId]);
+  for (final project in ProjectDao(db).getAll()) {
+    if (project.kind != null) continue;
+    final kind = kinds[project.root.environmentId];
+    if (projectFolderKey(project.root, kind) == key) return project;
+  }
+  return null;
+}
+
+/// Every environment the store has, by id, with its kind.
+Map<String, EnvironmentKind?> environmentKinds(AppDatabase db) => {
+  for (final row in db.query('SELECT id, kind FROM execution_environments;'))
+    row['id']! as String: EnvironmentKind.values
+        .where((kind) => kind.name == row['kind'])
+        .firstOrNull,
+};

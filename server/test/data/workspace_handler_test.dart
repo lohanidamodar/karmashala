@@ -475,7 +475,13 @@ void main() {
 
     test('identity is recorded on every row at that location, and cleared', () {
       final made = create();
-      final other = create(name: 'Other', found: [found('same', win)]);
+      // One folder is one project, so the other is rooted elsewhere and
+      // only its checkout shares the location.
+      final other = create(
+        name: 'Other',
+        root: under(win, 'other'),
+        found: [found('same', win)],
+      );
       final changed = app
           .handle(
             const CheckoutsIdentify(
@@ -510,7 +516,7 @@ void main() {
     test('the projects keeping an environment are named', () {
       create(name: 'Rooted', root: wsl);
       create(name: 'Mixed', found: [found('w', under(wsl, 'w'))]);
-      create(name: 'Elsewhere');
+      create(name: 'Elsewhere', root: under(win, 'elsewhere'));
       expect(app.handle(const ProjectsUsingEnvironment('wsl')).value, [
         'Mixed',
         'Rooted',

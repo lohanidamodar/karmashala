@@ -148,3 +148,48 @@ EnvironmentPath _underRoot(EnvironmentPath root, String relative) {
     path: windowsStyle ? '$base\\$tail' : '$base/$tail',
   );
 }
+
+/// Where a project's [root] is, as one comparable key: two roots with one key
+/// are one folder, so a second project there is a duplicate. Folded the way
+/// [canonicalPathKey] folds (separators, a trailing slash, a Windows path's
+/// case), and — because WSL reaches this machine's own drives at
+/// `/mnt/<drive>` — a WSL path under `/mnt/c` keys as the Windows `C:\` path
+/// it names. Every other environment keeps its own namespace: an SSH host's
+/// `/home/me` is never this machine's.
+String projectFolderKey(EnvironmentPath root, EnvironmentKind? kind) {
+  if (kind == EnvironmentKind.wsl) {
+    final drive = RegExp(r'^/mnt/([A-Za-z])(/.*)?$').firstMatch(root.path);
+    if (drive != null) {
+      final rest = drive[2] ?? '';
+      return 'host:${canonicalPathKey('${drive[1]}:${rest.isEmpty ? '/' : rest}')}';
+    }
+  }
+  if (kind == EnvironmentKind.windowsNative) {
+    return 'host:${canonicalPathKey(root.path)}';
+  }
+  return '${root.environmentId}:${canonicalPathKey(root.path)}';
+}
+
+/// The projects in [projects] that sit at the same folder as an earlier one,
+/// each with the oldest project at that folder — the one to keep. [kindOf]
+/// says what kind each environment id is; an unknown one keeps its own
+/// namespace. Scratch and bot projects are left out: the server makes those.
+List<({Project keep, List<Project> duplicates})> duplicateProjects(
+  Iterable<Project> projects,
+  EnvironmentKind? Function(String environmentId) kindOf,
+) {
+  final byFolder = <String, List<Project>>{};
+  for (final project in [...projects]..sort(compareProjects)) {
+    if (project.kind != null) continue;
+    byFolder
+        .putIfAbsent(
+          projectFolderKey(project.root, kindOf(project.root.environmentId)),
+          () => [],
+        )
+        .add(project);
+  }
+  return [
+    for (final same in byFolder.values)
+      if (same.length > 1) (keep: same.first, duplicates: same.sublist(1)),
+  ];
+}

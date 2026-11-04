@@ -157,9 +157,9 @@ const List<Map<String, Object?>> flutterRunToolSchemas = <Map<String, Object?>>[
         'checkoutId': {
           'type': 'string',
           'description':
-              'From list_checkouts. Required for run, pubGet, analyze and '
-              'test — it is what says which environment the commands run '
-              'in, which a bare path cannot.',
+              'From list_checkouts. For run, pubGet, analyze and test — it '
+              'is what says which environment the commands run in, which a '
+              'bare path cannot. Omit for the checkout you are working in.',
         },
         'projectDirectory': {
           'type': 'string',

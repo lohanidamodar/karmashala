@@ -217,6 +217,10 @@ sealed class DataRequest<R> {
       ProjectUpdate.name => ProjectUpdate._from(args),
       ProjectsFile.name => ProjectsFile(args.placements('placements')),
       ProjectDelete.name => ProjectDelete(args.string('id')),
+      ProjectMerge.name => ProjectMerge(
+        id: args.string('id'),
+        into: args.string('into'),
+      ),
       ProjectsUsingEnvironment.name => ProjectsUsingEnvironment(
         args.string('environmentId'),
       ),

@@ -179,9 +179,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // gh reads GitHub; nothing is re-run, cancelled or commented on.
   'github_runs': McpToolAnnotations.readOutside,
   'github_run_log': McpToolAnnotations.readOutside,
-  // Adds a project and discovers what is under it. Not idempotent: asked
-  // twice with the same folder it files the workspace with two of them.
-  'project_add': McpToolAnnotations(movesAttention: false),
+  // Adds a project and discovers what is under it. A folder already in the
+  // workspace answers with its project and writes nothing, so asking twice
+  // is the same as asking once.
+  'project_add': McpToolAnnotations(idempotent: true, movesAttention: false),
+  // Removes the duplicate's entry for good (its rows move, none is deleted):
+  // destructive, and the second call finds the duplicate already gone.
+  'project_merge': McpToolAnnotations(destructive: true, movesAttention: false),
   // Rewrites one project row, and with a new root the checkout rows under
   // it. Same arguments, same result — and nothing is deleted, so a move
   // that surprises is corrected by moving it back.
@@ -873,6 +877,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'project_update': McpToolListing(
     McpToolCategory.workspace,
     'Rename a project, move its root folder, or set its default checkout.',
+  ),
+  'project_merge': McpToolListing(
+    McpToolCategory.workspace,
+    'Fold a duplicate project into the one to keep; the folder stays put.',
   ),
   'project_rescan': McpToolListing(
     McpToolCategory.workspace,

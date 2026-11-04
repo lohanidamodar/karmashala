@@ -436,6 +436,7 @@ does both at once, and it is honest about the same gap:
       'github_runs',
       'github_run_log',
       'project_rescan',
+      'project_merge',
       'select_checkout',
     ],
     body: '''
@@ -468,6 +469,16 @@ ask" are different facts and only one of them means you are ready to ship.
 
 `select_checkout` moves what the *developer* sees on screen. Use it to show
 someone where you are working, not to navigate for yourself.
+
+**One folder is one project.** `project_add` on a folder already in the
+workspace hands back that project and writes nothing. To find your own
+checkout, call `list_checkouts` with no projectId; never add your own folder.
+
+`project_merge` folds a duplicate project into the one to keep and has no
+undo. Its sessions, checkouts, notes and todos move across and the duplicate's
+entry is deleted. Nothing on disk is touched, and two different folders are
+refused. `list_projects` marks a duplicate with `duplicateOf`. Ask the
+developer before you merge: which entry to keep is theirs to decide.
 ''',
   ),
   McpGuide(

@@ -23,7 +23,7 @@
     },
     {
       "name": "list_projects",
-      "description": "List the projects known to Karmashala (name, environment, path). A project with kind \"scratch\" is the folder sessions without a project run in, one per environment.",
+      "description": "List the projects known to Karmashala (name, environment, path). A project with kind \"scratch\" is the folder sessions without a project run in, one per environment. A project with duplicateOf is a second registration of an older project's folder; project_merge folds it into that one.",
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -1098,18 +1098,15 @@
     },
     {
       "name": "list_checkouts",
-      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free. writersHere narrows it to the live sessions that may write there (not read-only), with their agent and whether they are working or idle: if it names anyone, prefer a new worktree (worktree_create) over sharing.",
+      "description": "The checkouts under a project: the main clone and every worktree, with the branch each is on, which one the side panel is pointed at, and which sessions Karmashala records as working in each. A branch reads \"not recorded\" when git could not be asked — that is not the same as being on no branch. Only a session's own worktree is isolated: a session works in one worktree at most, so any other repository it touches is a checkout shared with every other session that touches it — same working tree, same index, same branch. Read sessionsWorkingHere before editing or running a build in a checkout that is not your own; an empty list means none was recorded, not that the checkout is free. writersHere narrows it to the live sessions that may write there (not read-only), with their agent and whether they are working or idle: if it names anyone, prefer a new worktree (worktree_create) over sharing. Omit projectId for your own project: the checkout you are working in is marked yours — the checkoutId flutter_run and the other checkout tools take.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "projectId": {
             "type": "string",
-            "description": "Which project, from list_projects."
+            "description": "Which project, from list_projects. Omit for the project of the session calling."
           }
-        },
-        "required": [
-          "projectId"
-        ]
+        }
       },
       "outputSchema": {
         "type": "object",
@@ -1124,6 +1121,9 @@
               "properties": {
                 "repositoryId": {
                   "type": "string"
+                },
+                "yours": {
+                  "type": "boolean"
                 },
                 "name": {
                   "type": "string"
@@ -1454,7 +1454,7 @@
     },
     {
       "name": "project_add",
-      "description": "Add a project to the Karmashala workspace: adopt a folder that is already there, clone a Git repository into one, or both. Every Git checkout beneath the folder is discovered and recorded, and any CLI sessions those checkouts already have are imported. Use this rather than telling the user to open the New Project dialog.",
+      "description": "Add a project to the Karmashala workspace: adopt a folder that is already there, clone a Git repository into one, or both. Every Git checkout beneath the folder is discovered and recorded, and any CLI sessions those checkouts already have are imported. Use this rather than telling the user to open the New Project dialog. A folder that is already a project — however its path is spelled — is NOT added again: the answer is that project, with alreadyInWorkspace true. To find the checkout you are working in, call list_checkouts with no projectId; never add your own folder to learn its id.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1503,6 +1503,12 @@
             "items": {
               "type": "object"
             }
+          },
+          "alreadyInWorkspace": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string"
           }
         },
         "required": [
@@ -1516,7 +1522,7 @@
       "annotations": {
         "readOnlyHint": false,
         "destructiveHint": false,
-        "idempotentHint": false,
+        "idempotentHint": true,
         "openWorldHint": false,
         "movesAttentionHint": false
       }
@@ -1599,6 +1605,65 @@
         "readOnlyHint": false,
         "destructiveHint": false,
         "idempotentHint": true,
+        "openWorldHint": false,
+        "movesAttentionHint": false
+      }
+    },
+    {
+      "name": "project_merge",
+      "description": "Fold a duplicate project into the one to keep: two projects registered at one folder (list_projects marks the newer with duplicateOf). Its sessions, checkouts, notes, todos and settings move to the kept project, and then the duplicate's entry is removed. **Nothing on disk is touched** and no session or history is deleted. Refused when the two are different folders. There is no undo: the duplicate's id is gone afterwards, so confirm with the user which one to keep before calling.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "The duplicate, which is removed."
+          },
+          "into": {
+            "type": "string",
+            "description": "The project to keep, which gets everything."
+          }
+        },
+        "required": [
+          "projectId",
+          "into"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "removedProjectId": {
+            "type": "string"
+          },
+          "sessionsMoved": {
+            "type": "number"
+          },
+          "checkoutsMerged": {
+            "type": "number"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "removedProjectId",
+          "sessionsMoved"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
         "openWorldHint": false,
         "movesAttentionHint": false
       }
@@ -4471,7 +4536,7 @@
           },
           "checkoutId": {
             "type": "string",
-            "description": "From list_checkouts. Required for run, pubGet, analyze and test — it is what says which environment the commands run in, which a bare path cannot."
+            "description": "From list_checkouts. For run, pubGet, analyze and test — it is what says which environment the commands run in, which a bare path cannot. Omit for the checkout you are working in."
           },
           "projectDirectory": {
             "type": "string",
@@ -6328,6 +6393,10 @@
     "project_update": {
       "category": "workspace",
       "summary": "Rename a project, move its root folder, or set its default checkout."
+    },
+    "project_merge": {
+      "category": "workspace",
+      "summary": "Fold a duplicate project into the one to keep; the folder stays put."
     },
     "worktree_create": {
       "category": "workspace",
