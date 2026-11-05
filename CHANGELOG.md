@@ -17,6 +17,11 @@ installs claim the same version name.
 
 ---
 
+## 1.34.23 — 2026-11-05 (build 90)
+
+- **A Codex approval reads as Codex draws it, and is answered from the chat again.** Codex 0.166 redraws its transcript while a command approval waits, so the prompt read off the screen kept changing and an answer from the chat, the phone or the dashboard was refused as "the prompt changed". The prompt now ends at Codex's own heading, and only Codex's numbered options are buttons: no more "Environment: local", the command line or the "Press enter to confirm" footer as choices.
+- **One folder is one project.** Adding a folder already in the workspace hands back the project that is there instead of making a second; an agent once did this to learn its own checkout. `list_checkouts` with no project lists your own, and `flutter_run` with no checkout runs in yours. A duplicate made before this can be folded into the one to keep with `project_merge`, which moves its sessions, checkouts, notes and todos and touches nothing on disk.
+
 ## 1.34.22 — 2026-11-03 (build 89)
 
 - **What a session waits on sits just over its message box.** An approval, a question or a secret it asks for is drawn over the box a reply is typed in — in a chat tab, on the phone and in the dashboard's chat — rather than under it, by the status line. The box gives it the room while it shows, and a pane too short for its answers scrolls the whole card.
