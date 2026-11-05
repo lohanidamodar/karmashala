@@ -180,7 +180,21 @@ class WorkspaceHandler {
     }
     final root = request.root;
     final moving = root != null && rootMoves(project.root, root);
-    if (moving) _requireEnvironment(root.environmentId);
+    if (moving) {
+      _requireEnvironment(root.environmentId);
+      // Moving onto another project's folder would make the duplicate
+      // createProject refuses.
+      if (project.kind == null) {
+        if (projectAtFolder(_db, root) case final existing?
+            when existing.id != project.id) {
+          throw DataRefused(
+            DataRefusalCode.conflict,
+            '${existing.name} is already in the workspace at that folder '
+            '(project ${existing.id}).',
+          );
+        }
+      }
+    }
 
     var rebased = const <Repository>[];
     var leftBehind = const <Repository>[];
@@ -249,24 +263,15 @@ class WorkspaceHandler {
   DataAck deleteProject(ProjectDelete request, List<DataChange> changes) {
     final project = _project(request.id);
     final checkouts = _repositories.getByProject(request.id);
-    final live = _liveAcpSessions?.call() ?? const <String>{};
-    if (live.isNotEmpty) {
-      final checkoutIds = {for (final checkout in checkouts) checkout.id};
-      final running = _db
-          .query(
-            'SELECT id, repository_id FROM sessions WHERE id IN '
-            '(${List.filled(live.length, '?').join(', ')});',
-            live.toList(),
-          )
-          .where((row) => checkoutIds.contains(row['repository_id']))
-          .length;
-      if (running > 0) {
-        throw DataRefused.invalid(
-          '${project.name} has $running ACP '
-          '${running == 1 ? 'session' : 'sessions'} running. Stop '
-          '${running == 1 ? 'it' : 'them'} first, then remove the project.',
-        );
-      }
+    final running = _liveAcpSessionsIn({
+      for (final checkout in checkouts) checkout.id,
+    });
+    if (running > 0) {
+      throw DataRefused.invalid(
+        '${project.name} has $running ACP '
+        '${running == 1 ? 'session' : 'sessions'} running. Stop '
+        '${running == 1 ? 'it' : 'them'} first, then remove the project.',
+      );
     }
     final notes = [
       for (final note in _notes.list())
@@ -297,8 +302,10 @@ class WorkspaceHandler {
   /// folder — moving every row that names it or its checkouts, then removes
   /// the emptied project. A checkout [ProjectMerge.into] already has at the
   /// same place takes the other's sessions and history; any other checkout
-  /// moves across whole, keeping its id. Nothing is deleted that a row still
-  /// names, and nothing on disk is touched.
+  /// moves across whole, keeping its id. Where both kept a record of the same
+  /// thing (one session linked to both checkouts, one CLI history imported
+  /// under each), the kept project's copy stays and the duplicate's goes with
+  /// it. Nothing on disk is touched.
   DataAck mergeProject(ProjectMerge request, List<DataChange> changes) {
     if (request.id == request.into) {
       throw const DataRefused.invalid('A project cannot merge into itself.');
@@ -332,6 +339,20 @@ class WorkspaceHandler {
             )
             .firstOrNull,
     };
+    // A checkout folded into the kept one is deleted with the duplicate; a
+    // running ACP session holds its id and would write against a gone row.
+    final running = _liveAcpSessionsIn({
+      for (final MapEntry(key: id, value: same) in target.entries)
+        if (same != null) id,
+    });
+    if (running > 0) {
+      throw DataRefused.invalid(
+        '${from.name} has $running ACP '
+        '${running == 1 ? 'session' : 'sessions'} running in a checkout '
+        '${into.name} also has. Stop ${running == 1 ? 'it' : 'them'} '
+        'first, then merge.',
+      );
+    }
     final told = _checkoutsMoving?.call([
       for (final checkout in checkouts) checkout.id,
     ]);
@@ -427,6 +448,20 @@ class WorkspaceHandler {
       }
     }
     return (repositories: repositories.toList(), projects: projects.toList());
+  }
+
+  /// How many running ACP sessions work in one of [checkoutIds].
+  int _liveAcpSessionsIn(Set<String> checkoutIds) {
+    final live = _liveAcpSessions?.call() ?? const <String>{};
+    if (live.isEmpty || checkoutIds.isEmpty) return 0;
+    return _db
+        .query(
+          'SELECT id, repository_id FROM sessions WHERE id IN '
+          '(${List.filled(live.length, '?').join(', ')});',
+          live.toList(),
+        )
+        .where((row) => checkoutIds.contains(row['repository_id']))
+        .length;
   }
 
   List<String> projectsUsing(ProjectsUsingEnvironment request) =>

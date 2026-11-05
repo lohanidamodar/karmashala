@@ -212,11 +212,9 @@ class SessionsHandler {
     return const DataAck();
   }
 
-  /// What deleting [checkoutIds] takes with it, read before the delete: the
-  /// sessions on them (and their recaps), the imported history they hold,
-  /// and the other sessions' links to them. Applied as changes after.
-  /// The sessions on [checkoutIds] or spanning one, read before a merge
-  /// moves them, and told as they stand after it.
+  /// The sessions on [checkoutIds] or spanning one, and the imported history
+  /// they hold, read before a merge moves them and told as they stand after
+  /// it: an imported entry the kept checkout already had goes.
   List<DataChange> Function() checkoutsMoving(List<String> checkoutIds) {
     final moving = checkoutIds.toSet();
     final ids = <String>{
@@ -226,15 +224,24 @@ class SessionsHandler {
         if (entry.value.any((link) => moving.contains(link.repositoryId)))
           entry.key,
     };
+    final imported = _imported.idsUnder(moving);
     return () => [
       for (final id in ids)
         if (_sessions.getById(id) case final session?) ...[
           SessionRowChanged(session),
           SessionLinksChanged(id, _links.linksFor(id)),
         ],
+      for (final id in imported)
+        if (_imported.getById(id) case final entry?)
+          ImportedChanged(entry)
+        else
+          ImportedRemoved(id),
     ];
   }
 
+  /// What deleting [checkoutIds] takes with it, read before the delete: the
+  /// sessions on them (and their recaps), the imported history they hold,
+  /// and the other sessions' links to them. Applied as changes after.
   List<DataChange> Function() checkoutsGoing(List<String> checkoutIds) {
     final going = checkoutIds.toSet();
     final sessions = [

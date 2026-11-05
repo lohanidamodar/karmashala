@@ -393,9 +393,10 @@ const List<Map<String, Object?>> projectToolSchemas = [
         'registered at one folder (list_projects marks the newer with '
         'duplicateOf). Its sessions, checkouts, notes, todos and settings '
         'move to the kept project, and then the duplicate\'s entry is '
-        'removed. **Nothing on disk is touched** and no session or history '
-        'is deleted. Refused when the two are different folders. There is no '
-        'undo: the duplicate\'s id is gone afterwards, so confirm with the '
+        'removed. **Nothing on disk is touched** and no session is deleted; '
+        'where both kept the same record, the kept project\'s copy stays. '
+        'Refused while an ACP session runs in a checkout both have, and '
+        'when the two are different folders. There is no undo: the duplicate\'s id is gone afterwards, so confirm with the '
         'user which one to keep before calling.',
     'inputSchema': {
       'type': 'object',

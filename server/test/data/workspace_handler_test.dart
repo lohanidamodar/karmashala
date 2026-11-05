@@ -3,6 +3,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
+import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -397,6 +398,108 @@ void main() {
       live = {'elsewhere'};
       app.handle(ProjectDelete(made.project.id));
       expect(snapshot().projects, isEmpty);
+    });
+  });
+
+  group('one folder is one project', () {
+    /// A second project at [win], written past the guard the way the old
+    /// project_add wrote it, with its own checkout there.
+    ({String keep, String keepCheckout, String dup, String dupCheckout})
+    duplicated() {
+      final made = create();
+      ProjectDao(
+        db,
+      ).insert(Project(id: 'dup', name: 'Demo', root: win, createdAt: now));
+      RepositoryDao(db).insert(
+        Repository(
+          id: 'dup-checkout',
+          projectId: 'dup',
+          name: 'demo',
+          path: win,
+          createdAt: now,
+        ),
+      );
+      return (
+        keep: made.project.id,
+        keepCheckout: made.repositories.single.id,
+        dup: 'dup',
+        dupCheckout: 'dup-checkout',
+      );
+    }
+
+    void session(String id, String checkoutId) => db.execute(
+      'INSERT INTO sessions (id, repository_id, agent_installation_id, '
+      'title, use_worktree, status, created_at) VALUES (?, ?, ?, ?, 0, ?, ?);',
+      [id, checkoutId, 'a1', id, 'running', '$now'],
+    );
+
+    test('a move onto another project\'s folder is refused', () {
+      create();
+      final other = create(name: 'Other', root: wsl);
+      expect(
+        () => app.handle(
+          ProjectUpdate(
+            id: other.project.id,
+            root: const EnvironmentPath(
+              environmentId: 'windows',
+              path: r'c:\SRC\demo\',
+            ),
+          ),
+        ),
+        refused(DataRefusalCode.conflict, 'Demo'),
+      );
+      expect(
+        snapshot().projects.firstWhere((p) => p.name == 'Other').root,
+        wsl,
+      );
+    });
+
+    test('a merge is refused while an ACP session runs in a checkout both '
+        'have, and goes once it has stopped', () {
+      final ids = duplicated();
+      db.execute('PRAGMA foreign_keys = OFF;');
+      session('s1', ids.dupCheckout);
+      db.execute('PRAGMA foreign_keys = ON;');
+      var live = {'s1'};
+      service.liveAcpSessions = () => live;
+
+      expect(
+        () => app.handle(ProjectMerge(id: ids.dup, into: ids.keep)),
+        refused(DataRefusalCode.invalid, '1 ACP session running'),
+      );
+      expect(snapshot().projects, hasLength(2));
+
+      live = {};
+      app.handle(ProjectMerge(id: ids.dup, into: ids.keep));
+      expect(snapshot().projects.single.id, ids.keep);
+    });
+
+    test('a merge tells every client where the imported history went', () {
+      final ids = duplicated();
+      db.execute(
+        'INSERT INTO imported_sessions (id, repository_id, source, '
+        'external_id, environment_id, title, preview, file_path, store_home, '
+        'is_subagent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?);',
+        [
+          'imp1',
+          ids.dupCheckout,
+          'claude',
+          'ext1',
+          'windows',
+          'Old chat',
+          '',
+          r'C:\x.jsonl',
+          r'C:\home',
+          '$now',
+        ],
+      );
+      told.clear();
+
+      app.handle(ProjectMerge(id: ids.dup, into: ids.keep));
+
+      final moved = told.single.changes.whereType<ImportedChanged>().single;
+      expect(moved.session.id, 'imp1');
+      expect(moved.session.repositoryId, ids.keepCheckout);
     });
   });
 
