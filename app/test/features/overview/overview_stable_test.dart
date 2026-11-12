@@ -52,10 +52,14 @@ void main() {
       ),
   };
 
+  /// Under a pointer the waiting drawer is open, listing every ask, so no
+  /// card draws its own: an ask is otherwise answered on its card, which
+  /// grows by it for as long as it waits (owner, 2026-11-12).
   Future<ProviderContainer> pump(WidgetTester tester, Size size) => pumpMission(
     tester,
     fixture: MissionFixture.full(),
     prefsDir: dir,
+    waiting: size.width >= WidthClass.mediumMin,
     size: size,
     phone: size.width < WidthClass.mediumMin,
   );

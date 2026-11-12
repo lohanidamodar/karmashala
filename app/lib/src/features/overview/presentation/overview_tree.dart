@@ -27,10 +27,12 @@ import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
+import '../application/overview_search.dart';
 import '../application/overview_seen.dart';
 import '../application/overview_tree.dart';
 import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
+import 'overview_cards.dart' show overviewCardEdge;
 import 'overview_done_card.dart';
 import 'overview_end_button.dart';
 import 'overview_quick_composer.dart';
@@ -51,8 +53,14 @@ class OverviewFamilyTree extends ConsumerStatefulWidget {
     this.laneKey,
     this.laneRoots = const [],
     this.matches,
+    this.askOf,
     super.key,
   });
+
+  /// What answers a session of this family that asks the owner something,
+  /// drawn on the card under the tree; null where asks are answered
+  /// elsewhere — a phone's waiting sheet.
+  final Widget Function(OverviewCard card)? askOf;
 
   /// What the dashboard's search matches, null while it is empty: a family
   /// holding a match unfolds whole, and its other rows dim.
@@ -279,6 +287,17 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
           children: [
             OverviewParentLink(card: root),
             tree,
+            if (widget.askOf case final askOf?)
+              for (final card in node.drawn)
+                if (card.column == BoardColumn.needsYou &&
+                    !card.heldBySubSessions)
+                  _FamilyAsk(
+                    key: ValueKey('overview-queue-card:${card.id}'),
+                    card: card,
+                    // The root's own ask needs no name over it.
+                    named: card.id != root.id,
+                    child: askOf(card),
+                  ),
             const SizedBox(height: Insets.xs),
             _FamilyFooter(
               node: node,
@@ -343,10 +362,58 @@ class _OverviewFamilyTreeState extends ConsumerState<OverviewFamilyTree> {
               node: node,
               onOpen: widget.onOpen,
               wide: widget.wide,
+              asksOnCard: widget.askOf != null,
               onFocus: (on) => _headFocused.value = on,
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One session's ask on its family's card: edged as what waits on the owner
+/// is, [named] with the sub-session that asks, and answered in place.
+class _FamilyAsk extends StatelessWidget {
+  const _FamilyAsk({
+    required this.card,
+    required this.named,
+    required this.child,
+    super.key,
+  });
+
+  final OverviewCard card;
+  final bool named;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(top: Insets.sm),
+      padding: const EdgeInsets.all(Insets.sm),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: overviewCardEdge(context, card.state)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (named)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Insets.xs),
+              child: Text(
+                card.entry.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          child,
+        ],
       ),
     );
   }
@@ -489,7 +556,11 @@ class _FamilyHeader extends ConsumerWidget {
     required this.onOpen,
     required this.wide,
     required this.onFocus,
+    this.asksOnCard = false,
   });
+
+  /// Whether this card answers its family's asks itself, under its tree.
+  final bool asksOnCard;
 
   final OverviewTreeNode node;
   final ValueChanged<OverviewCard> onOpen;
@@ -610,6 +681,29 @@ class _FamilyHeader extends ConsumerWidget {
                                 _AskMarker(
                                   card: card,
                                   asks: asks,
+                                  // On the card, it goes to the first ask;
+                                  // else to the family's asks in the drawer.
+                                  onTap: asksOnCard
+                                      ? () => ref
+                                            .read(
+                                              overviewRevealProvider.notifier,
+                                            )
+                                            .reveal(
+                                              node.drawn
+                                                  .firstWhere(
+                                                    (c) =>
+                                                        c.column ==
+                                                            BoardColumn
+                                                                .needsYou &&
+                                                        !c.heldBySubSessions,
+                                                  )
+                                                  .id,
+                                            )
+                                      : () => ref
+                                            .read(
+                                              overviewDrawerProvider.notifier,
+                                            )
+                                            .open(family: card.id),
                                   height: overviewLinesHeight(
                                     context,
                                     titleStyle,
@@ -696,8 +790,10 @@ class _AskMarker extends ConsumerWidget {
     required this.card,
     required this.asks,
     required this.height,
+    required this.onTap,
   });
 
+  final VoidCallback onTap;
   final OverviewCard card;
   final int asks;
   final double height;
@@ -718,8 +814,7 @@ class _AskMarker extends ConsumerWidget {
           child: InkWell(
             key: ValueKey('overview-family-review:${card.id}'),
             borderRadius: radius,
-            onTap: () =>
-                ref.read(overviewDrawerProvider.notifier).open(family: card.id),
+            onTap: onTap,
             child: SizedBox(
               height: height,
               child: FittedBox(

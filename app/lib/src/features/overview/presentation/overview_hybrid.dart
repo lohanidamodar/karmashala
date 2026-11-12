@@ -372,6 +372,21 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             laneKey: laneKey,
             laneRoots: roots,
             matches: matches,
+            // A pointer answers on the card; a phone, in its waiting sheet.
+            // While the drawer lists every ask, they are answered there.
+            askOf: phone || drawer
+                ? null
+                : (card) => OverviewQueueCard(
+                    card: card,
+                    bare: true,
+                    onOpen: onOpen,
+                    onEdit: widget.onEdit,
+                    onTerminal: widget.onTerminal,
+                    onAnswered: widget.onAnswered,
+                    questionController: widget.questionControllerOf?.call(
+                      card.id,
+                    ),
+                  ),
           );
           return DragTarget<String>(
             onWillAcceptWithDetails: (drag) =>

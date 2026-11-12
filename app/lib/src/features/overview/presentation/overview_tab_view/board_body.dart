@@ -261,11 +261,20 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
         );
         return;
       }
-      // What waits is answered in the drawer: N brings it out.
-      if (!ref.read(overviewDrawerProvider).open) {
-        ref.read(overviewDrawerProvider.notifier).open();
+      final to = next ?? current!;
+      if (_inSheet) {
+        // A phone answers in its waiting sheet: N brings it out.
+        if (!ref.read(overviewDrawerProvider).open) {
+          ref.read(overviewDrawerProvider.notifier).open();
+        }
+        _goTo(to);
+      } else if (focus.peeked != null ||
+          ref.read(overviewDrawerProvider).open) {
+        _goTo(to);
+      } else {
+        // What waits is answered on its own card: N brings it into view.
+        _reveal(to);
       }
-      _goTo(next ?? current!);
     }),
     OverviewPickOptionIntent: _Triage<OverviewPickOptionIntent>(
       (intent) => _questions[_target()?.id]?.pick(intent.number - 1),

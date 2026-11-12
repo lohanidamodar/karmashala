@@ -67,8 +67,13 @@ class OverviewQueueCard extends ConsumerStatefulWidget {
     this.onTerminal,
     this.questionController,
     this.onAnswered,
+    this.bare = false,
     super.key,
   });
+
+  /// Only what answers it, with no frame and no title of its own: the ask
+  /// as a family's card draws it, under the session that asks.
+  final bool bare;
 
   /// An answer went, by button or by key: move on.
   final ValueChanged<OverviewCard>? onAnswered;
@@ -238,6 +243,7 @@ class _OverviewQueueCardState extends ConsumerState<OverviewQueueCard> {
       ),
     };
 
+    if (widget.bare) return body;
     return OverviewCardFrame(
       card: card,
       onOpen: null,
