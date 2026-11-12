@@ -152,7 +152,8 @@ void main() {
 
       expect(find.byType(DebugModeSection), findsOneWidget);
       final before = container.read(settingsControllerProvider).debugMode;
-      await tester.tap(find.text('Debug mode'));
+      // The row, not the jump link of the same name above it.
+      await tester.tap(find.text('Debug mode').last);
       await tester.pump();
 
       expect(container.read(settingsControllerProvider).debugMode, !before);

@@ -11,7 +11,7 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/backup_client.dart';
 import 'backup_words.dart';
 
-/// Settings → Data → Back up: one backup now, into a folder picked here, the
+/// Settings → Backup → Back up: one backup now, into a folder picked here, the
 /// server's own schedule, and exactly what a backup leaves out.
 class DataBackupSection extends ConsumerStatefulWidget {
   const DataBackupSection({super.key});

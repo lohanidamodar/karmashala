@@ -12,7 +12,7 @@ import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// Settings → Projects and files → In-app editor.
+/// Settings → Editor and files → In-app editor.
 class EditorSection extends ConsumerWidget {
   const EditorSection({super.key});
 

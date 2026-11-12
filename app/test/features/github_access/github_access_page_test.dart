@@ -6,7 +6,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import '../../support/fake_data_server.dart';
 
-/// Settings → Source control → GitHub: a token typed once and never shown
+/// Settings → GitHub: a token typed once and never shown
 /// again, tested against GitHub's `/user` (here the fake server's), and each
 /// host's gh account or Off — at a phone's width and text scale too.
 void main() {

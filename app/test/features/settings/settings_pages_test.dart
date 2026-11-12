@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_tab.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_jump_links.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
@@ -79,14 +81,25 @@ void main() {
       testWidgets('${page.label} draws each of its sections, headed', (
         tester,
       ) async {
-        await pump(tester, SettingsScreen(initialSection: page));
+        final container = await pump(
+          tester,
+          SettingsScreen(initialSection: page),
+        );
         expect(tester.takeException(), isNull);
         expect(find.byType(SettingsPageBody), findsOneWidget);
+        final caps = container.read(capabilitiesProvider);
+        // A page this client hides (Bot, with no bot on the server) opens
+        // the first page it does show.
+        if (!page.shownWith(caps)) {
+          expect(find.text(page.description), findsNothing);
+          return;
+        }
         expect(find.text(page.description), findsOneWidget);
         // Agents and accounts folds each terminal agent into a card; its
         // account and behaviour headings are drawn once the card is open.
         await expandAgentCards(tester);
         for (final anchor in page.anchors) {
+          if (!anchor.shownWith(caps)) continue;
           expect(
             find.byWidgetPredicate(
               (w) => w is SettingsAnchorTarget && w.anchor == anchor,
@@ -252,6 +265,37 @@ void main() {
     });
   });
 
+  group('section links', () {
+    testWidgets('a long page names its sections under its blurb, and one '
+        'scrolls to its section', (tester) async {
+      const size = Size(1280, 560);
+      await pump(
+        tester,
+        const SettingsScreen(initialSection: SettingsSectionId.terminal),
+        size: size,
+      );
+      final heading = find.text(SettingsAnchor.snippets.heading);
+      expect(onScreen(tester, heading, size), isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('settings-jump-snippets')));
+      await tester.pumpAndSettle();
+      expect(onScreen(tester, heading, size), isTrue);
+    });
+
+    testWidgets('a page read at a glance draws none', (tester) async {
+      await pump(
+        tester,
+        const SettingsScreen(initialSection: SettingsSectionId.general),
+      );
+      expect(
+        SettingsSectionId.general.anchors.length,
+        lessThanOrEqualTo(SettingsJumpLinks.fewest),
+      );
+      expect(find.byType(SettingsJumpLinks), findsOneWidget);
+      expect(find.byType(ActionChip), findsNothing);
+    });
+  });
+
   group('narrow windows', () {
     // Spec §6 (6bb8a9813): under the compact width a page shows at once,
     // under a sticky picker; its Search opens the list, grouped.
@@ -280,10 +324,10 @@ void main() {
           findsNWidgets(SettingsGroup.values.length),
         );
 
-        await tester.tap(find.text('Projects and files'));
+        await tester.tap(find.text('Editor and files'));
         await tester.pumpAndSettle();
         expect(find.byType(SettingsNav), findsNothing);
-        expect(picked('Projects and files'), findsOneWidget);
+        expect(picked('Editor and files'), findsOneWidget);
         expect(find.text('IN-APP EDITOR'), findsOneWidget);
       });
     }

@@ -59,7 +59,7 @@ class OverviewPrefs {
 
   /// Whether resuming or starting a session from the command palette, the
   /// dashboard or a session's menu keeps the person where they are: no tab,
-  /// focus unmoved, the card peeked or a notice with Open. Settings › General
+  /// focus unmoved, the card peeked or a notice with Open. Settings › Sessions
   /// › Session view. What the New session and Resume… dialogs' "Keep working
   /// here" starts as; a choice made there is for that launch only.
   final bool launchInBackground;

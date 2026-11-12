@@ -6,7 +6,7 @@ import '../../settings/presentation/settings_section.dart';
 import '../../settings/presentation/settings_theme.dart';
 import 'package:karmashala_flutter_apps/projects.dart';
 
-/// Settings → Projects and files: what Karmashala can do with each kind of
+/// Settings → Projects → App projects: what Karmashala can do with each kind of
 /// project.
 /// All data off `builtInProjectDescriptors`, and nothing is measured to show it.
 class ProjectKindsSection extends StatelessWidget {

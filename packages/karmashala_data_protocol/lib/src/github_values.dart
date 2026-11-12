@@ -1,4 +1,4 @@
-/// GitHub access on a server (Settings → Source control → GitHub) and the
+/// GitHub access on a server (Settings → GitHub) and the
 /// secrets agents ask the owner for. **No value here ever carries a token or
 /// a secret**: a token travels client → server in `github.token.save` only,
 /// and a secret in `secrets.provide` only.
@@ -104,7 +104,7 @@ class GithubSavedToken {
       );
 }
 
-/// Everything Settings → Source control → GitHub shows.
+/// Everything Settings → GitHub shows.
 class GithubAccessStatus {
   const GithubAccessStatus({
     this.hosts = const [],

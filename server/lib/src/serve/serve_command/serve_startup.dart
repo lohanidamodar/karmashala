@@ -84,7 +84,7 @@ AppDatabase? _openStore(String dataDirectory, IOSink errSink) {
   try {
     final directory = Directory(dataDirectory);
     if (!directory.existsSync()) directory.createSync(recursive: true);
-    // A restore staged from Settings → Data switches in before anything
+    // A restore staged from Settings → Backup switches in before anything
     // opens the files it replaces.
     try {
       final restored = applyPendingRestore(dataDirectory);

@@ -23,7 +23,7 @@ enum BackupFrequency {
   );
 }
 
-/// The schedule as Settings → Data sets it, kept in the store's
+/// The schedule as Settings → Backup sets it, kept in the store's
 /// `app_metadata` under [key].
 class BackupSchedule {
   const BackupSchedule({
@@ -62,7 +62,7 @@ class BackupSchedule {
 }
 
 /// The server's backups: made when asked, on the schedule, and restored.
-/// Settings → Data reaches them through `ServerAdministration`.
+/// Settings → Backup reaches them through `ServerAdministration`.
 class ServerBackups {
   ServerBackups({
     required this.dataDirectory,

@@ -9,7 +9,7 @@ import 'package:karmashala_host_protocol/protocol.dart' show kBackupExclusions;
 
 import '../../support/window_matrix.dart';
 
-/// Settings → Data: backing up now and on a schedule, what a backup leaves
+/// Settings → Backup: backing up now and on a schedule, what a backup leaves
 /// out, and a backup shown before it is restored.
 void main() {
   Map<String, Object?> schedule({
@@ -187,7 +187,7 @@ void main() {
         WindowCell('720x560 @ 1.6x text', Size(720, 560), textScale: 1.6),
       ],
       checkFocus: false,
-      because: 'Settings → Data is drawn at every window size',
+      because: 'Settings → Backup is drawn at every window size',
     );
   });
 }

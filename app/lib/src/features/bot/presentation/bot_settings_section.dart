@@ -8,7 +8,7 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/bot_providers.dart';
 
-/// Settings → Agents and accounts → Bot: which agent the bot runs on. Hidden on
+/// Settings → Bot: which agent the bot runs on. Hidden on
 /// a server with no bot, and on a phone that may not start sessions. Kept on
 /// the server, so every client reads the same value.
 class BotSettingsSection extends ConsumerStatefulWidget {

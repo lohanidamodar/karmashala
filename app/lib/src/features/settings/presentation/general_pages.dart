@@ -283,7 +283,7 @@ class StartupSection extends ConsumerWidget {
   }
 }
 
-/// Settings → General → Session view: which face an agent session opens on,
+/// Settings → Sessions → Session view: which face an agent session opens on,
 /// and whether resuming or starting one moves you. Shown on every client — a
 /// phone is where the first answer differs.
 class SessionViewSection extends ConsumerWidget {

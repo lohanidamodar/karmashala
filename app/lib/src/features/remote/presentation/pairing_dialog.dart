@@ -94,9 +94,9 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
         setState(() {
           _error = noHosted
               ? 'No relay is switched on. Turn on the local relay in '
-                    'Settings → Remote and pairing. $kNoHostedRelayMessage.'
+                    'Settings → Phone pairing. $kNoHostedRelayMessage.'
               : 'No relay is switched on. Turn on the local relay or the '
-                    'hosted one in Settings → Remote and pairing first.';
+                    'hosted one in Settings → Phone pairing first.';
         });
       }
       return;

@@ -460,7 +460,7 @@ class KeymapBinding {
 }
 
 /// Every binding in force, then every command left without keys, in command
-/// order. [overrides] are Settings › Terminal's answers, which decide whether
+/// order. [overrides] are the Terminal chords answers, which decide whether
 /// a contested chord reaches the app from a focused pane.
 List<KeymapBinding> resolvedKeymapBindings(Map<String, bool> overrides) {
   final bound = <KeymapBinding>[];

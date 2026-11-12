@@ -19,7 +19,7 @@ import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import 'fake_instance.dart';
 
-/// Settings › General › "Open agent sessions in chat view": a terminal agent
+/// Settings › Sessions › "Open agent sessions in chat view": a terminal agent
 /// session rests on its chat, a phone's answer unless the person says.
 void main() {
   late TestMachine db;

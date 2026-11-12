@@ -65,10 +65,7 @@ void main() {
 
     test('finds an option by what its description says', () {
       expect(labels('system tray'), contains('Close to tray'));
-      expect(
-        labels('crash or a restart'),
-        contains('Server status'),
-      );
+      expect(labels('crash or a restart'), contains('Server status'));
     });
 
     test('finds the continue of cut-off turns by how a person says it', () {
@@ -234,13 +231,72 @@ void main() {
     expect(SettingsSectionId.projects.matches('worktree'), isTrue);
     expect(SettingsSectionId.accounts.matches('usage'), isTrue);
     expect(SettingsSectionId.permissions.matches('browser consent'), isTrue);
-    // Spec §6 merged Permissions into Tools and reach: one page, so the
+    // Permissions is its own page again, apart from MCP and skills: the
     // consent is found there and nowhere else.
-    expect(SettingsSectionId.permissions, SettingsSectionId.tools);
     expect(
       SettingsSectionId.values.where((p) => p.matches('browser consent')),
-      [SettingsSectionId.tools],
+      [SettingsSectionId.permissions],
     );
+  });
+
+  test('a session\'s settings are on the Sessions pages, not scattered', () {
+    expect(SettingsAnchor.defaultAgent.page, SettingsSectionId.sessions);
+    expect(SettingsAnchor.sessionView.page, SettingsSectionId.sessions);
+    expect(SettingsAnchor.sessionLimits.page, SettingsSectionId.sessions);
+    expect(SettingsAnchor.childReport.page, SettingsSectionId.sessions);
+    expect(SettingsAnchor.permissionModes.page, SettingsSectionId.permissions);
+    expect(SettingsAnchor.newSessionGrant.page, SettingsSectionId.permissions);
+    expect(SettingsSectionId.sessions.matches('report back'), isTrue);
+    expect(SettingsSectionId.permissions.matches('operate'), isTrue);
+    for (final page in [
+      SettingsSectionId.sessions,
+      SettingsSectionId.permissions,
+      SettingsSectionId.automations,
+    ]) {
+      expect(page.group, SettingsGroup.sessions, reason: page.label);
+    }
+  });
+
+  test('everything a terminal is sits on Terminal', () {
+    for (final anchor in [
+      SettingsAnchor.defaultTerminal,
+      SettingsAnchor.terminalFont,
+      SettingsAnchor.terminalTheme,
+      SettingsAnchor.terminalAdvanced,
+      SettingsAnchor.scrollbackPersistence,
+      SettingsAnchor.snippets,
+    ]) {
+      expect(anchor.page, SettingsSectionId.terminal, reason: anchor.title);
+    }
+    // The keys a terminal keeps are with the other keys.
+    expect(SettingsAnchor.terminalChords.page, SettingsSectionId.keyboard);
+    // The pages that were merged in still land on it.
+    expect(SettingsSectionId.snippets, SettingsSectionId.terminal);
+  });
+
+  test('the names a page had before still find it', () {
+    const was = {
+      'tools and reach': SettingsSectionId.permissions,
+      'remote and pairing': SettingsSectionId.remote,
+      'source control': SettingsSectionId.sourceControl,
+      'checkpoints and automations': SettingsSectionId.automations,
+      'projects and files': SettingsSectionId.editorFiles,
+      'snippets': SettingsSectionId.terminal,
+      'data': SettingsSectionId.data,
+    };
+    for (final MapEntry(key: name, value: page) in was.entries) {
+      expect(page.matches(name), isTrue, reason: name);
+    }
+  });
+
+  test('no page holds more sections than a person can scan', () {
+    for (final page in SettingsSectionId.values) {
+      expect(
+        page.anchors.length,
+        lessThanOrEqualTo(7),
+        reason: '${page.label} has grown; split it',
+      );
+    }
   });
 
   test('browser consent sits with the permissions, where its refusals send '
@@ -253,23 +309,18 @@ void main() {
     );
   });
 
-  test('automations are agent runs, filed with the agents after the '
-      'permissions they run under', () {
-    final agents = SettingsGroup.agents.pages;
-    expect(SettingsSectionId.automations.group, SettingsGroup.agents);
+  test('checkpoints follow the permissions a turn runs under', () {
+    final sessions = SettingsGroup.sessions.pages;
+    expect(SettingsSectionId.automations.group, SettingsGroup.sessions);
     expect(
-      agents.indexOf(SettingsSectionId.automations),
-      agents.indexOf(SettingsSectionId.permissions) + 1,
+      sessions.indexOf(SettingsSectionId.automations),
+      sessions.indexOf(SettingsSectionId.permissions) + 1,
     );
   });
 
-  test('device slimming has a page, beside Projects, that search finds', () {
+  test('device slimming has a page, with the projects, that search finds', () {
     expect(SettingsSectionId.devices.group, SettingsGroup.workspace);
-    final workspace = SettingsGroup.workspace.pages;
-    expect(
-      workspace.indexOf(SettingsSectionId.devices),
-      workspace.indexOf(SettingsSectionId.projects) + 1,
-    );
+    expect(SettingsSectionId.projects.group, SettingsGroup.workspace);
     for (final term in ['emulator', 'simulator', 'slimming', 'gpu', 'avd']) {
       expect(
         SettingsSectionId.values.where((p) => p.matches(term)),

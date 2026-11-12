@@ -15,7 +15,7 @@ import 'settings_row.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
-/// Settings → Tools and reach → Permission modes: per-agent defaults for new
+/// Settings → Permissions → Permission modes: per-agent defaults for new
 /// and existing sessions, one flat row per agent, purpose and axis — the
 /// board's rows, not a card per agent.
 class PermissionModesSection extends ConsumerWidget {
@@ -183,7 +183,7 @@ class PermissionAxisDropdown extends StatelessWidget {
   }
 }
 
-/// Settings → Tools and reach → Browser: a per-project consent switch rather
+/// Settings → Permissions → Browser: a per-project consent switch rather
 /// than a prompt on first `browser_evaluate` — the agent may run with nobody
 /// there.
 class BrowserConsentSection extends ConsumerWidget {

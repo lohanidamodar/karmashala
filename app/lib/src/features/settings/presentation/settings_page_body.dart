@@ -47,6 +47,7 @@ import 'session_limits_section.dart';
 import 'keyboard_section.dart';
 import 'permissions_page.dart';
 import 'settings_catalog.dart';
+import 'settings_jump_links.dart';
 import 'settings_layout.dart';
 import 'settings_theme.dart';
 import 'side_panel_items_section.dart';
@@ -99,6 +100,9 @@ class SettingsPageBody extends StatelessWidget {
                   page.description,
                   style: SettingsStyles.pageBlurb(context),
                 ),
+                // Agents and accounts is cards, not a run of sections.
+                if (page != SettingsSectionId.agents)
+                  SettingsJumpLinks(page: page),
                 ...settingsPageChildren(page),
               ],
             ),
@@ -185,6 +189,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.newSessionGrant => const NewSessionGrantSection(),
   SettingsAnchor.bot => const BotSettingsSection(),
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),
+  SettingsAnchor.childReport => const ChildReportSection(),
   SettingsAnchor.defaultModel => const DefaultModelSection(),
   SettingsAnchor.detection => const AgentDetectionSection(),
   SettingsAnchor.executables => const AgentPathSection(),

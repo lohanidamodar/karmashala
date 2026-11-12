@@ -94,7 +94,7 @@ class PhoneGrantPage extends ConsumerWidget {
           Text('On $server\'s desktop', style: theme.textTheme.titleSmall),
           const SizedBox(height: Insets.xs),
           Text(
-            'Settings → Remote and pairing, then this phone\'s row → Grant.',
+            'Settings → Phone pairing, then this phone\'s row → Grant.',
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: Insets.lg),

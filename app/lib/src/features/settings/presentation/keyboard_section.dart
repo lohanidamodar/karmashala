@@ -154,7 +154,7 @@ class _KeyboardSectionState extends ConsumerState<KeyboardSection> {
           where((b) => b.keys != null && b.when == KeymapWhen.notTerminalFocus),
           note:
               'A focused terminal keeps these keys for the shell. '
-              'Settings › Terminal hands contested ones back.',
+              'Terminal chords, below, hands contested ones back.',
         ),
         _group(
           'In a terminal',

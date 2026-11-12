@@ -22,7 +22,7 @@ import 'package:agent_cli/process.dart';
 import '../../support/fake_data_server.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 
-/// Settings → Snippets: the library's *discoverable* door.
+/// Settings → Terminal → Command snippets: the library's *discoverable* door.
 ///
 /// Two things are worth pinning here. The page has to be reachable by looking
 /// for it — the whole complaint was that snippet management lived nowhere but
@@ -289,10 +289,13 @@ void main() {
     // The filter is how someone who does not know where it lives finds it.
     await tester.enterText(find.byType(TextField).first, 'snippet');
     await tester.pumpAndSettle();
-    expect(find.text('Snippets'), findsOneWidget);
-    expect(find.text('Terminal'), findsNothing);
+    // Terminal holds them now; the hit under it names the section.
+    expect(find.text('Terminal'), findsOneWidget);
+    expect(find.text('Appearance'), findsNothing);
 
-    await tester.tap(find.text('Snippets'));
+    await tester.tap(
+      find.widgetWithText(SettingsSearchHitRow, 'Command snippets'),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(SnippetsSettingsPage), findsOneWidget);
     expect(find.text('Run the tests'), findsOneWidget);
@@ -332,7 +335,7 @@ void main() {
 
     await expectSurvivesWindowMatrix(
       tester,
-      because: 'Settings → Snippets',
+      because: 'Settings → Terminal → Command snippets',
       matrix: const [
         WindowCell('390x844 (phone)', Size(390, 844)),
         desktopWindow,

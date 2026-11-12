@@ -20,7 +20,7 @@ import 'worktree_cleanup_section.dart';
 import 'worktree_creation_view.dart';
 import 'worktree_setup_dialog.dart';
 
-/// Settings → Projects and files → Worktree setup: what each checkout wants
+/// Settings → Projects → Worktree setup: what each checkout wants
 /// done to a new worktree, and what happened last time. Nothing polls; every
 /// write bumps the revision.
 class WorktreeSetupPage extends ConsumerWidget {

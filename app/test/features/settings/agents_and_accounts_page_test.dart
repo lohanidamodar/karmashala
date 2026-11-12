@@ -19,6 +19,8 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/presentation/acp_builtin_agent_row.dart'
     show AcpAgentDetails, acpAgentsNote;
 import 'package:karmashala/src/features/settings/presentation/agents_and_accounts_page.dart';
+import 'package:karmashala/src/features/settings/presentation/agents_pages.dart'
+    show ChildReportSection;
 import 'package:karmashala/src/features/settings/presentation/environment_chips.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
@@ -150,11 +152,12 @@ void main() {
     db.server.acpAgentRows.insert(userRow());
     await pump(tester);
 
-    expect(find.text('DEFAULTS'), findsOneWidget);
+    expect(find.text('INSTALLED'), findsOneWidget);
     // Claude Code with its chat form counted once, and the npx agent.
     expect(find.text('5 agents · 2 installed on 2 machines'), findsOneWidget);
     expect(find.text('Discover agents'), findsOneWidget);
-    expect(find.text('Agent for new sessions'), findsOneWidget);
+    // The agent a new session starts on is on Settings → Sessions.
+    expect(find.text('Agent for new sessions'), findsNothing);
     expect(find.text('AGENTS · 3'), findsOneWidget);
     expect(find.text('ACP AGENTS (BUILT-IN) · 1'), findsOneWidget);
     expect(find.text('YOUR ACP AGENTS · 1'), findsOneWidget);
@@ -434,9 +437,20 @@ void main() {
 
   testWidgets('what a session hears of a session it starts is chosen here, '
       'a final report until changed', (tester) async {
-    await pump(tester);
+    // On Settings → Sessions, no longer among the agents.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: await overrides(),
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: ChildReportSection()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
     final container = ProviderScope.containerOf(
-      tester.element(find.byType(AgentsAndAccountsBody)),
+      tester.element(find.byType(ChildReportSection)),
     );
     final choice = find.byKey(const ValueKey('child-report-mode'));
     await tester.ensureVisible(choice);

@@ -233,7 +233,7 @@ old companion pairing the grants the app enforces on a phone. In `--remove`,
 
 `grant` takes any capability names or aliases (`phone`, `desktop`, `admin`,
 `ssh`) in `--add` and `--remove`. A device with a link open reattaches at once
-with the new grant. On a desktop, the device's row in Settings → Remote and pairing says
+with the new grant. On a desktop, the device's row in Settings → Phone pairing says
 when a phone lacks the app and offers **Grant**; the pairing and permissions
 dialogs start from a **Phone** or **Desktop** preset.
 
@@ -321,7 +321,7 @@ A pairing made before `phone_client` existed is **not** given the app
 automatically. Until you grant it, the app shows *This phone needs to be
 granted the app on <server>* with both ways to do it:
 
-- on the server's desktop, Settings → Remote and pairing, the phone's row →
+- on the server's desktop, Settings → Phone pairing, the phone's row →
   **Grant**;
 - on a headless server, `karmashala_host grant <id prefix> --add=phone` (the
   page fills in the prefix).

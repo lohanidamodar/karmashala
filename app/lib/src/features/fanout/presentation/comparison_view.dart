@@ -198,7 +198,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
       const SnackBar(
         content: Text(
           'This repository has no project checks. Add them in Settings → '
-          'Checkpoints and automations → Verification and project checks.',
+          'Checkpoints → Verification and project checks.',
         ),
       ),
     );

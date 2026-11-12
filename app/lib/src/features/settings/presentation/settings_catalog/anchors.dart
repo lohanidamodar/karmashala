@@ -16,14 +16,21 @@ enum SettingsAnchor {
     'background',
     'focus',
   ]),
-  sessionView(SettingsSectionId.general, 'Session view', [
+  // Sessions, as a person meets one: the agent it starts on, the face it
+  // opens with, how many run, and what an agent hears of one it starts.
+  defaultAgent(SettingsSectionId.sessions, 'Default agent', [
+    'default agent',
+    'defaults',
+    'new session',
+  ]),
+  sessionView(SettingsSectionId.sessions, 'Session view', [
     'chat',
     'chat view',
     'terminal',
     'open',
     'session',
   ]),
-  sessionLimits(SettingsSectionId.general, 'Session limits', [
+  sessionLimits(SettingsSectionId.sessions, 'Session limits', [
     'limits',
     'concurrency',
     'capacity',
@@ -33,6 +40,13 @@ enum SettingsAnchor {
     'waiting',
     'pause',
     'background',
+  ]),
+  childReport(SettingsSectionId.sessions, 'Sessions agents start', [
+    'report',
+    'report back',
+    'child',
+    'subagent',
+    'every turn',
   ]),
   launcherHotkey(SettingsSectionId.general, 'Launcher hotkey', [
     'hotkey',
@@ -82,22 +96,6 @@ enum SettingsAnchor {
     'density',
     'compact',
   ]),
-  // Moved from Terminal to Appearance with the built-in schemes; the enum name
-  // is kept so a link written against it still lands, and Terminal › Font
-  // keeps a row pointing here.
-  terminalTheme(SettingsSectionId.appearance, 'Terminal colours', [
-    'terminal',
-    'colour',
-    'colours',
-    'color',
-    'colors',
-    'scheme',
-    'theme',
-    'palette',
-    'ansi',
-    'ghostty',
-    'warp',
-  ]),
   // Also View › Side panel items. The enum name is kept so old links resolve;
   // the rail and Explorer it was named for are gone, but people still search
   // by those words.
@@ -118,7 +116,22 @@ enum SettingsAnchor {
     'profile',
   ]),
   terminalFont(SettingsSectionId.terminal, 'Font', ['font', 'size']),
-  terminalChords(SettingsSectionId.terminal, 'Terminal chords', [
+  // Back on Terminal, after a spell on Appearance; the enum name is kept so a
+  // link written against it still lands.
+  terminalTheme(SettingsSectionId.terminal, 'Terminal colours', [
+    'terminal',
+    'colour',
+    'colours',
+    'color',
+    'colors',
+    'scheme',
+    'theme',
+    'palette',
+    'ansi',
+    'ghostty',
+    'warp',
+  ]),
+  terminalChords(SettingsSectionId.keyboard, 'Terminal chords', [
     'chords',
     'keys',
   ]),
@@ -126,6 +139,10 @@ enum SettingsAnchor {
   // to Server.
   terminalAdvanced(SettingsSectionId.terminal, 'Shell integration', [
     'integration',
+  ]),
+  scrollbackPersistence(SettingsSectionId.terminal, 'Scrollback persistence', [
+    'scrollback',
+    'autosave',
   ]),
   worktreeSetup(SettingsSectionId.projects, 'Worktree setup', [
     'worktree',
@@ -144,22 +161,22 @@ enum SettingsAnchor {
     'react native',
     'build',
   ]),
-  editor(SettingsSectionId.projects, 'In-app editor', [
+  editor(SettingsSectionId.editorFiles, 'In-app editor', [
     'editor',
     'wrap',
     'auto save',
     'autosave',
   ]),
-  fileBrowsing(SettingsSectionId.projects, 'File browsing', [
+  fileBrowsing(SettingsSectionId.editorFiles, 'File browsing', [
     'file picker',
     'browse',
     'hidden files',
   ]),
-  externalTerminal(SettingsSectionId.projects, 'External terminal', [
+  externalTerminal(SettingsSectionId.editorFiles, 'External terminal', [
     'terminal app',
     'resume',
   ]),
-  externalEditor(SettingsSectionId.projects, 'External editor', [
+  externalEditor(SettingsSectionId.editorFiles, 'External editor', [
     'editor',
     'vs code',
     'open in editor',
@@ -181,7 +198,7 @@ enum SettingsAnchor {
     'iphone',
     'slimming',
   ]),
-  snippets(SettingsSectionId.snippets, 'Command snippets', [
+  snippets(SettingsSectionId.terminal, 'Command snippets', [
     'snippet',
     'snippets',
     'command',
@@ -244,17 +261,10 @@ enum SettingsAnchor {
     'reset',
     'continue',
   ]),
-  // Agents and accounts, in the order the page draws them: Defaults (the
-  // header strip), then the terminal agents as cards — Claude's and Codex's
-  // anchors and the default model open the card they belong to, executables
-  // lands on the group — then usage, updates and detection at the end.
-  // Titles are the headings the page draws, so a search hit names the
-  // section it opens.
-  defaultAgent(SettingsSectionId.agents, 'Defaults', [
-    'default agent',
-    'defaults',
-    'new session',
-  ]),
+  // Agents and accounts lays itself out: the terminal agents as cards —
+  // Claude's and Codex's anchors and the default model open the card they
+  // belong to, executables lands on the group — then usage, updates and
+  // detection at the end. Titles are the headings the page draws.
   claudeAccounts(SettingsSectionId.agents, 'Claude Code · accounts', [
     'claude',
     'accounts',
@@ -280,20 +290,11 @@ enum SettingsAnchor {
     'sandbox',
   ]),
   usage(SettingsSectionId.agents, 'Usage & limits', ['usage', 'limits']),
-  bot(SettingsSectionId.agents, 'Bot', [
+  bot(SettingsSectionId.bot, 'Bot', [
     'bot',
     'assistant',
     'default agent',
     'chat',
-  ]),
-  newSessionGrant(SettingsSectionId.agents, 'New sessions', [
-    'operate',
-    'operator',
-    'karmashala',
-    'new sessions',
-    'default',
-    'trust',
-    'folder',
   ]),
   agentUpdates(SettingsSectionId.agents, 'Agent updates', [
     'update',
@@ -316,16 +317,25 @@ enum SettingsAnchor {
     'scan',
     'rescan',
   ]),
-  permissionModes(SettingsSectionId.tools, 'Permission modes', [
+  permissionModes(SettingsSectionId.permissions, 'Permission modes', [
     'ask',
     'bypass',
     'accept edits',
     'sessions',
   ]),
+  newSessionGrant(SettingsSectionId.permissions, 'New sessions', [
+    'operate',
+    'operator',
+    'karmashala',
+    'new sessions',
+    'default',
+    'trust',
+    'folder',
+  ]),
   // Quoted as kBrowserConsentLocation in the browser tools' refusals and
-  // schemas. Was Tools › Browser, then Permissions › Browser; now Tools and
-  // reach › Browser. The enum name is kept so old links resolve.
-  browser(SettingsSectionId.tools, 'Browser', [
+  // schemas. Was Tools › Browser, then Tools and reach › Browser; now
+  // Permissions › Browser. The enum name is kept so old links resolve.
+  browser(SettingsSectionId.permissions, 'Browser', [
     'browser consent',
     'browser',
     'consent',
@@ -451,11 +461,6 @@ enum SettingsAnchor {
     'troubleshoot',
     'report',
   ]),
-  scrollbackPersistence(
-    SettingsSectionId.diagnostics,
-    'Scrollback persistence',
-    ['scrollback', 'autosave'],
-  ),
   sessionWatching(SettingsSectionId.diagnostics, 'Session watching', [
     'watch',
     'status refresh',

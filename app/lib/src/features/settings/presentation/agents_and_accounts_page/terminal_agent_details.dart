@@ -138,7 +138,7 @@ typedef _Run =
 /// **How the agent behaves** (board "· behaviour"): the model a new session
 /// starts on and the permission mode it starts in — each axis the agent has,
 /// so Codex's sandbox is its own row. Defaults only: a session that picks its
-/// own keeps it. Existing sessions' modes stay on Tools and reach.
+/// own keeps it. Existing sessions' modes stay on Permissions.
 class _AgentBehaviour extends ConsumerWidget {
   const _AgentBehaviour({required this.descriptor, required this.hasChatForm});
 

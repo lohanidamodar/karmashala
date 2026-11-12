@@ -8,14 +8,12 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_redetect_controller.dart';
-import 'agents_pages.dart' show DefaultAgentRow;
-import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// **The strip over the groups** (board "Defaults"): how many agents the app
-/// knows, how many are installed and on how many machines, the one button
-/// that looks for them again, and the agent a new session starts on.
+/// **The strip over the groups**: how many agents the app knows, how many are
+/// installed and on how many machines, and the one button that looks for them
+/// again. The agent a new session starts on is on Settings → Sessions.
 class AgentsHeaderStrip extends ConsumerWidget {
   const AgentsHeaderStrip({super.key});
 
@@ -23,7 +21,7 @@ class AgentsHeaderStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final redetect = ref.watch(agentRedetectControllerProvider);
     return SettingsSection(
-      title: SettingsAnchor.defaultAgent.heading,
+      title: 'Installed'.toUpperCase(),
       trailing: TextButton.icon(
         onPressed: redetect.busy
             ? null
@@ -43,7 +41,6 @@ class AgentsHeaderStrip extends ConsumerWidget {
               padding: const EdgeInsets.only(bottom: Insets.sm),
               child: DesktopErrorBanner(error),
             ),
-          const DefaultAgentRow(),
         ],
       ),
     );

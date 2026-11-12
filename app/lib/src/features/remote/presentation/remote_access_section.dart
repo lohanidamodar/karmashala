@@ -23,7 +23,7 @@ import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_theme.dart';
 
-/// Settings → Remote and pairing: the enable switch, the local and hosted
+/// Settings → Phone pairing: the enable switch, the local and hosted
 /// relays, the relays on SSH hosts, the paired devices with last-seen and
 /// revoke, and the pairing button. Every switch here is this machine's server
 /// config (`server.json`), read and written through the server — the local

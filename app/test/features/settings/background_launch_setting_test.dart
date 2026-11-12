@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/settings/presentation/general_pages.dart
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 
-/// Settings › General › Session view: whether resuming and starting from the
+/// Settings › Sessions › Session view: whether resuming and starting from the
 /// palette, the dashboard and a session's menu stays in the background. Kept
 /// per device, in the dashboard's own file.
 void main() {

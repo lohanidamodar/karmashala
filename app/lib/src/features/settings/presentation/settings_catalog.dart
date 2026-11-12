@@ -11,11 +11,14 @@ part 'settings_catalog/entries.dart';
 /// The one description of the settings screen: its groups, pages, the titled
 /// sections on each page, and every option a search can land on. The page
 /// list, search, page layout and deep links all read this, so none can drift.
+/// Grouped by what a person is doing: the app itself, how sessions behave,
+/// the agents that run them, the work, and what the app connects to.
 enum SettingsGroup {
   general('App'),
+  sessions('Sessions'),
   agents('Agents'),
-  workspace('Work'),
-  connections('Machines'),
+  workspace('Workspace'),
+  connections('Connections'),
   advanced('Advanced');
 
   const SettingsGroup(this.label);
@@ -29,27 +32,24 @@ enum SettingsGroup {
 }
 
 /// A page of the settings screen — one row in its page list. Declaration
-/// order is list order: common first, advanced last, the groups and pages of
-/// UI overhaul spec §6. Page labels are quoted as "Settings → …" in refusals,
-/// tool descriptions and the MCP instructions; a rename moves those quotes in
-/// the same change. Enum names outlive their labels (Environments is now
-/// Machines), so a link written against the old name still lands.
+/// order is list order: common first, advanced last. Page labels are quoted
+/// as "Settings → …" in refusals, tool descriptions and the MCP instructions;
+/// a rename moves those quotes in the same change. Enum names outlive their
+/// labels (Environments is now Machines), so a link written against the old
+/// name still lands.
 enum SettingsSectionId {
   general(
     'General',
     AppIcons.power,
     SettingsGroup.general,
-    'How Karmashala starts, the global hotkey, and optional features.',
+    'How Karmashala starts and closes, the global hotkey, and notes.',
   ),
   appearance(
     'Appearance',
     AppIcons.circleHalf,
     SettingsGroup.general,
-    'Theme, accent, text size, density, terminal colours, the sidebar and '
-        'the context panel.',
+    'Theme, accent, text size, density, the sidebar and the context panel.',
   ),
-  // The switches were only ever in the tray menu; a page is where somebody
-  // looks for them. Drawn by the screen, not an anchor (see settings_screen).
   notifications(
     'Notifications',
     AppIcons.tray,
@@ -67,67 +67,93 @@ enum SettingsSectionId {
       'tray',
     ],
   ),
-  // Was General › Keyboard.
   keyboard(
     'Keyboard',
     AppIcons.keyboard,
     SettingsGroup.general,
-    'Every shortcut in force, and the keymap that moves them.',
+    'Every shortcut in force, the keymap that moves them, and which keys '
+        'terminals keep.',
   ),
-  // Was Agents plus Accounts & usage: an agent's installs, the accounts they
-  // are signed in to, and how it behaves, on one page (spec §6).
+  // How a session starts and how many run: gathered from General and Agents
+  // and accounts, so one page answers "what happens when I start one".
+  sessions(
+    'Sessions',
+    AppIcons.chat,
+    SettingsGroup.sessions,
+    'How a session opens, the agent it starts on, how many run at once, and '
+        'what a session hears of one it starts.',
+    ['session', 'new session', 'general'],
+  ),
+  // What a session may do without asking. Was half of Tools and reach, plus
+  // the New sessions switches from Agents and accounts.
+  permissions(
+    'Permissions',
+    AppIcons.shield,
+    SettingsGroup.sessions,
+    'What agents may do without asking, whether new sessions may operate '
+        'Karmashala, folder trust, and browser consent.',
+    ['permissions', 'tools and reach', 'reach', 'trust'],
+  ),
+  // The enum name is kept so old links resolve; automations have their own
+  // tab, and this page keeps one row that opens it.
+  automations(
+    'Checkpoints',
+    AppIcons.clockCounterClockwise,
+    SettingsGroup.sessions,
+    'Snapshots of every agent turn; automations and resumes have their own '
+        'tab.',
+    ['automations', 'checkpoints', 'checkpoints and automations'],
+  ),
+  // One card per agent: its machines, executables, accounts and behaviour,
+  // then what spans them.
   agents(
     'Agents and accounts',
     AppIcons.robot,
     SettingsGroup.agents,
-    'Which agent new sessions use, where each is installed, who it is signed '
-        'in as, and how much limit is left.',
+    'Where each agent is installed, who it is signed in as, how much limit '
+        'is left, and how agents are updated and found.',
     ['agents', 'accounts & usage', 'accounts', 'usage'],
   ),
-  // Was Tools plus Permissions: what an agent can call, and how far it may
-  // go without asking.
+  // Was the other half of Tools and reach.
   tools(
-    'Tools and reach',
+    'MCP and skills',
     AppIcons.code,
     SettingsGroup.agents,
-    'What agents may do without asking, the MCP bridge, its tools, and '
-        'installed skills.',
-    ['tools', 'permissions'],
+    'The MCP bridge, the tools an agent can call, and installed skills.',
+    ['tools', 'tools and reach', 'mcp', 'skills'],
   ),
-  // An automation is an agent, a prompt and a permission mode armed in
-  // advance, so it follows the permissions it runs under. Checkpoints joined
-  // it from the Agents page: both are what happens to work nobody watches.
-  automations(
-    'Checkpoints and automations',
-    AppIcons.clockCounterClockwise,
+  bot(
+    'Bot',
+    AppIcons.chatCircleDots,
     SettingsGroup.agents,
-    'Snapshots of every agent turn; automations and resumes have their own '
-        'tab.',
-    ['automations', 'checkpoints'],
+    'The agent the Karmashala bot runs on.',
+    ['bot', 'assistant'],
   ),
-  snippets(
-    'Snippets',
-    AppIcons.bookBookmark,
-    SettingsGroup.agents,
-    'Saved commands you can insert into any terminal.',
+  projects(
+    'Projects',
+    AppIcons.folders,
+    SettingsGroup.workspace,
+    'What each checkout needs in a new worktree, and what can be built.',
+    ['projects', 'projects and files'],
   ),
+  // Was the second half of Projects and files.
+  editorFiles(
+    'Editor and files',
+    AppIcons.fileCode,
+    SettingsGroup.workspace,
+    'The in-app editor, file browsing, and the apps work is handed to.',
+    ['editor & files', 'editor', 'files', 'projects and files'],
+  ),
+  // Everything a terminal is: gathered from Appearance (colours), Snippets
+  // and Diagnostics (scrollback).
   terminal(
     'Terminal',
     AppIcons.terminal,
     SettingsGroup.workspace,
-    'Default shell, look, and which keys terminals keep.',
+    'Default shell, font, colours, scrollback, and saved commands.',
+    ['snippets'],
   ),
-  // Was Projects plus Editor & files.
-  projects(
-    'Projects and files',
-    AppIcons.folders,
-    SettingsGroup.workspace,
-    'What each checkout needs in a new worktree and can build, the in-app '
-        'editor, file browsing, and the apps work is handed to.',
-    ['projects', 'editor & files', 'editor'],
-  ),
-  // Beside Projects: an emulator is where an app project runs. Orca files its
-  // Mobile Emulator page under Workflows, its equivalent of this group.
+  // An emulator is where an app project runs.
   devices(
     'Devices',
     AppIcons.deviceMobile,
@@ -144,7 +170,7 @@ enum SettingsSectionId {
     ['environments', 'environment'],
   ),
   // This machine's server; other machines' stay on Machines beside the rest
-  // of each machine. Was Terminal › Shell integration & session host.
+  // of each machine.
   server(
     'Server',
     AppIcons.stack,
@@ -153,27 +179,21 @@ enum SettingsSectionId {
         'it keeps on disk.',
     ['server', 'host', 'session host', 'karmashala host', 'karmashala_host'],
   ),
-  // Was Remote access.
+  // Was Remote and pairing, and Remote access before that.
   remote(
-    'Remote and pairing',
+    'Phone pairing',
     AppIcons.wifiHigh,
     SettingsGroup.connections,
     'Pair a phone to follow and answer sessions from anywhere.',
-    ['remote access', 'remote'],
+    ['remote access', 'remote', 'remote and pairing', 'pairing'],
   ),
+  // Was Source control: GitHub is all it holds.
   sourceControl(
-    'Source control',
+    'GitHub',
     AppIcons.gitBranch,
     SettingsGroup.connections,
     'GitHub access: a token, or which gh account each host uses.',
-    ['git', 'github'],
-  ),
-  environmentVariables(
-    'Variables and secrets',
-    AppIcons.clipboardText,
-    SettingsGroup.connections,
-    'Variables every new terminal starts with.',
-    ['variables & secrets'],
+    ['git', 'github', 'source control'],
   ),
   // The credentials the Stores tab reads with; the tab itself is a workbench
   // tab, as Usage is.
@@ -185,13 +205,23 @@ enum SettingsSectionId {
         'Stores tab reads with.',
     ['app store', 'google play', 'app store connect', 'play console'],
   ),
+  // With the other credentials: agents' logins read these as terminals do.
+  environmentVariables(
+    'Variables and secrets',
+    AppIcons.clipboardText,
+    SettingsGroup.connections,
+    'Variables every new terminal starts with, and secrets agents sign in '
+        'with.',
+    ['variables & secrets'],
+  ),
+  // Was Data.
   data(
-    'Data',
+    'Backup',
     AppIcons.floppyDisk,
     SettingsGroup.advanced,
     'Back up Karmashala\'s sessions, settings and evidence, on a schedule '
         'or now, and restore a backup.',
-    ['backup', 'back up', 'restore', 'export', 'migrate'],
+    ['backup', 'back up', 'restore', 'export', 'migrate', 'data'],
   ),
   diagnostics(
     'Diagnostics',
@@ -199,8 +229,6 @@ enum SettingsSectionId {
     SettingsGroup.advanced,
     'Logs, debug mode, and readings for a bug report.',
   ),
-  // The About dialog's facts, where Settings users look for them. Drawn by the
-  // screen, not an anchor (see settings_screen).
   about(
     'About',
     AppIcons.info,
@@ -219,12 +247,11 @@ enum SettingsSectionId {
     ],
   );
 
-  /// Pages merged into another by spec §6's regrouping, kept as names so a
-  /// link or a test written against them lands on the page that holds their
-  /// sections now. Not in [values]: the page list never shows them.
+  /// Pages merged into another, kept as names so a link or a test written
+  /// against them lands on the page that holds their sections now. Not in
+  /// [values]: the page list never shows them.
   static const accounts = agents;
-  static const permissions = tools;
-  static const editorFiles = projects;
+  static const snippets = terminal;
 
   const SettingsSectionId(
     this.label,

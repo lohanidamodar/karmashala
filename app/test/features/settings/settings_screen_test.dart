@@ -104,7 +104,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('DEFAULT TERMINAL'), findsOneWidget);
-    expect(find.text('TERMINAL CHORDS'), findsOneWidget);
+    expect(find.text('TERMINAL COLOURS'), findsOneWidget);
     expect(find.text('STARTUP & WINDOW'), findsNothing);
     // The nav stays put after the switch — master-detail, not navigation.
     expect(find.byType(SettingsNav), findsOneWidget);
@@ -145,7 +145,7 @@ void main() {
     // Only Machines mentions known hosts — the SSH page was folded into it,
     // hosts and all — and the rest of the list is gone.
     expect(find.text('Machines'), findsOneWidget);
-    expect(find.text('Tools and reach'), findsNothing);
+    expect(find.text('MCP and skills'), findsNothing);
 
     await tester.tap(find.text('Machines'));
     await tester.pumpAndSettle();
@@ -154,7 +154,7 @@ void main() {
 
   testWidgets('a deep link lands on the requested section', (tester) async {
     await pump(tester, section: SettingsSectionId.agents);
-    expect(find.text('DEFAULTS'), findsOneWidget);
+    expect(find.text('INSTALLED'), findsOneWidget);
     expect(find.text('STARTUP & WINDOW'), findsNothing);
   });
 
@@ -181,7 +181,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(inMenu('WORK'), findsOneWidget);
+    expect(inMenu('WORKSPACE'), findsOneWidget);
     await tester.tap(inMenu('Terminal'));
     await tester.pumpAndSettle();
     expect(find.text('DEFAULT TERMINAL'), findsOneWidget);

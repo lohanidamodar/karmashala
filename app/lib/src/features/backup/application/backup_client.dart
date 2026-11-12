@@ -200,7 +200,7 @@ final backupClientProvider = Provider<BackupClient>((ref) {
   );
 });
 
-/// Read when Settings → Data is shown; invalidated after each change.
+/// Read when Settings → Backup is shown; invalidated after each change.
 final backupScheduleProvider =
     FutureProvider.autoDispose<BackupScheduleReading>(
       (ref) => ref.watch(backupClientProvider).schedule(),

@@ -11,7 +11,7 @@ import '../application/snippet_providers.dart';
 import '../domain/command_snippet.dart';
 import 'snippet_dialogs.dart';
 
-/// Settings → Snippets: the saved commands, somewhere a person looks for them.
+/// Settings → Terminal → Command snippets: the saved commands, somewhere a person looks for them.
 /// A second view, not a second implementation — the same dialog and controller.
 class SnippetsSettingsPage extends ConsumerWidget {
   const SnippetsSettingsPage({super.key});

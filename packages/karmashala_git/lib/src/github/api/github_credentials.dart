@@ -152,7 +152,7 @@ class GithubNoAccess implements Exception {
   final bool off;
 
   String get message => off
-      ? 'GitHub is turned off for $host in Settings → Source control → GitHub.'
+      ? 'GitHub is turned off for $host in Settings → GitHub.'
       : 'No GitHub access for $host: paste a token in Settings → Source '
             'control → GitHub, or run "gh auth login" on the server\'s machine.';
 

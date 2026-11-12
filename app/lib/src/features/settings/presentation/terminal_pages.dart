@@ -11,7 +11,6 @@ import 'data_connection_notice.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
-import 'terminal_colours_section.dart';
 import '../../terminal/application/terminal_profiles.dart';
 
 /// Settings → Terminal → Default terminal: the shell, and what comes back at
@@ -90,8 +89,8 @@ class TerminalAdvancedSection extends ConsumerWidget {
   }
 }
 
-/// The terminal's font size — separate from the UI text scale on purpose —
-/// and a pointer to its colours, which live under Appearance.
+/// The terminal's font size — separate from the UI text scale on purpose.
+/// Its colours are the next section down.
 class TerminalFontSection extends ConsumerWidget {
   const TerminalFontSection({super.key});
 
@@ -155,7 +154,6 @@ class TerminalFontSection extends ConsumerWidget {
               ],
             ),
           ),
-          const TerminalColoursPointerRow(),
         ],
       ),
     );

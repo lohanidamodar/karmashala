@@ -26,7 +26,7 @@ class ServerAdministration implements ServerAdmin {
     this.backups,
   });
 
-  /// Settings → Data's backups; null refuses those calls.
+  /// Settings → Backup's backups; null refuses those calls.
   final ServerBackups? backups;
 
   /// What Settings → Server → Storage reads and clears; null refuses those

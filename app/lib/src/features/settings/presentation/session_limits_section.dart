@@ -16,7 +16,7 @@ import 'settings_row.dart';
 import 'settings_section.dart';
 import 'settings_theme.dart';
 
-/// Settings → General → Session limits: how many agent sessions may run at
+/// Settings → Sessions → Session limits: how many agent sessions may run at
 /// once — in all, per machine, per agent account, per project — and the
 /// pause on new background work. Blank is no limit; the server holds them.
 class SessionLimitsSection extends ConsumerWidget {

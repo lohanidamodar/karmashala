@@ -9,13 +9,12 @@ import 'package:xterm2/xterm.dart' show TerminalTheme;
 import '../../terminal/application/terminal_theme_controller.dart';
 import '../../terminal/presentation/terminal_theme_colors.dart';
 import '../application/settings_controller.dart';
-import '../application/settings_tab.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import 'settings_theme.dart';
 
-/// Settings → Appearance → Terminal colours: every built-in scheme drawn in
+/// Settings → Terminal → Terminal colours: every built-in scheme drawn in
 /// its own colours, grouped by the ground it sits on, then a Ghostty or Warp
 /// theme file. One setting (`terminalThemeSource`) holds whichever is chosen,
 /// so picking one is un-picking the others, and every pane repaints at once.
@@ -375,27 +374,6 @@ class _ImportedThemeRows extends ConsumerWidget {
         if (loaded is ThemeLoadOk && loaded.notes.isNotEmpty)
           SettingsNote(loaded.notes.join(' ')),
       ],
-    );
-  }
-}
-
-/// Terminal → Font's pointer to where terminal colours are chosen now: the
-/// scheme in force, and a way there. One place per control.
-class TerminalColoursPointerRow extends ConsumerWidget {
-  const TerminalColoursPointerRow({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final label = ref.watch(terminalSchemeLabelProvider);
-    return SettingsRow(
-      label: 'Colours',
-      help: '$label. Chosen under Appearance.',
-      control: OutlinedButton(
-        onPressed: () => ref
-            .read(settingsTabSectionProvider.notifier)
-            .reveal(SettingsTarget.anchor(SettingsAnchor.terminalTheme)),
-        child: const Text('Open Appearance'),
-      ),
     );
   }
 }

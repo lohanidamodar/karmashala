@@ -1,6 +1,6 @@
 part of '../data_request.dart';
 
-// GitHub access (Settings → Source control → GitHub) and agents' secret
+// GitHub access (Settings → GitHub) and agents' secret
 // requests. A token or a secret travels client → server only, in
 // `github.token.save` and `secrets.provide`; no answer or change carries one.
 

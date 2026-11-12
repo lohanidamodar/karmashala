@@ -10,7 +10,7 @@ import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// Settings → Agents and accounts → New sessions: the server's "Let new
+/// Settings → Permissions → New sessions: the server's "Let new
 /// sessions operate Karmashala" and "Trust registered projects for agents".
 /// Each row is hidden on a server that does not have it, and on a phone that
 /// may not start sessions.

@@ -143,7 +143,7 @@ class _SnippetsButton extends StatelessWidget {
   final ValueChanged<String>? onPicked;
   final bool touch;
 
-  static const _empty = 'No snippets yet — add them in Settings › Snippets';
+  static const _empty = 'No snippets yet — add them in Settings › Terminal';
 
   Future<void> _showSheet(
     BuildContext context,

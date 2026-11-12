@@ -68,7 +68,7 @@ abstract final class ServerMethod {
   static const String backupScheduleSet = 'server.backup.schedule.set';
 }
 
-/// What a backup never holds, as Settings → Data and the manifest name it.
+/// What a backup never holds, as Settings → Backup and the manifest name it.
 const List<String> kBackupExclusions = [
   'The vaults in secrets/: environment variables, store credentials, the '
       'GitHub token, agent secrets and webhook secrets',
@@ -81,7 +81,7 @@ const List<String> kBackupExclusions = [
   'Logs and the tool-image cache',
 ];
 
-/// What a backup refers to but cannot carry, as Settings → Data names it.
+/// What a backup refers to but cannot carry, as Settings → Backup names it.
 const List<String> kBackupNotCarried = [
   'Checkpoint contents: they are git objects in each repository, so the '
       'backup records their refs and the repositories must still hold them',

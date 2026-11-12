@@ -16,7 +16,7 @@ import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// Settings → Agents and accounts → Default agent: the installation a new
+/// Settings → Sessions → Default agent: the installation a new
 /// session pre-selects.
 class DefaultAgentSection extends StatelessWidget {
   const DefaultAgentSection({super.key});
@@ -83,7 +83,7 @@ class DefaultAgentRow extends ConsumerWidget {
   }
 }
 
-/// Settings → Agents and accounts → Sessions agents start: what a session
+/// Settings → Sessions → Sessions agents start: what a session
 /// hears of a session it starts, unless it says. Read by the server.
 class ChildReportSection extends ConsumerWidget {
   const ChildReportSection({super.key});
@@ -94,7 +94,7 @@ class ChildReportSection extends ConsumerWidget {
         ref.watch(settingsControllerProvider).childReportMode ?? 'final';
     final controller = ref.read(settingsControllerProvider.notifier);
     return SettingsSection(
-      title: 'Sessions agents start',
+      title: SettingsAnchor.childReport.heading,
       child: SettingsRow(
         label: 'Report back',
         help:

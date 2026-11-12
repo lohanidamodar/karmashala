@@ -21,7 +21,7 @@ class _Gh implements GhLogin {
       GhAccountsReading(listed, problem: problem);
 }
 
-/// Settings → Source control → GitHub, on the server: a token saved where
+/// Settings → GitHub, on the server: a token saved where
 /// only this account can read it, tested against a fake `/user`, and each
 /// host's account or off switch — never the real GitHub.
 void main() {

@@ -22,7 +22,7 @@ import '../../ssh/presentation/privileged_command_block.dart';
 import '../application/ssh_relay_controller.dart';
 import '../application/ssh_relays.dart';
 
-/// Settings › Remote and pairing: the relays this desktop runs on its own SSH
+/// Settings › Phone pairing: the relays this desktop runs on its own SSH
 /// hosts, beside the local and the hosted one. A box with a public address is
 /// a meeting place nobody else operates.
 class SshRelaysPanel extends ConsumerWidget {

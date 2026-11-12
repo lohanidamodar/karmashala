@@ -474,6 +474,14 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['default agent', 'new session', 'pre-selected'],
   ),
   SettingsEntry(
+    'Report back',
+    anchor: SettingsAnchor.childReport,
+    description:
+        'What a session hears of one it starts: a final report, the end of '
+        'every turn, or nothing.',
+    keywords: ['report', 'child', 'subagent', 'every turn', 'final'],
+  ),
+  SettingsEntry(
     'Default model',
     anchor: SettingsAnchor.defaultModel,
     description: 'The model new sessions on each agent start on.',

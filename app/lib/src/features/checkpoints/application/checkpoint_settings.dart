@@ -12,7 +12,7 @@ export 'package:karmashala_checkpoints/checkpoints.dart'
         kCheckpointSettingsKey,
         kDefaultCheckpointRetention;
 
-/// Settings › Checkpoints and automations › Checkpoints, as a preference the
+/// Settings › Checkpoints, as a preference the
 /// server's recorder
 /// reads before each turn: writing it is all a change takes.
 class CheckpointSettingsController extends Notifier<CheckpointSettings> {

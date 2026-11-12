@@ -8,7 +8,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import '../../support/fake_data_server.dart';
 import '../../support/fixtures.dart';
 
-/// Settings › General › Session limits: a field per scope, blank for none,
+/// Settings › Sessions › Session limits: a field per scope, blank for none,
 /// the pause and the usage hold, written to `settings.v1` for the server.
 void main() {
   Future<ProviderContainer> pump(

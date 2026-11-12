@@ -8,7 +8,7 @@ import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/github_access_controller.dart';
 
-/// Settings → Source control → GitHub: a token pasted here (kept by the
+/// Settings → GitHub: a token pasted here (kept by the
 /// server, write-only), and per host which gh account Karmashala uses or
 /// whether it uses GitHub there at all.
 class GithubAccessPage extends ConsumerWidget {

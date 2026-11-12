@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_ui/icons.dart';
 
-import '../../bot/presentation/bot_settings_section.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -40,8 +39,7 @@ import 'agent_mcp_entry_section.dart';
 import 'agent_path_section.dart' show AgentExecutableRows;
 import 'agents_group_section.dart';
 import 'agents_header_strip.dart';
-import 'agents_pages.dart' show AgentUpdatesSection, ChildReportSection;
-import 'new_session_grant_section.dart';
+import 'agents_pages.dart' show AgentUpdatesSection;
 import 'permissions_page.dart' show PermissionAxisDropdown;
 import 'settings_catalog.dart';
 import 'settings_notice.dart';
@@ -58,8 +56,8 @@ part 'agents_and_accounts_page/account_stores.dart';
 part 'agents_and_accounts_page/terminal_agent_details.dart';
 
 /// **Settings → Agents and accounts**: a header strip — how many agents, how
-/// many installed on how many machines, Discover, the default agent — then
-/// three groups of agents and a fourth of what spans them.
+/// many installed on how many machines, Discover — then three groups of
+/// agents and a fourth of what spans them.
 ///
 /// Grouped by capability, never by id, and one entry per agent
 /// (`AgentRegistry.folded`): an agent with a terminal form is a card that
@@ -109,10 +107,7 @@ class AgentsAndAccountsBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SettingsAnchorTarget(
-          anchor: SettingsAnchor.defaultAgent,
-          child: AgentsHeaderStrip(),
-        ),
+        const AgentsHeaderStrip(),
         // The executables anchor lands on this group: each card holds its own
         // agent's paths, and the row's glyph says which one needs looking at.
         SettingsAnchorTarget(
@@ -180,8 +175,6 @@ class AgentsAndAccountsBody extends ConsumerWidget {
           anchors: {
             SettingsAnchor.usage,
             SettingsAnchor.agentUpdates,
-            SettingsAnchor.newSessionGrant,
-            SettingsAnchor.bot,
             SettingsAnchor.detection,
           },
           children: [
@@ -194,15 +187,6 @@ class AgentsAndAccountsBody extends ConsumerWidget {
               child: AgentUpdatesSection(),
             ),
             AgentMcpEntrySection(),
-            ChildReportSection(),
-            SettingsAnchorTarget(
-              anchor: SettingsAnchor.newSessionGrant,
-              child: NewSessionGrantSection(),
-            ),
-            SettingsAnchorTarget(
-              anchor: SettingsAnchor.bot,
-              child: BotSettingsSection(),
-            ),
             SettingsAnchorTarget(
               anchor: SettingsAnchor.detection,
               child: AgentDetectionSection(),

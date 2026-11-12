@@ -13,7 +13,7 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/backup_client.dart';
 import 'backup_words.dart';
 
-/// Settings → Data → Restore: a backup checked and shown first, then
+/// Settings → Backup → Restore: a backup checked and shown first, then
 /// unpacked into a fresh folder by the server and switched to when it
 /// restarts, the data it replaces kept beside it.
 class DataRestoreSection extends ConsumerStatefulWidget {

@@ -18,8 +18,7 @@ const String kNothingToCapture =
 
 /// What the panel says when turns are not being checkpointed on purpose.
 const String kAutomaticCheckpointsOff =
-    'automatic checkpoints are off in Settings › Checkpoints and automations '
-    '› Checkpoints';
+    'automatic checkpoints are off in Settings › Checkpoints';
 
 /// The longest headline a title carries; the rest of a prompt is not a title.
 const int kCheckpointHeadlineLimit = 72;
