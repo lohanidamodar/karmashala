@@ -177,3 +177,19 @@ bare key just after a prompt was answered, left because it cannot be told from
 a prompt the parser cannot read); one-shot forms and a dash-led prompt (**20**);
 external-terminal sessions stored `unknown` (**10**); automations and
 phone-started sessions do not trust worktrees they make.
+
+## Third round: the items left open
+
+| Item | Commit | Change |
+| --- | --- | --- |
+| 35 | `a99be376f` | Codex usage windows are labelled by `limit_window_seconds` (name confirmed by one live call that printed key names only) |
+| 10 | `e6f62bea9` | An external-terminal session's own hooks move its row to running and to ended |
+| 8 | `106b31fe4` | Automations and phone-started sessions trust the worktrees they create |
+| 20 | `375086bc0` | One-shot prompts starting with `-` go after `--` (Claude, Codex) or a leading space |
+
+Gates: analyze exit 0, no errors or warnings; server 3400 passed; app 8245+
+passed; `agent_cli` 1165. Left open on purpose: the gap in **1** (a bare key
+just after a prompt was answered cannot be told from a prompt the parser
+cannot read). Known limits: an external session with no hooks still reads
+`unknown`, and one killed without its end hook reads running until the server
+restarts.
