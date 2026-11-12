@@ -172,6 +172,43 @@ void main() {
     await runtime.stop();
   });
 
+  test(
+    'a request the bridge does not answer is refused and named on stderr',
+    () async {
+      Object? refused;
+      final codex = FakeCodexAppServer(
+        onTurn: (turn) async {
+          try {
+            await turn.server.request('thread/trust/request', {
+              'threadId': turn.threadId,
+            });
+          } on AcpRpcError catch (error) {
+            refused = error.code;
+          }
+          turn.end('completed');
+        },
+      );
+      final lines = <String>[];
+      await talkToAcpAgent(() async => codexAppServerBridge(codex.transport), (
+        peer,
+        init,
+      ) async {
+        final created = await peer.call(AcpMethods.sessionNew, {
+          'cwd': temp.path,
+          'mcpServers': <Object?>[],
+        });
+        await peer.call(AcpMethods.sessionPrompt, {
+          'sessionId': (created! as Map)['sessionId'],
+          'prompt': [
+            {'type': 'text', 'text': 'Go'},
+          ],
+        });
+      }, onErrorLine: lines.add);
+      expect(refused, JsonRpcErrorCodes.methodNotFound);
+      expect(lines, contains(contains('thread/trust/request')));
+    },
+  );
+
   test('authenticate runs Codex\'s ChatGPT login, says its link on stderr, '
       'and answers once the login completed', () async {
     final codex = FakeCodexAppServer(account: null);

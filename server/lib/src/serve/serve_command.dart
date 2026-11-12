@@ -1375,6 +1375,11 @@ Future<int> _serve(
     acpRuntimes: acpRuntimes.start,
     acpAuth: acpAuth.startAuth,
     rewindCuts: rewindCuts,
+    folderTrusted: (agentId, folder, kind) => scratchTrust.isTrusted(
+      agentId: agentId,
+      folder: folder,
+      windowsAgent: kind == EnvironmentKind.windowsNative,
+    ),
     hostEnvironment: hostEnvironment,
   );
   final checkoutFacts = DaemonCheckoutFacts(

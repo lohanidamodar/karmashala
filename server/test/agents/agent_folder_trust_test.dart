@@ -363,4 +363,101 @@ void main() {
     ]);
     expect(claudeJson().existsSync(), isFalse);
   });
+
+  group('isTrusted reads the choice back', () {
+    Future<bool?> asked(
+      AgentFolderTrust folderTrust,
+      String agentId,
+      EnvironmentPath folder, {
+      bool windowsAgent = false,
+    }) => folderTrust.isTrusted(
+      agentId: agentId,
+      folder: folder,
+      windowsAgent: windowsAgent,
+    );
+
+    test('Codex: the folder or one above it trusted, never an untrusted '
+        'one or a sibling', () async {
+      final folderTrust = trust({AgentIds.codex: codexStore()});
+      const inside = EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\Work\App\packages\core',
+      );
+      const sibling = EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\Work\Apples',
+      );
+
+      expect(
+        await asked(folderTrust, AgentIds.codex, inside, windowsAgent: true),
+        isFalse,
+        reason: 'no config.toml has trusted nothing',
+      );
+      codexToml().writeAsStringSync(
+        '[projects."/home/me/other"]\ntrust_level = "trusted"\n\n'
+        "[projects.'c:\\work\\app']\ntrust_level = \"trusted\"\n\n"
+        '[projects."${wslFolder.path}"]\ntrust_level = "untrusted"\n',
+      );
+      expect(
+        await asked(folderTrust, AgentIds.codex, inside, windowsAgent: true),
+        isTrue,
+      );
+      expect(
+        await asked(folderTrust, AgentIds.codex, sibling, windowsAgent: true),
+        isFalse,
+      );
+      expect(await asked(folderTrust, AgentIds.codex, wslFolder), isFalse);
+    });
+
+    test(
+      'Claude Code and Antigravity, and null where nothing can be read',
+      () async {
+        final claude = claudeStore();
+        final folderTrust = trust({AgentIds.claudeCode: claude});
+        expect(
+          await asked(folderTrust, AgentIds.claudeCode, wslFolder),
+          isNull,
+        );
+        claudeJson().writeAsStringSync(
+          '{"projects": {"/home/me/karmashala": {"hasTrustDialogAccepted": true},'
+          ' "/home/me/x": {"hasTrustDialogAccepted": false}}}',
+        );
+        expect(
+          await asked(folderTrust, AgentIds.claudeCode, wslFolder),
+          isTrue,
+        );
+        expect(
+          await asked(
+            folderTrust,
+            AgentIds.claudeCode,
+            const EnvironmentPath(
+              environmentId: 'wsl:arch',
+              path: '/home/me/x',
+            ),
+          ),
+          isFalse,
+        );
+        claudeJson().writeAsStringSync('not json');
+        expect(
+          await asked(folderTrust, AgentIds.claudeCode, wslFolder),
+          isNull,
+        );
+
+        final agy = Directory(p.join(home.path, '.gemini', 'antigravity-cli'))
+          ..createSync(recursive: true);
+        File(
+          p.join(agy.path, 'settings.json'),
+        ).writeAsStringSync('{"trustedWorkspaces": ["${wslFolder.path}"]}');
+        expect(
+          await asked(
+            trust({AgentIds.antigravity: agy.path}),
+            AgentIds.antigravity,
+            wslFolder,
+          ),
+          isTrue,
+        );
+        expect(await asked(trust({}), AgentIds.codex, wslFolder), isNull);
+      },
+    );
+  });
 }

@@ -329,6 +329,9 @@ class AcpSessionRuntime implements ScreenSession {
     return _closeRequested = true;
   }
 
+  /// A note in the chat from Karmashala, written as the runtime's own are.
+  void notice(String text) => _writer.notice(text);
+
   /// Spawns the agent, initialises, opens or loads the session and sets its
   /// mode. Throws [StateError] in words when any step refuses; the runtime
   /// has then ended and the process is gone.

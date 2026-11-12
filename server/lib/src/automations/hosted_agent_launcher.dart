@@ -238,6 +238,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.acpRuntimes,
     this.acpAuth,
     this.rewindCuts,
+    this.folderTrusted,
     Map<String, String>? hostEnvironment,
     bool? windows,
   }) : _hostEnvironment = hostEnvironment ?? Platform.environment,
@@ -316,6 +317,15 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// Each session's pending rewind cut, applied to an ACP resume; null keeps
   /// none.
   final RewindCuts? rewindCuts;
+
+  /// Whether the agent's own settings trust a folder; null when unknown. Only
+  /// read, so a Codex chat in an untrusted folder can say so.
+  final Future<bool?> Function(
+    String agentId,
+    EnvironmentPath folder,
+    EnvironmentKind kind,
+  )?
+  folderTrusted;
 
   final Map<String, String> _hostEnvironment;
   final bool _windows;
@@ -863,6 +873,10 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         sessions.updateExternalSessionId(id, outcome.agentSessionId);
         onRowWritten?.call(id);
       }
+      if (!outcome.resumed &&
+          acp.nativeBridge == AcpNativeBridge.codexAppServer) {
+        await _sayIfUntrusted(runtime, agentId, agentName, directory, kind);
+      }
       if (prompt != null && prompt.trim().isNotEmpty) {
         await runtime.send(prompt);
         handoffs?.consume(id);
@@ -894,6 +908,33 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       onRowWritten?.call(id);
       rethrow;
     }
+  }
+
+  /// Codex's app-server never asks the trust question its terminal does, so
+  /// the chat says the folder is untrusted; the folder is never trusted here.
+  Future<void> _sayIfUntrusted(
+    AcpSessionRuntime runtime,
+    String agentId,
+    String agentName,
+    EnvironmentPath directory,
+    EnvironmentKind kind,
+  ) async {
+    final read = folderTrusted;
+    if (read == null) return;
+    // The chat form keeps its trust where its terminal form does.
+    final trustId = agents.descriptorOf(agentId)?.chatFormOf ?? agentId;
+    final name = agents.descriptorOf(trustId)?.displayName ?? agentName;
+    bool? trusted;
+    try {
+      trusted = await read(trustId, directory, kind);
+    } on Object {
+      return;
+    }
+    if (trusted != false) return;
+    runtime.notice(
+      '$name does not trust this folder in its own settings, so it runs here '
+      'untrusted. Trusting it is your choice, made in $name.',
+    );
   }
 
   /// The id [installation]'s own service runs [conversationId] under, or

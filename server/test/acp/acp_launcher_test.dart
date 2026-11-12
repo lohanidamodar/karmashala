@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
+import 'package:agent_cli/process.dart' show EnvironmentKind, EnvironmentPath;
 import 'package:karmashala_acp/karmashala_acp.dart' show AuthMethod, StopReason;
 import 'package:karmashala_acp/testing.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
@@ -54,10 +55,11 @@ void main() {
     database.execute(
       'INSERT INTO agent_installations (id, agent_kind, environment_id, '
       'executable_path, created_at, executable_by_user) '
-      'VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?);',
+      'VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?);',
       [
         'acp1', AgentIds.grok, 'local', 'npx.cmd', '$t0', 1, //
-        'cc1', AgentIds.claudeCode, 'local', '/bin/claude', '$t0', 1,
+        'cc1', AgentIds.claudeCode, 'local', '/bin/claude', '$t0', 1, //
+        'cx1', AgentIds.codexAcp, 'local', '/bin/codex', '$t0', 1,
       ],
     );
     pty = FakePtyLauncher();
@@ -116,9 +118,12 @@ void main() {
     bool withRuntimes = true,
     AcpStartAuth Function(AgentInstallation, AcpLaunchSpec)? acpAuth,
     void Function(String sessionId)? onRowWritten,
+    Future<bool?> Function(String, EnvironmentPath, EnvironmentKind)?
+    folderTrusted,
   }) {
     final rows = CheckoutRows(database);
     return HostedAgentLauncher(
+      folderTrusted: folderTrusted,
       registry: registry,
       sessions: SessionDao(database),
       mcp: SessionMcpAccessPoint(mcp: null, configDirectory: temp.path),
@@ -271,6 +276,56 @@ void main() {
     expect(row('s1').title, 'Probe of the chat view');
     expect(row('s1').titleByUser, isFalse);
   });
+
+  test('a Codex chat in a folder Codex does not trust says so once in the '
+      'chat, read under the terminal form\'s id and never written', () async {
+    final rows = CheckoutRows(database);
+    final asked = <String>[];
+    Future<void> start(bool? trusted, String id) =>
+        launcher(
+          folderTrusted: (agentId, folder, kind) async {
+            asked.add('$agentId ${folder.path}');
+            return trusted;
+          },
+        ).startDetailed(
+          HostedLaunch(
+            repository: rows.repository('r1')!,
+            installation: rows.installation(id)!,
+            title: 'Chat',
+          ),
+        );
+    List<String> notices() => [
+      for (final m in SessionMessageDao(database).listAfter('s1'))
+        if (m.role == SessionMessageRole.notice) m.text,
+    ];
+
+    await start(false, 'cx1');
+    expect(asked, ['${AgentIds.codex} ${temp.path}']);
+    expect(notices(), [contains('Codex CLI does not trust this folder')]);
+  });
+
+  for (final (trusted, id) in [(true, 'cx1'), (null, 'cx1'), (false, 'acp1')]) {
+    test('no notice for a Codex chat whose folder reads $trusted, nor for '
+        'another ACP agent ($id)', () async {
+      final rows = CheckoutRows(database);
+      await launcher(
+        folderTrusted: (agentId, folder, kind) async => trusted,
+      ).startDetailed(
+        HostedLaunch(
+          repository: rows.repository('r1')!,
+          installation: rows.installation(id)!,
+          title: 'Chat',
+        ),
+      );
+      expect(
+        SessionMessageDao(database)
+            .listAfter('s1')
+            .where((m) => m.role == SessionMessageRole.notice)
+            .map((m) => m.text),
+        isNot(contains(contains('trust'))),
+      );
+    });
+  }
 
   test('a PTY agent is untouched by the branch', () async {
     final rows = CheckoutRows(database);

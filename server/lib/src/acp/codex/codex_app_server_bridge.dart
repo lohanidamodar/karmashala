@@ -1258,6 +1258,7 @@ final class CodexAppServerBridge implements AcpTransport {
             'currentTimeAt': DateTime.now().millisecondsSinceEpoch ~/ 1000,
           });
         default:
+          _say('Codex asked for ${request.method}, which Karmashala refused');
           request.fail(
             JsonRpcErrorCodes.methodNotFound,
             'Karmashala does not answer ${request.method}',

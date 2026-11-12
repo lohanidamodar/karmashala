@@ -82,6 +82,42 @@ class AgentFolderTrust {
     };
   }
 
+  /// Whether [agentId]'s own settings trust [folder] or a folder above it;
+  /// null when they cannot be read, or the agent keeps no trust there.
+  Future<bool?> isTrusted({
+    required String agentId,
+    required EnvironmentPath folder,
+    required bool windowsAgent,
+  }) async {
+    final spec = _registry().byId(agentId)?.store?.folderTrust;
+    if (spec == null) return null;
+    final home = await _storeHome(folder.environmentId, agentId);
+    if (home == null || !await Directory(home).exists()) return null;
+    final context = home.contains(r'\') ? p.windows : p.posix;
+    final file = File(context.normalize(context.join(home, spec.settingsFile)));
+    final String raw;
+    try {
+      raw = await file.readAsString();
+    } on FileSystemException {
+      // Codex with no config.toml has trusted nothing; the JSON ones never ran.
+      return spec.format == AgentFolderTrustFormat.tomlProjects ? false : null;
+    }
+    final under = _under(folder.path, windowsAgent: windowsAgent);
+    try {
+      return switch (spec.format) {
+        AgentFolderTrustFormat.jsonProjects => _jsonTrusts(raw, under),
+        AgentFolderTrustFormat.tomlProjects => _tomlTrusts(raw, under),
+        AgentFolderTrustFormat.jsonPathList => _jsonListTrusts(
+          raw,
+          spec.listKey,
+          under,
+        ),
+      };
+    } on FormatException {
+      return null;
+    }
+  }
+
   Future<bool> _json(File file, _Edit edit, EnvironmentPath folder) async {
     // No file is an agent that never ran here: it asks for far more than
     // trust on its first start, and a file made here would skip that.
@@ -212,15 +248,9 @@ _Edited _jsonListTrusting(String raw, String key, String folder) {
 /// lower case, as a literal string; elsewhere as a basic string.
 _Edited _tomlTrusting(String raw, String folder, {required bool windowsAgent}) {
   final key = windowsAgent ? folder.toLowerCase() : folder;
-  final header = RegExp(
-    r'''^\s*\[projects\.(?:"((?:[^"\\]|\\.)*)"|'([^']*)')\]''',
-  );
   for (final line in const LineSplitter().convert(raw)) {
-    final match = header.firstMatch(line);
-    if (match == null) continue;
-    final named = match[1] != null
-        ? match[1]!.replaceAll(r'\\', r'\').replaceAll(r'\"', '"')
-        : match[2]!;
+    final named = _tomlProject(line);
+    if (named == null) continue;
     if (windowsAgent ? named.toLowerCase() == key : named == key) {
       return _Unchanged();
     }
@@ -232,4 +262,78 @@ _Edited _tomlTrusting(String raw, String folder, {required bool windowsAgent}) {
   if (raw.trim().isEmpty) return _Changed(table);
   final separated = raw.endsWith('\n') ? raw : '$raw\n';
   return _Changed('$separated\n$table');
+}
+
+/// Whether a path an agent keyed its trust under is [folder] or above it,
+/// whichever slash it was written with; a Windows agent's case is ignored.
+bool Function(String key) _under(String folder, {required bool windowsAgent}) {
+  String plain(String path) {
+    var text = path.replaceAll(r'\', '/');
+    if (windowsAgent) text = text.toLowerCase();
+    while (text.length > 1 && text.endsWith('/')) {
+      text = text.substring(0, text.length - 1);
+    }
+    return text;
+  }
+
+  final target = plain(folder);
+  return (key) {
+    final above = plain(key);
+    return above == target ||
+        target.startsWith(above.endsWith('/') ? above : '$above/');
+  };
+}
+
+Map<String, Object?> _object(String raw) {
+  final decoded = jsonDecode(raw);
+  if (decoded is! Map<String, Object?>) {
+    throw const FormatException('the settings are not an object');
+  }
+  return decoded;
+}
+
+bool _jsonTrusts(String raw, bool Function(String key) under) {
+  final projects = _object(raw)['projects'];
+  if (projects is! Map) return false;
+  return projects.entries.any(
+    (e) =>
+        under('${e.key}') &&
+        e.value is Map &&
+        (e.value as Map)['hasTrustDialogAccepted'] == true,
+  );
+}
+
+bool _jsonListTrusts(String raw, String key, bool Function(String) under) {
+  final paths = _object(raw)[key];
+  if (paths is! List) return false;
+  return paths.whereType<String>().any(under);
+}
+
+/// Whether a `[projects."<path>"]` table for the folder or one above it says
+/// `trust_level = "trusted"`.
+bool _tomlTrusts(String raw, bool Function(String key) under) {
+  final level = RegExp(r'''^\s*trust_level\s*=\s*["']trusted["']''');
+  var inside = false;
+  for (final line in const LineSplitter().convert(raw)) {
+    if (line.trimLeft().startsWith('[')) {
+      final named = _tomlProject(line);
+      inside = named != null && under(named);
+      continue;
+    }
+    if (inside && level.hasMatch(line)) return true;
+  }
+  return false;
+}
+
+final _tomlProjectHeader = RegExp(
+  r'''^\s*\[projects\.(?:"((?:[^"\\]|\\.)*)"|'([^']*)')\]''',
+);
+
+/// The folder a `[projects."<path>"]` header names, or null for another line.
+String? _tomlProject(String line) {
+  final match = _tomlProjectHeader.firstMatch(line);
+  if (match == null) return null;
+  return match[1] != null
+      ? match[1]!.replaceAll(r'\\', r'\').replaceAll(r'\"', '"')
+      : match[2]!;
 }
