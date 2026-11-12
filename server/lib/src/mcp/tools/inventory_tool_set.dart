@@ -1,4 +1,5 @@
 import '../../sessions/launch/capacity/slot_waits.dart';
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/read.dart'
     show conversationQueryTokens, kConversationQueryMinimum;
@@ -10,6 +11,7 @@ import 'package:karmashala_environments/karmashala_environments.dart';
 import 'package:karmashala_environments/store.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
+import 'package:karmashala_session/session.dart' show SessionStatus;
 import 'package:karmashala_session_engine/store.dart';
 
 import '../../data/workspace_handler.dart' show environmentKinds;
@@ -22,15 +24,27 @@ import 'server_tool_set.dart';
 /// identity: they describe the machine, read from the store and the
 /// server's own conversation index.
 class InventoryToolSet extends ServerToolSet {
-  InventoryToolSet(this._context, {this.quietSinceOf, this.slotWaits})
-    : _projects = ProjectDao(_context.database),
-      _repositories = RepositoryDao(_context.database),
-      _sessions = SessionDao(_context.database),
-      _imported = ImportedSessionDao(_context.database),
-      _installations = AgentInstallationDao(_context.database),
-      _resumes = ScheduledResumeDao(_context.database);
+  InventoryToolSet(
+    this._context, {
+    required this.isLive,
+    required this.activityOf,
+    this.quietSinceOf,
+    this.slotWaits,
+  }) : _projects = ProjectDao(_context.database),
+       _repositories = RepositoryDao(_context.database),
+       _sessions = SessionDao(_context.database),
+       _imported = ImportedSessionDao(_context.database),
+       _installations = AgentInstallationDao(_context.database),
+       _resumes = ScheduledResumeDao(_context.database);
 
   final ServerToolContext _context;
+
+  /// Whether the server holds the session's agent running now.
+  final bool Function(String sessionId) isLive;
+
+  /// What the agent of a session the server holds is doing; null when
+  /// nothing measured it.
+  final AgentActivityStatus? Function(String sessionId) activityOf;
 
   /// When a native session last did anything, while the server reads it
   /// quiet; null when it is not.
@@ -135,6 +149,7 @@ class InventoryToolSet extends ServerToolSet {
               '';
           if (wantCli != null && agentId != wantCli) continue;
           if (!wanted([project.name, repo.name, session.title])) continue;
+          final live = isLive(session.id);
           sessions.add({
             'id': session.id,
             'kind': 'native',
@@ -148,8 +163,10 @@ class InventoryToolSet extends ServerToolSet {
             'environmentId': repo.path.environmentId,
             'status': waits.containsKey(session.id)
                 ? 'waitingForSlot'
-                : session.status.name,
+                : _statusWord(session.status, live: live),
             'waitingForSlot': ?waits[session.id],
+            'live': live,
+            if (live) 'activity': _activityWord(activityOf(session.id)),
             // What its agent last said it runs, never a setting.
             'model': _context.modelOf(session.id),
             'surface': session.surface.name,
@@ -194,6 +211,19 @@ class InventoryToolSet extends ServerToolSet {
     }
     return sessions;
   }
+
+  /// The row's lifecycle in a reader's words: `running` with nothing behind
+  /// it is not claimed, and a lost sight is no state of the agent's.
+  static String _statusWord(SessionStatus status, {required bool live}) =>
+      status == SessionStatus.unknown
+      ? 'not recorded (lost sight of it)'
+      : status.labelWhen(hostedLive: live);
+
+  static String _activityWord(AgentActivityStatus? activity) =>
+      switch (activity) {
+        null || AgentActivityStatus.unknown => 'not recorded',
+        final known => known.name,
+      };
 
   List<Map<String, Object?>> _listAgents() => [
     for (final install in _installations.getAll()..sort(compareInstallations))
@@ -339,10 +369,16 @@ const List<Map<String, Object?>> inventoryToolSchemas = [
     'name': 'list_sessions',
     'description':
         'List coding-agent sessions — both the ones running in Karmashala '
-        '("kind": "native", with a status, a quietSince while it has done '
-        'nothing new for a while and, when an agent started it, a '
-        'parentSessionId) and ones imported from a CLI store ("kind": '
-        '"imported"). Optionally filter by a case-insensitive substring '
+        '("kind": "native", with a status, live, an activity while live, a '
+        'quietSince while it has done nothing new for a while and, when an '
+        'agent started it, a parentSessionId) and ones imported from a CLI '
+        'store ("kind": "imported"). status is what the row last recorded: '
+        'created, running, idle, completed, failed, cancelled, '
+        'waitingForSlot, "no ending was reported" (it claims to run but '
+        'nothing here holds it) or "not recorded (lost sight of it)". live '
+        'says whether this server holds its agent running now; activity is '
+        'what that agent is doing: idle, working, awaitingApproval, failed '
+        'or "not recorded". Optionally filter by a case-insensitive substring '
         '(matched against project, repository, title, and preview) and by CLI '
         '("claude" or "codex").',
     'inputSchema': {

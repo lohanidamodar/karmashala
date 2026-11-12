@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:agent_cli/discovery.dart' show AgentInstallation;
 import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:agent_cli/read.dart' show ImportedSession;
@@ -20,10 +21,17 @@ import 'tool_harness.dart';
 void main() {
   late ToolHarness h;
   late InventoryToolSet tools;
+  // What the host holds, and what each held agent is doing.
+  late Map<String, AgentActivityStatus?> held;
 
   setUp(() {
     h = ToolHarness();
-    tools = InventoryToolSet(h.context);
+    held = {'s1': null};
+    tools = InventoryToolSet(
+      h.context,
+      isLive: held.containsKey,
+      activityOf: (id) => held[id],
+    );
   });
   tearDown(() => h.dispose());
 
@@ -164,6 +172,29 @@ void main() {
       expect(s1, isNot(contains('scheduledResume')));
       expect(rows.last['title'], 'Imported i1');
       expect(rows.last['externalId'], 'conv-i1');
+    });
+
+    test('status is a reader\'s word beside whether the host holds the '
+        'agent and, while it does, what it is doing', () async {
+      SessionDao(h.db).updateStatus('s2', SessionStatus.unknown);
+      held['s1'] = AgentActivityStatus.awaitingApproval;
+      var rows = {for (final r in await list('list_sessions')) r['id']: r};
+      expect(rows['s1']!['status'], 'running');
+      expect(rows['s1']!['live'], isTrue);
+      expect(rows['s1']!['activity'], 'awaitingApproval');
+      expect(rows['s2']!['status'], 'not recorded (lost sight of it)');
+      expect(rows['s2']!['live'], isFalse);
+      expect(rows['s2'], isNot(contains('activity')));
+
+      held['s1'] = null;
+      rows = {for (final r in await list('list_sessions')) r['id']: r};
+      expect(rows['s1']!['activity'], 'not recorded');
+
+      held.clear();
+      rows = {for (final r in await list('list_sessions')) r['id']: r};
+      expect(rows['s1']!['status'], 'no ending was reported');
+      expect(rows['s1']!['live'], isFalse);
+      expect(rows['s1'], isNot(contains('activity')));
     });
 
     test('each native session names the model its agent last said it runs, '

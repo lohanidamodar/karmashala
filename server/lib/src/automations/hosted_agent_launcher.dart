@@ -695,7 +695,8 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
 
     if (launch.surface == SessionSurface.external) {
       // Launched into a window nobody here can see: `running` would be a
-      // claim nothing observes. The agent's own hooks move the row from here.
+      // claim nothing observes. Nothing moves the row from here: hooks feed
+      // only its activity, never its lifecycle.
       sessions.updateStatus(id, SessionStatus.unknown);
       onRowWritten?.call(id);
       settleWorktree?.call(null);

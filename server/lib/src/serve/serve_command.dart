@@ -875,6 +875,8 @@ Future<int> _serve(
       const InstructionsToolSet(),
       InventoryToolSet(
         tools,
+        isLive: prompts.status.holds,
+        activityOf: (id) => status.statusOf(id)?.report.status,
         quietSinceOf: (id) => attention.status.reportForOpenId(id)?.quietSince,
         slotWaits: slotWaits,
       ),

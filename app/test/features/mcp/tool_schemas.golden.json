@@ -38,7 +38,7 @@
     },
     {
       "name": "list_sessions",
-      "description": "List coding-agent sessions — both the ones running in Karmashala (\"kind\": \"native\", with a status, a quietSince while it has done nothing new for a while and, when an agent started it, a parentSessionId) and ones imported from a CLI store (\"kind\": \"imported\"). Optionally filter by a case-insensitive substring (matched against project, repository, title, and preview) and by CLI (\"claude\" or \"codex\").",
+      "description": "List coding-agent sessions — both the ones running in Karmashala (\"kind\": \"native\", with a status, live, an activity while live, a quietSince while it has done nothing new for a while and, when an agent started it, a parentSessionId) and ones imported from a CLI store (\"kind\": \"imported\"). status is what the row last recorded: created, running, idle, completed, failed, cancelled, waitingForSlot, \"no ending was reported\" (it claims to run but nothing here holds it) or \"not recorded (lost sight of it)\". live says whether this server holds its agent running now; activity is what that agent is doing: idle, working, awaitingApproval, failed or \"not recorded\". Optionally filter by a case-insensitive substring (matched against project, repository, title, and preview) and by CLI (\"claude\" or \"codex\").",
       "inputSchema": {
         "type": "object",
         "properties": {
