@@ -253,24 +253,41 @@ class SessionRegistry {
   }
 
   /// Ends a session and drops it. Explicit, never a side effect of a disconnect.
-  Future<SessionLifecycle> close(
-    String id, {
-    int signal = 15,
-    String? reason,
-  }) async {
+  Future<SessionLifecycle> close(String id, {int signal = 15, String? reason}) {
     final process = requireProcess(id);
+    // One close per process: a second caller waits for the first, so one
+    // [SessionClosed] is told.
+    return _closing[process] ??= _close(process, signal, reason);
+  }
+
+  final _closing = <HostedProcess, Future<SessionLifecycle>>{};
+
+  Future<SessionLifecycle> _close(
+    HostedProcess process,
+    int signal,
+    String? reason,
+  ) async {
+    final id = process.id;
     // Taken before the terminate: whether this close is what ended the process,
     // or only lets go of the record of one that had already ended. Marked on
     // the session, so the exit the signal causes is reported as the close's.
     final endedByClose = process.markCloseRequested();
-    final end = await process.terminate(signal: signal);
-    _processes.remove(id);
-    // Closed on purpose, so the record goes too; a disconnect never reaches here.
-    store?.forget(id);
-    _changes.add(
-      SessionClosed(process, end, endedByClose: endedByClose, reason: reason),
-    );
-    return end;
+    try {
+      final end = await process.terminate(signal: signal);
+      // A resume that landed while this one wound down is not this close's.
+      if (identical(_processes[id], process)) {
+        _processes.remove(id);
+        // Closed on purpose, so the record goes too; a disconnect never
+        // reaches here.
+        store?.forget(id);
+      }
+      _changes.add(
+        SessionClosed(process, end, endedByClose: endedByClose, reason: reason),
+      );
+      return end;
+    } finally {
+      unawaited(_closing.remove(process));
+    }
   }
 
   /// Ends every session because this host is stopping. Not [close] for each:

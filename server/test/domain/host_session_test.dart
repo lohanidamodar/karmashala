@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:karmashala_host/karmashala_host.dart';
@@ -577,5 +578,59 @@ void main() {
       expect(env.registry.find('pane-1'), isNull);
       expect(env.launcher.handles.single.signals.single, 15);
     });
+
+    test('a resume landing mid-close is kept, and two closes tell one '
+        'SessionClosed', () async {
+      final launcher = _SlowCloseLauncher();
+      final registry = SessionRegistry(launcher: launcher);
+      final closed = <SessionClosed>[];
+      registry.changes.listen((c) {
+        if (c is SessionClosed) closed.add(c);
+      });
+      const request = PtySpawnRequest(argv: ['/bin/sh']);
+      final first = registry.open('pane-1', request);
+      final slow = launcher.handles.single as _SlowCloseHandle;
+
+      final closing = registry.close('pane-1');
+      final again = registry.close('pane-1');
+      slow.exit.complete(0);
+      await first.ended;
+      await Future<void>.delayed(Duration.zero);
+      // Ended but still winding down: the id is free for a resume.
+      final resumed = registry.open('pane-1', request);
+      slow.closing.complete();
+
+      expect(await closing, same(await again));
+      expect(registry.find('pane-1'), same(resumed));
+      expect(closed, hasLength(1));
+      launcher.handles.last.finish(0);
+    });
   });
+}
+
+/// The first handle's exit and close are the test's to complete, so a close
+/// can be held after the process ended.
+class _SlowCloseLauncher extends FakePtyLauncher {
+  @override
+  PtyHandle start(PtySpawnRequest request) {
+    if (handles.isNotEmpty) return super.start(request);
+    final handle = _SlowCloseHandle(nextPid++, request);
+    handles.add(handle);
+    return handle;
+  }
+}
+
+class _SlowCloseHandle extends FakePtyHandle {
+  _SlowCloseHandle(super.pid, super.request);
+  final exit = Completer<int>();
+  final closing = Completer<void>();
+
+  @override
+  Future<int> get exitCode => exit.future;
+
+  @override
+  Future<void> close() async {
+    await closing.future;
+    await super.close();
+  }
 }
