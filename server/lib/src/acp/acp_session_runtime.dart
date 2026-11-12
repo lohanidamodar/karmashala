@@ -1942,8 +1942,13 @@ class AcpSessionRuntime implements ScreenSession {
 
   /// Closes the peer (and so the agent's stdin), then waits for the exit —
   /// killing after [stopPatience], or at once with [killNow].
-  Future<void> _tearDown({bool killNow = false}) async {
-    if (_torn) return;
+  /// Every caller waits on the one teardown, so none reads the exit early.
+  Future<void> _tearDown({bool killNow = false}) =>
+      _teardown ??= _tearingDown(killNow: killNow);
+
+  Future<void>? _teardown;
+
+  Future<void> _tearingDown({required bool killNow}) async {
     _torn = true;
     await _updates?.cancel();
     // Every command the agent left running ends with the session; the rows

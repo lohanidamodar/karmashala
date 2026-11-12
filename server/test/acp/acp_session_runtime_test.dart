@@ -1240,6 +1240,26 @@ void main() {
     expect(runtime.closeRequested, isTrue);
   });
 
+  test('a second stop while the first waits for the exit records the same '
+      'clean ending', () async {
+    final process = FakeAcpProcess(FakeAcpAgent());
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+    );
+    await runtime.start();
+    Timer(const Duration(milliseconds: 100), () => process.die(0));
+    final first = runtime.stop();
+    final second = runtime.stop();
+    final ends = await Future.wait([first, second]);
+    expect(process.killed, isFalse);
+    for (final end in ends) {
+      expect(end, isA<SessionExited>().having((e) => e.exitCode, 'code', 0));
+    }
+  });
+
   test('a stop mid-turn is no failure of the turn, even when the agent is '
       'killed before it answers the cancel', () async {
     final agent = FakeAcpAgent(
