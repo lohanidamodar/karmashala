@@ -182,6 +182,12 @@ class FakeDataServer {
   /// What a change to it is refused with, when a test wants that.
   String? operateRefusal;
 
+  /// "Trust registered projects for agents"; on, as a server starts.
+  bool trustRegisteredProjects = true;
+
+  /// What a change to it is refused with, when a test wants that.
+  String? trustRefusal;
+
   /// The workspace domain's four tables, shaped like the server's DAOs so a
   /// test seeds them the way the server's store is written. A write here
   /// after a client connected reaches it as another client's change.
@@ -630,6 +636,8 @@ class FakeDataServer {
           quickAccessPins = [...pins];
         case OperateByDefaultChanged(:final enabled):
           operateNewSessions = enabled;
+        case TrustRegisteredProjectsChanged(:final enabled):
+          trustRegisteredProjects = enabled;
         case BotRowChanged() || BotApprovalChanged() || BotAgentChanged():
           break;
         case StoresChanged() ||
@@ -888,6 +896,14 @@ class FakeDataServer {
         }
         operateNewSessions = enabled;
         changes.add(OperateByDefaultChanged(enabled: enabled));
+        return const DataAck();
+      }(),
+      AgentsTrustRegisteredProjectsSet(:final enabled) => () {
+        if (trustRefusal case final words?) {
+          throw DataRefused.denied(words);
+        }
+        trustRegisteredProjects = enabled;
+        changes.add(TrustRegisteredProjectsChanged(enabled: enabled));
         return const DataAck();
       }(),
       final CheckpointsRequest<Object?> r => checkpointRows._handle(r, changes),
@@ -1328,6 +1344,9 @@ class FakeDataServer {
     origin.tell(attention._greeting());
     if (operateNewSessions) {
       origin.tell(const [OperateByDefaultChanged(enabled: true)]);
+    }
+    if (!trustRegisteredProjects) {
+      origin.tell(const [TrustRegisteredProjectsChanged(enabled: false)]);
     }
     return const DataAck();
   }

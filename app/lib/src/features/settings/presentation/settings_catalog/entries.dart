@@ -521,6 +521,14 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['operate', 'operator', 'grant', 'default', 'new sessions'],
   ),
   SettingsEntry(
+    'Trust registered projects for agents',
+    anchor: SettingsAnchor.newSessionGrant,
+    description:
+        "A session starting in a project you added here skips the agent's "
+        'own trust-this-folder prompt.',
+    keywords: ['trust', 'folder', 'project', 'prompt', 'new sessions'],
+  ),
+  SettingsEntry(
     'Let agents update themselves in Karmashala sessions',
     anchor: SettingsAnchor.agentUpdates,
     description:

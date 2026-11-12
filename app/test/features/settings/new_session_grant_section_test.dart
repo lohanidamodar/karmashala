@@ -17,13 +17,19 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(1440, 900),
     double textScale = 1,
-    Set<String> features = const {SessionsOperateByDefaultSet.feature},
+    Set<String> features = const {
+      SessionsOperateByDefaultSet.feature,
+      AgentsTrustRegisteredProjectsSet.feature,
+    },
     bool on = false,
+    bool trusts = true,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    server = FakeDataServer(clock: () => testTime)..operateNewSessions = on;
+    server = FakeDataServer(clock: () => testTime)
+      ..operateNewSessions = on
+      ..trustRegisteredProjects = trusts;
     final container = ProviderContainer(
       overrides: [
         await server.override(),
@@ -58,6 +64,69 @@ void main() {
   );
 
   bool shown(WidgetTester tester) => tester.widget<Switch>(toggle()).value;
+
+  Finder trustToggle() => find.descendant(
+    of: find.byKey(const ValueKey('trust-registered-projects')),
+    matching: find.byType(Switch),
+  );
+
+  bool trustShown(WidgetTester tester) =>
+      tester.widget<Switch>(trustToggle()).value;
+
+  group('Trust registered projects for agents', () {
+    testWidgets('on until the person turns it off, and the switch sets it', (
+      tester,
+    ) async {
+      await pump(tester);
+      expect(find.text('Trust registered projects for agents'), findsOneWidget);
+      expect(find.textContaining('trust-this-folder prompt'), findsOneWidget);
+      expect(trustShown(tester), isTrue);
+
+      await tester.tap(trustToggle());
+      await tester.pumpAndSettle();
+      expect(server.trustRegisteredProjects, isFalse);
+      expect(trustShown(tester), isFalse);
+
+      await tester.tap(trustToggle());
+      await tester.pumpAndSettle();
+      expect(server.trustRegisteredProjects, isTrue);
+      expect(trustShown(tester), isTrue);
+    });
+
+    testWidgets('shows off when the server holds it off', (tester) async {
+      await pump(tester, trusts: false);
+      expect(trustShown(tester), isFalse);
+    });
+
+    testWidgets('a refusal leaves the switch and says why', (tester) async {
+      await pump(tester);
+      server.trustRefusal = 'this device was not granted start_session';
+      await tester.tap(trustToggle());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(trustShown(tester), isTrue);
+      expect(find.textContaining('not granted start_session'), findsOneWidget);
+    });
+
+    testWidgets('a server that has only one of the two shows only that row', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        features: const {AgentsTrustRegisteredProjectsSet.feature},
+      );
+      expect(trustToggle(), findsOneWidget);
+      expect(find.byKey(const ValueKey('operate-new-sessions')), findsNothing);
+      expect(find.text('NEW SESSIONS'), findsOneWidget);
+
+      await pump(tester, features: const {SessionsOperateByDefaultSet.feature});
+      expect(toggle(), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('trust-registered-projects')),
+        findsNothing,
+      );
+    });
+  });
 
   testWidgets('off until the person turns it on', (tester) async {
     await pump(tester);
@@ -113,6 +182,7 @@ void main() {
       await pump(tester, size: size, textScale: scale);
       expect(tester.takeException(), isNull);
       expect(toggle(), findsOneWidget);
+      expect(trustToggle(), findsOneWidget);
     });
   }
 }

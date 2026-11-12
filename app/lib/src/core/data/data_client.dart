@@ -527,6 +527,25 @@ class DataClient {
     }
   }
 
+  /// The server's "Trust registered projects for agents", as last told. A new
+  /// link starts from on: the server greets it only while it is off.
+  bool trustRegisteredProjects = true;
+
+  final _trustRegisteredProjectsChanges = StreamController<bool>.broadcast(
+    sync: true,
+  );
+
+  /// The setting each time it changes, here or on another client.
+  Stream<bool> get trustRegisteredProjectsChanges =>
+      _trustRegisteredProjectsChanges.stream;
+
+  void _setTrustRegisteredProjects(bool enabled) {
+    trustRegisteredProjects = enabled;
+    if (!_trustRegisteredProjectsChanges.isClosed) {
+      _trustRegisteredProjectsChanges.add(enabled);
+    }
+  }
+
   /// The server's bot as last told; null until a link has followed it
   /// (`bot.subscribe`). Kept across a dropped link, for the panel to draw, and
   /// replaced whole when the next link follows.
@@ -1308,6 +1327,8 @@ class DataClient {
           _setQuickAccess(pins);
         case OperateByDefaultChanged(:final enabled):
           _setOperateByDefault(enabled);
+        case TrustRegisteredProjectsChanged(:final enabled):
+          _setTrustRegisteredProjects(enabled);
         // Told only to a client that asked (`bot.subscribe`).
         case BotRowChanged(:final row):
           _applyBotRow(row);
@@ -1377,6 +1398,7 @@ class DataClient {
     // Greeted only when something is pinned: silence means none.
     if (quickAccessPins.isNotEmpty) _setQuickAccess(const []);
     if (operateByDefault) _setOperateByDefault(false);
+    if (!trustRegisteredProjects) _setTrustRegisteredProjects(true);
   }
 
   Future<void> _attach(DataEndpoint endpoint) async {
@@ -1536,6 +1558,7 @@ class DataClient {
     unawaited(_secretRequestChanges.close());
     unawaited(_quickAccessChanges.close());
     unawaited(_operateByDefaultChanges.close());
+    unawaited(_trustRegisteredProjectsChanges.close());
     unawaited(_botChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storeChangeNotices.close());

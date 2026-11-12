@@ -292,6 +292,8 @@ enum SettingsAnchor {
     'karmashala',
     'new sessions',
     'default',
+    'trust',
+    'folder',
   ]),
   agentUpdates(SettingsSectionId.agents, 'Agent updates', [
     'update',
@@ -490,7 +492,7 @@ enum SettingsAnchor {
     // Made and restored by this machine's server, from its own disk.
     dataBackup || dataRestore => caps.hostsServer && caps.serverSettings,
     // An older server has no such setting.
-    newSessionGrant => caps.operateByDefault,
+    newSessionGrant => caps.operateByDefault || caps.trustRegisteredProjects,
     bot => caps.manageBot,
     _ => true,
   };
