@@ -89,3 +89,62 @@ Ids are `A1a`, `C2`, `D7`: the report and its own numbering.
 1, 2 + 3, 9, then 4, 5, 10, 6, then the rest of medium by number. 21 waits for
 the owner; 8 is done for folders Karmashala itself created and no further
 without a yes.
+
+## What was fixed (same day, branch `session/20289127`)
+
+One commit per fix, by Opus implementers; nothing pushed, merged or released.
+Checked by unit tests only — **nothing was tried against a live agent or in the
+running app.**
+
+| # | Commit | Fix |
+| --- | --- | --- |
+| 1 | `65477f740` | `session_answer` presses no key when no menu is drawn and no prompt is reported |
+| 2, 3 | `c6cc65dd6` | The typist waits for the screen before Return; `delivered: "unverified"`; an unverified opening is kept; nothing typed into a drawn dialog |
+| 9 | `b472a94c8` | `session_answer` takes `ticks` and `dismiss` for checklists |
+| 4 | `5ade6cb1f` | Concurrent permission requests queue |
+| 10 | `a8a3c0cd7` | `list_sessions` adds `live` and `activity` |
+| 5 | `f964a0719` | A child waiting for a slot answers `waitingForSlot`, not ended |
+| 6 | `6d61e9de0`, `af1a8e84e` | A stale in-flight hook is not believed; a stale open prompt still stands |
+| 14 | `7cf4d5927` | No Enter while an arrow may be in flight |
+| 20 | `800aa542d` | A prompt starting with `-` stays off argv |
+| 18 | `5b6b1046f` | `session_end` ends a child waiting in line |
+| 17 | `9b5d24702` | A resuming send that only joined the line says so |
+| 16 | `594b7198b` | An agent's `session_answer` cannot raise a mode, allow always, or answer itself |
+| 12 | `47a6e8c52` | Claude chat state cleared on a process replacement |
+| 13 | `0a3e33514` | Stop reaches an agent-started turn; Stop on an idle session is refused |
+| 23 | `681fe9ce5` | An ignored cancel ends the turn locally after 15 s |
+| 8 | `ba6fa3135` | Worktrees Karmashala creates are trusted; a missed trust write is logged |
+| 15 | `fffad8e5a` | A cut-off child turn waits the restore grace before its answer is read |
+| 24 | `96b0c62bd` | `session_send {wait}` does not settle on the idle before its turn |
+| 11 | `d52ac2dd9` | A failed Claude chat reopen is recoverable |
+| 37 | `1abfaf369` | A second `stop()` awaits the same teardown |
+| 36 | `a5653003c` | Codex client ignores a stale handle's exit |
+| 28 | `6e7e4521b` | `worktree_remove` / `project_merge` see attached and waiting sessions |
+| 31 | `203fa0363` | `decision_record`, `checkpoint_capture`, `checks_run` gated on another session |
+| 32–34 | `8c037675a` | Honest `detached`; worded argument errors; wait timers cancelled; archive cancels a slot ticket |
+| 19 | `b52e2b7d4` | Windows hook callbacks claim their own temp folder (20 of 20 bodies, was 3 of 20) |
+
+Closing gates on the combined tree: `dart analyze --no-fatal-warnings app server
+packages` exit 0, no errors or warnings; server suite without the live tags 3362
+passed; `agent_cli` 1154, `karmashala_agent_reporting` 277, `karmashala_agent_status`
+172, `karmashala_mcp` 48, `karmashala_acp` 39; the tool-schema golden. The app's
+full suite was not run.
+
+## Not fixed
+
+- **7** bracketed paste / long openings by file, **25** Claude 2.1.316's idle
+  footer: both need measuring against the live CLI.
+- **21** children inheriting "Operate Karmashala", **29** an agent's send lifting
+  a person's pause, **26** the bot's `report` collapsing to `once`: the owner's
+  decisions.
+- **22** Codex chat trust, **27** the notification todo (probably already
+  fixed — verify and tick), **30**, **38**, **39**.
+- **35** Codex usage labels: no fixture shows a window-length field; it needs
+  the real payload.
+
+Known gaps in what was fixed: a prompt the status still calls open after it was
+answered can still take a bare key (1); a dialog the menu parser cannot read
+still falls to the quiet rule (3); external-terminal sessions are still stored
+`unknown` (10); one-shot forms still pass a dash-led prompt positionally (20);
+an agent on the MCP bridge with no session id is treated as a person (16);
+registered project folders are still not trusted (8).
