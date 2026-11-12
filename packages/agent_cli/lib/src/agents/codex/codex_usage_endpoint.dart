@@ -4,6 +4,7 @@ import '../data/usage_exception.dart';
 import '../data/usage_throttle.dart';
 import '../domain/agent_usage.dart';
 import '../domain/usage_failure.dart';
+import 'codex_rate_limit_reader.dart';
 
 /// Codex's usage: `GET https://chatgpt.com/backend-api/wham/usage` with the
 /// `tokens.access_token` from `.codex/auth.json`. Read, never written, never
@@ -52,8 +53,8 @@ class CodexUsageEndpoint implements AgentUsageEndpoint {
   }
 }
 
-/// Parses Codex's `/backend-api/wham/usage` response. The two rate-limit
-/// windows become 5-hour / 7-day [UsageWindow]s.
+/// Parses Codex's `/backend-api/wham/usage` response. Each rate-limit window
+/// is labelled by its own `limit_window_seconds`, else by its position.
 AgentUsage parseCodexUsage(
   Map<String, dynamic> json,
   DateTime now, {
@@ -65,12 +66,16 @@ AgentUsage parseCodexUsage(
     void add(String key, String label, Duration span) {
       final w = rateLimit[key];
       if (w is Map<String, dynamic> && w['used_percent'] is num) {
+        final seconds = w['limit_window_seconds'];
+        final length = seconds is num
+            ? Duration(seconds: seconds.round())
+            : null;
         windows.add(
           UsageWindow(
-            label: label,
+            label: length == null ? label : codexWindowLabel(length),
             percent: (w['used_percent'] as num).toDouble(),
             resetsAt: _codexReset(w, now),
-            span: span,
+            span: length == null ? span : codexNominalSpan(length),
           ),
         );
       }

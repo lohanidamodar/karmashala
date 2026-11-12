@@ -100,6 +100,11 @@ void main() {
 
       expect(usage.email, 'me@openai.com');
       expect(usage.windows.map((w) => w.label).toList(), ['5-hour', '7-day']);
+      // No `limit_window_seconds`: the spans come from the position.
+      expect(usage.windows.map((w) => w.span).toList(), [
+        kUsageFiveHourWindow,
+        kUsageSevenDayWindow,
+      ]);
       expect(usage.windows[0].percent, 30.0);
       expect(usage.windows[0].resetsAt, now.add(const Duration(hours: 1)));
       expect(
@@ -127,6 +132,30 @@ void main() {
         usage.windows[0].resetsAt!.toIso8601String(),
         '2026-07-28T12:01:00.000Z',
       );
+    });
+
+    test('labels and spans each window by its own length', () {
+      final usage = parseCodexUsage({
+        'rate_limit': {
+          // A week-long primary window: the position no longer names it.
+          'primary_window': {
+            'used_percent': 12,
+            'limit_window_seconds': 604800,
+            'reset_after_seconds': 1000,
+          },
+          'secondary_window': {
+            'used_percent': 3,
+            'limit_window_seconds': 7200,
+            'reset_after_seconds': 500,
+          },
+        },
+      }, now);
+
+      expect(usage.windows.map((w) => w.label).toList(), ['7-day', '2-hour']);
+      expect(usage.windows.map((w) => w.span).toList(), [
+        kUsageSevenDayWindow,
+        const Duration(hours: 2),
+      ]);
     });
 
     test('is empty when rate_limit is missing', () {

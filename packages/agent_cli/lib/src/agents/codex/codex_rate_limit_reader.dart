@@ -92,16 +92,16 @@ UsageWindow? _window(Object? raw, DateTime? recordedAt) {
     resetsAt = recordedAt.add(Duration(seconds: inSeconds.round()));
   }
   return UsageWindow(
-    label: _labelFor(span),
+    label: codexWindowLabel(span),
     percent: percent.toDouble(),
     resetsAt: resetsAt,
-    span: _nominal(span),
+    span: codexNominalSpan(span),
   );
 }
 
 /// Codex rounds `window_minutes` (299, 10079), so the nominal period is the
-/// nearest known one — and the label the usage endpoint's windows carry.
-Duration? _nominal(Duration? span) {
+/// nearest known one. Shared with the usage endpoint's windows.
+Duration? codexNominalSpan(Duration? span) {
   if (span == null) return null;
   for (final known in const [kUsageFiveHourWindow, kUsageSevenDayWindow]) {
     if ((span - known).abs() <= known * 0.05) return known;
@@ -109,8 +109,9 @@ Duration? _nominal(Duration? span) {
   return span;
 }
 
-String _labelFor(Duration? span) {
-  final nominal = _nominal(span);
+/// The label of a Codex window [span] long: "5-hour", "7-day", or its length.
+String codexWindowLabel(Duration? span) {
+  final nominal = codexNominalSpan(span);
   if (nominal == kUsageFiveHourWindow) return '5-hour';
   if (nominal == kUsageSevenDayWindow) return '7-day';
   if (nominal == null) return 'limit';
