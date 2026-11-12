@@ -13,6 +13,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/phone_shell.dart' show phoneWorkbenchOpener;
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/explorer_actions.dart';
+import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/session_chat_source.dart'
     show composersHoldingTextProvider;
 import '../../sessions/application/session_providers.dart';
@@ -36,6 +37,7 @@ import 'overview_hybrid.dart';
 import 'overview_peek.dart';
 import 'overview_pipeline_peek.dart';
 import 'overview_pins.dart';
+import 'overview_project_tile.dart';
 import 'overview_queue_card.dart';
 import 'overview_resume_picker.dart';
 import 'overview_triage.dart';

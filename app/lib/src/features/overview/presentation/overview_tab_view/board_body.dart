@@ -369,19 +369,17 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       },
     ),
     OverviewFamilyIntent: _Triage<OverviewFamilyIntent>((intent) {
-      final forest = ref.read(overviewShownForestProvider);
-      final roots = [
-        for (final (_, trees) in forest.lanes)
-          for (final tree in trees) tree.card.id,
-      ];
-      if (roots.isEmpty) return;
-      final here = overviewFamilyOf(forest, _focused())?.tree.card.id;
-      final at = roots.indexOf(here ?? '');
+      // Tile by tile, in reading order: each tile's first session.
+      final tiles = _tiles();
+      if (tiles.isEmpty) return;
+      final here = _focused();
+      final at = tiles.indexWhere((tile) => tile.contains(here));
       final next = at < 0
-          ? (intent.forward ? 0 : roots.length - 1)
-          : (at + (intent.forward ? 1 : -1)).clamp(0, roots.length - 1);
-      _reveal(roots[next]);
+          ? (intent.forward ? 0 : tiles.length - 1)
+          : (at + (intent.forward ? 1 : -1)).clamp(0, tiles.length - 1);
+      _reveal(tiles[next].first);
     }),
+    OverviewDoIntent: _Triage<OverviewDoIntent>(_do),
     OverviewLaneIntent: _Triage<OverviewLaneIntent>((intent) {
       final lanes = ref.read(overviewShownForestProvider).lanes;
       if (lanes.isEmpty) return;
@@ -436,6 +434,113 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           );
     }),
   };
+
+  /// Every project tile the board draws, in reading order, as the ids of
+  /// its sessions, its first family's root first.
+  List<List<String>> _tiles() {
+    final forest = ref.read(overviewShownForestProvider);
+    final facts = ref.read(overviewFactsProvider);
+    final byProject =
+        ref.read(overviewGroupByProvider) == OverviewGroupBy.project;
+    return [
+      for (final (_, trees) in forest.lanes)
+        for (final tile
+            in byProject
+                ? [trees]
+                : [for (final t in overviewTilesOf(trees, facts)) t.trees])
+          [
+            for (final tree in tile)
+              for (final card in tree.drawn) card.id,
+          ],
+    ];
+  }
+
+  /// O, E, C, G, M, S, `.` and Space: what a key does to the selected
+  /// session or its project. With nothing selected, a key that needs one
+  /// picks the first session and does no more.
+  void _do(OverviewDoIntent intent) {
+    if (intent.what == OverviewDo.groupBy) {
+      ref.read(overviewGroupMenuAsksProvider.notifier).ask();
+      return;
+    }
+    final id = _focused();
+    final card = overviewCardOf(ref.read(overviewBoardProvider), id);
+    if (card == null) {
+      final first = _order().firstOrNull;
+      if (first != null) _reveal(first);
+      return;
+    }
+    final forest = ref.read(overviewShownForestProvider);
+    final family = overviewFamilyOf(forest, card.id);
+    switch (intent.what) {
+      case OverviewDo.groupBy:
+        return;
+      case OverviewDo.foldGroup:
+        if (family == null) return;
+        final by = ref.read(overviewGroupByProvider);
+        final lane = forest.lanes[family.lane].$1.key;
+        // Grouped by project the group is the tile itself.
+        final key = by == OverviewGroupBy.project
+            ? lane
+            : ref.read(overviewCollapsedLanesProvider).contains(lane) ||
+                  ref.read(overviewOpenForestProvider).placed.contains(card.id)
+            ? lane
+            : overviewTileFoldId(
+                by,
+                lane,
+                overviewTileKeyOf(family.tree, ref.read(overviewFactsProvider)),
+              );
+        ref
+            .read(overviewPrefsProvider.notifier)
+            .setLaneCollapsed(
+              by,
+              key,
+              !ref.read(overviewCollapsedLanesProvider).contains(key),
+            );
+      case OverviewDo.openProject ||
+          OverviewDo.editProject ||
+          OverviewDo.newSession:
+        final projectId = ref.read(overviewFactsProvider).projectOf(card.entry);
+        final project = ref
+            .read(projectsControllerProvider)
+            .where((p) => p.id == projectId)
+            .firstOrNull;
+        if (project == null) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            const SnackBar(content: Text('This session is in no project')),
+          );
+          return;
+        }
+        switch (intent.what) {
+          case OverviewDo.openProject:
+            openOverviewProject(context, ref, project);
+          case OverviewDo.editProject:
+            editOverviewProject(context, project);
+          default:
+            newOverviewProjectSession(context, ref, project);
+        }
+      case OverviewDo.message:
+        // A family's first session has its box on the card; any other
+        // session is typed to in its chat.
+        if (family?.tree.card.id == card.id) {
+          ref
+              .read(overviewCardAskProvider.notifier)
+              .ask(card.id, OverviewCardAsk.message);
+        } else {
+          _openToType(card);
+        }
+      case OverviewDo.stop || OverviewDo.menu:
+        if (family?.tree.card.id != card.id) return;
+        ref
+            .read(overviewCardAskProvider.notifier)
+            .ask(
+              card.id,
+              intent.what == OverviewDo.stop
+                  ? OverviewCardAsk.stop
+                  : OverviewCardAsk.menu,
+            );
+    }
+  }
 
   var _runPageOpen = false;
 

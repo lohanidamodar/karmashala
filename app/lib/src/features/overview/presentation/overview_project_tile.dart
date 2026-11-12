@@ -15,6 +15,7 @@ import '../../explorer/presentation/explorer_project_row.dart'
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/edit_project_dialog.dart';
 import '../application/overview_board.dart';
+import '../application/overview_drawer.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_shown.dart';
@@ -513,6 +514,18 @@ class OverviewSessionLine extends ConsumerWidget {
     final radius = BorderRadius.circular(Radii.md);
     Future<void> menu({Offset? at}) =>
         showOverviewFamilyMenu(context, ref, node, at: at);
+    // M and `.` on a selected line: its chat to type in, and its menu.
+    ref.listen(overviewCardAskProvider, (_, ask) {
+      if (ask == null || ask.id != card.id) return;
+      switch (ask.what) {
+        case OverviewCardAsk.message:
+          onOpen(card);
+        case OverviewCardAsk.menu:
+          unawaited(menu());
+        case OverviewCardAsk.stop:
+          break;
+      }
+    });
     return Semantics(
       button: true,
       selected: selected,

@@ -223,7 +223,7 @@ void main() {
     await unmountMission(tester);
   });
 
-  testWidgets('← → step by family, [ ] by lane, U to what is new', (
+  testWidgets('← → step by project tile, [ ] by group, U to what is new', (
     tester,
   ) async {
     final c = await pumpMission(tester, fixture: fixture(), prefsDir: dir);
@@ -241,16 +241,19 @@ void main() {
     expect(roots.length, greaterThan(2));
     expect(forest.lanes.length, 2);
 
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(selected(c), roots[0]);
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(selected(c), roots[1]);
-    await key(tester, LogicalKeyboardKey.arrowLeft);
-    expect(selected(c), roots[0]);
-
+    // Each project is a tile: the arrows land on a tile's first session.
     final firstOf = [
       for (final (_, trees) in forest.lanes) trees.first.card.id,
     ];
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(selected(c), firstOf[0]);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(selected(c), firstOf[1]);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(selected(c), firstOf[1], reason: 'the last tile is the end');
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(selected(c), firstOf[0]);
+
     await key(tester, LogicalKeyboardKey.bracketRight, character: ']');
     expect(selected(c), firstOf[1]);
     await key(tester, LogicalKeyboardKey.bracketLeft, character: '[');

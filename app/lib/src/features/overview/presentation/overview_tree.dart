@@ -913,6 +913,32 @@ class _FamilyFooterState extends ConsumerState<_FamilyFooter> {
     final laneKey = widget.laneKey;
     final laneRoots = widget.laneRoots;
     final card = node.card;
+    // M, S and `.` on the selected family do what its buttons do.
+    ref.listen(overviewCardAskProvider, (_, ask) {
+      if (ask == null || ask.id != card.id) return;
+      final caps = ref.read(capabilitiesProvider);
+      final ended = card.state == AgentState.ended;
+      switch (ask.what) {
+        case OverviewCardAsk.message:
+          if (caps.maySend && (!ended || caps.mayStart)) {
+            setState(() => _replying = true);
+          }
+        case OverviewCardAsk.stop:
+          if (!ended && _stopState(card, caps).why == null) {
+            _interrupt(context, card);
+          }
+        case OverviewCardAsk.menu:
+          unawaited(
+            showOverviewFamilyMenu(
+              context,
+              ref,
+              node,
+              laneKey: laneKey,
+              laneRoots: laneRoots,
+            ),
+          );
+      }
+    });
     if (_replying) {
       return SizedBox(
         key: ValueKey('overview-family-reply-box:${card.id}'),

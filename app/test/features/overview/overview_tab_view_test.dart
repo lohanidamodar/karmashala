@@ -13,6 +13,9 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
+import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_today.dart';
@@ -222,6 +225,87 @@ void main() {
 
   Finder today(OverviewTodayPart part) =>
       find.byKey(ValueKey('overview-today:${part.name}'));
+
+  group('the project, from its tile and from the keys', () {
+    Finder byKey(String key) => find.byKey(ValueKey(key));
+
+    Future<void> press(
+      WidgetTester tester,
+      LogicalKeyboardKey key, {
+      String? character,
+    }) async {
+      await tester.sendKeyEvent(key, character: character);
+      await settle(tester);
+    }
+
+    testBoard('the name shows the project in the Explorer; + and ⋯ are its '
+        'own', (tester) async {
+      final c = await pump(tester, const Size(1440, 900));
+      expect(byKey('overview-tile:p1'), findsOneWidget);
+      expect(byKey('overview-tile:p2'), findsOneWidget);
+
+      await tester.tap(byKey('overview-tile-open:p2'));
+      await settle(tester);
+      expect(c.read(selectedProjectIdProvider), 'p2');
+      expect(c.read(explorerExpandedProjectsProvider), contains('p2'));
+
+      // The menu is the project row's own.
+      await tester.tap(byKey('overview-tile-menu:p1'));
+      await settle(tester);
+      expect(find.text('Edit project…'), findsOneWidget);
+      expect(find.text('New session…'), findsOneWidget);
+      expect(find.text('Remove from workspace'), findsOneWidget);
+      await tester.tap(find.text('Edit project…'));
+      await settle(tester);
+      expect(find.byType(EditProjectDialog), findsOneWidget);
+    });
+
+    testBoard('O opens the selected session\'s project, E edits it, G lists '
+        'the groupings', (tester) async {
+      final c = await pump(tester, const Size(1440, 900));
+      // With nothing selected a key that needs a session picks the first.
+      await press(tester, LogicalKeyboardKey.keyO);
+      expect(c.read(overviewFocusProvider).selected, isNotNull);
+      expect(c.read(selectedProjectIdProvider), isNot('p2'));
+
+      c.read(overviewFocusProvider.notifier).select('beta-done');
+      await press(tester, LogicalKeyboardKey.keyO);
+      expect(c.read(selectedProjectIdProvider), 'p2');
+
+      await press(tester, LogicalKeyboardKey.keyG);
+      expect(byKey('overview-group-by:status'), findsOneWidget);
+      await tester.tap(byKey('overview-group-by:machine'));
+      await settle(tester);
+      expect(c.read(overviewPrefsProvider).groupBy, OverviewGroupBy.machine);
+
+      await press(tester, LogicalKeyboardKey.keyE);
+      expect(find.byType(EditProjectDialog), findsOneWidget);
+    });
+
+    testBoard('M opens the message box, . the menu, and Space folds the '
+        'project and opens it again', (tester) async {
+      final c = await pump(tester, const Size(1440, 900));
+      c.read(overviewFocusProvider.notifier).select('busy');
+      await settle(tester);
+
+      await press(tester, LogicalKeyboardKey.period, character: '.');
+      expect(byKey('session-menu:archive'), findsWidgets);
+      await tester.tapAt(const Offset(4, 4));
+      await settle(tester);
+
+      await press(tester, LogicalKeyboardKey.space);
+      expect(card('busy'), findsNothing);
+      expect(c.read(overviewPrefsProvider).collapsedLanes, {
+        overviewLaneFoldKey(OverviewGroupBy.project, 'p1'),
+      });
+      await press(tester, LogicalKeyboardKey.space);
+      expect(card('busy'), findsOneWidget);
+      expect(c.read(overviewPrefsProvider).collapsedLanes, isEmpty);
+
+      await press(tester, LogicalKeyboardKey.keyM);
+      expect(byKey('overview-family-reply-box:busy'), findsOneWidget);
+    });
+  });
 
   for (final (name, size) in [
     ('1440×900', const Size(1440, 900)),
