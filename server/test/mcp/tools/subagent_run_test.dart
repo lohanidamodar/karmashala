@@ -8,8 +8,9 @@ import 'package:agent_cli/process.dart' show EnvironmentPath;
 import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala_automations/store.dart'
     show CheckoutRows, ScheduledResumeDao;
+import 'package:karmashala_core/util.dart' show SystemClock;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DataRefused;
+    show DataRefused, LaunchLimits;
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
@@ -26,6 +27,7 @@ import 'package:karmashala_host/src/sessions/delegation_results.dart'
         ParentReport,
         ReportDelivery,
         ReportStatus;
+import 'package:karmashala_host/src/sessions/launch/capacity/session_launch_gate.dart';
 import 'package:karmashala_host/src/sessions/launch/launch_settings.dart';
 import 'package:karmashala_host/src/sessions/session_detach.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
@@ -64,6 +66,8 @@ void main() {
   late Map<String, String> answers;
   late HostedSessionWait waits;
   late LaunchToolSet tools;
+  late ServerSessionLauncher Function(SessionLaunchGate? gate) launchesWith;
+  late ChildTurnWait childTurns;
   late StreamController<String> settledTurns;
   late List<String> endedChildren;
   late List<(String, bool)> holds;
@@ -144,25 +148,28 @@ void main() {
       hostEnvironment: const {},
       environmentOf: rows.environment,
     );
+    launchesWith = (gate) => ServerSessionLauncher(
+      gate: gate,
+      launcher: launcher,
+      registry: registry,
+      sessions: SessionDao(database),
+      rows: rows,
+      facts: DaemonCheckoutFacts(rows, windows: Platform.isWindows),
+      installationsIn: context.data.installationsIn,
+      pathProbe: const _Everywhere(),
+      directoryPresent: (_) => true,
+    );
+    childTurns = ChildTurnWait(
+      waits: waits,
+      answerOf: answerOf,
+      settled: settledTurns.stream,
+      deadline: (_) => deadline.future,
+      recheck: const Duration(milliseconds: 5),
+    );
     tools = LaunchToolSet(
       context,
-      launches: ServerSessionLauncher(
-        launcher: launcher,
-        registry: registry,
-        sessions: SessionDao(database),
-        rows: rows,
-        facts: DaemonCheckoutFacts(rows, windows: Platform.isWindows),
-        installationsIn: context.data.installationsIn,
-        pathProbe: const _Everywhere(),
-        directoryPresent: (_) => true,
-      ),
-      turns: ChildTurnWait(
-        waits: waits,
-        answerOf: answerOf,
-        settled: settledTurns.stream,
-        deadline: (_) => deadline.future,
-        recheck: const Duration(milliseconds: 5),
-      ),
+      launches: launchesWith(null),
+      turns: childTurns,
       tokensOf: (_) async => 4200,
       endChild: (sessionId) async => endedChildren.add(sessionId),
       callHolds: (sessionId, held) => holds.add((sessionId, held)),
@@ -439,6 +446,43 @@ void main() {
     expect(result['state'], 'ended');
     expect(result['exitCode'], 3);
     expect(result['exitCodeKnown'], isTrue);
+  });
+
+  test('a child the concurrency limit holds answers waitingForSlot, not '
+      'ended, and nothing waits on a turn it has not begun', () async {
+    insertCaller('caller');
+    final gate = SessionLaunchGate(
+      limits: () => const LaunchLimits(pauseBackground: true),
+      occupants: () => const [],
+      clock: const SystemClock(),
+    );
+    final gated = LaunchToolSet(
+      context,
+      launches: launchesWith(gate),
+      turns: childTurns,
+      endChild: (sessionId) async => endedChildren.add(sessionId),
+      callHolds: (sessionId, held) => holds.add((sessionId, held)),
+    );
+    final result =
+        (await gated
+                .call('subagent_run', {
+                  'projectId': 'p1',
+                  'prompt': 'Look',
+                }, 'caller')!
+                .timeout(const Duration(seconds: 5)))!
+            as Map<String, Object?>;
+    expect(result['state'], 'waitingForSlot');
+    expect(result['childSessionId'], 'new-1');
+    expect(result['waitingForSlot'], contains('place 1 in line'));
+    expect(result['childOpen'], isTrue);
+    expect(result['note'], contains('session_wait (sessionId: new-1)'));
+    expect(pty.handles, isEmpty);
+    expect(holds, isEmpty);
+    expect(endedChildren, isEmpty);
+    expect(
+      SessionDao(database).getById('new-1')!.status,
+      SessionStatus.created,
+    );
   });
 
   /// Runs [arguments] as [caller] until the child is started, then lets the

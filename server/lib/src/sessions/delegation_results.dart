@@ -220,7 +220,9 @@ class DelegationResults {
     this.inBackground,
     this.isArchived,
     this.openAskOf,
+    this.waitsForSlot,
     this.restoreGrace = const Duration(minutes: 2),
+    this.slotPoll = const Duration(seconds: 1),
     this.endChild,
     this.batchWindow = const Duration(seconds: 2),
     this.settleWindow = kDelegationSettleWindow,
@@ -258,6 +260,10 @@ class DelegationResults {
   /// (`HostedSessionWait.openAskOf`): a blocked result whose prompt was
   /// answered before it went is dropped.
   final String? Function(String sessionId)? openAskOf;
+
+  /// Whether row [String] waits in the launch gate's line: not started, so
+  /// nothing running it is no ending.
+  final bool Function(String sessionId)? waitsForSlot;
   final AnswerOf answerOf;
   final SessionQueue queue;
   final SessionDelegationDao store;
@@ -269,6 +275,9 @@ class DelegationResults {
   /// the restart cut off is continued a moment later — before reading it as
   /// ended.
   final Duration restoreGrace;
+
+  /// How often a child waiting for a slot is looked at again.
+  final Duration slotPoll;
   final Future<void> Function(String childId)? endChild;
 
   /// The model row [String]'s agent last said it runs, in words: read as a
@@ -589,7 +598,9 @@ class DelegationResults {
   DelegationView viewOf(String childId) {
     final row = store.byChild(childId);
     final String state;
-    if (!isLive(childId)) {
+    if (waitsForSlot?.call(childId) ?? false) {
+      state = 'waiting for a slot';
+    } else if (!isLive(childId)) {
       state = 'ended';
     } else if (inBackground?.call(childId) ?? false) {
       state = 'running (background)';
@@ -648,9 +659,28 @@ class DelegationResults {
     await _follow(follow);
   }
 
+  /// Holds [follow] while its child waits for a slot, then until something
+  /// runs it; true when the follow is no longer the child's.
+  Future<bool> _parked(_Follow follow) async {
+    final id = follow.child.childId;
+    final waits = waitsForSlot;
+    if (waits == null || !waits(id)) return false;
+    log?.call('delegation $id: waits for a slot; followed once it starts');
+    bool ours() => !_closed && identical(_watched[id], follow);
+    while (ours() && waits(id)) {
+      await Future<void>.delayed(slotPoll);
+    }
+    final waited = Stopwatch()..start();
+    while (ours() && !isLive(id) && waited.elapsed < restoreGrace) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    return !ours();
+  }
+
   Future<void> _follow(_Follow follow) async {
     final child = follow.child;
     final id = child.childId;
+    if (await _parked(follow)) return;
     ChildTurnOutcome outcome;
     try {
       outcome = await (follow.next

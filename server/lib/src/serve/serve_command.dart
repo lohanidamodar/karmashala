@@ -1981,6 +1981,7 @@ Future<int> _serve(
     inBackground: (id) => status.statusOf(id)?.report.backgroundOnly ?? false,
     isArchived: (id) => SessionDao(database).getById(id)?.isArchived ?? false,
     openAskOf: sessionWaits.openAskOf,
+    waitsForSlot: (id) => slotWaits.of(id) != null,
     endChild: endChild,
     log: (message) => errSink.writeln('karmashala_host: $message'),
     modelOf: activeModels.modelWords,

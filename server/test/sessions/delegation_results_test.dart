@@ -46,6 +46,8 @@ void main() {
   late Map<String, String?> asks;
   // What each child's agent said it runs, as the server's keeper holds it.
   final models = <String, String>{};
+  // The children the launch gate still holds in its line.
+  final inLine = <String>{};
   late Directory temp;
   var clock = t0;
 
@@ -96,7 +98,9 @@ void main() {
     inBackground: (id) => status.statusOf(id)?.report.backgroundOnly ?? false,
     isArchived: archived.contains,
     openAskOf: (id) => asks.containsKey(id) ? asks[id] : waits.openAskOf(id),
+    waitsForSlot: inLine.contains,
     restoreGrace: const Duration(milliseconds: 60),
+    slotPoll: const Duration(milliseconds: 10),
     endChild: (childId) async => ended.add(childId),
     batchWindow: const Duration(milliseconds: 40),
     settleWindow: settleWindow,
@@ -107,6 +111,7 @@ void main() {
   setUp(() {
     clock = t0;
     models.clear();
+    inLine.clear();
     temp = Directory.systemTemp.createTempSync('delegation_results_test');
     database = AppDatabase.memory();
     database.execute('PRAGMA foreign_keys = OFF;');
@@ -1087,6 +1092,32 @@ void main() {
     );
   });
 
+  test('a child waiting for a slot is not ended: nothing is pushed until it '
+      'runs, and then its turn is', () async {
+    await runTerminal('parent');
+    hook('parent', 'Stop');
+    inLine.add('c1');
+    delegations.watch(child('c1'));
+    await settle();
+    expect(delivered['parent'], isNull);
+    expect(delegations.viewOf('c1').state, 'waiting for a slot');
+    expect(SessionDelegationDao(database).byChild('c1')!.isOpen, isTrue);
+
+    await runTerminal('c1');
+    inLine.remove('c1');
+    await settle();
+    expect(delivered['parent'], isNull);
+    hook('c1', 'UserPromptSubmit');
+    await pumpEventQueue();
+    answers['c1'] = 'Done once it started.';
+    answeredAt['c1'] = clock;
+    hook('c1', 'Stop');
+    await settle();
+    final message = delivered['parent']!.single;
+    expect(message, contains('Done once it started.'));
+    expect(message, isNot(contains('process ended')));
+  });
+
   group('once: the bot hears the first outcome, then nothing', () {
     DelegatedChild once(String id) => DelegatedChild(
       childId: id,
@@ -1115,6 +1146,25 @@ void main() {
       status: ReportStatus.done,
       text: text,
     );
+
+    test('a child waiting for a slot is heard of once it has worked, not '
+        'as ended while it waits', () async {
+      await runTerminal('parent');
+      hook('parent', 'Stop');
+      inLine.add('c1');
+      delegations.watch(once('c1'));
+      await settle();
+      expect(delivered['parent'], isNull);
+
+      await runTerminal('c1');
+      inLine.remove('c1');
+      await settle();
+      await works('c1', 'Started late, done.');
+      final message = delivered['parent']!.single;
+      expect(message, contains('Started late, done.'));
+      expect(message, isNot(contains('process ended')));
+      expect(SessionDelegationDao(database).byChild('c1')!.isOpen, isFalse);
+    });
 
     test(
       'a finished turn past the hold is told, and later turns are not',

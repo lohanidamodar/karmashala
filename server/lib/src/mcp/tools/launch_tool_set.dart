@@ -517,7 +517,8 @@ class LaunchToolSet extends ServerToolSet {
     return {
       'children': [for (final child in children) _delegationRow(child)],
       'note':
-          'state is running, running (background) (its own turn ended; work '
+          'state is waiting for a slot (not started yet), running, running '
+          '(background) (its own turn ended; work '
           'it started still runs), idle, reported done, blocked, needs input, '
           'failed or ended. A followed child pushes the end of each turn it '
           'works to '
@@ -701,6 +702,25 @@ class LaunchToolSet extends ServerToolSet {
                   'its result (agent, model, how long, its final answer) '
                   'arrives as a message from Karmashala, and it is ended. '
                   'Child: session ${session.id}.',
+      };
+    }
+    // Held by the gate: nothing runs it yet, so there is no turn to wait on.
+    if (opened.answer['waitingForSlot'] case final String why) {
+      return <String, Object?>{
+        'state': 'waitingForSlot',
+        'childSessionId': session.id,
+        'title': session.title,
+        'agent': agents.nameOf(opened.agentId),
+        'waitingForSlot': why,
+        'depth': opened.answer['depth'],
+        'permissionMode': opened.answer['permissionMode'],
+        'permissionCapped': ?opened.answer['permissionCapped'],
+        'childOpen': true,
+        'note':
+            'It has not started yet. It starts by itself when a slot frees; '
+            'follow it with session_wait (sessionId: ${session.id}), and end '
+            'it with session_end once it has answered. Calling subagent_run '
+            'again starts another agent.',
       };
     }
     final ChildTurnOutcome outcome;
@@ -1313,8 +1333,10 @@ const List<Map<String, Object?>> launchToolSchemas = [
         'unless keepOpen is true; any other child stays open as a session '
         'you can follow up with session_send. state is done, failed, blocked '
         '(it stopped for an approval or a question: blockedOn says which), '
-        'ended, or running when timeoutSeconds ran out first — then continue '
-        'with session_wait on childSessionId; calling this again starts '
+        'ended, waitingForSlot (the concurrency limit holds it; it has not '
+        'started) or running when timeoutSeconds ran out first — for those '
+        'two, continue with session_wait on childSessionId; calling this '
+        'again starts '
         'another agent. If your own tool calls time out sooner than the '
         'default 600 seconds, pass a smaller timeoutSeconds.',
     'inputSchema': {
@@ -1439,8 +1461,9 @@ const List<Map<String, Object?>> launchToolSchemas = [
     'name': 'delegations',
     'description':
         'The sessions you started with open_new_session or subagent_run, '
-        'each with its state — running, running (background), idle, reported '
-        'done, blocked, needs input, failed or ended — whether its turn ends '
+        'each with its state — waiting for a slot, running, running '
+        '(background), idle, reported done, blocked, needs input, failed or '
+        'ended — whether its turn ends '
         'are pushed to you '
         '(followed), and its last report: what, by whom, when. Read it '
         'instead of polling transcripts or files; results and reports '
