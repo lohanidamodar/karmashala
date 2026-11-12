@@ -26,6 +26,7 @@ import 'overview_heartbeat.dart';
 import 'overview_phone_strip.dart';
 import 'overview_pins.dart';
 import 'overview_pipeline_lane.dart';
+import 'overview_project_tile.dart';
 import 'overview_queue_card.dart';
 import 'overview_search_sheet.dart';
 import 'overview_strip.dart';
@@ -197,14 +198,20 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       ref
           .read(overviewFoldedParentsProvider.notifier)
           .open(overviewAncestorsIn(forest, id));
-      // A session in a folded group is shown by opening the group.
-      if (overviewFamilyOf(forest, id) case (:final lane, tree: _)) {
+      // A session in a folded group or project is shown by opening it.
+      if (overviewFamilyOf(forest, id) case (:final lane, :final tree)) {
+        final prefs = ref.read(overviewPrefsProvider.notifier);
+        final by = ref.read(overviewGroupByProvider);
         final key = forest.lanes[lane].$1.key;
-        if (ref.read(overviewCollapsedLanesProvider).contains(key)) {
-          ref
-              .read(overviewPrefsProvider.notifier)
-              .setLaneCollapsed(ref.read(overviewGroupByProvider), key, false);
-        }
+        final tile = overviewTileFoldId(
+          by,
+          key,
+          overviewTileKeyOf(tree, ref.read(overviewFactsProvider)),
+        );
+        // Opening one not folded changes nothing.
+        prefs
+          ..setLaneCollapsed(by, key, false)
+          ..setLaneCollapsed(by, tile, false);
       }
       final focus = ref.read(overviewFocusProvider);
       final card = overviewCardOf(ref.read(overviewBoardProvider), id);
@@ -289,14 +296,25 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     final whole = ref.watch(overviewForestProvider);
     // A search, New or Pinned leaves only what fits; nothing else moves.
     final forest = ref.watch(overviewShownForestProvider);
+    // The groups and project tiles folded under this grouping.
     final collapsed = ref.watch(overviewCollapsedLanesProvider);
     final sections = overviewSectionsOf(
       board,
-      forest,
+      ref.watch(overviewOpenForestProvider),
       waitingSince: (id) => statusOf(id)?.waitingSince,
       folded: folded,
-      collapsed: collapsed,
     );
+    final facts = ref.watch(overviewFactsProvider);
+    // Grouped by project a group is its tile: no header of its own.
+    final groupBy = ref.watch(overviewGroupByProvider);
+    final byProject = groupBy == OverviewGroupBy.project;
+    final byContext = groupBy == OverviewGroupBy.context;
+    // The families finished and seen: one line each, not a card.
+    final lines = {
+      for (final (_, trees) in forest.lanes)
+        for (final tree in trees)
+          if (overviewIsLineWith(ref.watch, tree)) tree.card.id,
+    };
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
     final pinned = watchOverviewPinned(ref);
     final allStates = ref.watch(
@@ -334,7 +352,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         // Between families: a list's step on a phone.
         final gap = phone ? Insets.sm : Insets.md;
         final inner = box.maxWidth - gutter * 2;
-        final cell = WidthClass.scaleBreakpoint(Chrome.familyCellMin, scaler);
+        final cell = WidthClass.scaleBreakpoint(Chrome.projectTileMin, scaler);
         final across = ((inner + Insets.md) / (cell + Insets.md)).floor().clamp(
           1,
           _maxAcross,
@@ -373,6 +391,45 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           );
         }
 
+        Widget line(OverviewTreeNode node) => OverviewSessionLine(
+          key: drawn.add(node.card.id)
+              ? _treeKeys.putIfAbsent(node.card.id, GlobalKey.new)
+              : null,
+          node: node,
+          onOpen: onOpen,
+        );
+
+        // A project's context, said on its tile where the groups are not
+        // the contexts themselves.
+        String? tagOf(OverviewTile tile) {
+          if (byContext || facts.contexts.isEmpty) return null;
+          final id = facts.contextOf(tile.trees.first.card.entry);
+          return facts.contexts.where((c) => c.id == id).firstOrNull?.label;
+        }
+
+        Widget tileOf(OverviewTile tile, String laneKey, {Key? key}) {
+          final roots = [for (final t in tile.trees) t.card.id];
+          final fold = overviewTileFoldId(groupBy, laneKey, tile.key);
+          return OverviewProjectTile(
+            key: key,
+            tile: tile,
+            lines: lines,
+            folded: collapsed.contains(fold),
+            onFold: (folded) => ref
+                .read(overviewPrefsProvider.notifier)
+                .setLaneCollapsed(groupBy, fold, folded),
+            framed: !phone,
+            tag: tagOf(tile),
+            keep: matches ?? const {},
+            drawn: {
+              for (final node in tile.trees)
+                node.card.id: lines.contains(node.card.id)
+                    ? line(node)
+                    : tree(node, laneKey, roots),
+            },
+          );
+        }
+
         final work = Column(
           key: const ValueKey('overview-work'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -394,6 +451,25 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 key: const ValueKey('overview-none-at-work'),
                 style: muted,
               )
+            else if (byProject)
+              ..._grid(
+                [
+                  for (final (lane, trees) in forest.lanes)
+                    tileOf(
+                      (
+                        key: lane.key,
+                        label: lane.key == kOverviewUnfiledLane
+                            ? kOverviewNoProjectLabel
+                            : lane.label,
+                        trees: trees,
+                      ),
+                      lane.key,
+                      key: _laneKeys.putIfAbsent(lane.key, GlobalKey.new),
+                    ),
+                ],
+                across,
+                gap: gap,
+              )
             else
               for (final (lane, trees) in forest.lanes) ...[
                 OverviewLaneHeader(
@@ -405,10 +481,8 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 if (!collapsed.contains(lane.key))
                   ..._grid(
                     [
-                      for (final node in trees)
-                        tree(node, lane.key, [
-                          for (final t in trees) t.card.id,
-                        ]),
+                      for (final tile in overviewTilesOf(trees, facts))
+                        tileOf(tile, lane.key),
                     ],
                     across,
                     gap: gap,

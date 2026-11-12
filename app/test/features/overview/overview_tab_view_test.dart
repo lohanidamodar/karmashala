@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/overview/application/overview_board.dart
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_today.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
+import 'package:karmashala/src/features/overview/application/overview_shown.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_triage.dart';
@@ -138,6 +139,8 @@ void main() {
           FakeCommandRunnerFactory(),
         ),
         overviewPrefsDirectoryProvider.overrideWithValue(() async => dir),
+        // Every family a card, as "Finished sessions as cards" draws them.
+        overviewFinishedAsLinesProvider.overrideWithValue(false),
         explorerActionsProvider.overrideWith(
           (ref) => actions = _SpyActions(ref),
         ),

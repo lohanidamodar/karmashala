@@ -119,3 +119,129 @@ final overviewShownForestProvider = Provider.autoDispose<OverviewForest>((ref) {
     },
   );
 });
+
+/// What a session is to the owner right now.
+enum OverviewStatus {
+  needsYou('Needs you'),
+  running('Running'),
+
+  /// Finished, and not looked at since.
+  fresh('New'),
+
+  /// Finished and seen: one the owner means to go back to.
+  seen('To go back to');
+
+  const OverviewStatus(this.label);
+
+  final String label;
+}
+
+/// [card]'s status: what it does now, and for one that finished, whether
+/// the owner has looked since.
+OverviewStatus overviewStatusWith(OverviewWatch watch, OverviewCard card) =>
+    switch (card.column) {
+      BoardColumn.needsYou => OverviewStatus.needsYou,
+      BoardColumn.working => OverviewStatus.running,
+      BoardColumn.ready || BoardColumn.done =>
+        overviewNewCountWith(watch, card) > 0
+            ? OverviewStatus.fresh
+            : OverviewStatus.seen,
+    };
+
+/// Whether a finished, seen family is drawn as one line: the owner's choice
+/// on this device, a line unless they asked for cards.
+final overviewFinishedAsLinesProvider = Provider.autoDispose<bool>(
+  (ref) => !ref.watch(overviewPrefsProvider.select((p) => p.finishedAsCards)),
+);
+
+/// Whether [tree]'s family is drawn as one line, not a card: every session
+/// of it finished and seen, and none of them open in the peek — a card
+/// looked at stays a card until the peek leaves it.
+bool overviewIsLineWith(OverviewWatch watch, OverviewTreeNode tree) {
+  if (!watch(overviewFinishedAsLinesProvider)) return false;
+  final ids = {for (final card in tree.drawn) card.id};
+  final open = watch(
+    overviewFocusProvider.select(
+      (f) => ids.contains(f.peeked) || ids.contains(f.beside),
+    ),
+  );
+  if (open) return false;
+  return tree.drawn.every(
+    (card) => overviewStatusWith(watch, card) == OverviewStatus.seen,
+  );
+}
+
+/// One project's tile on the board: its key — the project's id, or
+/// [kOverviewUnfiledLane] for sessions in none — its name, and its families
+/// in the order their group drew them.
+typedef OverviewTile = ({
+  String key,
+  String label,
+  List<OverviewTreeNode> trees,
+});
+
+/// The name of the tile for sessions in no project.
+const String kOverviewNoProjectLabel = 'No project';
+
+/// The key of the tile [tree]'s family is drawn in: its root's project.
+String overviewTileKeyOf(OverviewTreeNode tree, OverviewFacts facts) =>
+    facts.projectOf(tree.card.entry) ?? kOverviewUnfiledLane;
+
+/// [trees] — one group's families — as project tiles, in the order the
+/// projects are listed everywhere else, one for no project last. A family
+/// sits whole in its root's tile; a change of state never moves a tile.
+List<OverviewTile> overviewTilesOf(
+  List<OverviewTreeNode> trees,
+  OverviewFacts facts,
+) {
+  final byKey = <String, List<OverviewTreeNode>>{};
+  for (final tree in trees) {
+    (byKey[overviewTileKeyOf(tree, facts)] ??= []).add(tree);
+  }
+  final known = {for (final project in facts.projects) project.id};
+  return [
+    for (final project in facts.projects)
+      if (byKey[project.id] case final trees?)
+        (key: project.id, label: project.label, trees: trees),
+    for (final MapEntry(:key, value: trees) in byKey.entries)
+      if (!known.contains(key) && key != kOverviewUnfiledLane)
+        (key: key, label: key, trees: trees),
+    if (byKey[kOverviewUnfiledLane] case final trees?)
+      (key: kOverviewUnfiledLane, label: kOverviewNoProjectLabel, trees: trees),
+  ];
+}
+
+/// How a folded project tile is named among
+/// [overviewCollapsedLanesProvider]'s keys under grouping [by]: grouped by
+/// project the group is the tile; under any other grouping it is the tile
+/// within its group, so one folded under Project stays open under Machine.
+String overviewTileFoldId(OverviewGroupBy by, String laneKey, String tileKey) =>
+    by == OverviewGroupBy.project ? laneKey : '$laneKey/$tileKey';
+
+/// [overviewShownForestProvider] without what is folded away: the families
+/// of a folded group, and of a folded project tile. What the keys walk.
+final overviewOpenForestProvider = Provider.autoDispose<OverviewForest>((ref) {
+  final forest = ref.watch(overviewShownForestProvider);
+  final folded = ref.watch(overviewCollapsedLanesProvider);
+  if (folded.isEmpty) return forest;
+  final by = ref.watch(overviewGroupByProvider);
+  final facts = ref.watch(overviewFactsProvider);
+  bool open(OverviewLane lane, OverviewTreeNode tree) => !folded.contains(
+    overviewTileFoldId(by, lane.key, overviewTileKeyOf(tree, facts)),
+  );
+  final lanes = [
+    for (final (lane, trees) in forest.lanes)
+      if (by == OverviewGroupBy.project || !folded.contains(lane.key))
+        if (trees.where((tree) => open(lane, tree)).toList() case final kept
+            when kept.isNotEmpty)
+          (lane, kept),
+  ];
+  return (
+    lanes: lanes,
+    placed: {
+      for (final (_, trees) in lanes)
+        for (final tree in trees)
+          for (final card in tree.drawn) card.id,
+    },
+  );
+});

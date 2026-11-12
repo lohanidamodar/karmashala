@@ -1463,7 +1463,7 @@ void main() {
       '0 waiting on you, tap to list them',
     );
     expect(find.byKey(const ValueKey('overview-none-at-work')), findsNothing);
-    expect(find.textContaining('Archive done · '), findsWidgets);
+    expect(find.byTooltip(RegExp('Archive done · ')), findsWidgets);
     await openWaiting(tester);
     expect(find.byKey(const ValueKey('overview-drawer-empty')), findsOneWidget);
     await unmountMission(tester);
@@ -1669,7 +1669,7 @@ void main() {
       await settleMission(tester);
 
       expect(c.read(overviewGroupByProvider), OverviewGroupBy.project);
-      expect(group('p-ks'), findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-tile:p-ks')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
       await settleMission(tester);
       expect(find.byKey(const ValueKey('group-by:context')), findsNothing);

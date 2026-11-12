@@ -21,6 +21,7 @@ import 'package:karmashala/src/features/overview/application/overview_drawer.dar
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
+import 'package:karmashala/src/features/overview/application/overview_shown.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_peek.dart';
 import 'package:karmashala_git/git.dart' show FileDiffStat;
@@ -762,7 +763,9 @@ class FakeOverviewReader implements OverviewReader {
 
 /// Draws the Overview tab over [fixture] at [size]: the desktop's tab, or
 /// with [phone] the phone's Dashboard tab under a thumb's density; with
-/// [waiting], the waiting drawer open.
+/// [waiting], the waiting drawer open. Every family is a card, as the
+/// "Finished sessions as cards" choice draws them, unless [lines] asks for
+/// the default: a finished, seen family as one line.
 Future<ProviderContainer> pumpMission(
   WidgetTester tester, {
   required MissionFixture fixture,
@@ -775,6 +778,7 @@ Future<ProviderContainer> pumpMission(
   List<Override> overrides = const [],
   Widget? home,
   bool waiting = false,
+  bool lines = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -798,6 +802,7 @@ Future<ProviderContainer> pumpMission(
         FakeCommandRunnerFactory(),
       ),
       overviewPrefsDirectoryProvider.overrideWithValue(() async => prefsDir),
+      overviewFinishedAsLinesProvider.overrideWithValue(lines),
       ...fixture.overrides,
       ...overrides,
     ],

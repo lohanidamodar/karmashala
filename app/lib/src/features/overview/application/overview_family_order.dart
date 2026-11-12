@@ -49,13 +49,21 @@ class OverviewFamilyOrderController extends Notifier<OverviewFamilyOrder> {
     }
   }
 
-  /// Moves [id] to [index] among [drawn], the lane's families as drawn now.
+  /// Moves [id] to [index] among [drawn], its project tile's families as
+  /// drawn now. The lane's other tiles keep the order they were given.
   void move(String laneKey, List<String> drawn, String id, int index) {
     if (!ref.mounted || !drawn.contains(id)) return;
     final next = [...drawn]..remove(id);
     next.insert(index.clamp(0, next.length), id);
     _touched = true;
-    state = {...state, laneKey: next};
+    state = {
+      ...state,
+      laneKey: [
+        ...next,
+        for (final other in state[laneKey] ?? const <String>[])
+          if (!drawn.contains(other)) other,
+      ],
+    };
     // One write at a time, in order, so a quick second move is what stays.
     final order = state;
     _writing = _writing.then((_) => _write(order));

@@ -61,11 +61,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
 
   OverviewSections _sections() => overviewSectionsOf(
     ref.read(overviewBoardProvider),
-    ref.read(overviewShownForestProvider),
+    ref.read(overviewOpenForestProvider),
     waitingSince: (id) =>
         ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
-    collapsed: ref.read(overviewCollapsedLanesProvider),
   );
 
   void _open(
@@ -421,10 +420,9 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           .read(overviewSelectionProvider.notifier)
           .selectAll(
             overviewLaneOf(
-              ref.read(overviewShownForestProvider),
+              ref.read(overviewOpenForestProvider),
               from,
               folded: ref.read(overviewFoldedParentsProvider),
-              collapsed: ref.read(overviewCollapsedLanesProvider),
             ),
           );
     }),

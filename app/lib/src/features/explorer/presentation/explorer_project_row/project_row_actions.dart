@@ -33,6 +33,18 @@ class ProjectRowActions {
     // Nothing is scanned here: `explorer_expand_scan_cost_test.dart` pins it.
   }
 
+  /// Shows the project in the Explorer from somewhere else: selected and
+  /// unfolded, never folded as [toggle] would a row already open.
+  void show() {
+    ref.read(explorerExpandedProjectsProvider.notifier).open(project.id);
+    ref.read(explorerFollowHoldProvider.notifier).hold();
+    ref.read(selectedProjectIdProvider.notifier).select(project.id);
+    final repos = ref.read(workspaceDataProvider).repositoriesOf(project.id);
+    if (repos.length == 1) {
+      ref.read(selectedRepositoryIdProvider.notifier).select(repos.first.id);
+    }
+  }
+
   void togglePin() => ref
       .read(settingsControllerProvider.notifier)
       .togglePinnedProject(project.id);
@@ -313,6 +325,58 @@ class ProjectRowActions {
         _confirmDelete();
     }
   }
+}
+
+/// **A project's menu, from anywhere**: the entries and the verbs its row
+/// has in the Explorer, opened from [anchor] — a dashboard tile's ⋯ — or at
+/// [at] for a right-click. One list, so the two cannot drift. [extras] are
+/// the caller's own verbs, drawn first and answered by [onExtra].
+Future<void> showProjectMenu(
+  BuildContext anchor,
+  WidgetRef ref,
+  Project project, {
+  Offset? at,
+  List<PopupMenuEntry<String>> extras = const [],
+  void Function(String value)? onExtra,
+}) async {
+  final actions = ProjectRowActions(ref, anchor, project);
+  final canOpenExternally = ref.read(capabilitiesProvider).readsServerDisk;
+  var action =
+      await showSessionMenu(anchor, ExplorerRowKind.project.menuLabel, [
+        ...extras,
+        if (extras.isNotEmpty) const DesktopMenuDivider(),
+        ...projectMenuItems(
+          project: project,
+          pinned: ref.read(settingsControllerProvider).isPinned(project.id),
+          checkedSuffix: actions.checkedSuffix(),
+          canOpenExternally: canOpenExternally,
+        ),
+      ], at: at);
+  if (action == kMoreMenuValue && anchor.mounted) {
+    action = await showMoreMenu(
+      anchor,
+      projectMoreMenuItems(
+        project: project,
+        workspaces: ref.read(workspacesControllerProvider),
+        workspaceCounts: ref.read(workspaceProjectCountsProvider),
+        installations: ref
+            .read(agentInstallationsDataProvider)
+            .getByEnvironment(project.root.environmentId),
+        registry: ref.read(agentRegistryProvider),
+        canReveal: ref
+            .read(revealInFileManagerProvider)
+            .canReveal(project.root),
+        checkedSuffix: actions.checkedSuffix(),
+        canOpenExternally: canOpenExternally,
+      ),
+    );
+  }
+  if (action == null || !anchor.mounted) return;
+  if (extras.any((e) => e is PopupMenuItem<String> && e.value == action)) {
+    onExtra?.call(action);
+    return;
+  }
+  actions.onMenu(action);
 }
 
 /// Asks before removing a project. Pops null for cancel, otherwise whether to

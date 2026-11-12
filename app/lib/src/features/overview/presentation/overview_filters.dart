@@ -196,6 +196,18 @@ class OverviewFilterPanel extends ConsumerWidget {
               onChanged: controller.setGroupBy,
             ),
           ),
+          SwitchListTile(
+            key: const ValueKey('overview-finished-as-cards'),
+            dense: true,
+            contentPadding: side,
+            title: const Text('Finished sessions as cards'),
+            subtitle: const Text(
+              'Off, a session that is finished and seen is one line in its '
+              'project',
+            ),
+            value: prefs.finishedAsCards,
+            onChanged: controller.setFinishedAsCards,
+          ),
           field(
             'Show on cards',
             Wrap(
