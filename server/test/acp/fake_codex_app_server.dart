@@ -75,6 +75,9 @@ class FakeCodexAppServer {
     },
   ];
   var killed = false;
+
+  /// Whether `turn/interrupt` is refused, the turn going on.
+  var refusesInterrupt = false;
   FakeCodexTurn? turn;
   var _turns = 0;
 
@@ -257,7 +260,11 @@ class FakeCodexAppServer {
           });
         }
       case 'turn/interrupt':
-        request.respond(const <String, Object?>{});
+        if (refusesInterrupt) {
+          request.fail(JsonRpcErrorCodes.invalidRequest, 'no active turn');
+        } else {
+          request.respond(const <String, Object?>{});
+        }
         turn?.interrupted.complete();
       case 'skills/list':
         request.respond({

@@ -132,6 +132,7 @@ AcpSessionRuntime runtimeOver(
   DateTime Function()? now,
   Duration coalesce = const Duration(milliseconds: 20),
   Duration stopPatience = const Duration(milliseconds: 200),
+  Duration cancelPatience = const Duration(seconds: 15),
   AcpTerminals? terminals,
 }) {
   var ids = 0;
@@ -156,6 +157,7 @@ AcpSessionRuntime runtimeOver(
     now: now,
     coalesce: coalesce,
     stopPatience: stopPatience,
+    cancelPatience: cancelPatience,
     terminals: terminals,
     terminalRefresh: const Duration(milliseconds: 20),
   );

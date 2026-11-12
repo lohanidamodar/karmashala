@@ -76,6 +76,7 @@ void main() {
     PermissionRisk? risk,
     String? resumeSessionId,
     String? mcpUrl,
+    Duration? interruptPatience,
   }) {
     var ids = 0;
     return AcpSessionRuntime(
@@ -85,7 +86,16 @@ void main() {
       agentName: 'Codex',
       spec: _spec,
       workingDirectory: temp.path,
-      spawn: () async => bridgedAcpTransport(_spec, codex.transport),
+      spawn: () async => bridgedAcpTransport(
+        _spec,
+        codex.transport,
+        bridges: {
+          AcpNativeBridge.codexAppServer: (raw) => CodexAppServerBridge(
+            raw,
+            interruptPatience: interruptPatience ?? const Duration(seconds: 10),
+          ),
+        },
+      ),
       messages: SessionMessageDao(database),
       usage: SessionUsageDao(database),
       host: host,
@@ -999,6 +1009,46 @@ void main() {
       rows().firstWhere((r) => r.role == SessionMessageRole.tool).toolJson!,
     );
     expect(sleep['status'], 'failed');
+    await runtime.stop();
+  });
+
+  test('a refused interrupt is said; a turn Codex never ends after a cancel '
+      'ends here, and its late end ends no later turn', () async {
+    final stuck = Completer<void>();
+    final second = Completer<void>();
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        if (turn.id == 'turn-1') {
+          turn.delta('item/agentMessage/delta', 'msg-1', 'Working');
+          await stuck.future;
+          turn.end('interrupted');
+        } else {
+          await second.future;
+          turn.end('completed');
+        }
+      },
+    )..refusesInterrupt = true;
+    final runtime = runtimeOver(
+      codex,
+      interruptPatience: const Duration(milliseconds: 100),
+    );
+    await runtime.start();
+    await runtime.send('Take your time');
+    await pump(40);
+    runtime.cancel();
+    expect(await runtime.awaitTurn(), StopReason.cancelled);
+    final said = rows().map((r) => r.text).join('\n');
+    expect(said, contains('Codex refused the stop'));
+    expect(said, contains('did not confirm the stop'));
+    expect(statuses().last, AgentActivityStatus.idle);
+
+    await runtime.send('Next');
+    await pump(40);
+    stuck.complete();
+    await pump(40);
+    expect(runtime.inTurn, isTrue, reason: 'the late end was turn-1');
+    second.complete();
+    expect(await runtime.awaitTurn(), StopReason.endTurn);
     await runtime.stop();
   });
 

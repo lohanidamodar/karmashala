@@ -102,6 +102,7 @@ class AcpSessionRuntime implements ScreenSession {
     Duration coalesce = const Duration(milliseconds: 100),
     this.stopPatience = const Duration(seconds: 5),
     this.startPatience = const Duration(minutes: 3),
+    this.cancelPatience = const Duration(seconds: 15),
     AcpTerminals? terminals,
     this.terminalRefresh = const Duration(milliseconds: 250),
   }) : _spawn = spawn,
@@ -172,6 +173,10 @@ class AcpSessionRuntime implements ScreenSession {
   /// through `npx` downloads itself the first time.
   final Duration startPatience;
 
+  /// How long a cancelled turn may take to end before it is ended here. Three
+  /// times Claude's own escalation: an agent may be unwinding a tool call.
+  final Duration cancelPatience;
+
   final Future<AcpTransport> Function() _spawn;
 
   /// Where the agent's `usage_update`s are kept; null keeps none.
@@ -236,6 +241,10 @@ class AcpSessionRuntime implements ScreenSession {
   String? _agentSessionId;
   Future<StopReason>? _turn;
   Completer<StopReason?>? _turnSettled;
+
+  /// Ends the open turn here when the agent does not confirm a cancel.
+  Completer<StopReason>? _turnGivenUp;
+  Timer? _cancelTimer;
 
   /// Every request the agent has open, oldest first; the head is the ask shown.
   final _pendings = <_PendingPermission>[];
@@ -495,7 +504,12 @@ class AcpSessionRuntime implements ScreenSession {
     _turnSince = _now();
     _publish(AgentActivityStatus.working, detail: AcpMethods.sessionPrompt);
     final settled = _turnSettled = Completer<StopReason?>();
-    final turn = _turn = client.prompt(agent, prompt);
+    final givenUp = _turnGivenUp = Completer<StopReason>();
+    // A response after the turn was given up is dropped.
+    final turn = _turn = Future.any([
+      client.prompt(agent, prompt),
+      givenUp.future,
+    ]);
     unawaited(_settle(turn, settled));
     if (_cutPending) {
       _cutPending = false;
@@ -634,6 +648,19 @@ class AcpSessionRuntime implements ScreenSession {
     if (client == null || agent == null || !working) return false;
     _resolvePending(const PermissionOutcome.cancelled());
     client.cancel(agent);
+    final turn = _turn;
+    final givenUp = _turnGivenUp;
+    if (turn != null && givenUp != null && _cancelTimer == null) {
+      _cancelTimer = Timer(cancelPatience, () {
+        _cancelTimer = null;
+        if (!identical(_turn, turn) || givenUp.isCompleted) return;
+        _writer.notice(
+          '$agentName did not confirm the stop, so the turn was ended here; '
+          'it may still be finishing.',
+        );
+        givenUp.complete(StopReason.cancelled);
+      });
+    }
     return true;
   }
 
@@ -981,7 +1008,12 @@ class AcpSessionRuntime implements ScreenSession {
     }
     _writer.turnEnded();
     _usageTurnEnded();
-    if (identical(_turn, turn)) _turn = null;
+    if (identical(_turn, turn)) {
+      _turn = null;
+      _turnGivenUp = null;
+      _cancelTimer?.cancel();
+      _cancelTimer = null;
+    }
     _turnSince = _agentWorking ? _now() : null;
     _resolvePending(const PermissionOutcome.cancelled());
     if (failure != null && _stopping) {

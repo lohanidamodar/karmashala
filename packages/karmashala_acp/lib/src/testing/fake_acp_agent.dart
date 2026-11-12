@@ -334,6 +334,9 @@ class FakeAcpAgent {
       case FakeWaitForCancelStep():
         await turn.cancelled;
         return false;
+      case FakeWaitForStep(:final until):
+        await until;
+        return true;
       case FakeReadFileStep(:final path, :final line, :final limit):
         final result = await turn.race(
           _peer.call(

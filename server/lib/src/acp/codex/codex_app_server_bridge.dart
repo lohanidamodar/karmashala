@@ -22,6 +22,7 @@ final class CodexAppServerBridge implements AcpTransport {
     this.loginPatience = const Duration(minutes: 10),
     this.outputEvery = const Duration(milliseconds: 100),
     this.asyncAfter = const Duration(milliseconds: 250),
+    this.interruptPatience = const Duration(seconds: 10),
   }) {
     _codex = AcpPeer(_raw.output, _raw.input);
     _client = AcpPeer(_fromClient.stream, _toClient.sink);
@@ -50,6 +51,13 @@ final class CodexAppServerBridge implements AcpTransport {
   /// How long after a turn's end Codex's async questions are asked, so the
   /// client has settled the prompt first.
   final Duration asyncAfter;
+
+  /// How long Codex has to end a turn after a cancel before the bridge ends
+  /// it as cancelled; within the runtime's own patience, so this says why.
+  final Duration interruptPatience;
+
+  /// Turns ended here that Codex never confirmed: their late end is dropped.
+  final _givenUpTurns = <String>{};
 
   late final AcpPeer _codex;
   late final AcpPeer _client;
@@ -140,9 +148,25 @@ final class CodexAppServerBridge implements AcpTransport {
 
   void _onClientNotification(AcpNotification notification) {
     if (notification.method == AcpMethods.sessionCancel) {
-      if (_turn != null) _cancelAsked = true;
+      final done = _turn;
+      if (done != null) {
+        _cancelAsked = true;
+        Timer(interruptPatience, () => _giveUp(done));
+      }
       _interrupt();
     }
+  }
+
+  /// Codex did not end [done] after the cancel: it ends here, cancelled.
+  void _giveUp(Completer<JsonMap> done) {
+    if (!identical(_turn, done) || done.isCompleted) return;
+    if (_turnId case final id?) _givenUpTurns.add(id);
+    _note(
+      'Codex did not confirm the stop, so the turn was ended here; it may '
+      'still be finishing.',
+      error: true,
+    );
+    done.complete({'stopReason': 'cancelled'});
   }
 
   /// Opted in to Codex's experimental API, which 0.160.0's schema gates the
@@ -722,13 +746,21 @@ final class CodexAppServerBridge implements AcpTransport {
     unawaited(
       _codex
           .call('turn/interrupt', {'threadId': _threadId, 'turnId': turn})
-          .then((_) {}, onError: (Object _) {}),
+          .then(
+            (_) {},
+            onError: (Object error) {
+              if (_turnId == turn && _turn?.isCompleted == false) {
+                _note('Codex refused the stop: $error', error: true);
+              }
+            },
+          ),
     );
   }
 
   void _turnCompleted(JsonMap params) {
     final done = _turn;
     final turn = _map(params['turn']);
+    if (_givenUpTurns.remove(turn['id'])) return;
     if (done == null || done.isCompleted) return;
     if (_turnId != null && turn['id'] != _turnId) return;
     final asyncAsked = _asyncWaiting;

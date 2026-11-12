@@ -568,6 +568,55 @@ void main() {
     await runtime.stop();
   });
 
+  test('a cancel the agent ignores ends the turn here after the patience, '
+      'says so, and its late answer ends no later turn', () async {
+    final stuck = Completer<void>();
+    final second = Completer<void>();
+    final process = FakeAcpProcess(
+      FakeAcpAgent(
+        turns: [
+          FakeTurn([
+            const FakeStep.message('Working...'),
+            FakeStep.waitFor(stuck.future),
+          ]),
+          FakeTurn([
+            FakeStep.waitFor(second.future),
+            const FakeStep.message('Again.'),
+          ]),
+        ],
+      ),
+    );
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      cancelPatience: const Duration(milliseconds: 100),
+    );
+    await runtime.start();
+    await runtime.send('Go');
+    await pump();
+    expect(runtime.cancel(), isTrue);
+    expect(await runtime.awaitTurn(), StopReason.cancelled);
+    expect(process.agent.cancels, 1);
+    expect(runtime.inTurn, isFalse);
+    expect(host.statuses.last.status, AgentActivityStatus.idle);
+    expect(
+      rows().where((r) => r.role == SessionMessageRole.notice).single.text,
+      contains('did not confirm the stop'),
+    );
+
+    await runtime.send('Next');
+    await pump();
+    stuck.complete();
+    await pump();
+    expect(runtime.inTurn, isTrue, reason: 'the late answer was the old turn');
+    second.complete();
+    expect(await runtime.awaitTurn(), StopReason.endTurn);
+    expect(rows().any((r) => r.text == 'Again.'), isTrue);
+    await runtime.stop();
+  });
+
   test('the process exiting mid-turn fails the turn with its exit code and '
       'stderr, and ends the runtime with that code', () async {
     final process = FakeAcpProcess(

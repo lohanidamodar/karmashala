@@ -79,6 +79,10 @@ sealed class FakeStep {
   /// `cancelled`.
   const factory FakeStep.waitForCancel() = FakeWaitForCancelStep;
 
+  /// Blocks until [until] completes, cancelled or not: an agent that does
+  /// not stop when asked.
+  const factory FakeStep.waitFor(Future<void> until) = FakeWaitForStep;
+
   const factory FakeStep.readFile(String path, {int? line, int? limit}) =
       FakeReadFileStep;
 
@@ -212,6 +216,12 @@ final class FakeRawUpdateStep extends FakeStep {
 
 final class FakeWaitForCancelStep extends FakeStep {
   const FakeWaitForCancelStep();
+}
+
+final class FakeWaitForStep extends FakeStep {
+  const FakeWaitForStep(this.until);
+
+  final Future<void> until;
 }
 
 final class FakeReadFileStep extends FakeStep {
