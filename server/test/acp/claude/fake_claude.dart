@@ -22,6 +22,7 @@ class FakeClaudeMachine {
     this.ignoreInterrupt = false,
     this.autoMode = true,
     this.contextUsage,
+    this.recordOnFirstMessage = false,
   }) : turns = List.of(turns),
        conversations = {...conversations};
 
@@ -40,6 +41,13 @@ class FakeClaudeMachine {
 
   /// What `get_context_usage` answers; null refuses it, as an older Claude.
   Json? contextUsage;
+
+  /// Whether a conversation is written only once a user message arrives,
+  /// so a `--resume` before then finds nothing.
+  final bool recordOnFirstMessage;
+
+  /// How many of the next conversation processes die while starting.
+  var refuseStarts = 0;
 
   /// Every process started, in order.
   final launched = <FakeClaude>[];
@@ -145,6 +153,12 @@ class FakeClaude {
       die(0);
       return;
     }
+    if (machine.refuseStarts > 0) {
+      machine.refuseStarts--;
+      _stderr.add('Claude Code could not start');
+      die(1);
+      return;
+    }
     final resume = _after('--resume');
     if (resume != null && !machine.conversations.contains(resume)) {
       _stderr.add('No conversation found with session ID: $resume');
@@ -158,7 +172,9 @@ class FakeClaude {
       return;
     }
     sessionId = resume ?? _after('--session-id');
-    if (sessionId != null) machine.conversations.add(sessionId!);
+    if (sessionId != null && !machine.recordOnFirstMessage) {
+      machine.conversations.add(sessionId!);
+    }
   }
 
   String? _after(String flag) {
@@ -181,6 +197,7 @@ class FakeClaude {
         final response = message['response'] as Json;
         _controlAnswers.remove(response['request_id'])?.complete(response);
       case 'user':
+        if (sessionId != null) machine.conversations.add(sessionId!);
         if (machine.turns.isEmpty) return;
         final turn = machine.turns.removeAt(0);
         turnOpen = true;

@@ -306,6 +306,70 @@ void main() {
       await rt.stop();
     });
 
+    test('a checkout attached before the first prompt reopens the '
+        'conversation Claude has not written yet afresh, and the turn '
+        'runs', () async {
+      final later = Directory('${temp.path}-later')..createSync();
+      addTearDown(later.deleteSync);
+      var attached = <EnvironmentPath>[];
+      final machine = FakeClaudeMachine(
+        recordOnFirstMessage: true,
+        turns: [(c, user) async => c.result(), (c, user) async => c.result()],
+      );
+      final rt = runtime(
+        machine,
+        files: AcpPathScope(
+          root: temp.path,
+          environmentId: 'local',
+          checkouts: () => attached,
+        ),
+      );
+      final outcome = await rt.start();
+      attached = [EnvironmentPath(environmentId: 'local', path: later.path)];
+      await rt.send('First');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      expect(machine.current.args, [
+        '--session-id',
+        outcome.agentSessionId,
+        '--add-dir=${later.path}',
+      ]);
+      await rt.send('Second');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      await rt.stop();
+    });
+
+    test('a reopen that fails leaves the next prompt to resume the '
+        'conversation, with the checkouts attached since', () async {
+      final later = Directory('${temp.path}-later')..createSync();
+      addTearDown(later.deleteSync);
+      var attached = <EnvironmentPath>[];
+      final machine = FakeClaudeMachine(
+        turns: [(c, user) async => c.result(), (c, user) async => c.result()],
+      );
+      final rt = runtime(
+        machine,
+        files: AcpPathScope(
+          root: temp.path,
+          environmentId: 'local',
+          checkouts: () => attached,
+        ),
+      );
+      final outcome = await rt.start();
+      await rt.send('First');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      attached = [EnvironmentPath(environmentId: 'local', path: later.path)];
+      machine.refuseStarts = 1;
+      await rt.send('Second');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      expect(machine.current.args, [
+        '--resume',
+        outcome.agentSessionId,
+        '--add-dir=${later.path}',
+      ]);
+      expect(rt.lifecycle.hasEnded, isFalse);
+      await rt.stop();
+    });
+
     test('session/load resumes the conversation by id in a process of its '
         'own', () async {
       final machine = FakeClaudeMachine(conversations: {'conv-1'});

@@ -394,6 +394,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _openParams = params;
     _sessionId = id;
     _resumeAt = null;
+    _said = false;
     _announceCommands();
     _announceModel();
     _measureSoon();
@@ -418,8 +419,22 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     // keeps the mode and model the person had it in.
     final reopening = id == _sessionId;
     final held = _held;
-    final claude = await _open(_resumeArguments(id, resumeAt), params);
-    if (reopening) await _restore(claude, held);
+    final ClaudeProcess claude;
+    if (reopening) {
+      try {
+        claude = await _reopen(id, resumeAt, params);
+      } on Object {
+        // The old process is retired: the next prompt opens it again.
+        _abandoned = true;
+        _openParams = params;
+        _resumeAt = resumeAt;
+        rethrow;
+      }
+      await _restore(claude, held);
+    } else {
+      claude = await _open(_resumeArguments(id, resumeAt), params);
+      _said = true;
+    }
     _openParams = params;
     _sessionId = id;
     _resumeAt = resumeAt;
@@ -432,6 +447,24 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   /// A rewind's cut, kept until a prompt lands on it: a cut with nothing
   /// sent after it does not hold, so a resume before then cuts again.
   String? _resumeAt;
+
+  /// Whether a prompt was sent in this conversation: before one, Claude has
+  /// no transcript to resume.
+  var _said = false;
+
+  /// [id] opened again; with nothing said yet, afresh under the same id.
+  Future<ClaudeProcess> _reopen(
+    String id,
+    String? resumeAt,
+    JsonMap params,
+  ) async {
+    try {
+      return await _open(_resumeArguments(id, resumeAt), params);
+    } on AcpRpcError catch (error) {
+      if (_said || error.code != JsonRpcErrorCodes.resourceNotFound) rethrow;
+      return _open(['--session-id', id], params);
+    }
+  }
 
   static List<String> _resumeArguments(String id, String? resumeAt) => [
     '--resume',
@@ -496,6 +529,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       'parent_tool_use_id': null,
       'session_id': _sessionId,
     });
+    _said = true;
     _resumeAt = null;
     return {'stopReason': await turn.future};
   }
@@ -591,10 +625,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   Future<void> _resume() async {
     final held = _held;
-    final claude = await _open(
-      _resumeArguments(_sessionId, _resumeAt),
-      _openParams,
-    );
+    final claude = await _reopen(_sessionId, _resumeAt, _openParams);
     _abandoned = false;
     await _restore(claude, held);
     // The new process lists its models afresh; the client is told.
