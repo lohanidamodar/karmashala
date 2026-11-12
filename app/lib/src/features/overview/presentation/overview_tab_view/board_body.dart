@@ -20,9 +20,29 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
   bool get _inSheet => _mode == OverviewPeekMode.sheet;
 
   @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_takeKeysFromPane);
+  }
+
+  @override
   void dispose() {
+    FocusManager.instance.removeListener(_takeKeysFromPane);
     _focus.dispose();
     super.dispose();
+  }
+
+  /// The workbench gives the keyboard to the pane around a tab it shows, and
+  /// the board's keys live under that: the board takes them on from there.
+  void _takeKeysFromPane() {
+    final primary = FocusManager.instance.primaryFocus;
+    if (primary == null || primary is FocusScopeNode) return;
+    for (final above in _focus.ancestors) {
+      if (above is FocusScopeNode) return;
+      if (!above.canRequestFocus) continue;
+      if (above == primary) _focus.requestFocus();
+      return;
+    }
   }
 
   /// The ids ↑ and ↓ walk, as drawn.
