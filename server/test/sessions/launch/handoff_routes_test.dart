@@ -8,6 +8,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
+import 'package:karmashala_host/src/sessions/launch/handoff_routes.dart';
 import 'package:karmashala_host/src/sessions/launch/session_handoffs.dart';
 import 'package:karmashala_session/launch.dart' show SessionSurface;
 import 'package:karmashala_session/session.dart' show SessionAttribution;
@@ -193,6 +194,47 @@ void main() {
     });
   });
 
+  group('a message that starts with a dash', () {
+    final agents = AgentRegistry.builtIn;
+    const dashed = ['- [ ] fix it', '--verbose is broken', '  -p is wrong'];
+
+    for (final id in [AgentIds.claudeCode, AgentIds.codex]) {
+      for (final text in dashed) {
+        test('never rides $id\'s command line as a positional: "$text"', () {
+          final route = openingRoute(
+            text,
+            descriptor: agents.byId(id),
+            throughPowerShell: false,
+            typeable: true,
+          );
+          expect(route, isNot(HandoffRoute.argv));
+        });
+      }
+    }
+
+    test('a POSIX Codex is pointed at a file instead', () async {
+      await launch(
+        'cx-nix',
+        prompt: '--verbose is broken',
+        repository: 'r2',
+        windows: false,
+      );
+      expect(argv(), isNot(contains('--verbose is broken')));
+      expect(argv().last, startsWith('My opening message to you is in the '));
+      expect(row('s-cx-nix', HandoffKind.opening)!.route, HandoffRoute.file);
+    });
+
+    test('a dash inside the message is no option', () {
+      final route = openingRoute(
+        'fix the -p flag',
+        descriptor: agents.byId(AgentIds.codex),
+        throughPowerShell: false,
+        typeable: true,
+      );
+      expect(route, HandoffRoute.argv);
+    });
+  });
+
   group('the title', () {
     test('an unnamed session pointed at a file is named from the message, '
         'not the pointer', () async {
@@ -226,16 +268,19 @@ void main() {
       expect(started.session.title, 'Speed up the cart');
     });
 
-    test('a spawned session typed into is named from its prompt at once', () async {
-      final started = await launch(
-        'cc',
-        prompt: asked.render('Write the tests\nfor the cart'),
-        title: '',
-        parent: 'p-1',
-      );
-      expect(started.session.title, 'Write the tests');
-      expect(SessionDao(database).getById('s-cc')!.titleByUser, isFalse);
-    });
+    test(
+      'a spawned session typed into is named from its prompt at once',
+      () async {
+        final started = await launch(
+          'cc',
+          prompt: asked.render('Write the tests\nfor the cart'),
+          title: '',
+          parent: 'p-1',
+        );
+        expect(started.session.title, 'Write the tests');
+        expect(SessionDao(database).getById('s-cc')!.titleByUser, isFalse);
+      },
+    );
 
     test('a named session keeps its name', () async {
       final started = await launch('cx', prompt: multiLine);

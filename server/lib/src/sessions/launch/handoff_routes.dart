@@ -26,7 +26,12 @@ HandoffRoute openingRoute(
   required bool typeable,
 }) {
   final takesArgument = descriptor?.launch.acceptsPromptArgument ?? true;
+  // A positional that starts with `-` is read as an option.
+  final readAsOption =
+      descriptor?.launch.prompt.style != AgentPromptStyle.flag &&
+      text.trimLeft().startsWith('-');
   if (takesArgument &&
+      !readAsOption &&
       argvCarries(text, throughPowerShell: throughPowerShell)) {
     return HandoffRoute.argv;
   }
