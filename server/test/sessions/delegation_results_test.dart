@@ -82,6 +82,8 @@ void main() {
     Duration settleWindow = const Duration(milliseconds: 20),
     bool Function(String sessionId)? isWorking,
     bool Function(String parentId)? parentReachable,
+    bool Function(String sessionId)? turnCutOff,
+    Duration restoreGrace = const Duration(milliseconds: 60),
   }) => DelegationResults(
     parentReachable: parentReachable,
     turnOf: (childId, since) => turns.firstTurn(
@@ -99,7 +101,8 @@ void main() {
     isArchived: archived.contains,
     openAskOf: (id) => asks.containsKey(id) ? asks[id] : waits.openAskOf(id),
     waitsForSlot: inLine.contains,
-    restoreGrace: const Duration(milliseconds: 60),
+    turnCutOff: turnCutOff,
+    restoreGrace: restoreGrace,
     slotPoll: const Duration(milliseconds: 10),
     endChild: (childId) async => ended.add(childId),
     batchWindow: const Duration(milliseconds: 40),
@@ -1449,6 +1452,44 @@ void main() {
       await settle();
       expect(delivered['parent'], hasLength(1), reason: 'pushed once');
     });
+
+    test(
+      'a turn the restart cut off mid-turn is not read as done: the child '
+      'continued inside the grace has its final answer pushed, once',
+      () async {
+        await runTerminal('parent');
+        hook('parent', 'Stop');
+        await runTerminal('c1');
+        delegations.watch(child('c1'));
+        hook('c1', 'UserPromptSubmit');
+        await pumpEventQueue();
+        answers['c1'] = 'Starting on it…';
+        await delegations.close();
+        // The server stops mid-turn: the child's process goes with it.
+        pty.handles.last.finish(0);
+        await pumpEventQueue();
+
+        delegations = tracker(
+          turnCutOff: {'c1'}.contains,
+          restoreGrace: const Duration(milliseconds: 400),
+        )..start();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(delivered['parent'], isNull);
+        // The interrupted turn is continued, and finishes.
+        await runTerminal('c1');
+        hook('c1', 'UserPromptSubmit');
+        await pumpEventQueue();
+        answers['c1'] = 'Fixed it: cart.dart line 40.';
+        hook('c1', 'Stop');
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await settle();
+
+        expect(delivered['parent'], hasLength(1));
+        expect(delivered['parent']!.single, contains('Fixed it'));
+        expect(delivered['parent']!.single, isNot(contains('Starting on it')));
+        expect(ended, isEmpty);
+      },
+    );
   });
 
   group('follow-up turns', () {

@@ -221,6 +221,7 @@ class DelegationResults {
     this.isArchived,
     this.openAskOf,
     this.waitsForSlot,
+    this.turnCutOff,
     this.restoreGrace = const Duration(minutes: 2),
     this.slotPoll = const Duration(seconds: 1),
     this.endChild,
@@ -264,6 +265,10 @@ class DelegationResults {
   /// Whether row [String] waits in the launch gate's line: not started, so
   /// nothing running it is no ending.
   final bool Function(String sessionId)? waitsForSlot;
+
+  /// Whether row [String]'s turn was open when the server last stopped (the
+  /// `OpenTurns` record): a turn cut off, continued a moment later.
+  final bool Function(String sessionId)? turnCutOff;
   final AnswerOf answerOf;
   final SessionQueue queue;
   final SessionDelegationDao store;
@@ -637,26 +642,37 @@ class DelegationResults {
   }
 
   /// A restored turn: one already answered while nothing ran it is reported
-  /// at once; one nothing runs yet gets [restoreGrace] to come back.
+  /// at once; one nothing runs yet gets [restoreGrace] to come back. A turn
+  /// the restart cut off gets the grace first: its text so far is no answer.
   Future<void> _restore(_Follow follow) async {
     final childId = follow.child.childId;
     if (!isLive(childId)) {
-      if (await _answer(follow) case final answer?) {
-        if (_closed || !identical(_watched.remove(childId), follow)) return;
-        _report(
-          follow,
-          const ChildTurnOutcome(ChildTurnState.done),
-          answer,
-          ended: follow.child.endOnAnswer ? true : null,
-        );
-        return;
-      }
-      final waited = Stopwatch()..start();
-      while (!_closed && !isLive(childId) && waited.elapsed < restoreGrace) {
-        await Future<void>.delayed(const Duration(milliseconds: 200));
+      final cutOff = turnCutOff?.call(childId) ?? false;
+      if (cutOff) await _untilLive(childId);
+      if (!_closed && !isLive(childId)) {
+        if (await _answer(follow) case final answer?) {
+          if (_closed || !identical(_watched[childId], follow)) return;
+          final ended = follow.child.endOnAnswer ? await _end(childId) : null;
+          if (_closed || !identical(_watched.remove(childId), follow)) return;
+          _report(
+            follow,
+            const ChildTurnOutcome(ChildTurnState.done),
+            answer,
+            ended: ended,
+          );
+          return;
+        }
+        if (!cutOff) await _untilLive(childId);
       }
     }
     await _follow(follow);
+  }
+
+  Future<void> _untilLive(String childId) async {
+    final waited = Stopwatch()..start();
+    while (!_closed && !isLive(childId) && waited.elapsed < restoreGrace) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
   }
 
   /// Holds [follow] while its child waits for a slot, then until something

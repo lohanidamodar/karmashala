@@ -1621,6 +1621,10 @@ Future<int> _serve(
     read: () => database.readMetadata(kOpenTurnsKey),
     write: (value) => database.writeMetadata(kOpenTurnsKey, value),
   );
+  // Read before the continuer takes them: a delegation waits for these.
+  final cutOffTurns = hostEnvironment[kAgentWorkVariable] != 'off'
+      ? openTurns.open.keys.toSet()
+      : const <String>{};
   if (hostEnvironment[kAgentWorkVariable] != 'off') {
     unawaited(
       InterruptedTurnContinuer(
@@ -2009,6 +2013,7 @@ Future<int> _serve(
     isArchived: (id) => SessionDao(database).getById(id)?.isArchived ?? false,
     openAskOf: sessionWaits.openAskOf,
     waitsForSlot: (id) => slotWaits.of(id) != null,
+    turnCutOff: cutOffTurns.contains,
     endChild: endChild,
     log: (message) => errSink.writeln('karmashala_host: $message'),
     modelOf: activeModels.modelWords,
