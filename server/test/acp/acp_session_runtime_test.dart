@@ -11,6 +11,7 @@ import 'package:agent_cli/descriptors.dart'
         PermissionRisk;
 import 'package:karmashala_acp/karmashala_acp.dart'
     show
+        AcpMethods,
         AcpRpcError,
         AgentMessageChunk,
         AuthMethod,
@@ -19,6 +20,8 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         ConfigSelectOption,
         ContentBlock,
         JsonRpcErrorCodes,
+        PermissionCancelled,
+        PermissionOutcome,
         PermissionSelected,
         SessionMode,
         SessionModeState,
@@ -291,6 +294,134 @@ void main() {
     final tool = jsonDecode(rows()[1].toolJson!) as Map;
     expect(tool['status'], 'failed');
     await runtime.stop();
+  });
+
+  group('concurrent permission requests', () {
+    late FakeAcpProcess process;
+    late AcpSessionRuntime runtime;
+
+    Future<PermissionOutcome> ask(
+      String toolCallId, {
+      ToolKind kind = ToolKind.edit,
+      Future<void>? withdrawn,
+    }) async {
+      final answer = await process.agent.peer.call(
+        AcpMethods.sessionRequestPermission,
+        {
+          'sessionId': 'fake-session',
+          'toolCall': ToolCallUpdate(
+            toolCallId: toolCallId,
+            isNew: true,
+            title: 'Tool $toolCallId',
+            kind: kind,
+            status: ToolCallStatus.pending,
+          ).toToolCallJson(),
+          'options': [for (final o in fakePermissionOptions) o.toJson()],
+        },
+        withdrawn: withdrawn,
+      );
+      return PermissionOutcome.fromJson(
+        Map<String, Object?>.from((answer! as Map)['outcome'] as Map),
+      );
+    }
+
+    setUp(() async {
+      process = FakeAcpProcess(
+        FakeAcpAgent(
+          turns: const [
+            FakeTurn([FakeStep.waitForCancel()]),
+          ],
+        ),
+      );
+      runtime = runtimeOver(
+        process,
+        database: database,
+        workingDirectory: temp.path,
+        host: host,
+        risk: PermissionRisk.ask,
+      );
+      await runtime.start();
+      await runtime.send('Go');
+      await pump();
+    });
+
+    tearDown(() => runtime.stop());
+
+    test('two asks are answered in order, the second shown once the first '
+        'is answered', () async {
+      final a = ask('a');
+      final b = ask('b');
+      await pump();
+      expect(runtime.pendingToolCallId, 'a');
+      expect(host.statuses.last.toolAsk?.toolUseId, 'a');
+
+      await runtime.answerPermission(approve: true);
+      expect(await a, const PermissionSelected('allow'));
+      expect(runtime.pendingToolCallId, 'b');
+      expect(host.statuses.last.status, AgentActivityStatus.awaitingApproval);
+      expect(host.statuses.last.toolAsk?.toolUseId, 'b');
+
+      await runtime.answerPermission(approve: false, toolCallId: 'b');
+      expect(await b, const PermissionSelected('reject'));
+      expect(runtime.hasOpenPermission, isFalse);
+      expect(host.statuses.last.status, AgentActivityStatus.working);
+    });
+
+    test('answering by tool call id picks the queued one', () async {
+      final a = ask('a');
+      final b = ask('b');
+      await pump();
+      await runtime.answerPermission(approve: true, toolCallId: 'b');
+      expect(await b, const PermissionSelected('allow'));
+      expect(runtime.pendingToolCallId, 'a');
+      await runtime.answerPermission(approve: true);
+      expect(await a, const PermissionSelected('allow'));
+    });
+
+    test('a withdrawal of the queued ask leaves the shown one open', () async {
+      final withdraw = Completer<void>();
+      final a = ask('a');
+      final b = ask('b', withdrawn: withdraw.future);
+      await pump();
+      final shown = host.statuses.length;
+      withdraw.complete();
+      // The peer ends a withdrawn call as cancelled.
+      await expectLater(b, throwsA(isA<AcpRpcError>()));
+      await pump();
+      expect(runtime.pendingToolCallId, 'a');
+      expect(host.statuses.length, shown);
+      await runtime.answerPermission(approve: true);
+      expect(await a, const PermissionSelected('allow'));
+      expect(runtime.hasOpenPermission, isFalse);
+    });
+
+    test(
+      'an auto-answered read beside an open ask does not disturb it',
+      () async {
+        final a = ask('a');
+        await pump();
+        final shown = host.statuses.length;
+        expect(
+          await ask('r', kind: ToolKind.read),
+          const PermissionSelected('allow'),
+        );
+        expect(runtime.pendingToolCallId, 'a');
+        expect(host.statuses.length, shown);
+        await runtime.answerPermission(approve: true);
+        expect(await a, const PermissionSelected('allow'));
+      },
+    );
+
+    test('a cancel answers every open ask', () async {
+      final a = ask('a');
+      final b = ask('b');
+      await pump();
+      runtime.cancel();
+      expect(await a, isA<PermissionCancelled>());
+      expect(await b, isA<PermissionCancelled>());
+      expect(runtime.hasOpenPermission, isFalse);
+      await runtime.awaitTurn();
+    });
   });
 
   test('under autoRun an allow_once option is answered at once', () async {

@@ -236,7 +236,10 @@ class AcpSessionRuntime implements ScreenSession {
   String? _agentSessionId;
   Future<StopReason>? _turn;
   Completer<StopReason?>? _turnSettled;
-  _PendingPermission? _pending;
+
+  /// Every request the agent has open, oldest first; the head is the ask shown.
+  final _pendings = <_PendingPermission>[];
+  _PendingPermission? get _pending => _pendings.firstOrNull;
   final _stderr = <String>[];
   var _stderrLength = 0;
   int? _exitCode;
@@ -756,13 +759,15 @@ class AcpSessionRuntime implements ScreenSession {
     String? toolCallId,
     String? optionId,
   }) async {
-    final pending = _pending;
-    if (pending == null) {
+    if (_pending == null) {
       throw const SessionPromptRefusal(
         'this session has no permission request open to answer',
       );
     }
-    if (toolCallId != null && toolCallId != pending.call.toolCallId) {
+    final pending = toolCallId == null
+        ? _pending!
+        : _pendings.where((p) => p.call.toolCallId == toolCallId).firstOrNull;
+    if (pending == null) {
       throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
     }
     final PermissionOption? option;
@@ -793,12 +798,13 @@ class AcpSessionRuntime implements ScreenSession {
       );
     }
     if (approve) await _holdForEdit(pending.call);
-    if (!identical(_pending, pending)) {
+    if (!_pendings.contains(pending)) {
       throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
     }
-    _pending = null;
     pending.completer.complete(PermissionOutcome.selected(option.optionId));
-    _publish(AgentActivityStatus.working, evidence: [pending.title]);
+    if (!_drop(pending)) {
+      _publish(AgentActivityStatus.working, evidence: [pending.title]);
+    }
     return AcpPermissionAnswer(
       answered: option.name,
       effect:
@@ -818,14 +824,16 @@ class AcpSessionRuntime implements ScreenSession {
     required String toolUseId,
     required List<AgentQuestionAnswer> answers,
   }) async {
-    final pending = _pending;
-    final question = pending?.question;
-    if (pending == null || question == null) {
+    if (!_pendings.any((p) => p.question != null)) {
       throw const SessionPromptRefusal(
         'this session has no question open to answer',
       );
     }
-    if (question.toolUseId != toolUseId) {
+    final pending = _pendings
+        .where((p) => p.question?.toolUseId == toolUseId)
+        .firstOrNull;
+    final question = pending?.question;
+    if (pending == null || question == null) {
       throw const SessionPromptRefusal(kPromptChangedRefusal, stale: true);
     }
     final asked = question.questions;
@@ -888,7 +896,6 @@ class AcpSessionRuntime implements ScreenSession {
         '$agentName offered no way to answer "${pending.title}"',
       );
     }
-    _pending = null;
     pending.completer.complete(
       PermissionOutcome.selected(
         send.optionId,
@@ -897,7 +904,9 @@ class AcpSessionRuntime implements ScreenSession {
         },
       ),
     );
-    _publish(AgentActivityStatus.working, evidence: [pending.title]);
+    if (!_drop(pending)) {
+      _publish(AgentActivityStatus.working, evidence: [pending.title]);
+    }
     return AcpPermissionAnswer(
       answered: said.values.join('; '),
       effect: 'Answered "${pending.title}".',
@@ -1086,16 +1095,19 @@ class AcpSessionRuntime implements ScreenSession {
       return;
     }
     if (update is UnknownUpdate && update.kind == AcpExtensions.askWithdrawn) {
-      final pending = _pending;
-      if (pending != null &&
-          pending.call.toolCallId == update.raw['toolCallId']) {
-        _resolvePending(const PermissionOutcome.cancelled());
-        _publish(
-          _turn != null || _agentWorking
-              ? AgentActivityStatus.working
-              : AgentActivityStatus.idle,
-          evidence: [pending.title],
-        );
+      final pending = _pendings
+          .where((p) => p.call.toolCallId == update.raw['toolCallId'])
+          .firstOrNull;
+      if (pending != null) {
+        pending.completer.complete(const PermissionOutcome.cancelled());
+        if (!_drop(pending)) {
+          _publish(
+            _turn != null || _agentWorking
+                ? AgentActivityStatus.working
+                : AgentActivityStatus.idle,
+            evidence: [pending.title],
+          );
+        }
       }
       return;
     }
@@ -1545,25 +1557,35 @@ class AcpSessionRuntime implements ScreenSession {
         return PermissionOutcome.selected(unasked.optionId);
       }
     }
-    final pending = _PendingPermission(call, options, title, question);
-    _pending = pending;
-    final now = _now();
+    final pending = _PendingPermission(call, options, title, question, _now());
+    _pendings.add(pending);
+    // One asked while another is open waits its turn behind it.
+    if (identical(_pending, pending)) _publishAsk(pending);
+    try {
+      return await pending.completer.future;
+    } finally {
+      if (_pendings.contains(pending)) _drop(pending);
+    }
+  }
+
+  void _publishAsk(_PendingPermission pending) {
+    final call = pending.call;
     final input = call.rawInput;
     _publish(
       AgentActivityStatus.awaitingApproval,
-      waiting: question == null
+      waiting: pending.question == null
           ? AgentWaitKind.approval
           : AgentWaitKind.question,
-      question: question,
-      evidence: [title],
+      question: pending.question,
+      evidence: [pending.title],
       toolAsk: AgentToolAsk(
-        toolName: _toolNameOf(call) ?? title,
+        toolName: _toolNameOf(call) ?? pending.title,
         input: input is Map ? pruneToolInput(input) : const {},
-        at: now,
+        at: pending.at,
         toolUseId: call.toolCallId,
         cwd: workingDirectory,
         options: [
-          for (final option in options)
+          for (final option in pending.options)
             AgentToolAskOption(
               id: option.optionId,
               name: option.name,
@@ -1574,13 +1596,19 @@ class AcpSessionRuntime implements ScreenSession {
         reason: _askNote(call, 'reason'),
         asker: _askNote(call, 'asker'),
       ),
-      waitingSince: now,
+      waitingSince: pending.at,
     );
-    try {
-      return await pending.completer.future;
-    } finally {
-      if (identical(_pending, pending)) _pending = null;
-    }
+  }
+
+  /// Takes [pending] off the line; true when another is still open, and
+  /// then published as the ask should [pending] have been the one shown.
+  bool _drop(_PendingPermission pending) {
+    final shown = identical(_pending, pending);
+    _pendings.remove(pending);
+    final next = _pending;
+    if (next == null) return false;
+    if (shown) _publishAsk(next);
+    return true;
   }
 
   /// What a Karmashala bridge says of why it asks about [call]
@@ -1621,20 +1649,26 @@ class AcpSessionRuntime implements ScreenSession {
     });
   }
 
+  /// Answers every open request with [outcome].
   void _resolvePending(PermissionOutcome outcome) {
-    final pending = _pending;
-    if (pending == null) return;
-    _pending = null;
-    if (!pending.completer.isCompleted) pending.completer.complete(outcome);
+    final open = [..._pendings];
+    _pendings.clear();
+    for (final pending in open) {
+      if (!pending.completer.isCompleted) pending.completer.complete(outcome);
+    }
   }
 
   /// The agent withdrew its request about [call] (it was settled elsewhere,
-  /// or the turn moved on): nothing is left to answer, so the card goes.
+  /// or the turn moved on): nothing is left to answer, so its card goes.
   void _permissionWithdrawn(ToolCallUpdate call) {
-    final pending = _pending;
-    if (pending == null || pending.call.toolCallId != call.toolCallId) return;
-    _resolvePending(const PermissionOutcome.cancelled());
-    _publish(AgentActivityStatus.working, evidence: [pending.title]);
+    final pending = _pendings
+        .where((p) => p.call.toolCallId == call.toolCallId)
+        .firstOrNull;
+    if (pending == null) return;
+    pending.completer.complete(const PermissionOutcome.cancelled());
+    if (!_drop(pending)) {
+      _publish(AgentActivityStatus.working, evidence: [pending.title]);
+    }
   }
 
   PermissionOption? _optionFor(
@@ -1884,11 +1918,18 @@ class AcpSessionRuntime implements ScreenSession {
 }
 
 final class _PendingPermission {
-  _PendingPermission(this.call, this.options, this.title, this.question);
+  _PendingPermission(
+    this.call,
+    this.options,
+    this.title,
+    this.question,
+    this.at,
+  );
 
   final ToolCallUpdate call;
   final List<PermissionOption> options;
   final String title;
+  final DateTime at;
 
   /// The questions this request asks, when it is a question.
   final AgentQuestionSet? question;
