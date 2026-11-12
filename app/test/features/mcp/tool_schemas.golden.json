@@ -1909,6 +1909,13 @@
             "type": "string"
           },
           "detached": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null when the checkout was not attached."
+          },
+          "note": {
             "type": "string"
           },
           "attached": {

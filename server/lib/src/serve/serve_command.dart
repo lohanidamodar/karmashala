@@ -861,6 +861,7 @@ Future<int> _serve(
   final grantRows = SessionDao(database);
   final grantCheckpoints = CheckpointDao(database);
   final slotWaits = SlotWaits();
+  data.cancelSlotWait = slotWaits.cancel;
   final worktreeTools = WorktreeToolSet(
     tools,
     reach: reach,

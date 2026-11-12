@@ -62,7 +62,7 @@ class ChildTurnWait {
     WaitDeadline? deadline,
     this.recheck = const Duration(seconds: 2),
     this.backgroundCap = kBackgroundQuietCap,
-  }) : _deadline = deadline ?? ((bound) => Future<void>.delayed(bound));
+  }) : _deadline = deadline;
 
   /// [kBackgroundQuietCap] but in tests.
   final Duration backgroundCap;
@@ -77,7 +77,7 @@ class ChildTurnWait {
   /// How often an agent that never reported working is looked at again, for
   /// one whose status never moves or that finished before the wait began.
   final Duration recheck;
-  final WaitDeadline _deadline;
+  final WaitDeadline? _deadline;
 
   Future<ChildTurnOutcome> firstTurn(
     String sessionId, {
@@ -199,17 +199,18 @@ class ChildTurnWait {
         );
       }),
     );
-    if (bound != null) {
-      unawaited(
-        _deadline(bound).then((_) {
-          settle(const ChildTurnOutcome(ChildTurnState.running));
-        }),
-      );
-    }
+    final disarm = bound == null
+        ? null
+        : armWaitDeadline(
+            _deadline,
+            bound,
+            () => settle(const ChildTurnOutcome(ChildTurnState.running)),
+          );
     unawaited(consider(status.statusOf(sessionId)?.report));
     try {
       return await settled.future;
     } finally {
+      disarm?.call();
       quietBackground?.cancel();
       again.cancel();
       await changes.cancel();

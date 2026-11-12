@@ -170,12 +170,19 @@ class SessionCheckoutToolSet extends ServerToolSet {
       );
     }
     return runTool(() async {
+      final wasAttached = SessionRepositoryDao(
+        _context.database,
+      ).linksFor(session.id).any((link) => link.repositoryId == checkout.id);
       final links = _context.write(
         SessionLinkRemove(sessionId: session.id, repositoryId: checkout.id),
       );
       return <String, Object?>{
         'sessionId': session.id,
-        'detached': checkout.id,
+        'detached': wasAttached ? checkout.id : null,
+        if (!wasAttached)
+          'note':
+              '${checkout.name} was not attached to this session, so nothing '
+              'changed.',
         'attached': [
           for (final link in orderedLinks(links))
             if (RepositoryDao(_context.database).getById(link.repositoryId)
@@ -291,7 +298,11 @@ const List<Map<String, Object?>> sessionCheckoutToolSchemas = [
       'type': 'object',
       'properties': {
         'sessionId': {'type': 'string'},
-        'detached': {'type': 'string'},
+        'detached': {
+          'type': ['string', 'null'],
+          'description': 'Null when the checkout was not attached.',
+        },
+        'note': {'type': 'string'},
         'attached': {
           'type': 'array',
           'items': {'type': 'object'},

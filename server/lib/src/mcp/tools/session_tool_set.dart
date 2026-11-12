@@ -108,8 +108,8 @@ class SessionToolSet extends ServerToolSet {
     final String sessionId;
     try {
       sessionId = targetSessionOf(arguments, callerSessionId);
-    } on ArgumentError catch (error) {
-      return Future.error(error);
+    } on Object catch (error, stack) {
+      return Future.error(error, stack);
     }
     // Held: one of the server's own PTYs, or its copy of an SSH box session.
     // A held session is never resumed — its agent is still live.
@@ -206,10 +206,10 @@ class SessionToolSet extends ServerToolSet {
           final wait = arguments['wait'] == true;
           final answer = await _send(
             sessionId,
-            (arguments['text'] as String?) ?? '',
+            argumentOf<String>(arguments, 'text') ?? '',
             callerSessionId: callerSessionId,
             wait: wait,
-            timeoutSeconds: arguments['timeoutSeconds'] as num?,
+            timeoutSeconds: argumentOf<num>(arguments, 'timeoutSeconds'),
             held: held,
           );
           // A send that waited answered the turn itself: nothing to push.
@@ -220,20 +220,21 @@ class SessionToolSet extends ServerToolSet {
         return runTool(
           () => _wait(
             sessionId,
-            timeoutSeconds: arguments['timeoutSeconds'] as num?,
+            timeoutSeconds: argumentOf<num>(arguments, 'timeoutSeconds'),
           ),
         );
       case 'session_transcript':
         return runTool(
           () => _transcript(
             sessionId,
-            (arguments['limit'] as num?)?.round() ?? 20,
+            argumentOf<num>(arguments, 'limit')?.round() ?? 20,
             held: held,
           ),
         );
       case 'session_rename':
         return runTool(
-          () => _rename(sessionId, (arguments['title'] as String?) ?? ''),
+          () =>
+              _rename(sessionId, argumentOf<String>(arguments, 'title') ?? ''),
         );
       case 'session_end':
         return runTool(() async {

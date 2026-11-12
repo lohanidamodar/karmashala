@@ -21,6 +21,27 @@ class _Here extends ServerToolSet {
   ) => tool == 'here' ? Future.value('answered here') : null;
 }
 
+/// A tool that casts its argument unworded, once in its future and once
+/// before it.
+class _Casts extends ServerToolSet {
+  @override
+  List<Map<String, Object?>> get schemas => const [
+    {'name': 'later'},
+    {'name': 'at_once'},
+  ];
+
+  @override
+  Future<Object?>? call(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  ) => switch (tool) {
+    'later' => runTool(() => (arguments['n'] as String).length),
+    'at_once' => Future.value((arguments['n'] as String).length),
+    _ => null,
+  };
+}
+
 /// Found live on 2976ec4c: the desktop app killed and reopened, and every
 /// tool the server forwarded hung until the caller timed out. Since slice 5b
 /// (protocol 28) nothing agent-facing is forwarded to an app at all: every
@@ -52,5 +73,48 @@ void main() {
       ),
     );
     expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+  });
+
+  test('an argument of the wrong type is refused in words, not as a cast, '
+      'thrown early or late', () async {
+    final relay = McpToolRelay(tools: ServerTools([_Casts()]));
+    for (final tool in ['later', 'at_once']) {
+      await expectLater(
+        relay.call(tool, const {'n': 7}, null),
+        throwsA(
+          isA<McpToolRelayFailure>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('wrong type'), isNot(contains('subtype'))),
+          ),
+        ),
+        reason: tool,
+      );
+    }
+  });
+
+  test('a typed argument is refused in words', () {
+    expect(argumentOf<String>(const {'s': 'x'}, 's'), 'x');
+    expect(argumentOf<num>(const {}, 'n'), isNull);
+    expect(
+      () => argumentOf<num>(const {'n': 'ten'}, 'n'),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => e.message,
+          'message',
+          'n must be a number, not a string.',
+        ),
+      ),
+    );
+    expect(
+      () => targetSessionOf(const {'sessionId': 7}, 'me'),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => e.message,
+          'message',
+          'sessionId must be a string, not a number.',
+        ),
+      ),
+    );
   });
 }

@@ -90,8 +90,13 @@ class McpToolRelay {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
-    final here = tools.call(tool, arguments, callerSessionId);
-    if (here != null) return here;
+    final Future<Object?>? here;
+    try {
+      here = tools.call(tool, arguments, callerSessionId);
+    } on Object catch (error, stack) {
+      return _worded(tool, Future.error(error, stack));
+    }
+    if (here != null) return _worded(tool, here);
     return Future.error(
       McpToolRelayFailure(
         tools.serves(tool)
@@ -100,4 +105,14 @@ class McpToolRelay {
       ),
     );
   }
+
+  /// A cast a tool did not word itself is refused in words, not as a cast.
+  static Future<Object?> _worded(String tool, Future<Object?> call) =>
+      call.catchError(
+        (Object _) => throw McpToolRelayFailure(
+          '$tool was given an argument of the wrong type. Check each one '
+          'against the tool\'s inputSchema and call it again.',
+        ),
+        test: (error) => error is TypeError,
+      );
 }

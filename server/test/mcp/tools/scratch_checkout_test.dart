@@ -469,12 +469,21 @@ void main() {
         'repositoryId': b.repositories.single.id,
       }, caller: 's1');
       expect(answer.error, isNull);
+      expect((answer.value! as Map)['detached'], b.repositories.single.id);
       expect(
         ((answer.value! as Map)['attached'] as List).map(
           (e) => (e as Map)['repositoryId'],
         ),
         [scratch.id],
       );
+
+      final again = await call('session_checkout_detach', {
+        'repositoryId': b.repositories.single.id,
+      }, caller: 's1');
+      expect(again.error, isNull);
+      final said = again.value! as Map;
+      expect(said['detached'], isNull);
+      expect(said['note'], contains('nothing changed'));
     });
 
     test('without a calling session, sessionId is required', () async {

@@ -89,7 +89,12 @@ class DataService {
     _snippets = SnippetsHandler(database, _now);
     _quickAccess = QuickAccessHandler(database);
     _pairings = PairingsHandler(database);
-    _sessions = SessionsHandler(database, _now, runs: runsSession);
+    _sessions = SessionsHandler(
+      database,
+      _now,
+      runs: runsSession,
+      outOfLine: (id) => cancelSlotWait(id),
+    );
     _hosts = HostsHandler(
       database,
       _now,
@@ -231,6 +236,12 @@ class DataService {
   Set<String> Function() liveAcpSessions = _noLiveAcpSessions;
 
   static Set<String> _noLiveAcpSessions() => const {};
+
+  /// Takes a session's launch out of the slot line, false when it waits in
+  /// none; set by `serve`. An archived launch is taken out.
+  bool Function(String sessionId) cancelSlotWait = _noSlotWait;
+
+  static bool _noSlotWait(String _) => false;
   late final NotesHandler _notes;
   late final TodosHandler _todos;
   late final PreferencesHandler _preferences;

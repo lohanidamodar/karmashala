@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notes/karmashala_notes.dart' show recordIdProblem;
 import 'package:karmashala_projects/store.dart';
@@ -18,24 +20,32 @@ import 'package:agent_cli/read.dart';
 /// ([runsSession]): a client's status for one is ignored, not refused, so the
 /// rest of its change still lands.
 class SessionsHandler {
-  SessionsHandler(this._db, this._now, {bool Function(String sessionId)? runs})
-    : _runs = runs ?? _never,
-      _sessions = SessionDao(_db),
-      _links = SessionRepositoryDao(_db),
-      _events = SessionEventDao(_db),
-      _decisions = DecisionRecordDao(_db),
-      _recaps = SessionRecapDao(_db),
-      _relays = SessionRelayDao(_db),
-      _followUps = FollowUpDao(_db),
-      _imported = ImportedSessionDao(_db),
-      _repositories = RepositoryDao(_db),
-      _projects = ProjectDao(_db);
+  SessionsHandler(
+    this._db,
+    this._now, {
+    bool Function(String sessionId)? runs,
+    void Function(String sessionId)? outOfLine,
+  }) : _runs = runs ?? _never,
+       _outOfLine = outOfLine,
+       _sessions = SessionDao(_db),
+       _links = SessionRepositoryDao(_db),
+       _events = SessionEventDao(_db),
+       _decisions = DecisionRecordDao(_db),
+       _recaps = SessionRecapDao(_db),
+       _relays = SessionRelayDao(_db),
+       _followUps = FollowUpDao(_db),
+       _imported = ImportedSessionDao(_db),
+       _repositories = RepositoryDao(_db),
+       _projects = ProjectDao(_db);
 
   static bool _never(String _) => false;
 
   final AppDatabase _db;
   final DateTime Function() _now;
   final bool Function(String sessionId) _runs;
+
+  /// Takes an archived launch out of the slot line, once the write is done.
+  final void Function(String sessionId)? _outOfLine;
   final SessionDao _sessions;
   final SessionRepositoryDao _links;
   final SessionEventDao _events;
@@ -482,6 +492,12 @@ class SessionsHandler {
     _db.transaction(() => plan.changed.forEach(_sessions.write));
     for (final row in plan.changed) {
       changes.add(SessionRowChanged(_session(row.id)));
+      // A launch still waiting for a slot would start an archived session.
+      if (archive && row.status == SessionStatus.created) {
+        if (_outOfLine case final outOfLine?) {
+          scheduleMicrotask(() => outOfLine(row.id));
+        }
+      }
     }
     return SessionsArchived(
       changed: [for (final row in plan.changed) row.id],

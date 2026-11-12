@@ -146,15 +146,29 @@ void main() {
       expect(told, hasLength(1));
     });
 
+    test('a launch waiting for a slot leaves the line when archived', () async {
+      final outOfLine = <String>[];
+      service.cancelSlotWait = (id) {
+        outOfLine.add(id);
+        return true;
+      };
+      add('queued', status: SessionStatus.created);
+      add('done');
+
+      app.handle(const SessionsArchive(['queued', 'done']));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(rowOf('queued').isArchived, isTrue);
+      expect(outOfLine, ['queued']);
+    });
+
     test('an archived or unknown id is skipped quietly, and nothing to do '
         'tells nothing', () {
       add('s1');
       app.handle(const SessionsArchive(['s1']));
       told.clear();
 
-      final result = app
-          .handle(const SessionsArchive(['s1', 'never']))
-          .value;
+      final result = app.handle(const SessionsArchive(['s1', 'never'])).value;
 
       expect(result.changed, isEmpty);
       expect(result.missing, ['never']);

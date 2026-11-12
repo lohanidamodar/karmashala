@@ -12,6 +12,19 @@ import 'daemon_agent_status.dart';
 /// How a wait's bound is served; a test bounds a wait by an event it emits.
 typedef WaitDeadline = Future<void> Function(Duration bound);
 
+/// Calls [onTimeout] once [bound] has passed, by [deadline] when one is given,
+/// until the answer is called: a settled wait keeps no timer for its bound.
+void Function() armWaitDeadline(
+  WaitDeadline? deadline,
+  Duration bound,
+  void Function() onTimeout,
+) {
+  if (deadline == null) return Timer(bound, onTimeout).cancel;
+  var armed = true;
+  unawaited(deadline(bound).then((_) => armed ? onTimeout() : null));
+  return () => armed = false;
+}
+
 /// **Block until a session this host holds settles** — `session_wait`, and
 /// the wait after `session_send`, answered by the server from the status it
 /// keeps and the process it runs, app or no app. The same states and words
@@ -22,11 +35,11 @@ class HostedSessionWait {
     DateTime Function()? clock,
     WaitDeadline? deadline,
   }) : _now = clock ?? (() => DateTime.now().toUtc()),
-       _deadline = deadline ?? ((bound) => Future<void>.delayed(bound));
+       _deadline = deadline;
 
   final DaemonAgentStatus status;
   final DateTime Function() _now;
-  final WaitDeadline _deadline;
+  final WaitDeadline? _deadline;
 
   /// **What [sessionId] is blocked on right now**, or null: an approval
   /// prompt or a question on its screen. An agent at its own input is
@@ -188,22 +201,23 @@ class HostedSessionWait {
         );
       }),
     );
-    unawaited(
-      _deadline(bound ?? kSessionWaitDefaultBound).then((_) {
-        settle(
-          _outcome(
-            SessionWaitState.timeout,
-            opening,
-            changed: changed,
-            transcriptMoved: transcriptMoved,
-            inputSent: inputSent,
-          ),
-        );
-      }),
+    final disarm = armWaitDeadline(
+      _deadline,
+      bound ?? kSessionWaitDefaultBound,
+      () => settle(
+        _outcome(
+          SessionWaitState.timeout,
+          opening,
+          changed: changed,
+          transcriptMoved: transcriptMoved,
+          inputSent: inputSent,
+        ),
+      ),
     );
     try {
       return await completer.future;
     } finally {
+      disarm();
       await statuses.cancel();
     }
   }

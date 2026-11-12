@@ -29,7 +29,7 @@ abstract class ServerToolSet {
 /// The session a call is aimed at: an explicit `sessionId` is a *target*,
 /// not a credential; naming nothing means the caller. The app's words.
 String targetSessionOf(Map<String, dynamic> arguments, String? caller) {
-  final named = arguments['sessionId'] as String?;
+  final named = argumentOf<String>(arguments, 'sessionId');
   if (named != null && named.trim().isNotEmpty) return named.trim();
   if (caller != null && caller.isNotEmpty) return caller;
   throw ArgumentError(
@@ -38,6 +38,33 @@ String targetSessionOf(Map<String, dynamic> arguments, String? caller) {
     'list_sessions has the ids.',
   );
 }
+
+/// The argument [name] as a [T], or null when it is absent; one of another
+/// type is refused in words, not as a cast failure.
+T? argumentOf<T extends Object>(Map<String, dynamic> arguments, String name) {
+  final value = arguments[name];
+  if (value == null || value is T) return value as T?;
+  throw ArgumentError('$name must be ${_kind(T)}, not ${_kindOf(value)}.');
+}
+
+String _kind(Type type) => switch (type) {
+  const (String) => 'a string',
+  const (int) => 'a whole number',
+  const (num) || const (double) => 'a number',
+  const (bool) => 'true or false',
+  const (List) => 'a list',
+  const (Map) => 'an object',
+  _ => 'a $type',
+};
+
+String _kindOf(Object value) => switch (value) {
+  String() => 'a string',
+  num() => 'a number',
+  bool() => 'true or false',
+  List() => 'a list',
+  Map() => 'an object',
+  _ => 'a ${value.runtimeType}',
+};
 
 /// [body] run now, as a future: a synchronous throw becomes the failed
 /// future the MCP server turns into the agent's `Error:`.
