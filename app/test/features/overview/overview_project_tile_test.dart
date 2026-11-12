@@ -289,6 +289,149 @@ void main() {
     });
   });
 
+  group('more ways to group', () {
+    final start = MissionFixture.now.subtract(const Duration(hours: 3));
+
+    OverviewBoard board(
+      MissionFixture fixture,
+      OverviewGroupBy by, {
+      Set<String> fresh = const {},
+    }) => buildOverviewBoard(
+      fixture.groups,
+      facts: fixture.facts,
+      filter: const OverviewFilter(),
+      groupBy: by,
+      startOfToday: start,
+      memo: BoardOrderMemo(),
+      fresh: fresh,
+    );
+
+    List<String> ids(OverviewLane lane) => [
+      for (final column in BoardColumn.values)
+        for (final card in [
+          ...lane.cards(column),
+          if (column == BoardColumn.done) ...lane.doneOlder,
+        ])
+          card.id,
+    ]..sort();
+
+    test('Status files a project whole, under the most urgent of its '
+        'sessions', () {
+      final fixture = MissionFixture(
+        sessions: [
+          s('ks-run', 'Runs', state: AgentState.working),
+          s('ks-ready', 'Ready', state: AgentState.ready),
+          s('beej-new', 'New', project: 'p-beej', state: AgentState.ready),
+          s('web-seen', 'Seen', project: 'p-web', state: AgentState.ready),
+          s('store-ask', 'Ask', project: 'p-store', state: AgentState.needsYou),
+        ],
+      );
+      final lanes = board(
+        fixture,
+        OverviewGroupBy.status,
+        fresh: {'beej-new'},
+      ).lanes;
+      expect(
+        [for (final lane in lanes) lane.label],
+        ['Needs you', 'Running', 'New', 'To go back to'],
+      );
+      expect(ids(lanes[0]), ['store-ask']);
+      expect(ids(lanes[1]), ['ks-ready', 'ks-run']);
+      expect(ids(lanes[2]), ['beej-new']);
+      expect(ids(lanes[3]), ['web-seen']);
+    });
+
+    test('Last active files a project by its newest session', () {
+      final fixture = MissionFixture(
+        sessions: [
+          s('ks-now', 'Now', state: AgentState.working, age: 5),
+          s('ks-old', 'Old', age: 60 * 24 * 12),
+          s('beej-y', 'Yesterday', project: 'p-beej', age: 60 * 10),
+          s('web-w', 'Week', project: 'p-web', age: 60 * 24 * 3),
+          s('docs-o', 'Older', project: 'p-docs', age: 60 * 24 * 12),
+        ],
+      );
+      final lanes = board(fixture, OverviewGroupBy.lastActive).lanes;
+      expect(
+        [for (final lane in lanes) lane.label],
+        ['Today', 'Yesterday', 'This week', 'Older'],
+      );
+      expect(ids(lanes[0]), ['ks-now', 'ks-old']);
+      expect(ids(lanes[1]), ['beej-y']);
+      expect(ids(lanes[2]), ['web-w']);
+      expect(ids(lanes[3]), ['docs-o']);
+    });
+
+    test('Agent files a family whole, under its first session\'s agent', () {
+      final fixture = MissionFixture(
+        sessions: [
+          s('root', 'Root', state: AgentState.working),
+          (
+            id: 'kid',
+            title: 'Kid',
+            project: 'p-ks',
+            machine: 'windows',
+            agent: AgentIds.codex,
+            state: AgentState.working,
+            age: const Duration(minutes: 2),
+            parent: 'root',
+            report: null,
+          ),
+          s('other', 'Other', agent: AgentIds.codex, state: AgentState.ready),
+        ],
+      );
+      final lanes = board(fixture, OverviewGroupBy.agent).lanes;
+      expect(
+        {for (final lane in lanes) lane.key: ids(lane)},
+        {
+          AgentIds.claudeCode: ['kid', 'root'],
+          AgentIds.codex: ['other'],
+        },
+      );
+    });
+
+    testWidgets('Group by, beside the group chips, lists them and changes '
+        'the board', (tester) async {
+      final c = await pumpMission(
+        tester,
+        fixture: MissionFixture.full(),
+        prefsDir: dir,
+        lines: true,
+      );
+      expect(find.text('Group: None'), findsOneWidget);
+      await tester.tap(byKey('overview-group-by'));
+      await settleMission(tester);
+      // No context exists in this fixture, so Context is not offered.
+      expect(byKey('overview-group-by:context'), findsNothing);
+      for (final by in [
+        'machine',
+        'status',
+        'agent',
+        'lastActive',
+        'project',
+      ]) {
+        expect(byKey('overview-group-by:$by'), findsOneWidget, reason: by);
+      }
+      await tester.tap(byKey('overview-group-by:status'));
+      await settleMission(tester);
+
+      expect(c.read(overviewPrefsProvider).groupBy, OverviewGroupBy.status);
+      expect(find.text('Group: Status'), findsOneWidget);
+      Finder section(String key) => find.byWidgetPredicate(
+        (w) => w is OverviewLaneHeader && w.lane.key == key,
+      );
+      expect(section('needsYou'), findsOneWidget);
+      expect(section('running'), findsOneWidget);
+      // karmashala has an ask, so its whole tile is under Needs you.
+      expect(
+        tester.getTopLeft(tile('p-ks')).dy,
+        lessThan(tester.getTopLeft(section('running')).dy),
+      );
+      expect(tester.takeException(), isNull);
+      await unmountMission(tester);
+    });
+  });
+
   test('finished sessions are lines unless this device asks for cards, and '
       'the choice is kept', () {
     final c = ProviderContainer(

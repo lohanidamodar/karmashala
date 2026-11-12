@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import '../../../core/util/clock_provider.dart';
+import '../../explorer/application/agent_state_providers.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../sessions/application/session_status_providers.dart';
 import 'overview_board.dart';
@@ -120,32 +121,16 @@ final overviewShownForestProvider = Provider.autoDispose<OverviewForest>((ref) {
   );
 });
 
-/// What a session is to the owner right now.
-enum OverviewStatus {
-  needsYou('Needs you'),
-  running('Running'),
-
-  /// Finished, and not looked at since.
-  fresh('New'),
-
-  /// Finished and seen: one the owner means to go back to.
-  seen('To go back to');
-
-  const OverviewStatus(this.label);
-
-  final String label;
-}
-
 /// [card]'s status: what it does now, and for one that finished, whether
 /// the owner has looked since.
 OverviewStatus overviewStatusWith(OverviewWatch watch, OverviewCard card) =>
     switch (card.column) {
       BoardColumn.needsYou => OverviewStatus.needsYou,
       BoardColumn.working => OverviewStatus.running,
-      BoardColumn.ready || BoardColumn.done =>
-        overviewNewCountWith(watch, card) > 0
-            ? OverviewStatus.fresh
-            : OverviewStatus.seen,
+      BoardColumn.ready || BoardColumn.done => overviewStatusOf(
+        card.state,
+        fresh: overviewNewCountWith(watch, card) > 0,
+      ),
     };
 
 /// Whether a finished, seen family is drawn as one line: the owner's choice
@@ -245,3 +230,21 @@ final overviewOpenForestProvider = Provider.autoDispose<OverviewForest>((ref) {
     },
   );
 });
+
+/// The finished sessions that are new to the owner, by id: what Status
+/// files a project under New for. Read only while the board groups by
+/// Status, since it asks after every finished session.
+final overviewFreshIdsProvider = Provider.autoDispose<Set<String>>(
+  (ref) => {
+    for (final group in ref.watch(agentStateGroupsProvider))
+      // One that ended is never new.
+      if (group.state == AgentState.ready)
+        for (final entry in group.entries)
+          if (overviewNewCountWith(
+                ref.watch,
+                OverviewCard(entry: entry, state: group.state),
+              ) >
+              0)
+            entry.id,
+  },
+);

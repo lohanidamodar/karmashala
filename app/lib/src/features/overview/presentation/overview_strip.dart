@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart' show EyebrowLabel;
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -1027,6 +1028,61 @@ class OverviewSearchResults extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: Insets.xs),
           children: rows,
         ),
+      ),
+    );
+  }
+}
+
+/// The groupings the board offers now: Context only where a context exists.
+List<OverviewGroupBy> overviewGroupChoices(OverviewFacts facts) => [
+  for (final by in OverviewGroupBy.values)
+    if (by != OverviewGroupBy.context || facts.contexts.isNotEmpty) by,
+];
+
+/// The glyph a grouping is listed with.
+IconData overviewGroupIcon(OverviewGroupBy by) => switch (by) {
+  OverviewGroupBy.context => AppIcons.folder,
+  OverviewGroupBy.machine => AppIcons.terminal,
+  OverviewGroupBy.status => AppIcons.checkCircle,
+  OverviewGroupBy.agent => AppIcons.robot,
+  OverviewGroupBy.lastActive => AppIcons.clockCounterClockwise,
+  OverviewGroupBy.project => AppIcons.squaresFour,
+};
+
+/// **Group by**, on the strip: says how the project tiles are grouped now,
+/// and opens the list to change it. G opens it from the keyboard.
+class OverviewGroupByButton extends ConsumerWidget {
+  const OverviewGroupByButton({super.key});
+
+  Future<void> _pick(BuildContext context, WidgetRef ref) async {
+    final now = ref.read(overviewGroupByProvider);
+    final picked = await showDesktopMenuUnder<OverviewGroupBy>(context, [
+      for (final by in overviewGroupChoices(ref.read(overviewFactsProvider)))
+        DesktopMenuItem(
+          key: ValueKey('overview-group-by:${by.name}'),
+          value: by,
+          label: by.label,
+          icon: overviewGroupIcon(by),
+          selected: by == now,
+        ),
+    ]);
+    if (picked != null) {
+      ref.read(overviewPrefsProvider.notifier).setGroupBy(picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final by = ref.watch(overviewGroupByProvider);
+    ref.listen(overviewGroupMenuAsksProvider, (_, _) => _pick(context, ref));
+    return Tooltip(
+      message: 'Group the projects (G)',
+      child: OverviewStripToggle(
+        key: const ValueKey('overview-group-by'),
+        label: 'Group: ${by.label}',
+        icon: AppIcons.caretDown,
+        selected: false,
+        onTap: () => _pick(context, ref),
       ),
     );
   }

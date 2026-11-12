@@ -17,6 +17,7 @@ import '../application/overview_drawer.dart' show overviewMoreProvider;
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
+import 'overview_strip.dart' show overviewGroupChoices;
 
 /// The filters that narrow mission control right now, as chips say them.
 final overviewActiveFiltersProvider =
@@ -178,22 +179,21 @@ class OverviewFilterPanel extends ConsumerWidget {
             ),
           field(
             'Group by',
-            CompactSegmented<OverviewGroupBy>(
+            // Chips, not a segmented row: six choices wrap on a phone.
+            Wrap(
               key: const ValueKey('overview-filter-group'),
-              segments: [
-                for (final by in OverviewGroupBy.values)
-                  if (by != OverviewGroupBy.context ||
-                      facts.contexts.isNotEmpty)
-                    ButtonSegment(
-                      value: by,
-                      label: Text(
-                        by.label,
-                        key: ValueKey('group-by:${by.name}'),
-                      ),
-                    ),
+              spacing: Insets.sm,
+              runSpacing: Insets.xs,
+              children: [
+                for (final by in overviewGroupChoices(facts))
+                  ChoiceChip(
+                    key: ValueKey('group-by:${by.name}'),
+                    label: Text(by.label),
+                    selected: ref.watch(overviewGroupByProvider) == by,
+                    visualDensity: UiDensity.of(context).controlDensity,
+                    onSelected: (_) => controller.setGroupBy(by),
+                  ),
               ],
-              selected: ref.watch(overviewGroupByProvider),
-              onChanged: controller.setGroupBy,
             ),
           ),
           SwitchListTile(

@@ -12,6 +12,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../agents/data/agents_data.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
@@ -28,6 +29,7 @@ import '../../workspaces/data/workspace_data.dart';
 import 'overview_board.dart';
 import 'overview_prefs.dart';
 import 'overview_search.dart';
+import 'overview_shown.dart';
 import 'overview_tiles.dart';
 import 'overview_today.dart';
 
@@ -77,8 +79,16 @@ final overviewFactsProvider = Provider.autoDispose<OverviewFacts>((ref) {
       for (final environment in environments)
         OverviewLaneKey(environment.id, _label(environment)),
     ],
+    agentLabel: ref.watch(agentRegistryProvider).displayNameFor,
   );
 });
+
+/// What Status needs to file a project under New: the sessions new to the
+/// owner. Empty under any other grouping, which never asks.
+Set<String> _freshFor(Ref ref) =>
+    ref.watch(overviewGroupByProvider) == OverviewGroupBy.status
+    ? ref.watch(overviewFreshIdsProvider)
+    : const {};
 
 String _label(ExecutionEnvironment environment) =>
     environmentLabel(environment) ?? environment.name;
@@ -139,6 +149,7 @@ final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewOrderProvider),
     drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
+    fresh: _freshFor(ref),
   );
 });
 
@@ -311,6 +322,7 @@ final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewCountsOrderProvider),
     drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
+    fresh: _freshFor(ref),
   );
 });
 

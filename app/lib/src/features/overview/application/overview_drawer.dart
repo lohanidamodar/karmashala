@@ -132,3 +132,15 @@ final overviewArchivedTodayProvider =
       }
       return byLane;
     });
+
+/// How many times the Group by menu was asked for from the keyboard (G):
+/// the strip's Group by opens its menu each time this changes.
+class OverviewGroupMenuAsks extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void ask() => state++;
+}
+
+final overviewGroupMenuAsksProvider =
+    NotifierProvider<OverviewGroupMenuAsks, int>(OverviewGroupMenuAsks.new);

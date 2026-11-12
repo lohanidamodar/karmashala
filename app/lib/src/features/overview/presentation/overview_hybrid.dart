@@ -578,7 +578,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   queue: sections.queue,
                 ),
               ),
-            if (forest.lanes.isNotEmpty && !phone)
+            if (!phone)
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   gutter,
@@ -586,10 +586,19 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   gutter,
                   Insets.xs,
                 ),
-                child: OverviewLaneChips(
-                  lanes: forest.lanes,
-                  onScreen: _laneOnScreen,
-                  onTap: _goToLane,
+                // How the projects are grouped, then a chip per group.
+                child: Row(
+                  children: [
+                    const OverviewGroupByButton(),
+                    const SizedBox(width: Insets.sm),
+                    Expanded(
+                      child: OverviewLaneChips(
+                        lanes: forest.lanes,
+                        onScreen: _laneOnScreen,
+                        onTap: _goToLane,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             Expanded(

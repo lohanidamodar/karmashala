@@ -115,18 +115,87 @@ String subSessionSummary(List<OverviewCard> children) {
   ].join(' · ');
 }
 
-/// What the Board's rows are.
+/// What a session is to the owner right now.
+enum OverviewStatus {
+  needsYou('Needs you'),
+  running('Running'),
+
+  /// Finished, and not looked at since.
+  fresh('New'),
+
+  /// Finished and seen: one the owner means to go back to.
+  seen('To go back to');
+
+  const OverviewStatus(this.label);
+
+  final String label;
+}
+
+/// [state] as a status; a finished session is [OverviewStatus.fresh] while
+/// it is [fresh] — new to the owner.
+OverviewStatus overviewStatusOf(AgentState state, {required bool fresh}) =>
+    switch (columnOf(state)) {
+      BoardColumn.needsYou => OverviewStatus.needsYou,
+      BoardColumn.working => OverviewStatus.running,
+      BoardColumn.ready ||
+      BoardColumn.done => fresh ? OverviewStatus.fresh : OverviewStatus.seen,
+    };
+
+/// What the Board's groups are. Under every one of them a project is one
+/// tile; [project] draws the tiles alone, with no group over them.
 enum OverviewGroupBy {
-  project('Project'),
+  /// The context (workspace) the session's project is filed under.
+  context('Context'),
   machine('Machine'),
 
-  /// The context (workspace) the session's project is filed under.
-  context('Context');
+  /// The most urgent [OverviewStatus] among a project's sessions.
+  status('Status'),
+
+  /// The agent of a family's first session; a project with several agents
+  /// has a tile under each.
+  agent('Agent'),
+
+  /// When a project's sessions were last active: [OverviewRecency].
+  lastActive('Last active'),
+
+  /// No groups: the projects' tiles in their own order. The name is what
+  /// older prefs files hold.
+  project('None');
 
   const OverviewGroupBy(this.label);
 
   final String label;
+
+  /// Whether a project's tile is filed whole, by its sessions together, and
+  /// so can move between groups as they change.
+  bool get byTile =>
+      this == OverviewGroupBy.status || this == OverviewGroupBy.lastActive;
 }
+
+/// How long ago a project's sessions were last active, as Last active
+/// groups them.
+enum OverviewRecency {
+  today('Today'),
+  yesterday('Yesterday'),
+  week('This week'),
+  older('Older');
+
+  const OverviewRecency(this.label);
+
+  final String label;
+
+  /// Where a project last active [at] is filed, [startOfToday] being the
+  /// local midnight that began today.
+  static OverviewRecency of(DateTime at, DateTime startOfToday) {
+    if (!at.isBefore(startOfToday)) return OverviewRecency.today;
+    final days = startOfToday.difference(at).inHours ~/ 24;
+    if (days < 1) return OverviewRecency.yesterday;
+    return days < 6 ? OverviewRecency.week : OverviewRecency.older;
+  }
+}
+
+/// The group of a session whose agent is not known, under Agent.
+const String kOverviewUnknownAgentLabel = 'Unknown agent';
 
 /// [chosen], or Project when it is Context and no context exists any more.
 OverviewGroupBy effectiveGroupBy(OverviewGroupBy chosen, OverviewFacts facts) =>
@@ -165,7 +234,13 @@ class OverviewFacts {
     required this.machines,
     this.contextOf = _noContext,
     this.contexts = const [],
+    this.agentLabel = _itself,
   });
+
+  /// An agent's display name, for its group under Agent.
+  final String Function(String agentId) agentLabel;
+
+  static String _itself(String id) => id;
 
   final String? Function(WorkspaceSessionEntry entry) projectOf;
   final String? Function(WorkspaceSessionEntry entry) machineOf;
@@ -386,6 +461,9 @@ String overviewLaneKeyOf(
         final id? when facts.contexts.any((c) => c.id == id) => id,
         _ => null,
       },
+      OverviewGroupBy.agent => facts.agentOf(entry),
+      // Filed by the project's sessions together, which one alone cannot say.
+      OverviewGroupBy.status || OverviewGroupBy.lastActive => null,
     } ??
     kOverviewUnfiledLane;
 
@@ -400,6 +478,7 @@ OverviewBoard buildOverviewBoard(
   required DateTime startOfToday,
   required BoardOrderMemo memo,
   Set<String> drawnElsewhere = const {},
+  Set<String> fresh = const {},
 }) {
   bool kept(WorkspaceSessionEntry entry) {
     // A pipeline stage's session is drawn inside its run, never loose.
@@ -477,13 +556,72 @@ OverviewBoard buildOverviewBoard(
       ),
   ];
 
+  // The session a family is drawn under: the top of its parents in view.
+  // A family is filed whole, where its first session is.
+  WorkspaceSessionEntry rootOf(WorkspaceSessionEntry entry) {
+    final seen = <String>{entry.id};
+    var top = entry;
+    for (
+      var parent = parentIn(top);
+      parent != null && seen.add(parent);
+      parent = parentIn(top)
+    ) {
+      top = byId[parent]!;
+    }
+    return top;
+  }
+
+  String tileOf(WorkspaceSessionEntry entry) =>
+      facts.projectOf(rootOf(entry)) ?? kOverviewUnfiledLane;
+
+  // Under Status and Last active a project's tile is filed by its sessions
+  // together: the most urgent of them, and the one last active.
+  final laneOfTile = <String, String>{};
+  if (groupBy.byTile) {
+    final status = <String, OverviewStatus>{};
+    final active = <String, DateTime>{};
+    for (final card in cards) {
+      if (!filter.shows(card.state)) continue;
+      final tile = tileOf(card.entry);
+      final own = overviewStatusOf(card.state, fresh: fresh.contains(card.id));
+      final had = status[tile];
+      if (had == null || own.index < had.index) status[tile] = own;
+      final at = card.entry.activityAt;
+      final last = active[tile];
+      if (last == null || at.isAfter(last)) active[tile] = at;
+    }
+    for (final tile in status.keys) {
+      laneOfTile[tile] = groupBy == OverviewGroupBy.status
+          ? status[tile]!.name
+          : OverviewRecency.of(active[tile]!, startOfToday).name;
+    }
+  }
+
   final laneOrder = switch (groupBy) {
     OverviewGroupBy.project => facts.projects,
     OverviewGroupBy.machine => facts.machines,
     OverviewGroupBy.context => facts.contexts,
+    OverviewGroupBy.status => [
+      for (final status in OverviewStatus.values)
+        OverviewLaneKey(status.name, status.label),
+    ],
+    OverviewGroupBy.lastActive => [
+      for (final recency in OverviewRecency.values)
+        OverviewLaneKey(recency.name, recency.label),
+    ],
+    OverviewGroupBy.agent => [
+      for (final agent in {
+        for (final entry in byId.values) ?facts.agentOf(entry),
+      })
+        OverviewLaneKey(agent, facts.agentLabel(agent)),
+    ]..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase())),
   };
-  String laneOf(WorkspaceSessionEntry entry) =>
-      overviewLaneKeyOf(entry, facts, groupBy);
+  String laneOf(WorkspaceSessionEntry entry) => switch (groupBy) {
+    OverviewGroupBy.status || OverviewGroupBy.lastActive =>
+      laneOfTile[tileOf(entry)] ?? kOverviewUnfiledLane,
+    OverviewGroupBy.agent => overviewLaneKeyOf(rootOf(entry), facts, groupBy),
+    _ => overviewLaneKeyOf(entry, facts, groupBy),
+  };
 
   final keys = <String, DateTime>{};
   final byLane = <String, Map<BoardColumn, List<(OverviewCard, DateTime)>>>{};
@@ -556,6 +694,8 @@ OverviewBoard buildOverviewBoard(
                 ? key
                 : groupBy == OverviewGroupBy.context
                 ? kOverviewNoContextLabel
+                : groupBy == OverviewGroupBy.agent
+                ? kOverviewUnknownAgentLabel
                 : 'Elsewhere',
           ),
     ],
