@@ -46,6 +46,7 @@ import '../application/session_selection.dart';
 import '../application/where_you_are.dart';
 import 'explorer_selection_actions.dart';
 import 'more_menu.dart';
+import 'session_row_menu.dart' show showSessionMenu;
 import 'session_rows.dart';
 import 'sidebar_chrome.dart';
 

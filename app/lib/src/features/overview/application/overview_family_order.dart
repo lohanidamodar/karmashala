@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import 'overview_prefs.dart';
 import 'overview_providers.dart';
+import 'overview_search.dart';
 import 'overview_tree.dart';
 
 /// The owner's hand order of each lane's families: root ids by lane key.
@@ -49,13 +50,21 @@ class OverviewFamilyOrderController extends Notifier<OverviewFamilyOrder> {
     }
   }
 
-  /// Moves [id] to [index] among [drawn], the lane's families as drawn now.
+  /// Moves [id] to [index] among [drawn], its project tile's families as
+  /// drawn now. The lane's other tiles keep the order they were given.
   void move(String laneKey, List<String> drawn, String id, int index) {
     if (!ref.mounted || !drawn.contains(id)) return;
     final next = [...drawn]..remove(id);
     next.insert(index.clamp(0, next.length), id);
     _touched = true;
-    state = {...state, laneKey: next};
+    state = {
+      ...state,
+      laneKey: [
+        ...next,
+        for (final other in state[laneKey] ?? const <String>[])
+          if (!drawn.contains(other)) other,
+      ],
+    };
     // One write at a time, in order, so a quick second move is what stays.
     final order = state;
     _writing = _writing.then((_) => _write(order));
@@ -93,5 +102,6 @@ final overviewForestProvider = Provider.autoDispose<OverviewForest>(
     ref.watch(overviewBoardProvider),
     order: ref.watch(overviewFamilyOrderProvider),
     pinned: ref.watch(overviewPrefsProvider.select((p) => p.pinned)).toSet(),
+    older: ref.watch(overviewSearchProvider.select((s) => s.active)),
   ),
 );

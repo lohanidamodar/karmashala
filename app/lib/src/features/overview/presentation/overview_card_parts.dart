@@ -1,3 +1,5 @@
+export '../application/overview_card_line.dart' show overviewPlain;
+
 import 'overview_via_bot_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +20,8 @@ import '../../verification/domain/session_verdict.dart'
     show SessionVerdictState;
 import '../../verification/presentation/session_verdict_mark.dart';
 import '../application/overview_board.dart';
+import '../application/overview_card_line.dart' show overviewPlain;
+import '../application/overview_shown.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_seen.dart';
@@ -29,25 +33,6 @@ import 'overview_resume_actions.dart';
 import 'overview_session_menu.dart';
 import 'overview_session_parts.dart';
 import 'overview_title_block.dart';
-
-/// [text] as one plain paragraph: markdown marks and line breaks dropped,
-/// a link or an image said by its label ("[#6980](https://…)" is "#6980"),
-/// an autolink by its address, and a heading's, quote's or list item's
-/// marker gone.
-String overviewPlain(String text) => text
-    .replaceAllMapped(
-      RegExp(r'!?\[([^\]\n]*)\]\([^)\s]*(?:\s+"[^"]*")?\)'),
-      (m) => m[1]!,
-    )
-    .replaceAllMapped(RegExp(r'<((?:https?|mailto):[^>\s]+)>'), (m) => m[1]!)
-    .replaceAll(RegExp(r'^\s*(?:#+|>+|[-*+]|\d+[.)])\s+', multiLine: true), '')
-    .replaceAll(RegExp(r'\*\*|__|~~|`'), '')
-    .replaceAllMapped(
-      RegExp(r'(^|[\s(])[*_]([^*_\s][^*_\n]*?)[*_](?=[\s).,:;!?]|$)'),
-      (m) => '${m[1]}${m[2]}',
-    )
-    .replaceAll(RegExp(r'\s*\n+\s*'), ' ')
-    .trim();
 
 /// **The latest thing the agent said**, two lines, lit briefly when it
 /// changes so a card that moved catches the eye.
@@ -294,18 +279,8 @@ class OverviewSubSessionRow extends ConsumerWidget {
 
 /// How many messages came since the owner last opened [card] here, at least
 /// one for a session never opened here; 0 when nothing is new to them.
-int watchOverviewNewCount(WidgetRef ref, OverviewCard card) {
-  final id = card.id;
-  final seen = ref.watch(overviewSeenProvider.select((s) => s[id]));
-  if (card.state == AgentState.ended) return 0;
-  if (seen == null && !ref.watch(overviewSeenReadProvider)) return 0;
-  final peeked = ref.watch(overviewFocusProvider.select((f) => f.peeked == id));
-  if (peeked) return 0;
-  final times =
-      ref.watch(overviewGlanceProvider(id)).asData?.value?.messageTimes ??
-      const <DateTime>[];
-  return newSince(seen, times) ?? (times.isEmpty ? 1 : times.length);
-}
+int watchOverviewNewCount(WidgetRef ref, OverviewCard card) =>
+    overviewNewCountWith(ref.watch, card);
 
 /// Whether [card] is new to the owner, read once for a key rather than
 /// watched for a build.

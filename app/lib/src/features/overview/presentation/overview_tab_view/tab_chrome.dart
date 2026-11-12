@@ -24,6 +24,8 @@ class _OnScreenState extends ConsumerState<_OnScreen> {
     _shown = ref.read(overviewOnScreenProvider.notifier);
     _looked = ref.read(overviewLookedAtProvider.notifier);
     _clock = ref.read(clockProvider);
+    // Where no desktop shell started it: a chat opened from here on is seen.
+    ref.listenManual(overviewSeenFollowsScreenProvider, (_, _) {});
     // After the frame: a provider is not changed while the tree builds.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

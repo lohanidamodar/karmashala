@@ -190,8 +190,10 @@ void main() {
       final c = await pump(tester, size: size);
       const id = 'ks-r30';
       await reveal(tester, byKey('overview-family-message:$id'));
+      // From the card's foot: an ask is drawn over the footer, so the card
+      // grows upward of it and the buttons keep their place under it.
       Map<String, Offset> places() {
-        final card = tester.getTopLeft(byKey('overview-family:$id'));
+        final card = tester.getBottomLeft(byKey('overview-family:$id'));
         return {
           for (final key in [
             'overview-card-menu:$id',
@@ -430,13 +432,35 @@ void main() {
       await unmountMission(tester);
     });
 
-    testWidgets('the ask marker opens the waiting drawer on its family', (
-      tester,
-    ) async {
+    testWidgets('the ask marker goes to the ask on the card; with the '
+        'drawer open, to its family there', (tester) async {
       final c = await pump(tester);
       final marker = byKey('overview-family-review:ks-r21');
       await reveal(tester, marker);
       expect(find.text('Review 1 ask'), findsNothing, reason: 'no takeover');
+      // The ask is on the card itself, answerable there.
+      expect(
+        find.descendant(
+          of: byKey('overview-family:ks-r21'),
+          matching: byKey('overview-queue-card:ks-r21'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(marker);
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).selected, 'ks-r21');
+      expect(c.read(overviewDrawerProvider).open, isFalse);
+
+      // The drawer lists every ask: the card gives its own up to it.
+      c.read(overviewDrawerProvider.notifier).open();
+      await settleMission(tester);
+      expect(
+        find.descendant(
+          of: byKey('overview-family:ks-r21'),
+          matching: byKey('overview-queue-card:ks-r21'),
+        ),
+        findsNothing,
+      );
       await tester.tap(marker);
       await settleMission(tester);
       expect(

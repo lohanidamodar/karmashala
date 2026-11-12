@@ -11,11 +11,11 @@ import '../../sessions/presentation/approval_request_card.dart';
 import '../application/overview_batch.dart';
 import '../application/overview_batch_actions.dart';
 import '../application/overview_board.dart';
-import '../application/overview_family_order.dart';
 import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_quick_message.dart';
+import '../application/overview_shown.dart';
 import '../application/overview_tiles.dart';
 import 'overview_batch_run.dart';
 import 'overview_end_button.dart' show OverviewHoverScope;
@@ -41,10 +41,9 @@ List<String> overviewDrawnOrder(WidgetRef ref) {
   final board = ref.read(overviewBoardProvider);
   final sections = overviewSectionsOf(
     board,
-    ref.read(overviewForestProvider),
+    ref.read(overviewOpenForestProvider),
     waitingSince: (id) => statusOf(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
-    collapsed: ref.read(overviewCollapsedLanesProvider),
   );
   final families = [for (final card in sections.families) card.id];
   final drawn = families.toSet();

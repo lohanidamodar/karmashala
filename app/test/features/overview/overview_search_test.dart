@@ -8,11 +8,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_family_order.dart';
 import 'package:karmashala/src/features/overview/application/overview_links.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_search.dart';
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
-import 'package:karmashala_ui/tokens.dart';
 
 import 'mission_fixture.dart';
 
@@ -96,15 +96,7 @@ void main() {
   String? selected(ProviderContainer c) =>
       c.read(overviewFocusProvider).selected;
 
-  /// The families drawn dimmed, by root.
-  bool dimmed(WidgetTester tester, String root) => tester
-      .widgetList<AnimatedOpacity>(
-        find.ancestor(
-          of: familyCard(root),
-          matching: find.byType(AnimatedOpacity),
-        ),
-      )
-      .any((o) => o.opacity == StateLayers.dimmedOpacity);
+  String? peeked(ProviderContainer c) => c.read(overviewFocusProvider).peeked;
 
   testWidgets('/ reaches a folded sub-session in five keys, unfolding it', (
     tester,
@@ -118,20 +110,23 @@ void main() {
     expect(typing(), isTrue);
     await tester.enterText(field, 'zeb'); // 2, 3, 4
     await settleMission(tester);
-    // Matches stay where they are; the rest dim.
-    expect(dimmed(tester, 'o-root'), isTrue);
-    expect(dimmed(tester, 'f-root'), isFalse);
+    // Only what matches is left on the board, and the first match is the
+    // pick: selected, and counted in the field.
+    expect(familyCard('o-root'), findsNothing);
+    expect(familyCard('f-root'), findsOneWidget);
     expect(byKey('overview-tree-node:f-kid'), findsOneWidget);
+    expect(selected(c), 'f-kid');
+    expect(find.text('1 of 1'), findsOneWidget);
 
     await key(tester, LogicalKeyboardKey.enter); // 5
+    // Enter opens the pick: the board is whole again, on that session.
     expect(selected(c), 'f-kid');
+    expect(peeked(c), 'f-kid');
     expect(c.read(overviewFoldedParentsProvider), isNot(contains('f-root')));
     expect(byKey('overview-tree-node:f-kid'), findsOneWidget);
-    // The keys are the board's again: Esc clears the search.
     expect(typing(), isFalse);
-    await key(tester, LogicalKeyboardKey.escape);
     expect(c.read(overviewSearchProvider).query, isEmpty);
-    expect(dimmed(tester, 'o-root'), isFalse);
+    expect(familyCard('o-root'), findsOneWidget);
     await unmountMission(tester);
   });
 
@@ -164,10 +159,15 @@ void main() {
     await slash(tester);
     await tester.enterText(field, 'cap kid');
     await settleMission(tester);
-    await key(tester, LogicalKeyboardKey.arrowDown);
+    // The first match is the pick before any arrow is pressed.
     expect(selected(c), 'c-k1');
+    expect(find.text('1 of 5'), findsOneWidget);
     await key(tester, LogicalKeyboardKey.arrowDown);
     expect(selected(c), 'c-k2');
+    expect(find.text('2 of 5'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.arrowUp);
+    expect(selected(c), 'c-k1');
+    // The ends stop: nothing wraps round to the other end.
     await key(tester, LogicalKeyboardKey.arrowUp);
     expect(selected(c), 'c-k1');
     expect(typing(), isTrue);
@@ -175,6 +175,74 @@ void main() {
     expect(c.read(overviewSearchProvider).query, isEmpty);
     expect(tester.widget<EditableText>(field).controller.text, isEmpty);
     expect(typing(), isFalse);
+    await unmountMission(tester);
+  });
+
+  testWidgets('a project name finds its sessions, and no match says so', (
+    tester,
+  ) async {
+    final c = await pumpMission(tester, fixture: fixture(), prefsDir: dir);
+    await slash(tester);
+    await tester.enterText(field, 'beej');
+    await settleMission(tester);
+    expect(familyCard('o-root'), findsOneWidget);
+    expect(familyCard('c-root'), findsNothing);
+    expect(selected(c), 'o-root');
+
+    await tester.enterText(field, 'no such thing');
+    await settleMission(tester);
+    expect(byKey('overview-none-match'), findsOneWidget);
+    expect(find.text('No match'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(peeked(c), isNull);
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(familyCard('c-root'), findsOneWidget);
+    await unmountMission(tester);
+  });
+
+  testWidgets('it reaches past the filters, to what ended before today, and '
+      'to a project with no session', (tester) async {
+    final c = await pumpMission(
+      tester,
+      fixture: MissionFixture(
+        sessions: [
+          ...fixture().sessions,
+          s('old', 'Yak shaving', state: AgentState.ended, age: 60 * 24 * 3),
+        ],
+      ),
+      prefsDir: dir,
+    );
+    // Only beej is shown, and what ended days ago is not on the board.
+    c.read(overviewPrefsProvider.notifier).setProjects({'p-beej'});
+    await settleMission(tester);
+    expect(familyCard('c-root'), findsNothing);
+    expect(familyCard('old'), findsNothing);
+
+    await slash(tester);
+    await tester.enterText(field, 'busy parent');
+    await settleMission(tester);
+    expect(familyCard('c-root'), findsOneWidget);
+    expect(selected(c), 'c-root');
+
+    await tester.enterText(field, 'yak');
+    await settleMission(tester);
+    expect(familyCard('old'), findsOneWidget);
+    expect(find.text('1 of 1'), findsOneWidget);
+
+    // A project with no session is a tile with its header alone.
+    await tester.enterText(field, 'docs');
+    await settleMission(tester);
+    expect(byKey('overview-tile:p-docs'), findsOneWidget);
+    expect(byKey('overview-tile-empty:p-docs'), findsOneWidget);
+    expect(find.text('1 project'), findsOneWidget);
+    expect(byKey('overview-none-match'), findsNothing);
+
+    // Cleared, the filter holds again.
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(familyCard('c-root'), findsNothing);
+    expect(familyCard('o-root'), findsOneWidget);
+    expect(byKey('overview-tile:p-docs'), findsNothing);
+    expect(tester.takeException(), isNull);
     await unmountMission(tester);
   });
 
@@ -202,7 +270,7 @@ void main() {
     await unmountMission(tester);
   });
 
-  testWidgets('← → step by family, [ ] by lane, U to what is new', (
+  testWidgets('← → step by project tile, [ ] by group, U to what is new', (
     tester,
   ) async {
     final c = await pumpMission(tester, fixture: fixture(), prefsDir: dir);
@@ -220,16 +288,19 @@ void main() {
     expect(roots.length, greaterThan(2));
     expect(forest.lanes.length, 2);
 
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(selected(c), roots[0]);
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(selected(c), roots[1]);
-    await key(tester, LogicalKeyboardKey.arrowLeft);
-    expect(selected(c), roots[0]);
-
+    // Each project is a tile: the arrows land on a tile's first session.
     final firstOf = [
       for (final (_, trees) in forest.lanes) trees.first.card.id,
     ];
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(selected(c), firstOf[0]);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(selected(c), firstOf[1]);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(selected(c), firstOf[1], reason: 'the last tile is the end');
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(selected(c), firstOf[0]);
+
     await key(tester, LogicalKeyboardKey.bracketRight, character: ']');
     expect(selected(c), firstOf[1]);
     await key(tester, LogicalKeyboardKey.bracketLeft, character: '[');

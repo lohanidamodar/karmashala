@@ -12,6 +12,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/data/data_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../agents/data/agents_data.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../explorer/application/agent_state_providers.dart';
@@ -27,6 +28,8 @@ import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'overview_board.dart';
 import 'overview_prefs.dart';
+import 'overview_search.dart';
+import 'overview_shown.dart';
 import 'overview_tiles.dart';
 import 'overview_today.dart';
 
@@ -76,8 +79,16 @@ final overviewFactsProvider = Provider.autoDispose<OverviewFacts>((ref) {
       for (final environment in environments)
         OverviewLaneKey(environment.id, _label(environment)),
     ],
+    agentLabel: ref.watch(agentRegistryProvider).displayNameFor,
   );
 });
+
+/// What Status needs to file a project under New: the sessions new to the
+/// owner. Empty under any other grouping, which never asks.
+Set<String> _freshFor(Ref ref) =>
+    ref.watch(overviewGroupByProvider) == OverviewGroupBy.status
+    ? ref.watch(overviewFreshIdsProvider)
+    : const {};
 
 String _label(ExecutionEnvironment environment) =>
     environmentLabel(environment) ?? environment.name;
@@ -108,8 +119,12 @@ final overviewGroupByProvider = Provider.autoDispose<OverviewGroupBy>(
   ),
 );
 
-/// The lane keys folded under the grouping drawn now.
+/// The lane keys folded under the grouping drawn now. None while a search is
+/// typed: a folded group with a match is shown open, its fold kept.
 final overviewCollapsedLanesProvider = Provider.autoDispose<Set<String>>((ref) {
+  if (ref.watch(overviewSearchProvider.select((s) => s.active))) {
+    return const {};
+  }
   final by = ref.watch(overviewGroupByProvider);
   final prefix = overviewLaneFoldKey(by, '');
   return {
@@ -124,8 +139,11 @@ final overviewCollapsedLanesProvider = Provider.autoDispose<Set<String>>((ref) {
 /// while working and Show archived the way the lists do — filtered and laid
 /// out as this device chose. Recomputed only when those inputs move.
 final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
-  // The filter alone: a pin or a fold never rebuilds the board.
-  final filter = ref.watch(overviewPrefsProvider.select((p) => p.filter));
+  // The filter alone: a pin or a fold never rebuilds the board. A search
+  // looks past it: any session on any project is found by typing.
+  final filter = ref.watch(overviewSearchProvider.select((s) => s.active))
+      ? const OverviewFilter()
+      : ref.watch(overviewPrefsProvider.select((p) => p.filter));
   return buildOverviewBoard(
     ref.watch(agentStateGroupsProvider),
     facts: ref.watch(overviewFactsProvider),
@@ -134,6 +152,7 @@ final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewOrderProvider),
     drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
+    fresh: _freshFor(ref),
   );
 });
 
@@ -306,6 +325,7 @@ final overviewAllStatesBoardProvider = Provider.autoDispose<OverviewBoard>((
     startOfToday: _startOfToday(ref),
     memo: ref.watch(_overviewCountsOrderProvider),
     drawnElsewhere: ref.watch(overviewPipelineSessionIdsProvider),
+    fresh: _freshFor(ref),
   );
 });
 

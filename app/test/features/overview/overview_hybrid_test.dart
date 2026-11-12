@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/overview/application/overview_family_ord
 import 'package:karmashala/src/features/overview/application/overview_search.dart'
     show overviewRevealProvider;
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
+import 'package:karmashala/src/features/overview/application/overview_drawer.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
@@ -133,8 +134,15 @@ void main() {
 
         expect(find.byKey(const ValueKey('overview-strip')), findsOneWidget);
         expect(find.byKey(const ValueKey('overview-heartbeat')), findsNothing);
-        // What waits is in the drawer, closed until asked for.
-        expect(queueCard('ks-r21'), findsNothing);
+        // What waits is answered on its own card under a pointer; a phone
+        // answers in its sheet, closed until asked for.
+        expect(
+          find.descendant(
+            of: familyCard('ks-r21'),
+            matching: queueCard('ks-r21'),
+          ),
+          phone ? findsNothing : findsOneWidget,
+        );
         final work = find.byKey(const ValueKey('overview-work'));
         final workAt = tester.getTopLeft(work);
         await openWaiting(tester);
@@ -153,7 +161,9 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.tap(find.byKey(const ValueKey('overview-drawer-close')));
         await settleMission(tester);
-        expect(queueCard('ks-r21'), findsNothing);
+        expect(drawer, findsNothing);
+        // Closed, the ask is back on its card under a pointer.
+        expect(queueCard('ks-r21'), phone ? findsNothing : findsOneWidget);
         // Activity unfolds the heartbeat under the strip.
         await toggleActivity(tester);
         expect(
@@ -531,8 +541,9 @@ void main() {
     });
 
     testWidgets('a child that needs you is amber on its tree, counted on the '
-        'root, and Review opens the drawer on its family', (tester) async {
-      await pump(
+        'root, answered on its family\'s card, and listed alone in the '
+        'drawer on its family', (tester) async {
+      final c = await pump(
         tester,
         fixture: withSubs(
           (s) => s.id == 'ks-r32-sub2' ? asState(s, AgentState.needsYou) : s,
@@ -552,8 +563,14 @@ void main() {
         find.byKey(const ValueKey('session-avatar-badge:ks-r32')),
         findsOneWidget,
       );
-      // Answered in the drawer, narrowed to this family.
-      expect(queueCard('ks-r32-sub2'), findsNothing);
+      // Its ask is on its family's card, under its name.
+      expect(
+        find.descendant(
+          of: familyCard('ks-r32'),
+          matching: queueCard('ks-r32-sub2'),
+        ),
+        findsOneWidget,
+      );
       final review = find.byKey(
         const ValueKey('overview-family-review:ks-r32'),
       );
@@ -563,7 +580,12 @@ void main() {
         find.descendant(of: review, matching: find.text('1 ask')),
         findsOneWidget,
       );
+      // Review goes to the ask on the card.
       await tester.tap(review);
+      await settleMission(tester);
+      expect(c.read(overviewFocusProvider).selected, 'ks-r32-sub2');
+      // The drawer, opened on this family, lists its asks alone.
+      c.read(overviewDrawerProvider.notifier).open(family: 'ks-r32');
       await settleMission(tester);
       expect(queueCard('ks-r32-sub2'), findsOneWidget);
       expect(queueCard('ks-r21'), findsNothing);
@@ -1463,7 +1485,7 @@ void main() {
       '0 waiting on you, tap to list them',
     );
     expect(find.byKey(const ValueKey('overview-none-at-work')), findsNothing);
-    expect(find.textContaining('Archive done · '), findsWidgets);
+    expect(find.byTooltip(RegExp('Archive done · ')), findsWidgets);
     await openWaiting(tester);
     expect(find.byKey(const ValueKey('overview-drawer-empty')), findsOneWidget);
     await unmountMission(tester);
@@ -1669,7 +1691,7 @@ void main() {
       await settleMission(tester);
 
       expect(c.read(overviewGroupByProvider), OverviewGroupBy.project);
-      expect(group('p-ks'), findsOneWidget);
+      expect(find.byKey(const ValueKey('overview-tile:p-ks')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('overview-filter-button')));
       await settleMission(tester);
       expect(find.byKey(const ValueKey('group-by:context')), findsNothing);

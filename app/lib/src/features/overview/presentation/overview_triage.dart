@@ -89,6 +89,24 @@ class OverviewSearchIntent extends Intent {
   const OverviewSearchIntent();
 }
 
+/// What a key does to the selected session, or to its project.
+enum OverviewDo {
+  foldGroup,
+  openProject,
+  editProject,
+  newSession,
+  groupBy,
+  message,
+  stop,
+  menu,
+}
+
+class OverviewDoIntent extends Intent {
+  const OverviewDoIntent(this.what);
+
+  final OverviewDo what;
+}
+
 /// The Overview board's keys. Bare letters, so they live on the board alone
 /// and never in the app-wide keymap, where a shell or a field would want them.
 final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
@@ -148,6 +166,28 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
   const SingleActivator(LogicalKeyboardKey.keyA, meta: true):
       const OverviewSelectLaneIntent(),
   const CharacterActivator('?'): const OverviewShowKeysIntent(),
+  const SingleActivator(LogicalKeyboardKey.space): const OverviewDoIntent(
+    OverviewDo.foldGroup,
+  ),
+  const SingleActivator(LogicalKeyboardKey.keyO): const OverviewDoIntent(
+    OverviewDo.openProject,
+  ),
+  const SingleActivator(LogicalKeyboardKey.keyE): const OverviewDoIntent(
+    OverviewDo.editProject,
+  ),
+  const SingleActivator(LogicalKeyboardKey.keyC): const OverviewDoIntent(
+    OverviewDo.newSession,
+  ),
+  const SingleActivator(LogicalKeyboardKey.keyG): const OverviewDoIntent(
+    OverviewDo.groupBy,
+  ),
+  const SingleActivator(LogicalKeyboardKey.keyM): const OverviewDoIntent(
+    OverviewDo.message,
+  ),
+  const SingleActivator(LogicalKeyboardKey.keyS): const OverviewDoIntent(
+    OverviewDo.stop,
+  ),
+  const CharacterActivator('.'): const OverviewDoIntent(OverviewDo.menu),
 };
 
 /// What [intent] does, and the group the keys sheet files it under; null for
@@ -161,24 +201,53 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
   ),
   OverviewMoveIntent(down: true) => (group: 'Move', does: 'Next session'),
   OverviewMoveIntent(down: false) => (group: 'Move', does: 'Previous session'),
-  OverviewFamilyIntent(forward: true) => (group: 'Move', does: 'Next family'),
+  OverviewFamilyIntent(forward: true) => (group: 'Move', does: 'Next project'),
   OverviewFamilyIntent(forward: false) => (
     group: 'Move',
-    does: 'Previous family',
+    does: 'Previous project',
   ),
   OverviewLaneIntent(forward: true) => (
     group: 'Move',
-    does: 'First family of the next lane',
+    does: 'First project of the next group',
   ),
   OverviewLaneIntent(forward: false) => (
     group: 'Move',
-    does: 'First family of the previous lane',
+    does: 'First project of the previous group',
+  ),
+  OverviewDoIntent(what: OverviewDo.foldGroup) => (
+    group: 'Projects',
+    does: 'Fold or open the group the selection is in',
+  ),
+  OverviewDoIntent(what: OverviewDo.openProject) => (
+    group: 'Projects',
+    does: 'Open the selected session\'s project',
+  ),
+  OverviewDoIntent(what: OverviewDo.editProject) => (
+    group: 'Projects',
+    does: 'Edit that project',
+  ),
+  OverviewDoIntent(what: OverviewDo.newSession) => (
+    group: 'Projects',
+    does: 'New session in that project',
+  ),
+  OverviewDoIntent(what: OverviewDo.groupBy) => (
+    group: 'Projects',
+    does: 'Choose how the projects are grouped',
+  ),
+  OverviewDoIntent(what: OverviewDo.message) => (
+    group: 'Sessions',
+    does: 'Message the selected session',
+  ),
+  OverviewDoIntent(what: OverviewDo.stop) => (
+    group: 'Sessions',
+    does: 'Stop the selected session\'s turn',
+  ),
+  OverviewDoIntent(what: OverviewDo.menu) => (
+    group: 'Sessions',
+    does: 'Open the selected session\'s menu',
   ),
   OverviewNextNewIntent() => (group: 'Move', does: 'Next new session'),
-  OverviewSearchIntent() => (
-    group: 'Move',
-    does: 'Search the titles and latest lines',
-  ),
+  OverviewSearchIntent() => (group: 'Move', does: 'Find a session or project'),
   OverviewDismissIntent() => (
     group: 'Move',
     does: 'Close the peek, clear the search, or clear the selection',
@@ -243,6 +312,7 @@ String overviewKeyCap(ShortcutActivator activator, Intent intent) {
           LogicalKeyboardKey.arrowLeft => '←',
           LogicalKeyboardKey.arrowRight => '→',
           LogicalKeyboardKey.escape => 'Esc',
+          LogicalKeyboardKey.space => 'Space',
           LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter => 'Enter',
           _ => trigger.keyLabel.toUpperCase(),
         },
@@ -257,6 +327,7 @@ typedef OverviewKeyRow = ({String group, List<String> keys, String does});
 /// The groups, in the order the sheet draws them.
 const List<String> kOverviewKeyGroups = [
   'Move',
+  'Projects',
   'Answer',
   'Sessions',
   'Help',
@@ -296,8 +367,8 @@ List<OverviewKeyRow> overviewBoundKeyRows([
 /// Keys the dashboard answers outside [overviewTriageShortcuts]: in its
 /// search, in a card's quick message box, and with the mouse.
 const List<OverviewKeyRow> kOverviewOtherKeys = [
-  (group: 'In the search', keys: ['↑', '↓'], does: 'Step through the matches'),
-  (group: 'In the search', keys: ['Enter'], does: 'Go to the match'),
+  (group: 'In the search', keys: ['↑', '↓'], does: 'Move the pick'),
+  (group: 'In the search', keys: ['Enter'], does: 'Open the picked match'),
   (group: 'In the search', keys: ['Esc'], does: 'Clear the search'),
   (group: 'In a quick message', keys: ['Enter'], does: 'Send it'),
   (group: 'In a quick message', keys: ['Shift Enter'], does: 'A new line'),

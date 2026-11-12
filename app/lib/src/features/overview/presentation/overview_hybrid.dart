@@ -16,6 +16,7 @@ import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_search.dart';
+import '../application/overview_shown.dart';
 import '../application/overview_tiles.dart' show overviewCardOf;
 import '../application/overview_tree.dart';
 import 'overview_card_parts.dart';
@@ -25,6 +26,7 @@ import 'overview_heartbeat.dart';
 import 'overview_phone_strip.dart';
 import 'overview_pins.dart';
 import 'overview_pipeline_lane.dart';
+import 'overview_project_tile.dart';
 import 'overview_queue_card.dart';
 import 'overview_search_sheet.dart';
 import 'overview_strip.dart';
@@ -184,17 +186,32 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       if (!mounted) return;
       final id = asked.id;
       final forest = ref.read(overviewForestProvider);
+      // A session the search, New or Pinned keeps off the board: they lift.
+      if (!ref.read(overviewShownForestProvider).placed.contains(id) &&
+          forest.placed.contains(id)) {
+        ref.read(overviewSearchProvider.notifier).clear();
+        final lit = ref.read(overviewHighlightProvider);
+        if (lit != OverviewHighlight.none) {
+          ref.read(overviewHighlightProvider.notifier).toggle(lit);
+        }
+      }
       ref
           .read(overviewFoldedParentsProvider.notifier)
           .open(overviewAncestorsIn(forest, id));
-      // A session in a folded group is shown by opening the group.
-      if (overviewFamilyOf(forest, id) case (:final lane, tree: _)) {
+      // A session in a folded group or project is shown by opening it.
+      if (overviewFamilyOf(forest, id) case (:final lane, :final tree)) {
+        final prefs = ref.read(overviewPrefsProvider.notifier);
+        final by = ref.read(overviewGroupByProvider);
         final key = forest.lanes[lane].$1.key;
-        if (ref.read(overviewCollapsedLanesProvider).contains(key)) {
-          ref
-              .read(overviewPrefsProvider.notifier)
-              .setLaneCollapsed(ref.read(overviewGroupByProvider), key, false);
-        }
+        final tile = overviewTileFoldId(
+          by,
+          key,
+          overviewTileKeyOf(tree, ref.read(overviewFactsProvider)),
+        );
+        // Opening one not folded changes nothing.
+        prefs
+          ..setLaneCollapsed(by, key, false)
+          ..setLaneCollapsed(by, tile, false);
       }
       final focus = ref.read(overviewFocusProvider);
       final card = overviewCardOf(ref.read(overviewBoardProvider), id);
@@ -276,24 +293,35 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       }
     }
     final folded = ref.watch(overviewFoldedParentsProvider);
-    final forest = ref.watch(overviewForestProvider);
+    final whole = ref.watch(overviewForestProvider);
+    // A search, New or Pinned leaves only what fits; nothing else moves.
+    final forest = ref.watch(overviewShownForestProvider);
+    // The groups and project tiles folded under this grouping.
     final collapsed = ref.watch(overviewCollapsedLanesProvider);
     final sections = overviewSectionsOf(
       board,
-      forest,
+      ref.watch(overviewOpenForestProvider),
       waitingSince: (id) => statusOf(id)?.waitingSince,
       folded: folded,
-      collapsed: collapsed,
     );
+    final facts = ref.watch(overviewFactsProvider);
+    // Grouped by project a group is its tile: no header of its own.
+    final groupBy = ref.watch(overviewGroupByProvider);
+    final byProject = groupBy == OverviewGroupBy.project;
+    final byContext = groupBy == OverviewGroupBy.context;
+    // The families finished and seen: one line each, not a card.
+    final lines = {
+      for (final (_, trees) in forest.lanes)
+        for (final tree in trees)
+          if (overviewIsLineWith(ref.watch, tree)) tree.card.id,
+    };
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
     final pinned = watchOverviewPinned(ref);
-    final pinnedIds = {for (final card in pinned) card.id};
     final allStates = ref.watch(
       overviewPrefsProvider.select((p) => p.filter.allStates),
     );
     final drawer = ref.watch(overviewDrawerProvider.select((d) => d.open));
     final more = ref.watch(overviewMoreProvider);
-    final highlight = ref.watch(overviewHighlightProvider);
     final theme = Theme.of(context);
     final muted = UiDensity.of(context).muted(theme);
     final onOpen = widget.onOpen;
@@ -301,35 +329,18 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     _laneKeys.removeWhere((key, _) => !_lanes.contains(key));
     final searchSheet = ref.watch(overviewSearchSheetProvider);
     final fresh = [
-      for (final card in overviewForestMembers(forest))
+      for (final card in overviewForestMembers(whole))
         if (watchOverviewNewCount(ref, card) > 0) card,
     ].length;
     WidgetsBinding.instance.addPostFrameCallback((_) => _trackLane());
 
-    // The families New or Pinned leave out: they dim in place. Read here,
-    // in build, where a watch is kept.
-    bool lit(OverviewTreeNode node) => switch (highlight) {
-      OverviewHighlight.none => true,
-      OverviewHighlight.pinned => node.drawn.any(
-        (c) => pinnedIds.contains(c.id),
-      ),
-      OverviewHighlight.fresh => node.drawn.any(
-        (c) => watchOverviewNewCount(ref, c) > 0,
-      ),
-    };
-    // A search dims the families with no match; a match never moves.
+    // The sessions a search matched, lit on their families.
     final searching = ref.watch(overviewSearchProvider.select((s) => s.active));
     final matches = searching
-        ? {for (final card in watchOverviewSearchMatches(ref, forest)) card.id}
+        ? {for (final card in watchOverviewSearchMatches(ref)) card.id}
         : null;
-    final dimmed = {
-      for (final (_, trees) in forest.lanes)
-        for (final tree in trees)
-          if (!lit(tree) ||
-              (matches != null &&
-                  !tree.drawn.any((c) => matches.contains(c.id))))
-            tree.card.id,
-    };
+    // Projects the search found by name that have no session to draw.
+    final found = ref.watch(overviewSearchEmptyProjectsProvider);
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -343,7 +354,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         // Between families: a list's step on a phone.
         final gap = phone ? Insets.sm : Insets.md;
         final inner = box.maxWidth - gutter * 2;
-        final cell = WidthClass.scaleBreakpoint(Chrome.familyCellMin, scaler);
+        final cell = WidthClass.scaleBreakpoint(Chrome.projectTileMin, scaler);
         final across = ((inner + Insets.md) / (cell + Insets.md)).floor().clamp(
           1,
           _maxAcross,
@@ -363,11 +374,21 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             laneKey: laneKey,
             laneRoots: roots,
             matches: matches,
-          );
-          final shown = AnimatedOpacity(
-            opacity: dimmed.contains(id) ? StateLayers.dimmedOpacity : 1,
-            duration: Motion.of(context).fast,
-            child: family,
+            // A pointer answers on the card; a phone, in its waiting sheet.
+            // While the drawer lists every ask, they are answered there.
+            askOf: phone || drawer
+                ? null
+                : (card) => OverviewQueueCard(
+                    card: card,
+                    bare: true,
+                    onOpen: onOpen,
+                    onEdit: widget.onEdit,
+                    onTerminal: widget.onTerminal,
+                    onAnswered: widget.onAnswered,
+                    questionController: widget.questionControllerOf?.call(
+                      card.id,
+                    ),
+                  ),
           );
           return DragTarget<String>(
             onWillAcceptWithDetails: (drag) =>
@@ -382,8 +403,49 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                       color: StateLayers.dropTarget(theme.colorScheme),
                       borderRadius: BorderRadius.circular(Radii.lg),
                     ),
-              child: shown,
+              child: family,
             ),
+          );
+        }
+
+        Widget line(OverviewTreeNode node) => OverviewSessionLine(
+          key: drawn.add(node.card.id)
+              ? _treeKeys.putIfAbsent(node.card.id, GlobalKey.new)
+              : null,
+          node: node,
+          onOpen: onOpen,
+        );
+
+        // A project's context, said on its tile where the groups are not
+        // the contexts themselves.
+        String? tagOf(OverviewTile tile) {
+          if (byContext || facts.contexts.isEmpty || tile.trees.isEmpty) {
+            return null;
+          }
+          final id = facts.contextOf(tile.trees.first.card.entry);
+          return facts.contexts.where((c) => c.id == id).firstOrNull?.label;
+        }
+
+        Widget tileOf(OverviewTile tile, String laneKey, {Key? key}) {
+          final roots = [for (final t in tile.trees) t.card.id];
+          final fold = overviewTileFoldId(groupBy, laneKey, tile.key);
+          return OverviewProjectTile(
+            key: key,
+            tile: tile,
+            lines: lines,
+            folded: collapsed.contains(fold),
+            onFold: (folded) => ref
+                .read(overviewPrefsProvider.notifier)
+                .setLaneCollapsed(groupBy, fold, folded),
+            framed: !phone,
+            tag: tagOf(tile),
+            keep: matches ?? const {},
+            drawn: {
+              for (final node in tile.trees)
+                node.card.id: lines.contains(node.card.id)
+                    ? line(node)
+                    : tree(node, laneKey, roots),
+            },
           );
         }
 
@@ -392,13 +454,43 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (forest.lanes.isEmpty)
+            if (forest.lanes.isEmpty && found.isNotEmpty)
+              const SizedBox.shrink()
+            else if (forest.lanes.isEmpty &&
+                (whole.lanes.isNotEmpty || searching))
+              Text(
+                searching
+                    ? 'No session or project matches.'
+                    : 'Nothing here is new or pinned.',
+                key: const ValueKey('overview-none-match'),
+                style: muted,
+              )
+            else if (forest.lanes.isEmpty)
               Text(
                 allStates
                     ? 'Nothing is running or ready right now.'
                     : 'Nothing here right now.',
                 key: const ValueKey('overview-none-at-work'),
                 style: muted,
+              )
+            else if (byProject)
+              ..._grid(
+                [
+                  for (final (lane, trees) in forest.lanes)
+                    tileOf(
+                      (
+                        key: lane.key,
+                        label: lane.key == kOverviewUnfiledLane
+                            ? kOverviewNoProjectLabel
+                            : lane.label,
+                        trees: trees,
+                      ),
+                      lane.key,
+                      key: _laneKeys.putIfAbsent(lane.key, GlobalKey.new),
+                    ),
+                ],
+                across,
+                gap: gap,
               )
             else
               for (final (lane, trees) in forest.lanes) ...[
@@ -411,15 +503,32 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                 if (!collapsed.contains(lane.key))
                   ..._grid(
                     [
-                      for (final node in trees)
-                        tree(node, lane.key, [
-                          for (final t in trees) t.card.id,
-                        ]),
+                      for (final tile in overviewTilesOf(trees, facts))
+                        tileOf(tile, lane.key),
                     ],
                     across,
                     gap: gap,
                   ),
               ],
+            if (found.isNotEmpty)
+              ..._grid(
+                [
+                  for (final project in found)
+                    OverviewProjectTile(
+                      tile: (
+                        key: project.id,
+                        label: project.label,
+                        trees: const [],
+                      ),
+                      lines: const {},
+                      drawn: const {},
+                      framed: !phone,
+                      onFold: (_) {},
+                    ),
+                ],
+                across,
+                gap: gap,
+              ),
           ],
         );
         _treeKeys.removeWhere((id, _) => !drawn.contains(id));
@@ -510,7 +619,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   queue: sections.queue,
                 ),
               ),
-            if (forest.lanes.isNotEmpty && !phone)
+            if (!phone)
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   gutter,
@@ -518,10 +627,19 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   gutter,
                   Insets.xs,
                 ),
-                child: OverviewLaneChips(
-                  lanes: forest.lanes,
-                  onScreen: _laneOnScreen,
-                  onTap: _goToLane,
+                // How the projects are grouped, then a chip per group.
+                child: Row(
+                  children: [
+                    const OverviewGroupByButton(),
+                    const SizedBox(width: Insets.sm),
+                    Expanded(
+                      child: OverviewLaneChips(
+                        lanes: forest.lanes,
+                        onScreen: _laneOnScreen,
+                        onTap: _goToLane,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             Expanded(

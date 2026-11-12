@@ -480,6 +480,42 @@ void main() {
     await unmountMission(tester);
   });
 
+  testWidgets('with the drawer closed an ask is answered on its own card: by '
+      'its buttons, and by N then Y', (tester) async {
+    final (c, recorder) = await pump(tester);
+    c.read(overviewDrawerProvider.notifier).close();
+    await settleMission(tester);
+    expect(find.byKey(const ValueKey('overview-waiting-drawer')), findsNothing);
+
+    // The command and its answers are on the family's card.
+    final onCard = find.descendant(
+      of: familyCard('ks-r21'),
+      matching: find.byKey(const ValueKey('board-allow:ks-r21')),
+    );
+    await tester.ensureVisible(onCard);
+    await settleMission(tester);
+    await tester.tap(onCard);
+    await settleMission(tester);
+    expect((recorder.asked.single as ApprovalAnswerRequest).approve, isTrue);
+
+    // Every other ask is on a card too, one each.
+    expect(queueCard('ask-q'), findsOneWidget);
+    expect(queueCard('term'), findsOneWidget);
+
+    // N goes to what waits without opening the drawer, and Y answers it.
+    c.read(overviewFocusProvider.notifier).select(null);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await settleMission(tester);
+    expect(c.read(overviewDrawerProvider).open, isFalse);
+    expect(c.read(overviewFocusProvider).selected, isNotNull);
+    c.read(overviewFocusProvider.notifier).select('ks-r21');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyY);
+    await settleMission(tester);
+    expect(recorder.asked, hasLength(2));
+    expect((recorder.asked.last as ApprovalAnswerRequest).sessionId, 'ks-r21');
+    await unmountMission(tester);
+  });
+
   testWidgets('Edit… opens the peek with the command to change, then runs it', (
     tester,
   ) async {

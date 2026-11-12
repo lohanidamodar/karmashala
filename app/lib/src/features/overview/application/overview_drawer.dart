@@ -64,7 +64,8 @@ final overviewSearchSheetProvider =
       OverviewSearchSheetController.new,
     );
 
-/// What the strip's New and Pinned light up: the rest dims, nothing hides.
+/// What the strip's New and Pinned leave on the board: the rest is not
+/// drawn until it is put out again.
 enum OverviewHighlight { none, fresh, pinned }
 
 class OverviewHighlightController extends Notifier<OverviewHighlight> {
@@ -131,3 +132,45 @@ final overviewArchivedTodayProvider =
       }
       return byLane;
     });
+
+/// What a key asks of the selected session's card or line.
+enum OverviewCardAsk {
+  /// Open its message box; a line opens its chat to type in.
+  message,
+
+  /// Stop its turn.
+  stop,
+
+  /// Open its menu.
+  menu,
+}
+
+/// The last thing a key asked of a card, by the session it was asked of;
+/// the card or line of that session does it. [n] tells one ask from the
+/// same one made again.
+class OverviewCardAsks
+    extends Notifier<({String id, OverviewCardAsk what, int n})?> {
+  @override
+  ({String id, OverviewCardAsk what, int n})? build() => null;
+
+  void ask(String id, OverviewCardAsk what) =>
+      state = (id: id, what: what, n: (state?.n ?? 0) + 1);
+}
+
+final overviewCardAskProvider =
+    NotifierProvider<
+      OverviewCardAsks,
+      ({String id, OverviewCardAsk what, int n})?
+    >(OverviewCardAsks.new);
+
+/// How many times the Group by menu was asked for from the keyboard (G):
+/// the strip's Group by opens its menu each time this changes.
+class OverviewGroupMenuAsks extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void ask() => state++;
+}
+
+final overviewGroupMenuAsksProvider =
+    NotifierProvider<OverviewGroupMenuAsks, int>(OverviewGroupMenuAsks.new);

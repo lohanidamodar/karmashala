@@ -5,7 +5,7 @@ import 'package:karmashala_core/util.dart' show matchesSearchAny;
 import 'overview_board.dart';
 import 'overview_tree.dart';
 
-/// The dashboard's search: what is typed, the match the keys are on, and a
+/// The dashboard's search: what is typed, the one match Enter opens, and a
 /// count the strip's field takes focus on.
 @immutable
 class OverviewSearch {
@@ -13,7 +13,7 @@ class OverviewSearch {
 
   final String query;
 
-  /// The match ↑ and ↓ stepped to; null for the first.
+  /// The pick: the match Enter opens, which ↑ and ↓ move; null for the first.
   final String? current;
 
   /// Raised by `/`: the field takes the keys each time it changes.
@@ -47,20 +47,24 @@ class OverviewSearchController extends Notifier<OverviewSearch> {
     focusAsks: state.focusAsks + 1,
   );
 
-  /// The match [step] places from the current one in [ids], round the ends;
-  /// null when there is none.
+  /// The match [step] places from the pick in [ids], stopping at the ends;
+  /// null when there is none. With no pick yet, the first is the pick.
   String? step(List<String> ids, int step) {
     if (ids.isEmpty) return null;
     final at = ids.indexOf(state.current ?? '');
-    final next = at < 0
-        ? (step > 0 ? 0 : ids.length - 1)
-        : (at + step) % ids.length;
+    final next = (at < 0 ? 0 : at + step).clamp(0, ids.length - 1);
+    pick(ids[next]);
+    return ids[next];
+  }
+
+  /// Makes [id] the match Enter opens.
+  void pick(String? id) {
+    if (id == state.current) return;
     state = OverviewSearch(
       query: state.query,
-      current: ids[next],
+      current: id,
       focusAsks: state.focusAsks,
     );
-    return ids[next];
   }
 
   void clear() => state = OverviewSearch(focusAsks: state.focusAsks);

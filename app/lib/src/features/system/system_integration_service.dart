@@ -20,6 +20,8 @@ import '../notifications/application/attention_inbox.dart';
 import '../server/application/server_commands.dart';
 import '../server/application/server_overview.dart';
 import '../notifications/application/needs_you_chime.dart';
+import '../overview/application/overview_seen.dart'
+    show overviewSeenFollowsScreenProvider;
 import '../notifications/application/notification_providers.dart';
 import '../notifications/application/focus_mode.dart';
 import '../notifications/presentation/notify_level_text.dart';
@@ -372,6 +374,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     _container.read(attentionPresenterProvider).start();
     _container.read(needsYouChimeProvider);
+    // A session read in its own tab is seen on the dashboard too.
+    // Listened to, not read: a provider nobody listens to is paused, and
+    // would stop following.
+    _container.listen(overviewSeenFollowsScreenProvider, (_, _) {});
   }
 
   /// Applies [settings] to the OS. Prevent-close is the one value here that is

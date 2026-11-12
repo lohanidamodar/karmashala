@@ -4,30 +4,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart' show EyebrowLabel;
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../explorer/application/agent_states.dart';
+import '../../projects/application/projects_controller.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../application/overview_board.dart';
 import '../application/overview_drawer.dart';
 import '../application/overview_family_order.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
-import '../application/overview_reads.dart';
 import '../application/overview_search.dart';
+import '../application/overview_shown.dart';
 import '../application/overview_tree.dart';
 import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_counters.dart';
 import 'overview_done_card.dart';
+import 'overview_project_tile.dart' show openOverviewProject;
 import 'overview_queue_card.dart';
 import 'overview_session_parts.dart';
 
 /// **The dashboard's slim strip**: Today's counts, the search field, New and
-/// Pinned (which dim the rest), Waiting N (the drawer) and More (the
+/// Pinned (which leave only those), Waiting N (the drawer) and More (the
 /// heartbeat, glances and lanes under it). Narrow, the controls wrap under
 /// the counts. A phone draws [OverviewPhoneStrip] instead.
 class OverviewTopStrip extends ConsumerWidget {
@@ -682,26 +685,14 @@ class OverviewWaitingDrawer extends ConsumerWidget {
   }
 }
 
-/// [forest]'s sessions whose title or latest line match the search, folded
-/// and done ones included, in drawn order; empty while nothing is typed.
-List<OverviewCard> watchOverviewSearchMatches(
-  WidgetRef ref,
-  OverviewForest forest,
-) {
-  final query = ref.watch(overviewSearchProvider.select((s) => s.query));
-  if (query.trim().isEmpty) return const [];
-  return overviewSearchMatchesIn(forest, query, (card) {
-    final said = ref.watch(overviewLastAnswerProvider(card.id)).value?.text;
-    return [
-      if (said != null) overviewPlain(said),
-      watchOverviewLine(ref, card),
-    ].join(' ');
-  });
-}
+/// The sessions that match the search ([overviewSearchMatchesProvider]).
+List<OverviewCard> watchOverviewSearchMatches(WidgetRef ref) =>
+    ref.watch(overviewSearchMatchesProvider);
 
-/// **The dashboard's search**: `/` focuses it; typing dims what does not
-/// match; ↑ and ↓ step through the matches, Enter goes to one, Esc clears.
-/// Empty and focused, it lists what needs you, then what is new.
+/// **The dashboard's search**: `/` focuses it; typing leaves only what
+/// matches on the board, the first match picked; ↑ and ↓ move the pick,
+/// Enter opens it, Esc clears. Empty and focused, it lists what needs you,
+/// then what is new.
 class OverviewSearchBox extends ConsumerStatefulWidget {
   const OverviewSearchBox({required this.queue, super.key});
 
@@ -756,12 +747,53 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
   void _leave() =>
       _focus.unfocus(disposition: UnfocusDisposition.previouslyFocusedChild);
 
+  /// The match Enter opens: the pick while it still matches, else the first.
+  String? _pick() {
+    final current = ref.read(overviewSearchProvider).current;
+    return _ids.contains(current) ? current : _ids.firstOrNull;
+  }
+
+  /// Goes to [id], or the pick. A match that was searched for is opened —
+  /// the board whole again, on that session, with its chat beside it; one
+  /// picked off the empty field's list is selected and no more.
   void _go([String? id]) {
-    final to =
-        id ?? ref.read(overviewSearchProvider).current ?? _ids.firstOrNull;
-    if (to == null) return;
+    final to = id ?? _pick();
+    if (to == null) {
+      // No session matches, but a project does: Enter opens the first.
+      final key = ref.read(overviewSearchEmptyProjectsProvider).firstOrNull;
+      final project = key == null
+          ? null
+          : ref
+                .read(projectsControllerProvider)
+                .where((p) => p.id == key.id)
+                .firstOrNull;
+      if (project == null) return;
+      _search.clear();
+      _controller.clear();
+      _leave();
+      openOverviewProject(context, ref, project);
+      return;
+    }
+    final searched = ref.read(overviewSearchProvider).active;
+    _search.clear();
+    _controller.clear();
     _reveal(to);
     _leave();
+    if (searched) ref.read(overviewFocusProvider.notifier).peek(to);
+  }
+
+  /// What was typed is on the board: its first match is the pick, lit as
+  /// the selection is.
+  void _typed(String query) {
+    _search.type(query);
+    _drawn(() {
+      if (!ref.read(overviewSearchProvider).active) return;
+      final first = _ids.firstOrNull;
+      _search.pick(first);
+      if (first != null) {
+        ref.read(overviewFocusProvider.notifier).select(first);
+      }
+    });
   }
 
   /// Runs [then] on matches drawn for what is typed now.
@@ -784,6 +816,7 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
       case LogicalKeyboardKey.arrowDown || LogicalKeyboardKey.arrowUp:
         final step = event.logicalKey == LogicalKeyboardKey.arrowDown ? 1 : -1;
         _drawn(() {
+          _search.pick(_pick());
           if (_search.step(_ids, step) case final id?) _reveal(id);
         });
         return KeyEventResult.handled;
@@ -817,10 +850,18 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
     final forest = ref.watch(overviewForestProvider);
     final List<(String, List<OverviewCard>)> sections;
     _idsFor = search.query;
+    String? count;
     if (search.active) {
-      final matches = watchOverviewSearchMatches(ref, forest);
+      final matches = watchOverviewSearchMatches(ref);
       sections = const [];
       _ids = [for (final card in matches) card.id];
+      final at = _ids.indexOf(search.current ?? '');
+      final projects = ref.watch(overviewSearchEmptyProjectsProvider).length;
+      count = _ids.isNotEmpty
+          ? '${at < 0 ? 1 : at + 1} of ${_ids.length}'
+          : projects == 0
+          ? 'No match'
+          : '$projects ${projects == 1 ? 'project' : 'projects'}';
     } else if (_focus.hasFocus) {
       sections = watchOverviewSearchHints(ref, forest, widget.queue);
       _ids = [
@@ -862,8 +903,26 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
             controller: _controller,
             focusNode: _focus,
             clearOnEscape: false,
-            decoration: compactSearchDecoration(hintText: 'Search sessions'),
-            onChanged: _search.type,
+            decoration:
+                compactSearchDecoration(
+                  hintText: 'Find a session or project',
+                ).copyWith(
+                  // Which match Enter opens, of how many.
+                  suffixIcon: count == null
+                      ? null
+                      : Padding(
+                          padding: const EdgeInsets.only(right: Insets.sm),
+                          child: Text(
+                            count,
+                            key: const ValueKey('overview-search-count'),
+                            maxLines: 1,
+                            style: UiDensity.of(
+                              context,
+                            ).muted(Theme.of(context)),
+                          ),
+                        ),
+                ),
+            onChanged: _typed,
           ),
         ),
       ),
@@ -989,6 +1048,61 @@ class OverviewSearchResults extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: Insets.xs),
           children: rows,
         ),
+      ),
+    );
+  }
+}
+
+/// The groupings the board offers now: Context only where a context exists.
+List<OverviewGroupBy> overviewGroupChoices(OverviewFacts facts) => [
+  for (final by in OverviewGroupBy.values)
+    if (by != OverviewGroupBy.context || facts.contexts.isNotEmpty) by,
+];
+
+/// The glyph a grouping is listed with.
+IconData overviewGroupIcon(OverviewGroupBy by) => switch (by) {
+  OverviewGroupBy.context => AppIcons.folder,
+  OverviewGroupBy.machine => AppIcons.terminal,
+  OverviewGroupBy.status => AppIcons.checkCircle,
+  OverviewGroupBy.agent => AppIcons.robot,
+  OverviewGroupBy.lastActive => AppIcons.clockCounterClockwise,
+  OverviewGroupBy.project => AppIcons.squaresFour,
+};
+
+/// **Group by**, on the strip: says how the project tiles are grouped now,
+/// and opens the list to change it. G opens it from the keyboard.
+class OverviewGroupByButton extends ConsumerWidget {
+  const OverviewGroupByButton({super.key});
+
+  Future<void> _pick(BuildContext context, WidgetRef ref) async {
+    final now = ref.read(overviewGroupByProvider);
+    final picked = await showDesktopMenuUnder<OverviewGroupBy>(context, [
+      for (final by in overviewGroupChoices(ref.read(overviewFactsProvider)))
+        DesktopMenuItem(
+          key: ValueKey('overview-group-by:${by.name}'),
+          value: by,
+          label: by.label,
+          icon: overviewGroupIcon(by),
+          selected: by == now,
+        ),
+    ]);
+    if (picked != null) {
+      ref.read(overviewPrefsProvider.notifier).setGroupBy(picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final by = ref.watch(overviewGroupByProvider);
+    ref.listen(overviewGroupMenuAsksProvider, (_, _) => _pick(context, ref));
+    return Tooltip(
+      message: 'Group the projects (G)',
+      child: OverviewStripToggle(
+        key: const ValueKey('overview-group-by'),
+        label: 'Group: ${by.label}',
+        icon: AppIcons.caretDown,
+        selected: false,
+        onTap: () => _pick(context, ref),
       ),
     );
   }

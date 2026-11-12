@@ -39,7 +39,13 @@ class OverviewPrefs {
     this.pinned = const [],
     this.hiddenDetails = const {},
     this.collapsedLanes = const {},
+    this.finishedAsCards = false,
   });
+
+  /// Whether a family that is finished and seen keeps its card. Off, it is
+  /// one line in its project's tile, and only what needs the owner, runs or
+  /// is new is a card.
+  final bool finishedAsCards;
 
   /// The groups this device keeps folded, each as [overviewLaneFoldKey]:
   /// one folded under Project stays open under Machine.
@@ -73,6 +79,7 @@ class OverviewPrefs {
     List<String>? pinned,
     Set<OverviewCardDetail>? hiddenDetails,
     Set<String>? collapsedLanes,
+    bool? finishedAsCards,
   }) => OverviewPrefs(
     filter: filter ?? this.filter,
     groupBy: groupBy ?? this.groupBy,
@@ -82,6 +89,7 @@ class OverviewPrefs {
     pinned: pinned ?? this.pinned,
     hiddenDetails: hiddenDetails ?? this.hiddenDetails,
     collapsedLanes: collapsedLanes ?? this.collapsedLanes,
+    finishedAsCards: finishedAsCards ?? this.finishedAsCards,
   );
 
   Map<String, Object?> toJson() => {
@@ -98,6 +106,7 @@ class OverviewPrefs {
     if (hiddenDetails.isNotEmpty)
       'hiddenDetails': [for (final detail in hiddenDetails) detail.name],
     if (collapsedLanes.isNotEmpty) 'collapsedLanes': collapsedLanes.toList(),
+    if (finishedAsCards) 'finishedAsCards': true,
   };
 
   static OverviewPrefs fromJson(Object? json) {
@@ -152,6 +161,7 @@ class OverviewPrefs {
             detail,
       },
       collapsedLanes: strings(json['collapsedLanes']) ?? const {},
+      finishedAsCards: json['finishedAsCards'] == true,
     );
   }
 }
@@ -247,6 +257,12 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
 
   void setDensity(OverviewDensity density) {
     if (state.density != density) _set(state.copyWith(density: density));
+  }
+
+  void setFinishedAsCards(bool cards) {
+    if (state.finishedAsCards != cards) {
+      _set(state.copyWith(finishedAsCards: cards));
+    }
   }
 
   void setLaunchInBackground(bool background) {

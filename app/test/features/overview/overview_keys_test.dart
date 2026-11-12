@@ -55,20 +55,29 @@ void main() {
     expect(rows.singleWhere((r) => r.does == 'Next session').keys, ['↓', 'J']);
   });
 
-  test('the family, lane, new and search keys are on the sheet', () {
+  test('the project, group, new and search keys are on the sheet', () {
     final rows = overviewBoundKeyRows();
     List<String> keysOf(String does) =>
         rows.singleWhere((r) => r.does == does).keys;
-    expect(keysOf('Next family'), ['→']);
-    expect(keysOf('Previous family'), ['←']);
-    expect(keysOf('First family of the next lane'), [']']);
-    expect(keysOf('First family of the previous lane'), ['[']);
+    expect(keysOf('Next project'), ['→']);
+    expect(keysOf('Previous project'), ['←']);
+    expect(keysOf('First project of the next group'), [']']);
+    expect(keysOf('First project of the previous group'), ['[']);
+    // What acts on the selected session and its project.
+    expect(keysOf('Fold or open the group the selection is in'), ['Space']);
+    expect(keysOf('Open the selected session\'s project'), ['O']);
+    expect(keysOf('Edit that project'), ['E']);
+    expect(keysOf('New session in that project'), ['C']);
+    expect(keysOf('Choose how the projects are grouped'), ['G']);
+    expect(keysOf('Message the selected session'), ['M']);
+    expect(keysOf('Stop the selected session\'s turn'), ['S']);
+    expect(keysOf('Open the selected session\'s menu'), ['.']);
     expect(keysOf('Next new session'), ['U']);
-    expect(keysOf('Search the titles and latest lines'), ['/']);
+    expect(keysOf('Find a session or project'), ['/']);
     final search = overviewKeyRows().where((r) => r.group == 'In the search');
     expect(
       [for (final r in search) r.does],
-      ['Step through the matches', 'Go to the match', 'Clear the search'],
+      ['Move the pick', 'Open the picked match', 'Clear the search'],
     );
   });
 
