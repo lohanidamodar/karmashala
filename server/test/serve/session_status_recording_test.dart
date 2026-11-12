@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/lifecycle_client.dart';
 import 'package:karmashala_store/database.dart';
@@ -141,6 +142,85 @@ void main() {
     expect(statusOf('held'), 'running');
     expect(statusOf('remote'), 'running', reason: 'an SSH host speaks for it');
     expect(statusOf('done'), 'completed');
+  });
+
+  group('an external-surface row moves by its own hooks', () {
+    void external(String id, String status, {String surface = 'external'}) {
+      row(id, status);
+      db.execute(
+        'UPDATE sessions SET surface = ?, external_session_id = ? '
+        'WHERE id = ?;',
+        [surface, 'conv-$id', id],
+      );
+    }
+
+    AgentStatusReport said(
+      String id,
+      AgentActivityStatus status, {
+      AgentSessionEnding? ending,
+    }) => AgentStatusReport(
+      agentId: 'claude-code',
+      sessionId: 'conv-$id',
+      status: status,
+      observedAt: clock,
+      source: AgentStatusSource.hook,
+      ending: ending,
+    );
+
+    test('a working hook makes it running; its session end, completed', () {
+      external('x', 'unknown');
+      recording.start();
+      recording.hookReported(null, said('x', AgentActivityStatus.working));
+      expect(statusOf('x'), 'running');
+      recording.hookReported(
+        null,
+        said(
+          'x',
+          AgentActivityStatus.idle,
+          ending: AgentSessionEnding.completed,
+        ),
+      );
+      expect(statusOf('x'), 'completed');
+      expect(written, ['x running', 'x completed']);
+      // An ended row is never revived by a late hook.
+      recording.hookReported(null, said('x', AgentActivityStatus.working));
+      expect(statusOf('x'), 'completed');
+    });
+
+    test('with no hook it stays unknown', () {
+      external('quiet', 'unknown');
+      recording.start();
+      expect(statusOf('quiet'), 'unknown');
+      expect(written, isEmpty);
+    });
+
+    test('a row the host holds, or an in-app one, is not moved by hooks', () {
+      external('held', 'running');
+      external('pane', 'unknown', surface: 'pane');
+      registry.open('karmashala_held', request);
+      recording.start();
+      recording.hookReported(
+        null,
+        said(
+          'held',
+          AgentActivityStatus.idle,
+          ending: AgentSessionEnding.completed,
+        ),
+      );
+      recording.hookReported('pane', said('pane', AgentActivityStatus.working));
+      expect(statusOf('held'), 'running');
+      expect(statusOf('pane'), 'unknown');
+    });
+
+    test('the unheld sweep on a watch does not undo it', () async {
+      external('x', 'unknown');
+      recording.start();
+      recording.hookReported(null, said('x', AgentActivityStatus.working));
+      final feed = await watch();
+      await pump();
+      expect(statusOf('x'), 'running');
+      await feed.close();
+    });
   });
 
   test('without a recording, a host writes nothing and still feeds', () async {

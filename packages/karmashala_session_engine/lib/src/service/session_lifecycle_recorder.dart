@@ -100,6 +100,17 @@ class SessionLifecycleRecorder {
     return _record(row, _derived(row, null), null);
   }
 
+  /// Records what the agent's own hooks said of a row no host runs: [status]
+  /// is `running` or an ending. An ended or archived row is never revived.
+  SessionLifecycleChange? recordReported(
+    String sessionId,
+    SessionStatus status,
+  ) {
+    final row = _sessions.getById(sessionId);
+    if (row == null || row.status.isEnded) return null;
+    return _record(row, status, null);
+  }
+
   Future<void> dispose() => _changes.close();
 
   /// What [facts] say of [row], with `unknown` put to the resolver.

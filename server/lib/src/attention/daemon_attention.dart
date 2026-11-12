@@ -129,6 +129,9 @@ class DaemonAttention {
   late final StreamSubscription<HostedAgentStatus> _agentStatuses;
   var _followUpsDue = false;
 
+  /// Each hook's report as it is read — what moves an external row's lifecycle.
+  void Function(AgentHookEvent hook, AgentStatusReport report)? onReport;
+
   void start() => attention.start();
 
   Future<void> close() async {
@@ -147,6 +150,7 @@ class DaemonAttention {
       body: body,
       observedAt: hook.receivedAt,
     );
+    onReport?.call(hook, report);
     if (report.sessionId.isEmpty) return;
     // Before the status is recomposed, so a prompt reads the call it is for.
     status.toolAsks?.hook(

@@ -38,18 +38,27 @@ class HostedSessionStatusKeeper {
 
   /// Rows on this machine still claiming to run that the host does not hold
   /// ([heldHostSessionIds]) become `unknown` — except [runByClient], sessions a
-  /// client runs in its own panes, which no host could know.
+  /// client runs in its own panes, which no host could know, and [keptByHooks],
+  /// rows whose own agent's hooks have said they run.
   List<SessionLifecycleChange> markUnheld({
     required Set<String> heldHostSessionIds,
     Set<String> runByClient = const {},
+    Set<String> keptByHooks = const {},
   }) => [
     for (final session in _sessions.getClaimingLive())
       if (!session.isArchived &&
           !runByClient.contains(session.id) &&
+          !keptByHooks.contains(session.id) &&
           !heldHostSessionIds.contains(hostSessionIdOf(session.id)) &&
           _runsHere(session))
         ?_recorder.recordUnseen(session.id),
   ];
+
+  /// See [SessionLifecycleRecorder.recordReported].
+  SessionLifecycleChange? recordReported(
+    String sessionId,
+    SessionStatus status,
+  ) => _recorder.recordReported(sessionId, status);
 
   Future<void> dispose() => _recorder.dispose();
 

@@ -1055,6 +1055,9 @@ Future<int> _serve(
       agents: liveAgents,
     ),
   )..start();
+  // A row in a terminal window nobody here sees runs and ends by its hooks.
+  attention.onReport = (hook, report) =>
+      recording.hookReported(hook.sessionHeader, report);
   // A box's sessions start and exit as its host says (slice 5d).
   ssh.onBoxLifecycle = recording.applyRemote;
   // The timeline's history: what the server sees, written off the turn.

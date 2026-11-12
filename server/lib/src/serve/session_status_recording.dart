@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:agent_cli/descriptors.dart'
+    show AgentActivityStatus, AgentSessionEnding, AgentStatusReport;
+import 'package:karmashala_session/launch.dart' show SessionSurface;
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart'
     as engine;
 import 'package:karmashala_session_engine/store.dart' as store;
@@ -26,10 +30,12 @@ class SessionStatusRecording {
     void Function(String sessionId)? onWritten,
     engine.UnknownResolver? resolveUnknown,
   }) : _keeper = store.keeperOver(database, resolveUnknown: resolveUnknown),
+       _rows = store.SessionDao(database),
        _now = clock,
        _onWritten = onWritten;
 
   final LifecycleFeed _feed;
+  final store.SessionDao _rows;
   final void Function(String sessionId)? _onWritten;
   final engine.HostedSessionStatusKeeper _keeper;
   final DateTime Function() _now;
@@ -54,10 +60,53 @@ class SessionStatusRecording {
     _keeper.markUnheld(
       heldHostSessionIds: {for (final f in _feed.snapshot()) f.sessionId},
     );
+    // A row its hooks said runs since this server started is theirs to end:
+    // no host was ever going to hold it.
     _feed.onWatched = (runByClient) => _keeper.markUnheld(
       heldHostSessionIds: {for (final f in _feed.snapshot()) f.sessionId},
       runByClient: runByClient,
+      keptByHooks: _keptByHooks,
     );
+  }
+
+  /// External-surface rows a hook has said run, this server's life.
+  final Set<String> _keptByHooks = {};
+
+  /// What an agent's own hook said of a row in a terminal window nobody here
+  /// sees (the external surface): working or idle is `running`, its session's
+  /// end is the ending. A row the host holds moves only by the host.
+  void hookReported(String? paneSessionId, AgentStatusReport report) {
+    final row = _externalRowOf(paneSessionId, report.sessionId);
+    if (row == null) return;
+    final hostId = engine.hostSessionIdOf(row.id);
+    if (_feed.snapshot().any((f) => f.sessionId == hostId)) return;
+    final status = switch (report.ending) {
+      AgentSessionEnding.completed => SessionStatus.completed,
+      AgentSessionEnding.failed => SessionStatus.failed,
+      AgentSessionEnding.conversationOnly || null => switch (report.status) {
+        AgentActivityStatus.working ||
+        AgentActivityStatus.idle ||
+        AgentActivityStatus.awaitingApproval => SessionStatus.running,
+        _ => null,
+      },
+    };
+    if (status == null) return;
+    if (status == SessionStatus.running) {
+      _keptByHooks.add(row.id);
+    } else {
+      _keptByHooks.remove(row.id);
+    }
+    _keeper.recordReported(row.id, status);
+  }
+
+  Session? _externalRowOf(String? paneSessionId, String conversationId) {
+    final named = paneSessionId == null ? null : _rows.getById(paneSessionId);
+    final row =
+        named ??
+        (conversationId.isEmpty
+            ? null
+            : _rows.getByExternalSessionId(conversationId));
+    return row != null && row.surface == SessionSurface.external ? row : null;
   }
 
   /// Records [event] from an SSH box's host (slice 5d): a session there that
