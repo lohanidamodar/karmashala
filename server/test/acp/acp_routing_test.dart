@@ -381,6 +381,33 @@ void main() {
     expect(rows.map((r) => r.text), ['First', 'hi', 'Second', 'again']);
   });
 
+  test(
+    'Stop with no turn open is refused in words, not taken as a stop',
+    () async {
+      final process = FakeAcpProcess(FakeAcpAgent());
+      await open(process);
+      final input = SessionInput(
+        prompts: prompts,
+        typist: SessionMessageTypist(
+          readScreen: (_) => null,
+          markersFor: (_) => null,
+          type: (_, _) => false,
+          press: (_, _) => false,
+        ),
+      );
+      await expectLater(
+        input.handle(const SessionInterrupt('s1'), null),
+        throwsA(
+          isA<DataRefused>()
+              .having((r) => r.code, 'code', DataRefusalCode.invalid)
+              .having((r) => r.message, 'message', contains('nothing to stop')),
+        ),
+      );
+      await pump();
+      expect(process.agent.cancels, 0);
+    },
+  );
+
   test('sessions.setMode reaches the agent for an ACP session and is refused '
       'in words for any other', () async {
     const modes = SessionModeState(

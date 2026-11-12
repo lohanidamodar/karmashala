@@ -623,13 +623,18 @@ class AcpSessionRuntime implements ScreenSession {
   /// at once, with null, when none is open.
   Future<StopReason?> awaitTurn() => _turnSettled?.future ?? Future.value(null);
 
-  /// Asks the agent to stop the open turn; nothing when none is open.
-  void cancel() {
+  /// Whether there is a turn to stop: a prompt's, or one the agent began.
+  bool get working => _turn != null || _agentWorking;
+
+  /// Asks the agent to stop the open turn, its own included; nothing when
+  /// none is open. Answers whether it asked.
+  bool cancel() {
     final client = _client;
     final agent = _agentSessionId;
-    if (client == null || agent == null || _turn == null) return;
+    if (client == null || agent == null || !working) return false;
     _resolvePending(const PermissionOutcome.cancelled());
     client.cancel(agent);
+    return true;
   }
 
   /// `session/set_mode`. Throws [StateError] in words for a mode the agent

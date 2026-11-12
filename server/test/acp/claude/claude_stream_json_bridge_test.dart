@@ -2294,6 +2294,77 @@ void main() {
       },
     );
 
+    test('Stop reaches a turn Claude began itself as an interrupt, and the '
+        'session goes idle', () async {
+      final report = Completer<void>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.result();
+            await report.future;
+            c.assistant('later', [
+              {'type': 'text', 'text': 'Working on my own.'},
+            ]);
+            c.turnOpen = true;
+          },
+        ],
+      );
+      final rt = runtime(machine);
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      report.complete();
+      await until(
+        () => host.statuses.last.status == AgentActivityStatus.working,
+      );
+      expect(rt.cancel(), isTrue);
+      await until(() => host.statuses.last.status == AgentActivityStatus.idle);
+      expect(machine.current.controls('interrupt'), hasLength(1));
+      expect(machine.current.killed, isFalse);
+      expect(rt.cancel(), isFalse, reason: 'nothing is left to stop');
+      await rt.stop();
+    });
+
+    test('a turn Claude began itself that ignores the interrupt is ended '
+        'with its process; the next prompt resumes', () async {
+      final report = Completer<void>();
+      final machine = FakeClaudeMachine(
+        ignoreInterrupt: true,
+        turns: [
+          (c, user) async {
+            c.result();
+            await report.future;
+            c.assistant('later', [
+              {'type': 'text', 'text': 'Working on my own.'},
+            ]);
+          },
+          (c, user) async => c.result(),
+        ],
+      );
+      final rt = runtime(
+        machine,
+        interruptPatience: const Duration(milliseconds: 100),
+      );
+      await rt.start();
+      await rt.send('Go');
+      await rt.awaitTurn();
+      final first = machine.current;
+      report.complete();
+      await until(
+        () => host.statuses.last.status == AgentActivityStatus.working,
+      );
+      expect(rt.cancel(), isTrue);
+      await until(() => host.statuses.last.status == AgentActivityStatus.idle);
+      expect(first.killed, isTrue);
+      await rt.send('Again');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      expect(
+        machine.launched.where((c) => c.args.contains('--resume')),
+        hasLength(1),
+      );
+      await rt.stop();
+    });
+
     test('a task not said to be backgrounded holds nothing once the turn '
         'ends', () async {
       // Claude Code sends is_backgrounded only for tasks that carry it; one

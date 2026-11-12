@@ -399,13 +399,20 @@ class SessionInput {
   /// Stop also pauses the queue: the turn's end it causes must not send the
   /// next message the person just stopped short of.
   Future<DataAck> _interrupt(String sessionId) async {
-    interrupted?.call(sessionId);
     final runtime = prompts.status.acpRuntimeOf(sessionId);
     if (runtime != null) {
+      if (!runtime.working) {
+        throw DataRefused.invalid(
+          '${runtime.agentName} is not working on anything, so there was '
+          'nothing to stop',
+        );
+      }
+      interrupted?.call(sessionId);
       queue?.pause(sessionId);
       runtime.cancel();
       return const DataAck();
     }
+    interrupted?.call(sessionId);
     if (!prompts.status.typeAsServer(sessionId, utf8.encode(_interruptKey))) {
       throw _notHere;
     }

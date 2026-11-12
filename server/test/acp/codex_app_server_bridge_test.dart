@@ -1557,8 +1557,11 @@ void main() {
   });
 
   group("Codex's async questions", () {
-    FakeCodexAppServer asyncAsking() => FakeCodexAppServer(
+    FakeCodexAppServer asyncAsking({
+      Future<void> Function(FakeCodexTurn turn)? answering,
+    }) => FakeCodexAppServer(
       onTurn: (turn) async {
+        if (turn.id != 'turn-1' && answering != null) return answering(turn);
         if (turn.id == 'turn-1') {
           turn.completed({
             'type': 'agentMessage',
@@ -1619,6 +1622,35 @@ void main() {
       expect(codex.callsTo('turn/start'), hasLength(2));
       await runtime.stop();
     });
+
+    test(
+      'Stop reaches the turn the answer opened, as turn/interrupt',
+      () async {
+        final codex = asyncAsking(
+          answering: (turn) async {
+            await turn.interrupted.future;
+            turn.end('interrupted');
+          },
+        );
+        final runtime = runtimeOver(codex, risk: PermissionRisk.ask);
+        await runtime.start();
+        await runtime.send('Wrap up');
+        await runtime.awaitTurn();
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await runtime.answerQuestion(
+          toolUseId: runtime.openQuestion!.toolUseId,
+          answers: const [AgentQuestionAnswer.option(0)],
+        );
+        await pump(100);
+        expect(statuses().last, AgentActivityStatus.working);
+        expect(runtime.inTurn, isFalse, reason: 'no prompt opened it');
+        expect(runtime.cancel(), isTrue);
+        await pump(100);
+        expect(codex.callsTo('turn/interrupt').single['turnId'], 'turn-2');
+        expect(statuses().last, AgentActivityStatus.idle);
+        await runtime.stop();
+      },
+    );
   });
 
   group("an MCP server's elicitation", () {

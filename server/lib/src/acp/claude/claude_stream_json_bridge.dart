@@ -530,7 +530,25 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   void _cancel() {
     final claude = _claude;
     final turn = _turn;
-    if (turn == null || claude == null) return;
+    if (claude == null) return;
+    if (turn == null) {
+      // A turn Claude began itself: stopped the same way, with no prompt
+      // to answer.
+      if (!_agentTurnOpen) return;
+      final own = _agentTurns;
+      unawaited(
+        claude.control('interrupt').then((_) {}, onError: (Object _) {}),
+      );
+      Timer(_interruptPatience, () {
+        if (_turn == null &&
+            _agentTurnOpen &&
+            _agentTurns == own &&
+            identical(_claude, claude)) {
+          _abandon(claude, null);
+        }
+      });
+      return;
+    }
     _cancelling = true;
     unawaited(claude.control('interrupt').then((_) {}, onError: (Object _) {}));
     Timer(_interruptPatience, () {
@@ -543,7 +561,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   /// Claude did not end the turn after the interrupt: the process is ended
   /// (its end is not the session's), the turn answers cancelled, and the
   /// next prompt resumes the conversation in a new process.
-  void _abandon(ClaudeProcess claude, Completer<String> turn) {
+  void _abandon(ClaudeProcess claude, Completer<String>? turn) {
     _claude = null;
     _turn = null;
     _cancelling = false;
@@ -552,7 +570,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _limitUnsent = false;
     _compaction = null;
     _dropAgentTurn();
-    if (!turn.isCompleted) turn.complete('cancelled');
+    if (turn != null && !turn.isCompleted) turn.complete('cancelled');
     unawaited(claude.kill().catchError((Object _) {}));
   }
 
@@ -1028,7 +1046,11 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   /// what it is doing. The session is not finished while any runs.
   final _background = <String, String>{};
 
+  /// Counts the agent turns opened, so a stop's escalation ends only its own.
+  var _agentTurns = 0;
+
   void _openAgentTurn() {
+    if (!_agentTurnOpen) _agentTurns++;
     _agentTurnOpen = true;
     _update({
       'sessionUpdate': AcpExtensions.agentTurn,
