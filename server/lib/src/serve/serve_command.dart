@@ -915,6 +915,11 @@ Future<int> _serve(
     trust: trustMadeFolder,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  // Every launcher below — a person's, a phone's, an automation's — trusts alike.
+  final launcherTrust = LauncherTrust(
+    createdWorktree: trustMadeFolder,
+    registeredProject: projectTrust.trustForNewConversation,
+  );
 
   // Which sessions the person let operate Karmashala: read per call, so
   // a grant given a moment ago counts on the next tool call.
@@ -1229,9 +1234,10 @@ Future<int> _serve(
     openAgent: openAgent,
   );
   // A phone's start is a person's; it waits in line, at the front of it.
-  companion.launcher
-    ?..admit = awaitedLaunches.admitAt(LaunchPriority.interactive)
-    ..trustRegisteredProject = projectTrust.trustForNewConversation;
+  companion.launcher?.admit = awaitedLaunches.admitAt(
+    LaunchPriority.interactive,
+  );
+  launcherTrust.applyTo(companion.launcher);
   // An agent whose adapter speaks ACP runs in a runtime of the server's, not
   // a PTY: its conversation is `session_messages`, its status its own word.
   final sessionMessages = SessionMessageDao(database);
@@ -1310,9 +1316,10 @@ Future<int> _serve(
     identities: identities,
   );
   // Automations, webhooks and scheduled resumes are background work.
-  automations?.agentLauncher
-    ?..admit = awaitedLaunches.admitAt(LaunchPriority.background)
-    ..trustRegisteredProject = projectTrust.trustForNewConversation;
+  automations?.agentLauncher.admit = awaitedLaunches.admitAt(
+    LaunchPriority.background,
+  );
+  launcherTrust.applyTo(automations?.agentLauncher);
   // Webhooks reach this server through the relay it pairs through.
   final webhooks = await _startWebhooks(
     database: database,
@@ -1368,8 +1375,6 @@ Future<int> _serve(
     now: () => DateTime.now().toUtc(),
     newId: newUuid,
     worktrees: worktrees,
-    trustCreatedWorktree: trustMadeFolder,
-    trustRegisteredProject: projectTrust.trustForNewConversation,
     onRowWritten: (sessionId) => data.announceSessions([sessionId]),
     environmentOf: checkoutRows.environment,
     openAgent: openAgent,
@@ -1395,6 +1400,7 @@ Future<int> _serve(
     ),
     hostEnvironment: hostEnvironment,
   );
+  launcherTrust.applyTo(hostedLauncher);
   final checkoutFacts = DaemonCheckoutFacts(
     checkoutRows,
     agents: liveAgents,

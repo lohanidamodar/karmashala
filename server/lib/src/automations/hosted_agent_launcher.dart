@@ -210,6 +210,27 @@ class HostedStart {
 typedef AgentTerminalOpener =
     Future<void> Function(AgentPaneLaunch launch, int columns, int rows);
 
+/// What every launcher the server builds trusts before its agent starts — a
+/// person's, a phone's and an automation's alike.
+final class LauncherTrust {
+  const LauncherTrust({
+    required this.createdWorktree,
+    required this.registeredProject,
+  });
+
+  /// See [HostedAgentLauncher.trustCreatedWorktree].
+  final Future<void> Function(AgentInstallation, EnvironmentPath)
+  createdWorktree;
+
+  /// See [HostedAgentLauncher.trustRegisteredProject].
+  final Future<bool> Function(AgentInstallation, EnvironmentPath)
+  registeredProject;
+
+  void applyTo(HostedAgentLauncher? launcher) => launcher
+    ?..trustCreatedWorktree = createdWorktree
+    ..trustRegisteredProject = registeredProject;
+}
+
 /// Starts an agent as a session this host owns: the row first, then the PTY
 /// under the row's host id, so a client attaches to it as to any other hosted
 /// session. Every start comes through [start] — a person's in the app, an
@@ -259,10 +280,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// Marks a worktree [worktrees] just made trusted in the agent's own
   /// settings before the agent starts there; never throws. A folder the
   /// person brought is never passed here.
-  final Future<void> Function(
-    AgentInstallation installation,
-    EnvironmentPath folder,
-  )?
+  Future<void> Function(AgentInstallation installation, EnvironmentPath folder)?
   trustCreatedWorktree;
 
   /// Trusts a registered project's folder before a new conversation's agent

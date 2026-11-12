@@ -97,21 +97,27 @@ void main() {
     final rows = CheckoutRows(database);
     final environment = rows.environment('local')!;
     var ids = 0;
-    launches = ServerSessionLauncher(
-      launcher: HostedAgentLauncher(
-        registry: registry,
-        sessions: SessionDao(database),
-        mcp: SessionMcpAccessPoint(mcp: null, configDirectory: tmp.path),
-        now: () => t0,
-        newId: () => 'new-${++ids}',
-        hostEnvironment: const {},
-        environmentOf: rows.environment,
-        worktrees: WorktreeService(
-          runnerFactory: const CommandRunnerFactory(),
-          environmentOf: (_) => environment,
-        ),
-        trustCreatedWorktree: trust,
+    // Built as the phone's and the automations' launchers are, with no trust
+    // of its own: `serve` gives all three theirs through one LauncherTrust.
+    final launcher = HostedAgentLauncher(
+      registry: registry,
+      sessions: SessionDao(database),
+      mcp: SessionMcpAccessPoint(mcp: null, configDirectory: tmp.path),
+      now: () => t0,
+      newId: () => 'new-${++ids}',
+      hostEnvironment: const {},
+      environmentOf: rows.environment,
+      worktrees: WorktreeService(
+        runnerFactory: const CommandRunnerFactory(),
+        environmentOf: (_) => environment,
       ),
+    );
+    LauncherTrust(
+      createdWorktree: trust,
+      registeredProject: (_, _) async => false,
+    ).applyTo(launcher);
+    launches = ServerSessionLauncher(
+      launcher: launcher,
       registry: registry,
       sessions: SessionDao(database),
       rows: rows,
