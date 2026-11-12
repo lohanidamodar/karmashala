@@ -27,6 +27,7 @@ import '../application/overview_on_screen.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_search.dart';
+import '../application/overview_seen.dart';
 import '../application/overview_shown.dart';
 import '../application/overview_tiles.dart';
 import '../application/overview_today.dart';

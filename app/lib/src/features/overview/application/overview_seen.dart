@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/util/clock_provider.dart';
+import '../../explorer/application/session_context.dart';
 import 'overview_prefs.dart';
 
 /// **When the owner last looked at each session**, on this device: the
@@ -93,3 +95,25 @@ final overviewSeenReadProvider = NotifierProvider<OverviewSeenRead, bool>(
 /// looked at here, which is not "nothing new".
 int? newSince(DateTime? seen, Iterable<DateTime> times) =>
     seen == null ? null : times.where((t) => t.isAfter(seen)).length;
+
+/// **A session looked at anywhere is seen**: its chat or terminal coming on
+/// screen in the workbench marks it as the dashboard's own peek does, and
+/// leaving it marks it again, so what came while it was open is seen too.
+/// Follows for as long as it is listened to: the desktop listens for the
+/// app's life, and the dashboard while it is drawn.
+final overviewSeenFollowsScreenProvider = Provider<void>((ref) {
+  final seen = ref.read(overviewSeenProvider.notifier);
+  void mark(String? id) {
+    if (id != null) seen.markSeen(id, ref.read(clockProvider).nowUtc());
+  }
+
+  // After this provider is built: one may not change another while it is.
+  final first = ref.read(onScreenSessionIdProvider);
+  Future.microtask(() {
+    if (ref.mounted) mark(first);
+  });
+  ref.listen(onScreenSessionIdProvider, (before, after) {
+    mark(before);
+    mark(after);
+  });
+});
