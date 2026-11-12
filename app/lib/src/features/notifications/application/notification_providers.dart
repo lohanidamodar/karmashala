@@ -196,24 +196,7 @@ final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
   // stood when it was shown: a click that lands later answers only that one.
   final raisedFor = <String, PromptAsk>{};
   final presenter = DesktopNotificationPresenter(
-    onActivated: (payload) {
-      if (storeAppKeyOfInboxId(payload.openId) case final appKey?) {
-        ref.read(storesOpenRequestProvider.notifier).open(appKey);
-        ref.read(windowRaiseRequestProvider.notifier).bump();
-        return;
-      }
-      if (pipelineRunIdOfInboxId(payload.openId) case final runId?) {
-        ref.read(workflowsOpenRequestProvider.notifier).openPipelineRun(runId);
-        ref.read(windowRaiseRequestProvider.notifier).bump();
-        return;
-      }
-      revealSession(
-        ref.container,
-        openId: payload.openId,
-        imported: payload.imported,
-      );
-      ref.read(windowRaiseRequestProvider.notifier).bump();
-    },
+    onActivated: (payload) => openClickedToast(ref.container, payload),
     // The toast's Allow once / Deny ([kApprovalNotificationActions]), answered
     // as the dock answers: the guarded path refuses once the prompt is gone,
     // so a toast clicked late types nothing. With the app in the background
@@ -403,15 +386,48 @@ void openNotifiedSession(
         .openPipelineRun(runId);
     return;
   }
-  void open() => _whenShellUp(
+  _whenSessionsPrimed(
     container,
-    () => revealSession(
+    () => _whenShellUp(
       container,
-      openId: payload.openId,
-      imported: payload.imported,
+      () => revealSession(
+        container,
+        openId: payload.openId,
+        imported: payload.imported,
+      ),
     ),
   );
+}
 
+/// Opens what a clicked desktop toast names and brings the window forward. A
+/// session is revealed once the server has said what the sessions are, as on
+/// the phone: a click while reconnecting would otherwise call it gone.
+void openClickedToast(
+  ProviderContainer container,
+  NotificationPayload payload,
+) {
+  if (storeAppKeyOfInboxId(payload.openId) case final appKey?) {
+    container.read(storesOpenRequestProvider.notifier).open(appKey);
+  } else if (pipelineRunIdOfInboxId(payload.openId) case final runId?) {
+    container
+        .read(workflowsOpenRequestProvider.notifier)
+        .openPipelineRun(runId);
+  } else {
+    _whenSessionsPrimed(
+      container,
+      () => revealSession(
+        container,
+        openId: payload.openId,
+        imported: payload.imported,
+      ),
+    );
+  }
+  container.read(windowRaiseRequestProvider.notifier).bump();
+}
+
+/// Runs [open] now when the server has said what the sessions are, else once
+/// it has: a stale list must not act (decision 9).
+void _whenSessionsPrimed(ProviderContainer container, void Function() open) {
   if (container.read(sessionsPrimedProvider)) return open();
   late final ProviderSubscription<bool> waiting;
   waiting = container.listen<bool>(sessionsPrimedProvider, (_, primed) {

@@ -59,19 +59,16 @@ Repository? commandDefaultCheckout(
 /// Quick open brings the dashboard forward before it runs this.
 void peekOnDashboard(ProviderContainer container, String sessionId) {
   container.read(overviewPrefsProvider.notifier).setView(OverviewView.board);
-  var tries = 0;
-  void peekWhenUp(Duration _) {
-    // The board's focus lives only while the dashboard is built.
-    if (!container.exists(overviewFocusProvider)) {
-      if (++tries < 4) {
-        WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
-      }
-      return;
+  // Held until the board's focus is built, which takes it — a cold start's
+  // first build may be many frames away.
+  final pending = container.read(pendingOverviewPeekProvider)..hold(sessionId);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    // A board built all along has taken nothing: it is peeked here.
+    if (!container.exists(overviewFocusProvider)) return;
+    if (pending.take() case final id?) {
+      container.read(overviewFocusProvider.notifier).peek(id);
     }
-    container.read(overviewFocusProvider.notifier).peek(sessionId);
-  }
-
-  WidgetsBinding.instance.addPostFrameCallback(peekWhenUp);
+  });
 }
 
 /// Runs a [CommandAction] through the action that already owns it; nothing

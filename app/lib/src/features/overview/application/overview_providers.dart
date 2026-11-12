@@ -427,7 +427,11 @@ class OverviewFocus {
 
 class OverviewFocusController extends Notifier<OverviewFocus> {
   @override
-  OverviewFocus build() => const OverviewFocus();
+  OverviewFocus build() {
+    final pending = ref.read(pendingOverviewPeekProvider).take();
+    if (pending == null) return const OverviewFocus();
+    return OverviewFocus(selected: pending, peeked: pending);
+  }
 
   void select(String? id) => state = OverviewFocus(
     selected: id,
@@ -485,6 +489,25 @@ final overviewFocusProvider =
     NotifierProvider.autoDispose<OverviewFocusController, OverviewFocus>(
       OverviewFocusController.new,
     );
+
+/// A peek asked for before the board was built to take it: the board's focus
+/// takes it when it is next built, however many frames that is.
+class PendingOverviewPeek {
+  String? _sessionId;
+
+  void hold(String sessionId) => _sessionId = sessionId;
+
+  /// The peek held, now no longer held.
+  String? take() {
+    final sessionId = _sessionId;
+    _sessionId = null;
+    return sessionId;
+  }
+}
+
+final pendingOverviewPeekProvider = Provider<PendingOverviewPeek>(
+  (ref) => PendingOverviewPeek(),
+);
 
 /// The branch a reading of [EnvironmentPath] checkout has already named, or
 /// null. Borrowed, never asked for, as the Agents lens's rows do.

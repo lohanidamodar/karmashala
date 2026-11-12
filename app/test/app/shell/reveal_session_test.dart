@@ -7,7 +7,12 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/phone_routes.dart';
 import 'package:karmashala/src/app/shell/reveal_session.dart';
+import 'package:karmashala/src/features/explorer/application/session_list_snapshot.dart'
+    show sessionsPrimedProvider;
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart'
+    show openClickedToast, windowRaiseRequestProvider;
+import 'package:karmashala_notifications/toasts.dart' show NotificationPayload;
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -45,7 +50,11 @@ void main() {
     db.server.sessionRows.markArchived('s3', testTime);
   });
 
-  Future<ProviderContainer> launch(WidgetTester tester) async {
+  Future<ProviderContainer> launch(
+    WidgetTester tester, {
+    bool boardUp = true,
+    List<Override> overrides = const [],
+  }) async {
     final prefs = Directory.systemTemp.createTempSync('ks-reveal');
     addTearDown(() => prefs.deleteSync(recursive: true));
     final container = ProviderContainer(
@@ -53,12 +62,13 @@ void main() {
         data,
         ...fakeTerminalOverrides(machine: db),
         overviewPrefsDirectoryProvider.overrideWithValue(() async => prefs),
+        ...overrides,
       ],
     );
     addTearDown(container.dispose);
     // The dashboard's peek lives while the dashboard is built; held here so
     // what a reveal peeked can be read back.
-    container.listen(overviewFocusProvider, (_, _) {});
+    if (boardUp) container.listen(overviewFocusProvider, (_, _) {});
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -108,6 +118,59 @@ void main() {
     // Revealing opens no tab of the session's own.
     expect(container.read(paneSessionsProvider).panesOf('s2'), isEmpty);
     expect(container.read(selectedSessionIdProvider), isNull);
+  });
+
+  testWidgets('a board ten frames from built still takes the peek', (
+    tester,
+  ) async {
+    final container = await launch(tester, boardUp: false);
+    terminals(container).openSettingsTab();
+
+    final went = revealSession(container, openId: 's2');
+    for (var frame = 0; frame < 10; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(container.exists(overviewFocusProvider), isFalse);
+    // The board is built at last.
+    container.listen(overviewFocusProvider, (_, _) {});
+
+    expect(went, SessionReveal.dashboard);
+    expect(activeTab(container), overviewTab(container));
+    expect(container.read(overviewFocusProvider).peeked, 's2');
+    expect(container.read(selectedSessionIdProvider), isNull);
+  });
+
+  testWidgets('a toast clicked before the sessions are known: revealed once '
+      'they are, not called gone', (tester) async {
+    final container = await launch(
+      tester,
+      overrides: [
+        sessionsPrimedProvider.overrideWith((ref) => ref.watch(_primed)),
+      ],
+    );
+    final before = container.read(sessionRevealNoticeProvider)?.seq;
+
+    openClickedToast(
+      container,
+      const NotificationPayload(openId: 's4', imported: false),
+    );
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(container.read(windowRaiseRequestProvider), 1);
+    expect(overviewTab(container), isNull);
+
+    // The reconnected server answers with the session the toast named.
+    db.server.sessionRows.insert(session(id: 's4', title: 'Back after'));
+    for (var frame = 0; frame < 10; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    container.read(_primed.notifier).answered();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(container.read(sessionRevealNoticeProvider)?.seq, before);
+    expect(activeTab(container), overviewTab(container));
+    expect(activeTab(container), isNotNull);
+    expect(container.read(overviewFocusProvider).peeked, 's4');
   });
 
   testWidgets('an archived or deleted one: a word, and the dashboard', (
@@ -176,6 +239,16 @@ void main() {
     expect(activeTab(container), isNot(settings));
   });
 }
+
+/// Whether the server has said what the sessions are, flipped by the test.
+class _Primed extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void answered() => state = true;
+}
+
+final _primed = NotifierProvider<_Primed, bool>(_Primed.new);
 
 class _Routes implements PhoneShellRoutes {
   final shown = <String>[];
