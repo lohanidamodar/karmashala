@@ -80,7 +80,8 @@ void main() {
     );
     await runtime.start();
     expect(
-      (process.agent.initializeParams!['clientCapabilities'] as Map)['terminal'],
+      (process.agent.initializeParams!['clientCapabilities']
+          as Map)['terminal'],
       isTrue,
     );
     await runtime.stop();
@@ -123,10 +124,7 @@ void main() {
     expect(agent.terminalExits.single, {'exitCode': 3, 'signal': null});
     expect(agent.terminalOutputs.single['output'], 'ok 1\nok 2');
     expect(agent.terminalOutputs.single['truncated'], isFalse);
-    expect(
-      (agent.terminalOutputs.single['exitStatus'] as Map)['exitCode'],
-      3,
-    );
+    expect((agent.terminalOutputs.single['exitStatus'] as Map)['exitCode'], 3);
 
     await pump();
     final terminal = (toolJson('c1')['content'] as List).single as Map;
@@ -136,45 +134,47 @@ void main() {
     await runtime.stop();
   });
 
-  test('the output shows under its tool call while the command still runs',
-      () async {
-    final started = <FakeProcessHandle>[];
-    final runner = FakeCommandRunner(
-      processFactory: (_) {
-        final handle = FakeProcessHandle();
-        started.add(handle);
-        return handle;
-      },
-    );
-    final process = FakeAcpProcess(
-      FakeAcpAgent(
-        turns: const [
-          FakeTurn([FakeStep.terminal(toolCallId: 'c1', command: 'make')]),
-        ],
-      ),
-    );
-    final runtime = runtimeOver(
-      process,
-      database: database,
-      workingDirectory: temp.path,
-      terminals: terminalsOver(runner),
-    );
-    await runtime.start();
-    await runtime.send('build');
-    while (started.isEmpty) {
+  test(
+    'the output shows under its tool call while the command still runs',
+    () async {
+      final started = <FakeProcessHandle>[];
+      final runner = FakeCommandRunner(
+        processFactory: (_) {
+          final handle = FakeProcessHandle();
+          started.add(handle);
+          return handle;
+        },
+      );
+      final process = FakeAcpProcess(
+        FakeAcpAgent(
+          turns: const [
+            FakeTurn([FakeStep.terminal(toolCallId: 'c1', command: 'make')]),
+          ],
+        ),
+      );
+      final runtime = runtimeOver(
+        process,
+        database: database,
+        workingDirectory: temp.path,
+        terminals: terminalsOver(runner),
+      );
+      await runtime.start();
+      await runtime.send('build');
+      while (started.isEmpty) {
+        await pump();
+      }
       await pump();
-    }
-    await pump();
-    started.single.emitStdout('compiling…');
-    await settle(const Duration(milliseconds: 80));
-    final live = (toolJson('c1')['content'] as List).single as Map;
-    expect(live['output'], 'compiling…');
-    expect(live.containsKey('exitCode'), isFalse);
+      started.single.emitStdout('compiling…');
+      await settle(const Duration(milliseconds: 80));
+      final live = (toolJson('c1')['content'] as List).single as Map;
+      expect(live['output'], 'compiling…');
+      expect(live.containsKey('exitCode'), isFalse);
 
-    started.single.complete(0);
-    await runtime.awaitTurn();
-    await runtime.stop();
-  });
+      started.single.complete(0);
+      await runtime.awaitTurn();
+      await runtime.stop();
+    },
+  );
 
   test('a command with its arguments runs as given', () async {
     final runner = scripted(const []);
@@ -214,20 +214,24 @@ void main() {
   test('output past the limit keeps its end, cut on a character', () async {
     final runner = scripted(['ééééé', 'abcdef']);
     final terminals = terminalsOver(runner);
-    final created = await terminals.handle('terminal/create', {
-      'sessionId': 's',
-      'command': 'x',
-      'outputByteLimit': 10,
-    }) as Map;
+    final created =
+        await terminals.handle('terminal/create', {
+              'sessionId': 's',
+              'command': 'x',
+              'outputByteLimit': 10,
+            })
+            as Map;
     final id = created['terminalId'] as String;
     await terminals.handle('terminal/wait_for_exit', {
       'sessionId': 's',
       'terminalId': id,
     });
-    final output = await terminals.handle('terminal/output', {
-      'sessionId': 's',
-      'terminalId': id,
-    }) as Map;
+    final output =
+        await terminals.handle('terminal/output', {
+              'sessionId': 's',
+              'terminalId': id,
+            })
+            as Map;
     expect(output['truncated'], isTrue);
     final text = output['output'] as String;
     expect(utf8.encode(text).length, lessThanOrEqualTo(10));
@@ -236,81 +240,88 @@ void main() {
     await terminals.releaseAll();
   });
 
-  test('kill ends the command and keeps its output; release forgets it',
-      () async {
-    final started = <FakeProcessHandle>[];
-    final runner = FakeCommandRunner(
-      processFactory: (_) {
-        final handle = FakeProcessHandle();
-        started.add(handle);
-        return handle;
-      },
-    );
-    final terminals = terminalsOver(runner);
-    final id = ((await terminals.handle('terminal/create', {
-      'sessionId': 's',
-      'command': 'sleep',
-      'args': ['100'],
-    })) as Map)['terminalId'] as String;
-    started.single.emitStdout('waiting');
-    await pump();
-    final ids = {'sessionId': 's', 'terminalId': id};
-
-    await terminals.handle('terminal/kill', ids);
-    expect(started.single.killed, isTrue);
-    expect(await terminals.handle('terminal/wait_for_exit', ids), {
-      'exitCode': 137,
-      'signal': null,
-    });
-    expect(
-      ((await terminals.handle('terminal/output', ids)) as Map)['output'],
-      'waiting',
-    );
-
-    await terminals.handle('terminal/release', ids);
-    await expectLater(
-      terminals.handle('terminal/release', ids),
-      throwsA(isA<AcpRpcError>()),
-    );
-    expect(terminals.snapshot(id)?.output, 'waiting');
-  });
-
-  test('a command still running when the session stops is killed with it',
-      () async {
-    final started = <FakeProcessHandle>[];
-    final runner = FakeCommandRunner(
-      processFactory: (_) {
-        final handle = FakeProcessHandle();
-        started.add(handle);
-        return handle;
-      },
-    );
-    final process = FakeAcpProcess(
-      FakeAcpAgent(
-        turns: const [
-          FakeTurn([FakeStep.terminal(toolCallId: 'c1', command: 'serve')]),
-        ],
-      ),
-    );
-    final runtime = runtimeOver(
-      process,
-      database: database,
-      workingDirectory: temp.path,
-      terminals: terminalsOver(runner),
-    );
-    await runtime.start();
-    await runtime.send('serve it');
-    while (started.isEmpty) {
+  test(
+    'kill ends the command and keeps its output; release forgets it',
+    () async {
+      final started = <FakeProcessHandle>[];
+      final runner = FakeCommandRunner(
+        processFactory: (_) {
+          final handle = FakeProcessHandle();
+          started.add(handle);
+          return handle;
+        },
+      );
+      final terminals = terminalsOver(runner);
+      final id =
+          ((await terminals.handle('terminal/create', {
+                    'sessionId': 's',
+                    'command': 'sleep',
+                    'args': ['100'],
+                  }))
+                  as Map)['terminalId']
+              as String;
+      started.single.emitStdout('waiting');
       await pump();
-    }
-    started.single.emitStdout('listening on 8080');
-    await pump();
+      final ids = {'sessionId': 's', 'terminalId': id};
 
-    await runtime.stop();
-    expect(started.single.killed, isTrue);
-    final terminal = (toolJson('c1')['content'] as List).single as Map;
-    expect(terminal['output'], 'listening on 8080');
-  });
+      await terminals.handle('terminal/kill', ids);
+      expect(started.single.killed, isTrue);
+      expect(await terminals.handle('terminal/wait_for_exit', ids), {
+        'exitCode': 137,
+        'signal': null,
+      });
+      expect(
+        ((await terminals.handle('terminal/output', ids)) as Map)['output'],
+        'waiting',
+      );
+
+      await terminals.handle('terminal/release', ids);
+      await expectLater(
+        terminals.handle('terminal/release', ids),
+        throwsA(isA<AcpRpcError>()),
+      );
+      expect(terminals.snapshot(id)?.output, 'waiting');
+    },
+  );
+
+  test(
+    'a command still running when the session stops is killed with it',
+    () async {
+      final started = <FakeProcessHandle>[];
+      final runner = FakeCommandRunner(
+        processFactory: (_) {
+          final handle = FakeProcessHandle();
+          started.add(handle);
+          return handle;
+        },
+      );
+      final process = FakeAcpProcess(
+        FakeAcpAgent(
+          turns: const [
+            FakeTurn([FakeStep.terminal(toolCallId: 'c1', command: 'serve')]),
+          ],
+        ),
+      );
+      final runtime = runtimeOver(
+        process,
+        database: database,
+        workingDirectory: temp.path,
+        terminals: terminalsOver(runner),
+      );
+      await runtime.start();
+      await runtime.send('serve it');
+      while (started.isEmpty) {
+        await pump();
+      }
+      started.single.emitStdout('listening on 8080');
+      await pump();
+
+      await runtime.stop();
+      expect(started.single.killed, isTrue);
+      final terminal = (toolJson('c1')['content'] as List).single as Map;
+      expect(terminal['output'], 'listening on 8080');
+    },
+  );
 
   test('an unknown terminal is refused in words', () async {
     final terminals = terminalsOver(FakeCommandRunner());
@@ -320,8 +331,60 @@ void main() {
         'terminalId': 'term-9',
       }),
       throwsA(
-        isA<AcpRpcError>().having((e) => e.message, 'message', contains('term-9')),
+        isA<AcpRpcError>().having(
+          (e) => e.message,
+          'message',
+          contains('term-9'),
+        ),
       ),
     );
   });
+
+  test('an exit is reported as ACP has it: never a negative code', () async {
+    Future<Object?> exitOf(
+      FakeProcessHandle handle, {
+      bool posix = true,
+    }) async {
+      final terminals = terminalsOver(
+        FakeCommandRunner(processFactory: (_) => handle),
+        posix: posix,
+      );
+      final id =
+          ((await terminals.handle('terminal/create', {
+                    'sessionId': 's',
+                    'command': 'run',
+                  }))
+                  as Map)['terminalId']
+              as String;
+      final ids = {'sessionId': 's', 'terminalId': id};
+      final exit = await terminals.handle('terminal/wait_for_exit', ids);
+      final output = (await terminals.handle('terminal/output', ids)) as Map;
+      expect(output['exitStatus'], exit);
+      return exit;
+    }
+
+    expect(await exitOf(FakeProcessHandle()..complete(-9)), {
+      'exitCode': null,
+      'signal': 'SIGKILL',
+    });
+    expect(await exitOf(FakeProcessHandle()..complete(-1)), {
+      'exitCode': null,
+      'signal': 'SIGHUP',
+    });
+    expect(
+      await exitOf(FakeProcessHandle()..complete(-1073741819), posix: false),
+      {'exitCode': 0xC0000005, 'signal': null},
+    );
+    expect(await exitOf(_UnreadableExit()), {'exitCode': null, 'signal': null});
+  });
+}
+
+/// A process whose exit code could not be read.
+class _UnreadableExit extends FakeProcessHandle {
+  _UnreadableExit() {
+    complete();
+  }
+
+  @override
+  Future<int> get exitCode => Future.error(StateError('lost'));
 }

@@ -56,7 +56,13 @@ Future<String?> findGitShell(CommandRunner runner) async {
 }
 
 /// A terminal's output as last read: what [AcpTerminals.snapshot] answers.
-typedef AcpTerminalSnapshot = ({String output, bool truncated, int? exitCode});
+/// [failed]: the exit could not be read, so there is no code to report.
+typedef AcpTerminalSnapshot = ({
+  String output,
+  bool truncated,
+  int? exitCode,
+  bool failed,
+});
 
 /// **The `terminal/*` an ACP agent asks of this client**: each command run on
 /// the session's machine through its own runner, in the session's folder,
@@ -203,12 +209,11 @@ class AcpTerminals {
     final terminal = _live[id];
     final released = _released[id];
     if (terminal == null && released == null) throw _unknown(id);
-    final (:output, :truncated, :exitCode) = terminal?.snapshot ?? released!;
+    final shown = terminal?.snapshot ?? released!;
     return {
-      'output': output,
-      'truncated': truncated,
-      if (terminal == null || terminal.exited)
-        'exitStatus': {'exitCode': exitCode, 'signal': null},
+      'output': shown.output,
+      'truncated': shown.truncated,
+      if (terminal == null || terminal.exited) 'exitStatus': _exitStatus(shown),
     };
   }
 
@@ -218,11 +223,37 @@ class AcpTerminals {
     if (terminal == null) {
       final released = _released[id];
       if (released == null) throw _unknown(id);
-      return {'exitCode': released.exitCode, 'signal': null};
+      return _exitStatus(released);
     }
-    final code = await terminal.finished;
-    return {'exitCode': code, 'signal': null};
+    await terminal.finished;
+    return _exitStatus(terminal.snapshot);
   }
+
+  /// ACP's `exitCode` is unsigned or null, with the signal apart; Dart gives a
+  /// signalled POSIX process `-signal` and a crashed Windows one a negative code.
+  JsonMap _exitStatus(AcpTerminalSnapshot shown) {
+    final code = shown.exitCode;
+    if (shown.failed || code == null) return {'exitCode': null, 'signal': null};
+    if (code >= 0) return {'exitCode': code, 'signal': null};
+    if (!posix) return {'exitCode': code & 0xFFFFFFFF, 'signal': null};
+    return {'exitCode': null, 'signal': _posixSignals[-code]};
+  }
+
+  /// The signals numbered alike on Linux and macOS; others go unnamed.
+  static const _posixSignals = {
+    1: 'SIGHUP',
+    2: 'SIGINT',
+    3: 'SIGQUIT',
+    4: 'SIGILL',
+    5: 'SIGTRAP',
+    6: 'SIGABRT',
+    8: 'SIGFPE',
+    9: 'SIGKILL',
+    11: 'SIGSEGV',
+    13: 'SIGPIPE',
+    14: 'SIGALRM',
+    15: 'SIGTERM',
+  };
 
   Future<JsonMap> _kill(JsonMap params) async {
     final id = params.requireString('terminalId');
@@ -243,12 +274,13 @@ class AcpTerminals {
     if (terminal == null) return;
     await terminal.kill();
     _live.remove(id);
-    final (:output, :truncated, :exitCode) = terminal.snapshot;
+    final (:output, :truncated, :exitCode, :failed) = terminal.snapshot;
     final kept = _Output(kAcpReleasedTerminalBytes)..add(output);
     _released[id] = (
       output: kept.text,
       truncated: truncated || kept.truncated,
       exitCode: exitCode,
+      failed: failed,
     );
     while (_released.length > 50) {
       _released.remove(_released.keys.first);
@@ -280,6 +312,7 @@ class _Terminal {
         return code;
       },
       onError: (Object _) {
+        failed = true;
         exitCode = -1;
         changed();
         return -1;
@@ -292,11 +325,16 @@ class _Terminal {
   final void Function() changed;
   late final Future<int> finished;
   int? exitCode;
+  var failed = false;
 
   bool get exited => exitCode != null;
 
-  AcpTerminalSnapshot get snapshot =>
-      (output: output.text, truncated: output.truncated, exitCode: exitCode);
+  AcpTerminalSnapshot get snapshot => (
+    output: output.text,
+    truncated: output.truncated,
+    exitCode: exitCode,
+    failed: failed,
+  );
 
   void _line(String line) {
     output.add(output.isEmpty ? line : '\n$line');
