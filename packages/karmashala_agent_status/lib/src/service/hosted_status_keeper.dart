@@ -375,13 +375,15 @@ class HostedStatusKeeper {
   static bool _isTheAgentsWord(AgentStatusSource source) =>
       source == AgentStatusSource.hook || source == AgentStatusSource.protocol;
 
-  /// Whether a stale [report] may still stand: a settled word, or a protocol
+  /// Whether a stale [report] may still stand: a settled word, a prompt left
+  /// open (unknown would let a message be typed into it), or a protocol
   /// runtime's, which ends its own turns.
   static bool _settled(AgentStatusReport report) =>
       report.source == AgentStatusSource.protocol ||
       report.ending != null ||
       report.status == AgentActivityStatus.idle ||
-      report.status == AgentActivityStatus.failed;
+      report.status == AgentActivityStatus.failed ||
+      report.status == AgentActivityStatus.awaitingApproval;
 }
 
 /// Everything kept about one session between readings.

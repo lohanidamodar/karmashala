@@ -299,6 +299,18 @@ void main() {
       expect(asking.report.waiting, AgentWaitKind.approval);
       expect(asking.report.hasOpenPrompt, isTrue);
     });
+
+    test('a stale open prompt still stands on a screen nothing reads', () {
+      hook('Notification', {
+        'notification_type': 'permission_prompt',
+        'message': 'Claude needs your permission to use Bash',
+      });
+      clock.now = clock.now.add(const Duration(minutes: 6));
+      keeper.screen('row-1', const ['', 'some rows with no marker']);
+      final kept = keeper.statusOf('row-1')!.report;
+      expect(kept.status, AgentActivityStatus.awaitingApproval);
+      expect(kept.hasOpenPrompt, isTrue);
+    });
   });
 
   group('a menu drawn under the idle footer after the turn', () {
