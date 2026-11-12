@@ -173,7 +173,19 @@ class _OverviewProjectTileState extends ConsumerState<OverviewProjectTile> {
           ],
           onFold: () => widget.onFold(!widget.folded),
         ),
-        if (!widget.folded) ...[
+        if (tile.trees.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: Insets.xs,
+            ),
+            child: Text(
+              'No session here',
+              key: ValueKey('overview-tile-empty:${tile.key}'),
+              style: UiDensity.of(context).muted(theme),
+            ),
+          )
+        else if (!widget.folded) ...[
           for (final tree in tile.trees)
             if (!hidden.contains(tree.card.id))
               Padding(

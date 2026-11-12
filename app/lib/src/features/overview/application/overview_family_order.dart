@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import 'overview_prefs.dart';
 import 'overview_providers.dart';
+import 'overview_search.dart';
 import 'overview_tree.dart';
 
 /// The owner's hand order of each lane's families: root ids by lane key.
@@ -101,5 +102,6 @@ final overviewForestProvider = Provider.autoDispose<OverviewForest>(
     ref.watch(overviewBoardProvider),
     order: ref.watch(overviewFamilyOrderProvider),
     pinned: ref.watch(overviewPrefsProvider.select((p) => p.pinned)).toSet(),
+    older: ref.watch(overviewSearchProvider.select((s) => s.active)),
   ),
 );

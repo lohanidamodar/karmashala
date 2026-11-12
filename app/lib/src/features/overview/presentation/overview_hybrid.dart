@@ -339,6 +339,8 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     final matches = searching
         ? {for (final card in watchOverviewSearchMatches(ref)) card.id}
         : null;
+    // Projects the search found by name that have no session to draw.
+    final found = ref.watch(overviewSearchEmptyProjectsProvider);
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -417,7 +419,9 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
         // A project's context, said on its tile where the groups are not
         // the contexts themselves.
         String? tagOf(OverviewTile tile) {
-          if (byContext || facts.contexts.isEmpty) return null;
+          if (byContext || facts.contexts.isEmpty || tile.trees.isEmpty) {
+            return null;
+          }
           final id = facts.contextOf(tile.trees.first.card.entry);
           return facts.contexts.where((c) => c.id == id).firstOrNull?.label;
         }
@@ -450,7 +454,10 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (forest.lanes.isEmpty && whole.lanes.isNotEmpty)
+            if (forest.lanes.isEmpty && found.isNotEmpty)
+              const SizedBox.shrink()
+            else if (forest.lanes.isEmpty &&
+                (whole.lanes.isNotEmpty || searching))
               Text(
                 searching
                     ? 'No session or project matches.'
@@ -503,6 +510,25 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     gap: gap,
                   ),
               ],
+            if (found.isNotEmpty)
+              ..._grid(
+                [
+                  for (final project in found)
+                    OverviewProjectTile(
+                      tile: (
+                        key: project.id,
+                        label: project.label,
+                        trees: const [],
+                      ),
+                      lines: const {},
+                      drawn: const {},
+                      framed: !phone,
+                      onFold: (_) {},
+                    ),
+                ],
+                across,
+                gap: gap,
+              ),
           ],
         );
         _treeKeys.removeWhere((id, _) => !drawn.contains(id));

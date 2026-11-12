@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_family_order.dart';
 import 'package:karmashala/src/features/overview/application/overview_links.dart';
+import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_search.dart';
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
@@ -196,6 +197,52 @@ void main() {
     expect(peeked(c), isNull);
     await key(tester, LogicalKeyboardKey.escape);
     expect(familyCard('c-root'), findsOneWidget);
+    await unmountMission(tester);
+  });
+
+  testWidgets('it reaches past the filters, to what ended before today, and '
+      'to a project with no session', (tester) async {
+    final c = await pumpMission(
+      tester,
+      fixture: MissionFixture(
+        sessions: [
+          ...fixture().sessions,
+          s('old', 'Yak shaving', state: AgentState.ended, age: 60 * 24 * 3),
+        ],
+      ),
+      prefsDir: dir,
+    );
+    // Only beej is shown, and what ended days ago is not on the board.
+    c.read(overviewPrefsProvider.notifier).setProjects({'p-beej'});
+    await settleMission(tester);
+    expect(familyCard('c-root'), findsNothing);
+    expect(familyCard('old'), findsNothing);
+
+    await slash(tester);
+    await tester.enterText(field, 'busy parent');
+    await settleMission(tester);
+    expect(familyCard('c-root'), findsOneWidget);
+    expect(selected(c), 'c-root');
+
+    await tester.enterText(field, 'yak');
+    await settleMission(tester);
+    expect(familyCard('old'), findsOneWidget);
+    expect(find.text('1 of 1'), findsOneWidget);
+
+    // A project with no session is a tile with its header alone.
+    await tester.enterText(field, 'docs');
+    await settleMission(tester);
+    expect(byKey('overview-tile:p-docs'), findsOneWidget);
+    expect(byKey('overview-tile-empty:p-docs'), findsOneWidget);
+    expect(find.text('1 project'), findsOneWidget);
+    expect(byKey('overview-none-match'), findsNothing);
+
+    // Cleared, the filter holds again.
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(familyCard('c-root'), findsNothing);
+    expect(familyCard('o-root'), findsOneWidget);
+    expect(byKey('overview-tile:p-docs'), findsNothing);
+    expect(tester.takeException(), isNull);
     await unmountMission(tester);
   });
 
