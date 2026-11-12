@@ -605,6 +605,23 @@ void main() {
       expect(holds, isEmpty, reason: 'no call waits on an async child');
     });
 
+    test("the answer says the child lacks the grant, the caller's own "
+        'not passed on', () async {
+      insertCaller('caller');
+      final rows = SessionDao(database);
+      rows.write(rows.getById('caller')!.copyWith(operatorGranted: true));
+      final result =
+          (await tools.call('subagent_run', {
+                'projectId': 'p1',
+                'prompt': 'Look',
+                'mode': 'async',
+              }, 'caller'))!
+              as Map<String, Object?>;
+      expect(result['operatorGranted'], isFalse);
+      expect(result['operatorNote'], contains('Operate Karmashala'));
+      expect(result['operatorNote'], contains('report_to_parent'));
+    });
+
     test('keepOpen keeps an async child open', () async {
       insertCaller('caller');
       await tools.call('subagent_run', {

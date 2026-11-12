@@ -91,7 +91,9 @@ String mcpOperatorRefusal(String tool) =>
     'person has not let this session operate Karmashala. NOTHING WAS DONE. '
     'Ask them to turn on "Operate Karmashala" for this session (the session '
     'bar, or its Session sheet on a phone), or to start their next message '
-    'with /operator. Without it you can still read Karmashala, use devices, '
+    'with /operator. If another session started this one, it cannot grant '
+    'this; only the person can. Without it you can still read Karmashala, '
+    'use devices, '
     'the browser, builds, projects and terminals, and act on your own '
     'session.';
 

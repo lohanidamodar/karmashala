@@ -293,6 +293,26 @@ void main() {
     );
   });
 
+  test('the answer says whether the child may operate Karmashala, from its '
+      'stored row', () async {
+    insertCaller('caller');
+    final without =
+        (await tools.call('open_new_session', {'projectId': 'p1'}, 'caller'))!
+            as Map<String, Object?>;
+    expect(without['operatorGranted'], isFalse);
+    expect(without['operatorNote'], contains('Operate Karmashala'));
+  });
+
+  test('a child the setting grants is said to have it, with no note', () async {
+    insertCaller('caller');
+    database.writeMetadata(kOperateNewSessionsKey, 'true');
+    final answer =
+        (await tools.call('open_new_session', {'projectId': 'p1'}, 'caller'))!
+            as Map<String, Object?>;
+    expect(answer['operatorGranted'], isTrue);
+    expect(answer.containsKey('operatorNote'), isFalse);
+  });
+
   test('an agent starting in a scratch folder has it marked trusted first; '
       'one in an ordinary project does not', () async {
     insertCaller('caller');

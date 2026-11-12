@@ -167,6 +167,11 @@ void main() {
       expect(text, contains('/operator'));
     });
 
+    test('says a parent session cannot give it, only the person', () {
+      expect(text, contains('If another session started this one'));
+      expect(text, contains('only the person can'));
+    });
+
     test('names what the grant covers', () {
       expect(text, contains('other sessions and agents'));
     });

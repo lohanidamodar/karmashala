@@ -696,6 +696,7 @@ class LaunchToolSet extends ServerToolSet {
         'depth': opened.answer['depth'],
         'permissionMode': opened.answer['permissionMode'],
         'permissionCapped': ?opened.answer['permissionCapped'],
+        ..._grantOf(opened.answer),
         'note': args['keepOpen'] == true || report == kReportModeNone
             ? _reportNote(report, session.id)
             : 'End your turn now rather than polling: when the child answers, '
@@ -715,6 +716,7 @@ class LaunchToolSet extends ServerToolSet {
         'depth': opened.answer['depth'],
         'permissionMode': opened.answer['permissionMode'],
         'permissionCapped': ?opened.answer['permissionCapped'],
+        ..._grantOf(opened.answer),
         'childOpen': true,
         'note':
             'It has not started yet. It starts by itself when a slot frees; '
@@ -774,6 +776,7 @@ class LaunchToolSet extends ServerToolSet {
       'depth': opened.answer['depth'],
       'permissionMode': opened.answer['permissionMode'],
       'permissionCapped': ?opened.answer['permissionCapped'],
+      ..._grantOf(opened.answer),
       'childOpen': switch (outcome.state) {
         ChildTurnState.ended => false,
         ChildTurnState.done => ended != true,
@@ -1047,6 +1050,10 @@ class LaunchToolSet extends ServerToolSet {
         ),
       ),
     );
+    // The child is never given the caller's grant; the caller is told.
+    final granted =
+        SessionDao(_context.database).getById(session.id)?.operatorGranted ??
+        session.operatorGranted;
     final answer = <String, Object?>{
       'sessionId': session.id,
       if (started.wait case final wait?)
@@ -1060,6 +1067,8 @@ class LaunchToolSet extends ServerToolSet {
       'depth': started.depth ?? launches.depthForChildOf(callerSessionId).depth,
       'permissionMode': session.permissionMode ?? 'not recorded',
       if (permission.capped != null) 'permissionCapped': permission.capped,
+      'operatorGranted': granted,
+      if (!granted) 'operatorNote': _childWithoutGrant,
       if (session.worktree != null) 'worktree': session.worktree!.path,
       'where': shown
           ? 'running in the Karmashala server, shown in a tab of the '
@@ -1069,6 +1078,17 @@ class LaunchToolSet extends ServerToolSet {
     };
     return (answer: answer, session: session, agentId: install.agentId);
   }
+
+  static const _childWithoutGrant =
+      'This session cannot start, message or end other sessions unless the '
+      'person turns on "Operate Karmashala" for it; you cannot grant it. It '
+      'can still report to you with report_to_parent.';
+
+  /// What [_open] says of the child's grant, for an answer built apart.
+  static Map<String, Object?> _grantOf(Map<String, Object?> opened) => {
+    'operatorGranted': opened['operatorGranted'],
+    'operatorNote': ?opened['operatorNote'],
+  };
 
   /// A folder of its own for a session without a project, in
   /// [environmentId] — the caller's own environment when none is named, or
