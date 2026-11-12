@@ -180,6 +180,10 @@ void main() {
         context,
         launches: launches,
         delegate: delegated.add,
+        setReport: (child, _) {
+          delegated.add(child);
+          return true;
+        },
       );
       SessionDao(database).insertBot(
         Session(
@@ -225,6 +229,47 @@ void main() {
               }, 'bot')!)
               as Map;
       expect(silent['report'], kReportModeNone);
+      expect(silent.containsKey('reportNote'), isFalse);
+    });
+
+    test('a report it names and does not get is said so', () async {
+      final opened =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'report': 'each_turn',
+                'prompt': 'one',
+              }, 'bot')!)
+              as Map;
+      expect(opened['report'], kReportModeOnce);
+      expect(opened['reportNote'], contains('heard once'));
+
+      final plain =
+          (await tools.call('open_new_session', {
+                'projectId': 'p1',
+                'prompt': 'two',
+              }, 'bot')!)
+              as Map;
+      expect(plain.containsKey('reportNote'), isFalse);
+
+      final run =
+          (await tools.call('subagent_run', {
+                'projectId': 'p1',
+                'prompt': 'three',
+                'mode': 'async',
+                'report': 'final',
+              }, 'bot')!)
+              as Map;
+      expect(run['report'], kReportModeOnce);
+      expect(run['reportNote'], contains('heard once'));
+
+      final set =
+          (await tools.call('delegation_set_report', {
+                'sessionId': opened['sessionId'],
+                'report': 'each_turn',
+              }, 'bot')!)
+              as Map;
+      expect(set['report'], kReportModeOnce);
+      expect(set['reportNote'], contains('delegations'));
     });
 
     test('an ordinary session cannot choose once', () async {

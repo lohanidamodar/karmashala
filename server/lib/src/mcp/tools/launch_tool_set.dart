@@ -247,6 +247,15 @@ class LaunchToolSet extends ServerToolSet {
       ? kReportModeOnce
       : report;
 
+  /// The answer's `reportNote` when the report [named] was replaced by the
+  /// bot's [report]: only the bot's ever is.
+  static Map<String, Object?> _botReportNote(String named, String report) => {
+    if (named.isNotEmpty && named != report)
+      'reportNote':
+          'You are the bot: a session you start is heard once, then the '
+          'delegation closes; delegations reads its later turns.',
+  };
+
   static String _checkedReport(String report) => kReportModes.contains(report)
       ? report
       : throw ArgumentError(
@@ -316,6 +325,7 @@ class LaunchToolSet extends ServerToolSet {
       ...opened.answer,
       'report': report,
       'reportsBack': report != kReportModeNone,
+      ..._botReportNote((args['report'] as String?)?.trim() ?? '', report),
       'note': _reportNote(report, opened.session.id),
     };
   }
@@ -418,10 +428,8 @@ class LaunchToolSet extends ServerToolSet {
     Map<String, dynamic> args,
     String? callerSessionId,
   ) {
-    final report = _forCaller(
-      _checkedReport((args['report'] as String?)?.trim() ?? ''),
-      callerSessionId,
-    );
+    final named = (args['report'] as String?)?.trim() ?? '';
+    final report = _forCaller(_checkedReport(named), callerSessionId);
     final childId = (args['sessionId'] as String?)?.trim() ?? '';
     final child = childId.isEmpty
         ? null
@@ -453,6 +461,7 @@ class LaunchToolSet extends ServerToolSet {
     return {
       'sessionId': child.id,
       'report': report,
+      ..._botReportNote(named, report),
       'note': _reportNote(report, child.id),
     };
   }
@@ -687,6 +696,7 @@ class LaunchToolSet extends ServerToolSet {
         'state': 'started',
         'mode': 'async',
         'report': report,
+        ..._botReportNote(namedReport, report),
         'childSessionId': session.id,
         'title': session.title,
         'agent': agents.nameOf(opened.agentId),
@@ -1235,6 +1245,11 @@ final class _ContextClock implements Clock {
 }
 
 /// How the agent runs, for the tools that start one.
+/// Said wherever a caller names a report: the bot's is always once.
+const _botReportFact =
+    'The bot hears a session it starts once, whatever report it names but '
+    '"none", then the delegation closes; delegations reads later turns.';
+
 const Map<String, Object?> _formSchema = {
   'type': 'string',
   'enum': ['terminal', 'chat'],
@@ -1334,7 +1349,7 @@ const List<Map<String, Object?>> launchToolSchemas = [
               'works as well. "none": it runs on its own and nothing comes '
               'back. End your turn rather than polling; change it later '
               'with delegation_set_report. The session is never ended for '
-              'you.',
+              'you. $_botReportFact',
         },
       },
       'required': <String>[],
@@ -1452,7 +1467,7 @@ const List<Map<String, Object?>> launchToolSchemas = [
               'With mode "async" and keepOpen, what you hear after its '
               'answer: "final" (default) when it reports, stops blocked or '
               'failed, finishes a turn without reporting, or ends; '
-              '"each_turn" every turn; "none" nothing.',
+              '"each_turn" every turn; "none" nothing. $_botReportFact',
         },
       },
       'required': <String>['prompt'],
@@ -1505,7 +1520,11 @@ const List<Map<String, Object?>> launchToolSchemas = [
           'type': 'string',
           'description': 'The child, from delegations.',
         },
-        'report': {'type': 'string', 'enum': kReportModes},
+        'report': {
+          'type': 'string',
+          'enum': kReportModes,
+          'description': _botReportFact,
+        },
       },
       'required': <String>['sessionId', 'report'],
     },

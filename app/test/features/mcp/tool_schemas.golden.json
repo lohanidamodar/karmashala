@@ -3324,7 +3324,7 @@
               "final",
               "each_turn"
             ],
-            "description": "What you hear of it. This call never waits for it either way. \"final\" (the default unless Settings choose another): one message when it reports with report_to_parent, stops blocked or failed, finishes a turn without reporting, or ends. \"each_turn\": the end of every turn it works as well. \"none\": it runs on its own and nothing comes back. End your turn rather than polling; change it later with delegation_set_report. The session is never ended for you."
+            "description": "What you hear of it. This call never waits for it either way. \"final\" (the default unless Settings choose another): one message when it reports with report_to_parent, stops blocked or failed, finishes a turn without reporting, or ends. \"each_turn\": the end of every turn it works as well. \"none\": it runs on its own and nothing comes back. End your turn rather than polling; change it later with delegation_set_report. The session is never ended for you. The bot hears a session it starts once, whatever report it names but \"none\", then the delegation closes; delegations reads later turns."
           }
         },
         "required": []
@@ -3424,7 +3424,7 @@
               "final",
               "each_turn"
             ],
-            "description": "With mode \"async\" and keepOpen, what you hear after its answer: \"final\" (default) when it reports, stops blocked or failed, finishes a turn without reporting, or ends; \"each_turn\" every turn; \"none\" nothing."
+            "description": "With mode \"async\" and keepOpen, what you hear after its answer: \"final\" (default) when it reports, stops blocked or failed, finishes a turn without reporting, or ends; \"each_turn\" every turn; \"none\" nothing. The bot hears a session it starts once, whatever report it names but \"none\", then the delegation closes; delegations reads later turns."
           }
         },
         "required": [
@@ -3491,7 +3491,8 @@
               "none",
               "final",
               "each_turn"
-            ]
+            ],
+            "description": "The bot hears a session it starts once, whatever report it names but \"none\", then the delegation closes; delegations reads later turns."
           }
         },
         "required": [
