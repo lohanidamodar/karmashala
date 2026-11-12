@@ -45,6 +45,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     waitingSince: (id) =>
         ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
+    collapsed: ref.read(overviewCollapsedLanesProvider),
   );
 
   void _open(
@@ -403,6 +404,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
               ref.read(overviewForestProvider),
               from,
               folded: ref.read(overviewFoldedParentsProvider),
+              collapsed: ref.read(overviewCollapsedLanesProvider),
             ),
           );
     }),

@@ -38,7 +38,12 @@ class OverviewPrefs {
     this.launchInBackground = true,
     this.pinned = const [],
     this.hiddenDetails = const {},
+    this.collapsedLanes = const {},
   });
+
+  /// The groups this device keeps folded, each as [overviewLaneFoldKey]:
+  /// one folded under Project stays open under Machine.
+  final Set<String> collapsedLanes;
 
   /// The parts of a card's "where" line this device hides.
   final Set<OverviewCardDetail> hiddenDetails;
@@ -67,6 +72,7 @@ class OverviewPrefs {
     bool? launchInBackground,
     List<String>? pinned,
     Set<OverviewCardDetail>? hiddenDetails,
+    Set<String>? collapsedLanes,
   }) => OverviewPrefs(
     filter: filter ?? this.filter,
     groupBy: groupBy ?? this.groupBy,
@@ -75,6 +81,7 @@ class OverviewPrefs {
     launchInBackground: launchInBackground ?? this.launchInBackground,
     pinned: pinned ?? this.pinned,
     hiddenDetails: hiddenDetails ?? this.hiddenDetails,
+    collapsedLanes: collapsedLanes ?? this.collapsedLanes,
   );
 
   Map<String, Object?> toJson() => {
@@ -90,6 +97,7 @@ class OverviewPrefs {
     if (pinned.isNotEmpty) 'pinned': pinned,
     if (hiddenDetails.isNotEmpty)
       'hiddenDetails': [for (final detail in hiddenDetails) detail.name],
+    if (collapsedLanes.isNotEmpty) 'collapsedLanes': collapsedLanes.toList(),
   };
 
   static OverviewPrefs fromJson(Object? json) {
@@ -143,9 +151,14 @@ class OverviewPrefs {
           if (strings(json['hiddenDetails'])?.contains(detail.name) ?? false)
             detail,
       },
+      collapsedLanes: strings(json['collapsedLanes']) ?? const {},
     );
   }
 }
+
+/// How [OverviewPrefs.collapsedLanes] names the group [laneKey] under [by].
+String overviewLaneFoldKey(OverviewGroupBy by, String laneKey) =>
+    '${by.name}:$laneKey';
 
 /// The most sessions pinned to the top of the board.
 const int kOverviewPinLimit = 3;
@@ -251,6 +264,15 @@ class OverviewPrefsController extends Notifier<OverviewPrefs> {
     final hidden = {...state.hiddenDetails};
     if (shown ? hidden.remove(detail) : hidden.add(detail)) {
       _set(state.copyWith(hiddenDetails: hidden));
+    }
+  }
+
+  /// Folds the group [laneKey] under [by], or opens it.
+  void setLaneCollapsed(OverviewGroupBy by, String laneKey, bool collapsed) {
+    final key = overviewLaneFoldKey(by, laneKey);
+    final next = {...state.collapsedLanes};
+    if (collapsed ? next.add(key) : next.remove(key)) {
+      _set(state.copyWith(collapsedLanes: next));
     }
   }
 

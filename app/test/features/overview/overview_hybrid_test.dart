@@ -9,6 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/features/explorer/application/agent_states.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
+import 'package:karmashala/src/features/overview/application/overview_family_order.dart'
+    show overviewForestProvider;
+import 'package:karmashala/src/features/overview/application/overview_search.dart'
+    show overviewRevealProvider;
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
 import 'package:karmashala/src/features/overview/application/overview_providers.dart';
 import 'package:karmashala/src/features/overview/application/overview_reads.dart';
@@ -17,6 +21,8 @@ import 'package:karmashala/src/features/overview/application/overview_tree.dart'
 import 'package:karmashala/src/features/overview/presentation/overview_hybrid.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_done_card.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_strip.dart';
+import 'package:karmashala/src/features/overview/presentation/overview_tree.dart'
+    show OverviewFamilyTree;
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
 import 'package:karmashala_session/delivery.dart'
     show DeliveryAction, OfferedAction;
@@ -1668,6 +1674,101 @@ void main() {
       await settleMission(tester);
       expect(find.byKey(const ValueKey('group-by:context')), findsNothing);
       await unmountMission(tester);
+    });
+  });
+
+  group('folding a group', () {
+    const fold = ValueKey('overview-lane-fold:p-ks');
+    const asks = ValueKey('overview-lane-folded-asks:p-ks');
+    Finder family(String id) => find.byWidgetPredicate(
+      (w) => w is OverviewFamilyTree && w.node.card.id == id,
+    );
+
+    for (final (name, size, phone, scale) in [
+      ('1440×900', const Size(1440, 900), false, 1.0),
+      ('360×800 at 1.6x text', const Size(360, 800), true, 1.6),
+    ]) {
+      testWidgets('$name: its header folds the group away, says what waits '
+          'in it, and opens it again', (tester) async {
+        final c = await pump(
+          tester,
+          size: size,
+          phone: phone,
+          textScale: scale,
+        );
+        expect(family('ks-r21'), findsOneWidget);
+        expect(find.byKey(asks), findsNothing);
+
+        await tester.tap(find.byKey(fold));
+        await settleMission(tester);
+        expect(family('ks-r21'), findsNothing);
+        expect(find.byKey(fold), findsOneWidget);
+        expect(find.byKey(asks), findsOneWidget);
+        expect(c.read(overviewPrefsProvider).collapsedLanes, {
+          overviewLaneFoldKey(OverviewGroupBy.project, 'p-ks'),
+        });
+        // The keyboard's order skips what is folded away.
+        expect(
+          overviewSectionsOf(
+            c.read(overviewBoardProvider),
+            c.read(overviewForestProvider),
+            waitingSince: (_) => null,
+            collapsed: c.read(overviewCollapsedLanesProvider),
+          ).families.map((card) => card.id),
+          isNot(contains('ks-r21')),
+        );
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.byKey(fold));
+        await settleMission(tester);
+        expect(family('ks-r21'), findsOneWidget);
+        expect(c.read(overviewPrefsProvider).collapsedLanes, isEmpty);
+        await unmountMission(tester);
+      });
+    }
+
+    testWidgets('a group folded under Project stays open under Machine', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      final prefs = c.read(overviewPrefsProvider.notifier);
+      prefs.setLaneCollapsed(OverviewGroupBy.project, 'p-ks', true);
+      await settleMission(tester);
+      expect(c.read(overviewCollapsedLanesProvider), {'p-ks'});
+
+      prefs.setGroupBy(OverviewGroupBy.machine);
+      await settleMission(tester);
+      expect(c.read(overviewCollapsedLanesProvider), isEmpty);
+      expect(family('ks-r21'), findsOneWidget);
+      await unmountMission(tester);
+    });
+
+    testWidgets('going to a session in a folded group opens the group', (
+      tester,
+    ) async {
+      final c = await pump(tester);
+      await tester.tap(find.byKey(fold));
+      await settleMission(tester);
+      expect(family('ks-r21'), findsNothing);
+
+      c.read(overviewRevealProvider.notifier).reveal('ks-r21');
+      await settleMission(tester);
+      expect(family('ks-r21'), findsOneWidget);
+      expect(c.read(overviewCollapsedLanesProvider), isEmpty);
+      await unmountMission(tester);
+    });
+
+    test('the folded groups survive the prefs file', () {
+      final kept = OverviewPrefs.fromJson(
+        const OverviewPrefs(
+          collapsedLanes: {'project:p-ks', 'machine:m1'},
+        ).toJson(),
+      );
+      expect(kept.collapsedLanes, {'project:p-ks', 'machine:m1'});
+      expect(
+        const OverviewPrefs().toJson().containsKey('collapsedLanes'),
+        isFalse,
+      );
     });
   });
 }

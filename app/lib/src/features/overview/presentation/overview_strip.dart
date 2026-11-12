@@ -14,6 +14,8 @@ import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../application/overview_board.dart';
 import '../application/overview_drawer.dart';
 import '../application/overview_family_order.dart';
+import '../application/overview_prefs.dart';
+import '../application/overview_providers.dart';
 import '../application/overview_reads.dart';
 import '../application/overview_search.dart';
 import '../application/overview_tree.dart';
@@ -345,17 +347,22 @@ class _LaneChip extends ConsumerWidget {
   }
 }
 
-/// A lane's header: its name and count, "Archive done · N" for its ended
-/// families, and "N archived today", which lists them.
+/// A lane's header: a caret and its name and count, which fold the group
+/// or open it, "Archive done · N" for its ended families, and "N archived
+/// today", which lists them. Folded, it says how many of its sessions ask.
 class OverviewLaneHeader extends ConsumerWidget {
   const OverviewLaneHeader({
     required this.lane,
     required this.trees,
+    this.collapsed = false,
     super.key,
   });
 
   final OverviewLane lane;
   final List<OverviewTreeNode> trees;
+
+  /// Whether the group's families are folded away under it.
+  final bool collapsed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -370,19 +377,85 @@ class OverviewLaneHeader extends ConsumerWidget {
     final archived = ref.watch(
       overviewArchivedTodayProvider.select((a) => a[lane.key] ?? const []),
     );
+    final density = UiDensity.of(context);
+    final asks = collapsed
+        ? trees.fold(0, (sum, tree) => sum + overviewWaitingIn(tree))
+        : 0;
+    final title = '${lane.label} · ${trees.length}';
+    final radius = BorderRadius.circular(Radii.sm);
+    // On a phone the fold's tap area is the header's own room: it takes the
+    // place of the padding, so the first family sits no lower.
     return Padding(
-      padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
+      padding: density.isTouch
+          ? EdgeInsets.zero
+          : const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
       child: Wrap(
         spacing: Insets.sm,
         runSpacing: Insets.xs,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(
-            '${lane.label} · ${trees.length}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
+          Semantics(
+            button: true,
+            expanded: !collapsed,
+            label: [title, if (asks > 0) '$asks waiting'].join(', '),
+            hint: collapsed ? 'Show the group' : 'Fold the group',
+            excludeSemantics: true,
+            child: Tooltip(
+              message: collapsed ? 'Show ${lane.label}' : 'Fold ${lane.label}',
+              child: InkWell(
+                key: ValueKey('overview-lane-fold:${lane.key}'),
+                borderRadius: radius,
+                onTap: () => ref
+                    .read(overviewPrefsProvider.notifier)
+                    .setLaneCollapsed(
+                      ref.read(overviewGroupByProvider),
+                      lane.key,
+                      !collapsed,
+                    ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: overviewCompactChipHeight(context),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.only(end: Insets.xs),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          collapsed ? AppIcons.caretRight : AppIcons.caretDown,
+                          size: density.iconSmall,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        SizedBox(width: density.glyphGap),
+                        Flexible(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (asks > 0) ...[
+                          const SizedBox(width: Insets.sm),
+                          Text(
+                            '$asks waiting',
+                            key: ValueKey(
+                              'overview-lane-folded-asks:${lane.key}',
+                            ),
+                            maxLines: 1,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: SemanticColors.of(context).attention,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
           if (done.isNotEmpty)
