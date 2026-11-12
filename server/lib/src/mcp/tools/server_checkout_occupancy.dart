@@ -14,12 +14,14 @@ import 'session_liveness.dart';
 /// them: working there (their own directory, or a checkout attached to them),
 /// live by [liveness], and in a mode that writes. A session that chose no mode
 /// follows the app's per-agent default, which the server does not hold — so
-/// it counts: an unknown mode is never assumed to be read-only.
+/// it counts: an unknown mode is never assumed to be read-only. With
+/// [writersOnly] false, a read-only session counts too.
 List<CheckoutOccupant> serverCheckoutOccupants(
   ServerToolContext context,
   EnvironmentPath directory, {
   SessionLiveness liveness = SessionLiveness.rowsOnly,
   String? excluding,
+  bool writersOnly = true,
 }) {
   final repositories = RepositoryDao(context.database);
   final links = SessionRepositoryDao(context.database);
@@ -40,6 +42,7 @@ List<CheckoutOccupant> serverCheckoutOccupants(
   }
 
   bool mayWrite(Session session) {
+    if (!writersOnly) return true;
     final mode = session.permissionMode;
     if (mode == null || mode.isEmpty) return true;
     final installation = installations.getById(session.agentInstallationId);

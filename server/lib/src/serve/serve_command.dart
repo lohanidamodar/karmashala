@@ -860,14 +860,15 @@ Future<int> _serve(
   // a grant given a moment ago counts on the next tool call.
   final grantRows = SessionDao(database);
   final grantCheckpoints = CheckpointDao(database);
+  final slotWaits = SlotWaits();
   final worktreeTools = WorktreeToolSet(
     tools,
     reach: reach,
     folders: folders,
     worktrees: worktrees,
     liveness: liveness,
+    slotWaits: slotWaits,
   );
-  final slotWaits = SlotWaits();
   final mcpTools = McpToolRelay(
     operatorGranted: (sessionId) =>
         grantRows.getById(sessionId)?.operatorGranted ?? false,

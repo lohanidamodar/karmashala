@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:karmashala_host/src/mcp/tools/session_liveness.dart';
 import 'package:karmashala_host/src/mcp/tools/worktree_tool_set.dart';
+import 'package:karmashala_host/src/sessions/launch/capacity/slot_waits.dart';
 import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_session_engine/store.dart' show SessionRepositoryDao;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -21,6 +23,7 @@ void main() {
   late RepoToolFixture fixture;
   late WorktreeToolSet tools;
   late Set<String> running;
+  late _Waits waits;
 
   /// `demo/app`, recorded as the project `demo`'s one checkout.
   late String app;
@@ -36,6 +39,7 @@ void main() {
       folders: fixture.folders,
       worktrees: fixture.worktrees,
       liveness: SessionLiveness(running.contains),
+      slotWaits: waits = _Waits(),
     );
     app = fixture.repository(fixture.path('demo/app'));
   });
@@ -387,6 +391,37 @@ void main() {
       expect(answer.error, contains('Hosted'));
     });
 
+    test('a live session that attached it counts', () async {
+      pushedWorktree();
+      fixture.session(
+        's1',
+        appId,
+        title: 'Attached',
+        status: SessionStatus.running,
+      );
+      SessionRepositoryDao(fixture.database).link('s1', worktreeId);
+
+      final answer = await call('worktree_remove', {
+        'repositoryId': worktreeId,
+      });
+
+      expect(answer.error, contains('Attached'));
+      expect(Directory(worktree).existsSync(), isTrue);
+    });
+
+    test('a launch waiting in line to start there counts', () async {
+      pushedWorktree();
+      fixture.session('s1', worktreeId, title: 'Queued');
+      waits.waiting['s1'] = 'all slots are taken (place 1 in line)';
+
+      final answer = await call('worktree_remove', {
+        'repositoryId': worktreeId,
+      });
+
+      expect(answer.error, contains('Queued'));
+      expect(Directory(worktree).existsSync(), isTrue);
+    });
+
     test('a checkout git will not describe is refused, not guessed', () async {
       final plain = fixture.path('demo/plain');
       Directory(plain).createSync(recursive: true);
@@ -412,6 +447,14 @@ void main() {
       expect(answer.error, contains('main checkout'));
     });
   });
+}
+
+/// The gate's line, as the tool reads it.
+class _Waits extends SlotWaits {
+  final waiting = <String, String>{};
+
+  @override
+  Map<String, String> all() => waiting;
 }
 
 /// A checkout `rr` of [projectId] on an SSH host — a "box" that is this

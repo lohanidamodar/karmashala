@@ -450,17 +450,22 @@ class WorkspaceHandler {
     return (repositories: repositories.toList(), projects: projects.toList());
   }
 
-  /// How many running ACP sessions work in one of [checkoutIds].
+  /// How many running ACP sessions work in one of [checkoutIds], as their
+  /// own checkout or one attached to them.
   int _liveAcpSessionsIn(Set<String> checkoutIds) {
     final live = _liveAcpSessions?.call() ?? const <String>{};
     if (live.isEmpty || checkoutIds.isEmpty) return 0;
+    final marks = List.filled(live.length, '?').join(', ');
     return _db
         .query(
-          'SELECT id, repository_id FROM sessions WHERE id IN '
-          '(${List.filled(live.length, '?').join(', ')});',
-          live.toList(),
+          'SELECT id AS session_id, repository_id FROM sessions '
+          'WHERE id IN ($marks) UNION SELECT session_id, repository_id '
+          'FROM session_repositories WHERE session_id IN ($marks);',
+          [...live, ...live],
         )
         .where((row) => checkoutIds.contains(row['repository_id']))
+        .map((row) => row['session_id'])
+        .toSet()
         .length;
   }
 

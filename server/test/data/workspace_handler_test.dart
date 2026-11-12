@@ -4,6 +4,7 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_host/data.dart';
 import 'package:karmashala_projects/karmashala_projects.dart';
 import 'package:karmashala_projects/store.dart';
+import 'package:karmashala_session_engine/store.dart' show SessionRepositoryDao;
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
@@ -472,6 +473,22 @@ void main() {
       live = {};
       app.handle(ProjectMerge(id: ids.dup, into: ids.keep));
       expect(snapshot().projects.single.id, ids.keep);
+    });
+
+    test('a merge is refused while an ACP session runs with a folded '
+        'checkout attached', () {
+      final ids = duplicated();
+      db.execute('PRAGMA foreign_keys = OFF;');
+      session('s1', ids.keepCheckout);
+      SessionRepositoryDao(db).link('s1', ids.dupCheckout);
+      db.execute('PRAGMA foreign_keys = ON;');
+      service.liveAcpSessions = () => {'s1'};
+
+      expect(
+        () => app.handle(ProjectMerge(id: ids.dup, into: ids.keep)),
+        refused(DataRefusalCode.invalid, '1 ACP session running'),
+      );
+      expect(snapshot().projects, hasLength(2));
     });
 
     test('a merge tells every client where the imported history went', () {

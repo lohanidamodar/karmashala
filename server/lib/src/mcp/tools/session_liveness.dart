@@ -18,4 +18,8 @@ class SessionLiveness {
 
   bool isLive(Session session) =>
       _runs(session.id) || session.status.claimsLive;
+
+  /// This liveness, with [also] counting a session as live too.
+  SessionLiveness or(bool Function(String sessionId) also) =>
+      SessionLiveness((id) => _runs(id) || also(id));
 }

@@ -8,9 +8,11 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:path/path.dart' as p;
 
+import '../../sessions/launch/capacity/slot_waits.dart';
 import 'checkout_delivery.dart';
 import 'checkout_reach.dart';
 import 'project_folders.dart';
+import 'server_checkout_occupancy.dart';
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
 import 'session_liveness.dart';
@@ -26,10 +28,12 @@ class WorktreeToolSet extends ServerToolSet {
     required ProjectFolders folders,
     required WorktreeService worktrees,
     SessionLiveness liveness = SessionLiveness.rowsOnly,
+    SlotWaits? slotWaits,
   }) : _reach = reach,
        _folders = folders,
        _worktrees = worktrees,
        _liveness = liveness,
+       _slotWaits = slotWaits,
        _delivery = CheckoutDeliveryReader(reach);
 
   final ServerToolContext _context;
@@ -37,6 +41,7 @@ class WorktreeToolSet extends ServerToolSet {
   final ProjectFolders _folders;
   final WorktreeService _worktrees;
   final SessionLiveness _liveness;
+  final SlotWaits? _slotWaits;
   final CheckoutDeliveryReader _delivery;
 
   @override
@@ -368,17 +373,24 @@ class WorktreeToolSet extends ServerToolSet {
     });
   }
 
-  /// A session running in [worktree] right now, or `null`. Both ways one
-  /// lands there are asked: the path on the row, and the repository id.
+  /// A session running in [worktree] right now, or waiting in line to start
+  /// there, or `null`: by its repository id, its own path, or an attached
+  /// checkout, whatever its mode.
   Session? _liveSessionIn(Repository worktree) {
+    final liveness = _liveness.or((id) => _slotWaits?.of(id) != null);
     for (final session in SessionDao(_context.database).getAll()) {
       final inHere =
           session.repositoryId == worktree.id ||
           (session.worktree != null &&
               Checkout(session.worktree!) == Checkout(worktree.path));
-      if (inHere && _liveness.isLive(session)) return session;
+      if (inHere && liveness.isLive(session)) return session;
     }
-    return null;
+    return serverCheckoutOccupants(
+      _context,
+      worktree.path,
+      liveness: liveness,
+      writersOnly: false,
+    ).firstOrNull?.session;
   }
 
   /// The worktree's own name, which becomes the last part of a directory
