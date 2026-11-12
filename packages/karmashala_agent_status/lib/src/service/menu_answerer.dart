@@ -269,6 +269,23 @@ class SessionMenuAnswerer {
     // draws can be dropped.
     final deadline = DateTime.now().add(patience);
     var at = menu.highlighted;
+    // Arrows pressed against rows the highlight was seen to move: a key
+    // pressed again may only have been late, and still be on its way.
+    var sent = 0;
+    var moved = 0;
+    var repressed = false;
+    AgentScreenMenu reread() {
+      final read = onScreen(sessionId);
+      if (read == null || read.id != menuId) {
+        throw const SessionPromptRefusal(
+          'the prompt changed while moving to that option, so nothing was '
+          'chosen',
+        );
+      }
+      moved += _rowsBetween(now.highlighted, read.highlighted, read);
+      return now = read;
+    }
+
     while (at != option) {
       if (!press(sessionId, support.move(at, at < option ? at + 1 : at - 1))) {
         throw const SessionPromptRefusal(
@@ -276,21 +293,17 @@ class SessionMenuAnswerer {
           noTerminal: true,
         );
       }
+      sent++;
       final before = at;
       final stepDeadline = DateTime.now().add(_step);
       while (at == before) {
         await Future<void>.delayed(poll);
-        final read = onScreen(sessionId);
-        if (read == null || read.id != menuId) {
-          throw const SessionPromptRefusal(
-            'the prompt changed while moving to that option, so nothing was '
-            'chosen',
-          );
-        }
-        now = read;
-        at = read.highlighted;
+        at = reread().highlighted;
         // A key the menu dropped is pressed again, not waited on for ever.
-        if (DateTime.now().isAfter(stepDeadline)) break;
+        if (at == before && DateTime.now().isAfter(stepDeadline)) {
+          repressed = true;
+          break;
+        }
       }
       if (DateTime.now().isAfter(deadline)) {
         throw SessionPromptRefusal(
@@ -299,7 +312,36 @@ class SessionMenuAnswerer {
         );
       }
     }
+    if (!repressed) return now;
+    // Every arrow seen land, then one quiet step — or a dropped key given
+    // up on — before the highlight is believed.
+    final giveUp = DateTime.now().add(_step * 3);
+    final hardStop = giveUp.add(patience);
+    var quietSince = DateTime.now();
+    var quiet = false;
+    while (!DateTime.now().isAfter(hardStop)) {
+      await Future<void>.delayed(poll);
+      final was = now.highlighted;
+      if (reread().highlighted != was) quietSince = DateTime.now();
+      quiet = DateTime.now().difference(quietSince) >= _step;
+      if (quiet && (moved >= sent || DateTime.now().isAfter(giveUp))) break;
+    }
+    if (!quiet || now.highlighted != option) {
+      throw SessionPromptRefusal(
+        'a late key moved the highlight off "$label", so nothing was chosen '
+        '— check the terminal',
+        unconfirmed: true,
+      );
+    }
     return now;
+  }
+
+  /// Rows the highlight moved from [from] to [to] on [menu], one key a row:
+  /// the short way round, as a menu that wraps moves.
+  static int _rowsBetween(int from, int to, AgentScreenMenu menu) {
+    final d = (to - from).abs();
+    final n = menu.options.length;
+    return d < n - d ? d : n - d;
   }
 }
 

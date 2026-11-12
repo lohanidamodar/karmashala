@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/descriptors.dart';
 import 'package:test/test.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart';
@@ -48,8 +50,114 @@ class FakeMenuPane {
   }
 }
 
+/// A permission menu that wraps around and applies each key [lag] after it
+/// was pressed, in order — a terminal slow to redraw. The first [drop] arrows
+/// are lost, as a burst sent while the menu draws can be.
+class LateMenuPane {
+  LateMenuPane(this.options, {required this.lag, this.drop = 0});
+
+  final List<String> options;
+  final Duration lag;
+  int drop;
+  int highlighted = 0;
+  int pending = 0;
+  String? confirmed;
+
+  /// The highlight on screen, and the arrows still on their way, as each
+  /// Enter was pressed.
+  final List<({int highlighted, int pending})> enters = [];
+
+  List<String> get screen => [
+    ' Do you want to proceed?',
+    '',
+    for (var i = 0; i < options.length; i++)
+      i == highlighted ? ' ❯ ${options[i]}' : '   ${options[i]}',
+    '',
+    ' Enter to confirm · Esc to cancel',
+  ];
+
+  bool press(String keys) {
+    if (keys == '\r') {
+      enters.add((highlighted: highlighted, pending: pending));
+    } else if (drop > 0) {
+      drop--;
+      return true;
+    } else {
+      pending++;
+    }
+    Timer(lag, () {
+      switch (keys) {
+        case '\x1b[B':
+          pending--;
+          highlighted = (highlighted + 1) % options.length;
+        case '\x1b[A':
+          pending--;
+          highlighted = (highlighted - 1) % options.length;
+        case '\r':
+          confirmed = options[highlighted];
+      }
+    });
+    return true;
+  }
+}
+
 void main() {
   const trust = ['No, exit', 'Yes, I trust this folder'];
+
+  group('keys that land late', () {
+    const options = ['Yes', "Yes, and don't ask again", 'No'];
+
+    SessionMenuAnswerer answererFor(LateMenuPane pane) => SessionMenuAnswerer(
+      readScreen: (_) => pane.screen,
+      supportFor: (_) => const AgentMenuSupport(markers: ['❯']),
+      isAsking: (_) => true,
+      press: (_, keys) => pane.press(keys),
+      poll: const Duration(milliseconds: 5),
+      // One step is 100 ms; every key lands 120 ms after it is pressed.
+      patience: const Duration(milliseconds: 600),
+    );
+
+    test('Enter is never pressed while an arrow is on its way', () async {
+      final pane = LateMenuPane(
+        options,
+        lag: const Duration(milliseconds: 120),
+      );
+      final answerer = answererFor(pane);
+      final menu = answerer.read('s1')!;
+
+      try {
+        await answerer.choose('s1', menuId: menu.id, option: 2);
+      } on SessionPromptRefusal catch (refusal) {
+        expect(refusal.unconfirmed, isTrue);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      for (final enter in pane.enters) {
+        expect(enter.highlighted, 2);
+        expect(enter.pending, 0);
+      }
+      expect(pane.confirmed, anyOf(isNull, 'No'), reason: 'a deny, not Yes');
+    });
+
+    test(
+      'a key the menu dropped is pressed again, and the choice made',
+      () async {
+        final pane = LateMenuPane(
+          options,
+          lag: const Duration(milliseconds: 10),
+          drop: 1,
+        );
+        final answerer = answererFor(pane);
+        final menu = answerer.read('s1')!;
+
+        expect(
+          await answerer.choose('s1', menuId: menu.id, option: 1),
+          options[1],
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(pane.confirmed, options[1]);
+      },
+    );
+  });
 
   SessionMenuAnswerer answererFor(FakeMenuPane pane, {bool asking = true}) =>
       SessionMenuAnswerer(
