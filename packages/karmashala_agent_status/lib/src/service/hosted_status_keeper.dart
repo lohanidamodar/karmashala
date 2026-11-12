@@ -278,10 +278,12 @@ class HostedStatusKeeper {
       // transcript fallback is not here, and an agent that stopped says so
       // once. Without this a Stop fired while nobody watched lapsed to
       // `unknown` five minutes later on any screen the grid cannot read, and
-      // stayed there until the agent's next hook.
-      next = composed.source == AgentStatusSource.none
-          ? _reports.latest(query.agentId, query.sessionId) ?? composed
-          : composed;
+      // stayed there until the agent's next hook. Only a settled word is
+      // kept: a turn aborted with no hook must not read working for ever.
+      final last = composed.source == AgentStatusSource.none
+          ? _reports.latest(query.agentId, query.sessionId)
+          : null;
+      next = last != null && _settled(last) ? last : composed;
     }
     // A question travels only while the hook that opened it is the word.
     final hookQuestion = next.hasOpenQuestion && _isTheAgentsWord(next.source);
@@ -372,6 +374,14 @@ class HostedStatusKeeper {
   /// sent over its protocol. A screen or state-file reading is ours.
   static bool _isTheAgentsWord(AgentStatusSource source) =>
       source == AgentStatusSource.hook || source == AgentStatusSource.protocol;
+
+  /// Whether a stale [report] may still stand: a settled word, or a protocol
+  /// runtime's, which ends its own turns.
+  static bool _settled(AgentStatusReport report) =>
+      report.source == AgentStatusSource.protocol ||
+      report.ending != null ||
+      report.status == AgentActivityStatus.idle ||
+      report.status == AgentActivityStatus.failed;
 }
 
 /// Everything kept about one session between readings.

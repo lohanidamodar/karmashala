@@ -590,6 +590,26 @@ void main() {
       expect(kept.observedAt, clock.now.subtract(const Duration(minutes: 30)));
     });
 
+    test('a stale working hook is not the word: an aborted Codex turn fires '
+        'none', () {
+      keeper.track('row-c', agentId: codex.id);
+      final body = payload('PreToolUse', {'tool_name': 'shell'});
+      final report = keeper.classify(
+        agentId: codex.id,
+        event: 'PreToolUse',
+        body: body,
+        receivedAt: clock.now,
+      );
+      final working = keeper.hookLanded('row-c', report, body: body);
+      expect(working!.report.status, AgentActivityStatus.working);
+
+      clock.now = clock.now.add(const Duration(minutes: 6));
+      keeper.screen('row-c', const ['', 'some rows with no marker']);
+      final kept = keeper.statusOf('row-c')!.report;
+      expect(kept.status, AgentActivityStatus.unknown);
+      expect(kept.source, AgentStatusSource.none);
+    });
+
     test(
       'a fresh working hook outranks a modal until the prompt\'s own hook',
       () {

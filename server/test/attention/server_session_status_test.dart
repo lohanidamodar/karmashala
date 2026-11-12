@@ -513,10 +513,77 @@ void main() {
       );
       clock.now = _start.add(const Duration(seconds: 13));
       await status.cycle();
+      expect(status.reportForOpenId('row-1')?.status, AgentActivityStatus.idle);
+      await status.close();
+    });
+
+    // Codex fires no hook for a turn the user aborted: the last hook said
+    // working, and once it is stale the rollout's `turn_aborted` is the word.
+    test('a stale working hook gives way to an aborted turn', () async {
+      final keeper = HostedStatusKeeper(
+        agents: AgentRegistry.builtIn,
+        clock: clock,
+      )..track('row-1', agentId: AgentIds.codex, conversationId: 'conv-1');
+      watched.add(
+        const WatchedSession(
+          key: AgentSessionKey(AgentIds.codex, 'conv-1'),
+          label: 'Hosted',
+          openId: 'row-1',
+          imported: false,
+          stateFilePath: 'store/conv-1.jsonl',
+        ),
+      );
+      final status = ServerSessionStatus(
+        statusService: service,
+        agents: AgentRegistry.builtIn,
+        loadSessions: () => watched,
+        clock: clock,
+        stateFileSource: source,
+        heldByHost: (session) => session.openId == 'row-1',
+        hostStatusFor: (session) => keeper.statusOf(session.openId),
+      );
+
+      const body =
+          '{"session_id":"conv-1","hook_event_name":"PreToolUse",'
+          '"tool_name":"shell"}';
+      keeper.hookLanded(
+        'row-1',
+        keeper.classify(
+          agentId: AgentIds.codex,
+          event: 'PreToolUse',
+          body: body,
+          receivedAt: clock.nowUtc(),
+        ),
+        body: body,
+      );
+      source.records['store/conv-1.jsonl'] = {
+        'type': 'response_item',
+        'payload': {'type': 'function_call'},
+      };
+      await status.cycle();
       expect(
         status.reportForOpenId('row-1')?.status,
-        AgentActivityStatus.idle,
+        AgentActivityStatus.working,
       );
+
+      source.records['store/conv-1.jsonl'] = {
+        'type': 'event_msg',
+        'payload': {'type': 'turn_aborted'},
+      };
+      source.modified['store/conv-1.jsonl'] = _start.add(
+        const Duration(seconds: 12),
+      );
+      clock.now = _start.add(const Duration(minutes: 6));
+      keeper.screen('row-1', const [
+        '› Fix the build',
+        '',
+        '› Ask Codex to do anything',
+        '',
+        '  model medium · ~/project',
+        '  ? for shortcuts                    ⚠ 6 warnings · f2 to view',
+      ]);
+      await status.cycle();
+      expect(status.reportForOpenId('row-1')?.status, AgentActivityStatus.idle);
       await status.close();
     });
   });
