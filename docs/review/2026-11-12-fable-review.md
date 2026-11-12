@@ -148,3 +148,32 @@ still falls to the quiet rule (3); external-terminal sessions are still stored
 `unknown` (10); one-shot forms still pass a dash-led prompt positionally (20);
 an agent on the MCP bridge with no session id is treated as a person (16);
 registered project folders are still not trusted (8).
+
+## Second round: leftovers and the owner's decisions (same day)
+
+| # | Commit | Change |
+| --- | --- | --- |
+| 27 | `d58359352` | A notification's peek survives a slow dashboard build; a desktop toast click waits for sessions to load |
+| 25 | `0b722330c` | Measured on Claude Code 2.1.316: every mode in the shift+tab cycle reads idle with the existing markers. Fixtures and a test only |
+| 7 | `39dd04ca4` | Measured: a 4.6 KB message through the production typist arrived as one message, five runs of five. Live test only |
+| 30 | `1bbc215c1` | `SessionRegistry.close` removes by identity; one close in flight per process |
+| 38 | `59b4bafaf` | ACP terminal exits report a signal or an unsigned code |
+| 22 | `e983d8b30` | A Codex chat in an untrusted folder says so; unlisted Codex requests are logged |
+| 39 | `b05dc8dd0` | An expired Antigravity token is an auth failure |
+| 16 | `04e3f6573` | Every `session_answer` counts as an agent's; approve never falls back to allow-always |
+| 21 | `90f85ab02` | Decided: children do not inherit the grant. The answer carries `operatorGranted` and the refusal says only the person grants it |
+| 26 | `cd73b236e` | Decided: the bot's report stays `once`. The answer carries a `reportNote` |
+| 29 | `98e6428bc` | Decided: only the person lifts a pause on a queue |
+| 8 | `47ee09964`, `5d8377f87` | Decided: "Trust registered projects for agents", a server setting on by default with a Settings switch |
+
+Gates on the full tree: analyze exit 0 with no errors or warnings; server suite
+without the live tags 3394 passed; app suite 8245 passed; `agent_cli` 1155,
+`karmashala_session` 292, `karmashala_agent_reporting` 277,
+`karmashala_data_protocol` 207, `karmashala_agent_status` 176, `karmashala_mcp`
+49, `karmashala_acp` 39. Still nothing tried in the running app.
+
+Still open: **35** (Codex usage labels need a real payload); the gap in **1** (a
+bare key just after a prompt was answered, left because it cannot be told from
+a prompt the parser cannot read); one-shot forms and a dash-led prompt (**20**);
+external-terminal sessions stored `unknown` (**10**); automations and
+phone-started sessions do not trust worktrees they make.
