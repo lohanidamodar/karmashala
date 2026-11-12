@@ -607,10 +607,7 @@ void _runForReal(
         paneSessionId: 'f3976069-b8d7-4266-ad1a-5afa772b51e7',
       );
 
-      expect(
-        received.last.session,
-        'f3976069-b8d7-4266-ad1a-5afa772b51e7',
-      );
+      expect(received.last.session, 'f3976069-b8d7-4266-ad1a-5afa772b51e7');
       expect(received.last.body, '{"session_id":"abc","cwd":"/tmp"}');
     }, skip: skip);
 
@@ -706,6 +703,46 @@ void _runForReal(
         expect(request.body, isNot(contains('session_id')));
       }
     }, skip: skip);
+
+    if (shell.extension == 'cmd') {
+      test('callbacks fired at once each post their own payload', () async {
+        // cmd seeds %RANDOM% from the clock, so same-second callbacks once
+        // shared their temp files.
+        const count = 20;
+        await fire(expectRequests: 2);
+        received.clear();
+        wanted = count * 2;
+        quota = Completer<void>();
+        final script = p.join(scratch.path, '$agentHookMarker.cmd');
+        final runs = await Future.wait([
+          for (var i = 0; i < count; i++)
+            Process.start(shell.executable, [...shell.prefix, script, 'Stop']),
+        ]);
+        for (final (i, run) in runs.indexed) {
+          run.stdin.add(utf8.encode('{"n":$i}'));
+          unawaited(run.stdin.close());
+        }
+        final codes = await Future.wait([
+          for (final run in runs)
+            run.stdout
+                .drain<void>()
+                .then((_) => run.stderr.drain<void>())
+                .then((_) => run.exitCode),
+        ]);
+        await quota.future.timeout(
+          const Duration(seconds: 20),
+          onTimeout: () {},
+        );
+
+        expect(codes, everyElement(0));
+        final bodies = [
+          for (final r in received)
+            if (r.authorization != null) r.body,
+        ];
+        expect(bodies.toSet(), {for (var i = 0; i < count; i++) '{"n":$i}'});
+        expect(bodies, hasLength(count));
+      }, skip: skip);
+    }
 
     test('a dead port costs one refused connection and nothing else', () async {
       final dead = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

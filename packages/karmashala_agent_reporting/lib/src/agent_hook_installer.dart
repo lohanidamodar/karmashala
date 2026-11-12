@@ -640,14 +640,21 @@ class AgentHookInstaller {
       ')\r\n'
       'if not defined KS_URL exit /b 0\r\n'
       'if not defined KS_TOKEN exit /b 0\r\n'
-      'set "KS_PROBE=%TEMP%\\$_scriptBaseName.%RANDOM%.code"\r\n'
+      // %RANDOM% repeats across same-second cmds; mkdir claims a name for
+      // this run alone, and a taken one is passed over.
+      'set "KS_TRIES=0"\r\n'
+      ':ks_claim\r\n'
+      'set /a KS_TRIES+=1\r\n'
+      'if !KS_TRIES! GTR 200 exit /b 0\r\n'
+      'set "KS_DIR=%TEMP%\\$_scriptBaseName.%RANDOM%"\r\n'
+      'mkdir "%KS_DIR%" >NUL 2>NUL || goto ks_claim\r\n'
+      'set "KS_PROBE=%KS_DIR%\\code"\r\n'
       'set "KS_CODE="\r\n'
       'curl -s -o NUL -m 2 -w "%%{http_code}" "%KS_URL%" > "%KS_PROBE%" '
       '2>NUL\r\n'
       'set /p KS_CODE=<"%KS_PROBE%"\r\n'
-      'del "%KS_PROBE%" >NUL 2>NUL\r\n'
-      'if not "%KS_CODE%"=="401" exit /b 0\r\n'
-      'set "KS_BODY=%TEMP%\\$_scriptBaseName.%RANDOM%.body"\r\n'
+      'if not "%KS_CODE%"=="401" goto ks_done\r\n'
+      'set "KS_BODY=%KS_DIR%\\body"\r\n'
       'set "KS_BODYURL=!KS_BODY:\\=/!"\r\n'
       'set "KS_BODYURL=!KS_BODYURL: =%%20!"\r\n'
       'curl -s -T - "file:///!KS_BODYURL!" 2>NUL\r\n'
@@ -659,7 +666,8 @@ class AgentHookInstaller {
       // Delayed, so a value is never parsed as cmd syntax; unset reads empty.
       '-H "$kPaneSessionHeader: !KARMASHALA_SESSION_ID!" '
       '--data-binary @"%KS_BODY%" "%KS_URL%%~1" 2>NUL\r\n'
-      'del "%KS_BODY%" >NUL 2>NUL\r\n'
+      ':ks_done\r\n'
+      'rmdir /s /q "%KS_DIR%" >NUL 2>NUL\r\n'
       'exit /b 0\r\n';
 
   /// Deletes every generated file under [storeHome]. Both script spellings,
