@@ -33,6 +33,10 @@ const Set<String> _kMcpOperatorToolsOnOthers = {
   'session_draft',
   'session_checkout_attach',
   'session_checkout_detach',
+  // They write onto the session named: its decisions, checkpoints, checks.
+  'decision_record',
+  'checkpoint_capture',
+  'checks_run',
 };
 
 /// Whether calling [tool] with [arguments] from [callerSessionId] needs the

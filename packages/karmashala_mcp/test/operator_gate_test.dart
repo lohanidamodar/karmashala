@@ -48,6 +48,10 @@ void main() {
       'session_draft',
       'session_checkout_attach',
       'session_checkout_detach',
+      // They write onto the session named.
+      'decision_record',
+      'checkpoint_capture',
+      'checks_run',
     ];
 
     test('are free on the caller itself', () {
@@ -55,7 +59,7 @@ void main() {
         expect(_gated(tool), isFalse, reason: '$tool, no id');
         expect(_gated(tool, {'sessionId': 'me'}), isFalse, reason: tool);
         expect(_gated(tool, {'sessionId': ' me '}), isFalse, reason: tool);
-        // A blank id falls back to the caller in every one of these tools.
+        // A blank id never names another session.
         expect(_gated(tool, {'sessionId': '  '}), isFalse, reason: tool);
       }
     });
@@ -119,7 +123,6 @@ void main() {
       'browser_evaluate',
       'flutter_run',
       'project_build',
-      'checks_run',
       'project_add',
       'project_update',
       'worktree_create',

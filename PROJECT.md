@@ -1467,7 +1467,7 @@ proves the fixture can observe the write, so a green run is not an empty one.
 `Session.operatorGranted` is the person's word that a session's agent may start,
 message and end other sessions and agents. The relay checks it on every tool
 call (`mcpToolNeedsOperatorGrant`, with the tool's arguments and the
-authenticated caller). `kMcpOperatorTools` is always gated; four tools are gated
+authenticated caller). `kMcpOperatorTools` is always gated; seven tools are gated
 only when `sessionId` names another session; `terminal_close` when it kills;
 `checkpoint_restore` on another session's checkpoint. Any tool missing from the
 catalogue is gated, and everything else is outside the grant.
