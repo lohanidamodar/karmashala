@@ -27,7 +27,8 @@ class DaemonPromptAnswers implements PromptTerminals {
     Duration menuPatience = const Duration(seconds: 3),
     this.onDecision,
   }) : _sessions = SessionDao(database),
-       _decisions = DecisionRecordDao(database) {
+       _decisions = DecisionRecordDao(database),
+       _person = null {
     answers = SessionPromptAnswers(
       terminals: this,
       clock: status.keeper.clock,
@@ -35,6 +36,24 @@ class DaemonPromptAnswers implements PromptTerminals {
       menuPatience: menuPatience,
     );
   }
+
+  DaemonPromptAnswers._forAgents(DaemonPromptAnswers person)
+    : status = person.status,
+      agents = person.agents,
+      _sessions = person._sessions,
+      _decisions = person._decisions,
+      _person = person {
+    answers = person.answers;
+  }
+
+  /// These answers as `session_answer` gives them: each one an agent's, so
+  /// over ACP none raises the mode or allows always, whatever it names.
+  late final DaemonPromptAnswers forAgents = _person == null
+      ? DaemonPromptAnswers._forAgents(this)
+      : this;
+
+  /// The person's answers this one stands beside, or null for those.
+  final DaemonPromptAnswers? _person;
 
   final DaemonAgentStatus status;
   final AgentRegistry agents;
@@ -82,6 +101,7 @@ class DaemonPromptAnswers implements PromptTerminals {
         toolCallId: request.ask?.toolUseId,
         optionId: request.optionId,
         decidedBySessionId: request.decidedBySessionId,
+        byAgent: _person != null,
       ),
       MenuAnswerRequest() => throw const SessionPromptRefusal(
         'an agent spoken to over ACP has no menu to answer; approve or deny '
@@ -191,7 +211,7 @@ class DaemonPromptAnswers implements PromptTerminals {
   @override
   Future<AgentQuestionSet?> openQuestion(String sessionId) async =>
       status.statusOf(sessionId)?.question ??
-      await readQuestion?.call(sessionId);
+      await (_person ?? this).readQuestion?.call(sessionId);
 
   @override
   List<String>? screen(String sessionId) =>
@@ -206,6 +226,7 @@ class DaemonPromptAnswers implements PromptTerminals {
 
   @override
   void record(DecisionRecord decision) {
+    if (_person case final person?) return person.record(decision);
     try {
       final stored = _decisions.append(decision);
       onDecision?.call(stored);

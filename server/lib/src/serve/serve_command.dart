@@ -2279,7 +2279,8 @@ Future<int> _serve(
       SessionToolSet(
         tools,
         slotWaits: slotWaits,
-        prompts: prompts,
+        // Every answer through the tool is an agent's, caller named or not.
+        prompts: prompts.forAgents,
         registry: registry,
         waits: sessionWaits,
         queue: sessionQueue,

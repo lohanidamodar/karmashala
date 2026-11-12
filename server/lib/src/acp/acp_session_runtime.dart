@@ -789,14 +789,16 @@ class AcpSessionRuntime implements ScreenSession {
   /// `reject_once` (else `reject_always`). Throws [SessionPromptRefusal] when
   /// none is open, when [toolCallId] names another call, or when the agent
   /// offered no such option. An edit waits for the before-turn checkpoint.
-  /// From an agent ([decidedBySessionId]), [optionId] never raises the
-  /// session's mode nor allows always: those stay the person's.
+  /// From an agent ([byAgent], or a [decidedBySessionId]), no answer raises
+  /// the session's mode nor allows always: those stay the person's.
   Future<AcpPermissionAnswer> answerPermission({
     required bool approve,
     String? toolCallId,
     String? optionId,
     String? decidedBySessionId,
+    bool byAgent = false,
   }) async {
+    final agent = byAgent || decidedBySessionId != null;
     if (_pending == null) {
       throw const SessionPromptRefusal(
         'this session has no permission request open to answer',
@@ -819,7 +821,7 @@ class AcpSessionRuntime implements ScreenSession {
       }
       // A mode switch is held to the session's rung; any other "always"
       // writes a lasting rule.
-      if (decidedBySessionId != null && option.kind.allows) {
+      if (agent && option.kind.allows) {
         final rung = spec.rungOfOption(option.optionId);
         if (rung != null && !rung.isAtMost(_allowCeiling)) {
           throw SessionPromptRefusal(
@@ -843,6 +845,14 @@ class AcpSessionRuntime implements ScreenSession {
         throw SessionPromptRefusal(
           'every way $agentName offers to approve "${pending.title}" would '
           "raise this session's permissions",
+        );
+      }
+      if (agent &&
+          option?.kind == PermissionOptionKind.allowAlways &&
+          spec.rungOfOption(option!.optionId) == null) {
+        throw SessionPromptRefusal(
+          '$agentName offers no way to allow "${pending.title}" just once, '
+          'and allowing it from now on is only a person\'s to decide',
         );
       }
     }

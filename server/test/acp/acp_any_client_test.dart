@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show PathProbe;
 import 'package:karmashala_acp/karmashala_acp.dart'
-    show AuthMethod, PermissionSelected;
+    show AuthMethod, PermissionOption, PermissionOptionKind, PermissionSelected;
 import 'package:karmashala_acp/testing.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show ApprovalAnswerRequest;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/data.dart' show DataService;
@@ -196,7 +198,7 @@ void main() {
       data: DataService(database),
       dataDirectory: temp.path,
     ),
-    prompts: prompts,
+    prompts: prompts.forAgents,
     registry: registry,
     resumeWith: (sessionId, prompt, _) =>
         launches.resume(sessionId, prompt: prompt),
@@ -607,6 +609,71 @@ void main() {
       expect(
         (agent.permissionOutcomes.single as PermissionSelected).optionId,
         'allow',
+      );
+    });
+
+    test('session_answer with no caller session is still an agent: it '
+        'cannot allow always, and approve never falls back to it, while the '
+        "app's own answer can", () async {
+      agent = FakeAcpAgent(
+        sessionIdPrefix: 'agent-session',
+        turns: const [
+          FakeTurn([
+            FakeStep.toolCall(
+              toolCallId: 'c1',
+              title: 'Run tests',
+              permissionOptions: [
+                PermissionOption(
+                  optionId: 'allow-always',
+                  name: 'Always allow',
+                  kind: PermissionOptionKind.allowAlways,
+                ),
+                PermissionOption(
+                  optionId: 'reject',
+                  name: 'Reject',
+                  kind: PermissionOptionKind.rejectOnce,
+                ),
+              ],
+            ),
+            FakeStep.message('Tests pass.'),
+          ]),
+        ],
+      );
+      row('old');
+      await input().handle(
+        const SessionSend(sessionId: 'old', text: 'run them'),
+        null,
+      );
+      final runtime = runtimeOf('old');
+      while (!runtime.hasOpenPermission) {
+        await pump();
+      }
+
+      for (final answer in [
+        {'sessionId': 'old', 'optionId': 'allow-always'},
+        {'sessionId': 'old', 'decision': 'approve'},
+      ]) {
+        await expectLater(
+          tools().call('session_answer', answer, null),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              anyOf(contains('only a person'), contains("only a person's")),
+            ),
+          ),
+        );
+      }
+      expect(runtime.hasOpenPermission, isTrue);
+
+      final answered = await prompts.answer(
+        const ApprovalAnswerRequest(sessionId: 'old', approve: true),
+      );
+      expect(answered.answered, 'Always allow');
+      await runtime.awaitTurn();
+      expect(
+        (agent.permissionOutcomes.single as PermissionSelected).optionId,
+        'allow-always',
       );
     });
 
