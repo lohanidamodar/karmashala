@@ -17,7 +17,7 @@ import '../application/overview_board.dart';
 import '../application/overview_card_line.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
-import '../application/overview_reads.dart';
+import '../application/overview_shown.dart';
 import 'overview_title_block.dart' show OverviewChipFit;
 
 /// The colour a state is drawn in on the Overview; null for no colour.
@@ -34,24 +34,8 @@ Color? overviewStateColor(BuildContext context, AgentState state) {
 
 /// What [card] is doing, in words: its status report, the inbox's words and,
 /// while it works or waits, one server read of its plan and open calls.
-OverviewActivity watchOverviewActivity(WidgetRef ref, OverviewCard card) {
-  final id = card.id;
-  ref.watch(agentSessionStatusProvider(id));
-  final details = ref.watch(overviewInboxDetailsProvider(id));
-  final reads =
-      card.state == AgentState.working || card.state == AgentState.needsYou;
-  final glance = reads
-      ? ref.watch(overviewGlanceProvider(id)).asData?.value
-      : null;
-  return overviewActivity(
-    state: card.state,
-    report: ref.read(sessionStatusLookupProvider)(id),
-    detailOf: (kind) => details[kind],
-    activityAt: card.entry.activityAt,
-    now: ref.read(clockProvider).nowUtc(),
-    glance: glance,
-  );
-}
+OverviewActivity watchOverviewActivity(WidgetRef ref, OverviewCard card) =>
+    overviewActivityWith(ref.watch, ref.read, card);
 
 /// The headline alone, for a label or a tooltip.
 String watchOverviewLine(WidgetRef ref, OverviewCard card) =>

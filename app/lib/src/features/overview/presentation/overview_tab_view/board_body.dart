@@ -61,7 +61,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
 
   OverviewSections _sections() => overviewSectionsOf(
     ref.read(overviewBoardProvider),
-    ref.read(overviewForestProvider),
+    ref.read(overviewShownForestProvider),
     waitingSince: (id) =>
         ref.read(sessionStatusLookupProvider)(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
@@ -361,7 +361,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       },
     ),
     OverviewFamilyIntent: _Triage<OverviewFamilyIntent>((intent) {
-      final forest = ref.read(overviewForestProvider);
+      final forest = ref.read(overviewShownForestProvider);
       final roots = [
         for (final (_, trees) in forest.lanes)
           for (final tree in trees) tree.card.id,
@@ -375,10 +375,10 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
       _reveal(roots[next]);
     }),
     OverviewLaneIntent: _Triage<OverviewLaneIntent>((intent) {
-      final lanes = ref.read(overviewForestProvider).lanes;
+      final lanes = ref.read(overviewShownForestProvider).lanes;
       if (lanes.isEmpty) return;
       final here = overviewFamilyOf(
-        ref.read(overviewForestProvider),
+        ref.read(overviewShownForestProvider),
         _focused(),
       )?.lane;
       final next = here == null
@@ -388,7 +388,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
     }),
     OverviewNextNewIntent: _Triage<OverviewNextNewIntent>((_) {
       final members = overviewForestMembers(
-        ref.read(overviewForestProvider),
+        ref.read(overviewShownForestProvider),
       ).toList();
       final at = members.indexWhere((c) => c.id == _focused());
       for (var i = 1; i <= members.length; i++) {
@@ -421,7 +421,7 @@ class _BoardBodyState extends ConsumerState<_BoardBody> {
           .read(overviewSelectionProvider.notifier)
           .selectAll(
             overviewLaneOf(
-              ref.read(overviewForestProvider),
+              ref.read(overviewShownForestProvider),
               from,
               folded: ref.read(overviewFoldedParentsProvider),
               collapsed: ref.read(overviewCollapsedLanesProvider),

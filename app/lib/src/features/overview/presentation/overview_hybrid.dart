@@ -16,6 +16,7 @@ import '../application/overview_links.dart';
 import '../application/overview_prefs.dart';
 import '../application/overview_providers.dart';
 import '../application/overview_search.dart';
+import '../application/overview_shown.dart';
 import '../application/overview_tiles.dart' show overviewCardOf;
 import '../application/overview_tree.dart';
 import 'overview_card_parts.dart';
@@ -184,6 +185,15 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       if (!mounted) return;
       final id = asked.id;
       final forest = ref.read(overviewForestProvider);
+      // A session the search, New or Pinned keeps off the board: they lift.
+      if (!ref.read(overviewShownForestProvider).placed.contains(id) &&
+          forest.placed.contains(id)) {
+        ref.read(overviewSearchProvider.notifier).clear();
+        final lit = ref.read(overviewHighlightProvider);
+        if (lit != OverviewHighlight.none) {
+          ref.read(overviewHighlightProvider.notifier).toggle(lit);
+        }
+      }
       ref
           .read(overviewFoldedParentsProvider.notifier)
           .open(overviewAncestorsIn(forest, id));
@@ -276,7 +286,9 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       }
     }
     final folded = ref.watch(overviewFoldedParentsProvider);
-    final forest = ref.watch(overviewForestProvider);
+    final whole = ref.watch(overviewForestProvider);
+    // A search, New or Pinned leaves only what fits; nothing else moves.
+    final forest = ref.watch(overviewShownForestProvider);
     final collapsed = ref.watch(overviewCollapsedLanesProvider);
     final sections = overviewSectionsOf(
       board,
@@ -287,13 +299,11 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     );
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
     final pinned = watchOverviewPinned(ref);
-    final pinnedIds = {for (final card in pinned) card.id};
     final allStates = ref.watch(
       overviewPrefsProvider.select((p) => p.filter.allStates),
     );
     final drawer = ref.watch(overviewDrawerProvider.select((d) => d.open));
     final more = ref.watch(overviewMoreProvider);
-    final highlight = ref.watch(overviewHighlightProvider);
     final theme = Theme.of(context);
     final muted = UiDensity.of(context).muted(theme);
     final onOpen = widget.onOpen;
@@ -301,35 +311,16 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     _laneKeys.removeWhere((key, _) => !_lanes.contains(key));
     final searchSheet = ref.watch(overviewSearchSheetProvider);
     final fresh = [
-      for (final card in overviewForestMembers(forest))
+      for (final card in overviewForestMembers(whole))
         if (watchOverviewNewCount(ref, card) > 0) card,
     ].length;
     WidgetsBinding.instance.addPostFrameCallback((_) => _trackLane());
 
-    // The families New or Pinned leave out: they dim in place. Read here,
-    // in build, where a watch is kept.
-    bool lit(OverviewTreeNode node) => switch (highlight) {
-      OverviewHighlight.none => true,
-      OverviewHighlight.pinned => node.drawn.any(
-        (c) => pinnedIds.contains(c.id),
-      ),
-      OverviewHighlight.fresh => node.drawn.any(
-        (c) => watchOverviewNewCount(ref, c) > 0,
-      ),
-    };
-    // A search dims the families with no match; a match never moves.
+    // The sessions a search matched, lit on their families.
     final searching = ref.watch(overviewSearchProvider.select((s) => s.active));
     final matches = searching
-        ? {for (final card in watchOverviewSearchMatches(ref, forest)) card.id}
+        ? {for (final card in watchOverviewSearchMatches(ref)) card.id}
         : null;
-    final dimmed = {
-      for (final (_, trees) in forest.lanes)
-        for (final tree in trees)
-          if (!lit(tree) ||
-              (matches != null &&
-                  !tree.drawn.any((c) => matches.contains(c.id))))
-            tree.card.id,
-    };
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -364,11 +355,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
             laneRoots: roots,
             matches: matches,
           );
-          final shown = AnimatedOpacity(
-            opacity: dimmed.contains(id) ? StateLayers.dimmedOpacity : 1,
-            duration: Motion.of(context).fast,
-            child: family,
-          );
           return DragTarget<String>(
             onWillAcceptWithDetails: (drag) =>
                 drag.data != id && roots.contains(drag.data),
@@ -382,7 +368,7 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                       color: StateLayers.dropTarget(theme.colorScheme),
                       borderRadius: BorderRadius.circular(Radii.lg),
                     ),
-              child: shown,
+              child: family,
             ),
           );
         }
@@ -392,7 +378,15 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (forest.lanes.isEmpty)
+            if (forest.lanes.isEmpty && whole.lanes.isNotEmpty)
+              Text(
+                searching
+                    ? 'No session or project matches.'
+                    : 'Nothing here is new or pinned.',
+                key: const ValueKey('overview-none-match'),
+                style: muted,
+              )
+            else if (forest.lanes.isEmpty)
               Text(
                 allStates
                     ? 'Nothing is running or ready right now.'

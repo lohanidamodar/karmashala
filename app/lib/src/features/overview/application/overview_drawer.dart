@@ -64,7 +64,8 @@ final overviewSearchSheetProvider =
       OverviewSearchSheetController.new,
     );
 
-/// What the strip's New and Pinned light up: the rest dims, nothing hides.
+/// What the strip's New and Pinned leave on the board: the rest is not
+/// drawn until it is put out again.
 enum OverviewHighlight { none, fresh, pinned }
 
 class OverviewHighlightController extends Notifier<OverviewHighlight> {

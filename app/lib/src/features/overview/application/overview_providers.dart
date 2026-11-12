@@ -27,6 +27,7 @@ import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/data/workspace_data.dart';
 import 'overview_board.dart';
 import 'overview_prefs.dart';
+import 'overview_search.dart';
 import 'overview_tiles.dart';
 import 'overview_today.dart';
 
@@ -108,8 +109,12 @@ final overviewGroupByProvider = Provider.autoDispose<OverviewGroupBy>(
   ),
 );
 
-/// The lane keys folded under the grouping drawn now.
+/// The lane keys folded under the grouping drawn now. None while a search is
+/// typed: a folded group with a match is shown open, its fold kept.
 final overviewCollapsedLanesProvider = Provider.autoDispose<Set<String>>((ref) {
+  if (ref.watch(overviewSearchProvider.select((s) => s.active))) {
+    return const {};
+  }
   final by = ref.watch(overviewGroupByProvider);
   final prefix = overviewLaneFoldKey(by, '');
   return {

@@ -26,28 +26,29 @@ void main() {
     }
   });
 
-  testWidgets('keys work when the pane around the board is given the keyboard', (
-    tester,
-  ) async {
-    final pane = FocusNode(debugLabel: 'document pane', skipTraversal: true);
-    addTearDown(pane.dispose);
-    await pumpMission(
-      tester,
-      fixture: MissionFixture.full(),
-      prefsDir: dir,
-      home: Scaffold(
-        body: Focus(focusNode: pane, child: const OverviewTabView()),
-      ),
-    );
-    // As the workbench does once the tab is on screen.
-    pane.requestFocus();
-    await settleMission(tester);
+  testWidgets(
+    'keys work when the pane around the board is given the keyboard',
+    (tester) async {
+      final pane = FocusNode(debugLabel: 'document pane', skipTraversal: true);
+      addTearDown(pane.dispose);
+      await pumpMission(
+        tester,
+        fixture: MissionFixture.full(),
+        prefsDir: dir,
+        home: Scaffold(
+          body: Focus(focusNode: pane, child: const OverviewTabView()),
+        ),
+      );
+      // As the workbench does once the tab is on screen.
+      pane.requestFocus();
+      await settleMission(tester);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.slash, character: '?');
-    await settleMission(tester);
-    expect(find.byType(OverviewKeysSheet), findsOneWidget);
-    await unmountMission(tester);
-  });
+      await tester.sendKeyEvent(LogicalKeyboardKey.slash, character: '?');
+      await settleMission(tester);
+      expect(find.byType(OverviewKeysSheet), findsOneWidget);
+      await unmountMission(tester);
+    },
+  );
 
   testWidgets('a text field around the board keeps the keyboard', (
     tester,

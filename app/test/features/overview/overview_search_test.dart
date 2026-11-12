@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/overview/application/overview_providers.
 import 'package:karmashala/src/features/overview/application/overview_search.dart';
 import 'package:karmashala/src/features/overview/application/overview_seen.dart';
 import 'package:karmashala/src/features/overview/presentation/overview_tab_view.dart';
-import 'package:karmashala_ui/tokens.dart';
 
 import 'mission_fixture.dart';
 
@@ -96,15 +95,7 @@ void main() {
   String? selected(ProviderContainer c) =>
       c.read(overviewFocusProvider).selected;
 
-  /// The families drawn dimmed, by root.
-  bool dimmed(WidgetTester tester, String root) => tester
-      .widgetList<AnimatedOpacity>(
-        find.ancestor(
-          of: familyCard(root),
-          matching: find.byType(AnimatedOpacity),
-        ),
-      )
-      .any((o) => o.opacity == StateLayers.dimmedOpacity);
+  String? peeked(ProviderContainer c) => c.read(overviewFocusProvider).peeked;
 
   testWidgets('/ reaches a folded sub-session in five keys, unfolding it', (
     tester,
@@ -118,20 +109,23 @@ void main() {
     expect(typing(), isTrue);
     await tester.enterText(field, 'zeb'); // 2, 3, 4
     await settleMission(tester);
-    // Matches stay where they are; the rest dim.
-    expect(dimmed(tester, 'o-root'), isTrue);
-    expect(dimmed(tester, 'f-root'), isFalse);
+    // Only what matches is left on the board, and the first match is the
+    // pick: selected, and counted in the field.
+    expect(familyCard('o-root'), findsNothing);
+    expect(familyCard('f-root'), findsOneWidget);
     expect(byKey('overview-tree-node:f-kid'), findsOneWidget);
+    expect(selected(c), 'f-kid');
+    expect(find.text('1 of 1'), findsOneWidget);
 
     await key(tester, LogicalKeyboardKey.enter); // 5
+    // Enter opens the pick: the board is whole again, on that session.
     expect(selected(c), 'f-kid');
+    expect(peeked(c), 'f-kid');
     expect(c.read(overviewFoldedParentsProvider), isNot(contains('f-root')));
     expect(byKey('overview-tree-node:f-kid'), findsOneWidget);
-    // The keys are the board's again: Esc clears the search.
     expect(typing(), isFalse);
-    await key(tester, LogicalKeyboardKey.escape);
     expect(c.read(overviewSearchProvider).query, isEmpty);
-    expect(dimmed(tester, 'o-root'), isFalse);
+    expect(familyCard('o-root'), findsOneWidget);
     await unmountMission(tester);
   });
 
@@ -164,10 +158,15 @@ void main() {
     await slash(tester);
     await tester.enterText(field, 'cap kid');
     await settleMission(tester);
-    await key(tester, LogicalKeyboardKey.arrowDown);
+    // The first match is the pick before any arrow is pressed.
     expect(selected(c), 'c-k1');
+    expect(find.text('1 of 5'), findsOneWidget);
     await key(tester, LogicalKeyboardKey.arrowDown);
     expect(selected(c), 'c-k2');
+    expect(find.text('2 of 5'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.arrowUp);
+    expect(selected(c), 'c-k1');
+    // The ends stop: nothing wraps round to the other end.
     await key(tester, LogicalKeyboardKey.arrowUp);
     expect(selected(c), 'c-k1');
     expect(typing(), isTrue);
@@ -175,6 +174,28 @@ void main() {
     expect(c.read(overviewSearchProvider).query, isEmpty);
     expect(tester.widget<EditableText>(field).controller.text, isEmpty);
     expect(typing(), isFalse);
+    await unmountMission(tester);
+  });
+
+  testWidgets('a project name finds its sessions, and no match says so', (
+    tester,
+  ) async {
+    final c = await pumpMission(tester, fixture: fixture(), prefsDir: dir);
+    await slash(tester);
+    await tester.enterText(field, 'beej');
+    await settleMission(tester);
+    expect(familyCard('o-root'), findsOneWidget);
+    expect(familyCard('c-root'), findsNothing);
+    expect(selected(c), 'o-root');
+
+    await tester.enterText(field, 'no such thing');
+    await settleMission(tester);
+    expect(byKey('overview-none-match'), findsOneWidget);
+    expect(find.text('No match'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(peeked(c), isNull);
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(familyCard('c-root'), findsOneWidget);
     await unmountMission(tester);
   });
 

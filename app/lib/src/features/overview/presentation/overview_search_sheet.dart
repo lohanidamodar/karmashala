@@ -88,7 +88,7 @@ class _OverviewSearchSheetState extends ConsumerState<OverviewSearchSheet> {
     ].length;
     final List<(String, List<OverviewCard>)> base;
     if (search.active) {
-      final matches = watchOverviewSearchMatches(ref, forest);
+      final matches = watchOverviewSearchMatches(ref);
       base = [
         (
           '${matches.length} ${matches.length == 1 ? 'match' : 'matches'}',
