@@ -73,6 +73,14 @@ Future<String> _getWith(String path, Map<String, String> headers) async {
   }
 }
 
+Future<void> _until(bool Function() condition) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (!condition()) {
+    if (DateTime.now().isAfter(deadline)) fail('condition never held');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 void main() {
   tearDown(() async => relay.close());
 
@@ -248,6 +256,111 @@ void main() {
       expect(hungUpOn, isFalse, reason: 'a waiting listener is left alone');
       expect(relay.rendezvousCount, 1);
       await lonely.sink.close();
+    });
+  });
+
+  group('the heartbeat', () {
+    test('a ping is answered pong, and is never forwarded or held', () async {
+      await _start();
+      final host = await _connect();
+      final atHost = <Object?>[];
+      host.stream.listen(atHost.add);
+      // Alone: more pings than a lone socket may send frames.
+      for (var i = 0; i < 12; i++) {
+        host.sink.add(kRelayPing);
+      }
+      await _until(() => atHost.length == 12);
+      expect(atHost, everyElement(kRelayPong));
+
+      final phone = await _connect();
+      final atPhone = <Object?>[];
+      phone.stream.listen(atPhone.add);
+      host.sink.add(kRelayPing);
+      phone.sink.add(kRelayPing);
+      host.sink.add('after');
+      await _until(() => atPhone.length == 2 && atHost.length == 13);
+      expect(atPhone, [kRelayPong, 'after']);
+      await host.sink.close();
+    });
+
+    test('only the exact word is a ping', () async {
+      await _start();
+      final host = await _connect();
+      host.sink.add('PING');
+      host.sink.add('ping ');
+      host.sink.add(utf8.encode(kRelayPing));
+      final phone = await _connect();
+
+      expect(await phone.stream.take(3).toList(), [
+        'PING',
+        'ping ',
+        utf8.encode(kRelayPing),
+      ]);
+      await host.sink.close();
+    });
+
+    test('a lone socket that keeps pinging outlasts the lone timeout, and '
+        'is dropped once it stops', () async {
+      await _start(
+        options: const RelayOptions(loneTimeout: Duration(milliseconds: 150)),
+      );
+      final listener = await _connect();
+      int? closeCode;
+      var closed = false;
+      listener.stream.listen(
+        (_) {},
+        onDone: () {
+          closed = true;
+          closeCode = listener.closeCode;
+        },
+      );
+      listener.sink.add(kRelayPing);
+
+      // Several lone timeouts later it is still held, and still pairs.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(closed, isFalse, reason: 'a pinging listener is left waiting');
+      expect(relay.rendezvousCount, 1);
+      final phone = await _connect();
+      phone.sink.add(Uint8List.fromList([7]));
+      await phone.sink.close();
+      await _until(() => closed);
+      expect(closeCode, kClosePeerLeft);
+    });
+
+    test('a lone socket that stopped pinging is dropped with 4408', () async {
+      await _start(
+        options: const RelayOptions(
+          loneTimeout: Duration(milliseconds: 150),
+          pingStaleAfter: Duration(milliseconds: 200),
+        ),
+      );
+      final listener = await _connect();
+      listener.sink.add(kRelayPing);
+
+      final closeCode = await listener.stream
+          .drain<void>()
+          .timeout(const Duration(seconds: 5))
+          .then((_) => listener.closeCode);
+
+      expect(closeCode, kCloseNoPeer);
+      expect(relay.rendezvousCount, 0);
+    });
+
+    test('a hooks listener is answered too', () async {
+      await _start();
+      final socket = IOWebSocketChannel.connect(
+        Uri.parse(
+          'ws://127.0.0.1:${relay.port}/'
+          '${hooksListenPath('ab' * 32)}',
+        ),
+      );
+      await socket.ready;
+      final frames = <Object?>[];
+      socket.stream.listen(frames.add);
+      socket.sink.add(kRelayPing);
+      await _until(() => frames.contains(kRelayPong));
+      expect(frames.length, 2, reason: 'ready, then the pong');
+      await socket.sink.close();
     });
   });
 

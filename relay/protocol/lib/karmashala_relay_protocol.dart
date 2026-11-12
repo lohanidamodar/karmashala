@@ -7,6 +7,7 @@
 library;
 
 export 'src/close_codes.dart';
+export 'src/heartbeat.dart';
 export 'src/hooks.dart';
 export 'src/push.dart';
 export 'src/routes.dart';

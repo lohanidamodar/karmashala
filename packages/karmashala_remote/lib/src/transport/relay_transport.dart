@@ -38,9 +38,12 @@ class RelayTransport extends ReconnectingTransport {
     required this.endpoint,
     this.heartbeat = kDefaultHeartbeat,
     this.connectTimeout = kDefaultConnectTimeout,
+    this.keepAlive = false,
+    this.keepAliveInterval = kRelayPingInterval,
     super.backoff,
     super.maxQueuedFrames,
     super.maxQueuedBytes,
+    super.stableAfter,
     void Function(String message)? onLog,
   }) : super(
          // Every line this transport or its base writes: a failed dial's
@@ -54,6 +57,7 @@ class RelayTransport extends ReconnectingTransport {
     required RendezvousId rendezvous,
     Duration heartbeat = kDefaultHeartbeat,
     Duration connectTimeout = kDefaultConnectTimeout,
+    bool keepAlive = false,
     Backoff? backoff,
     int maxQueuedFrames = 256,
     void Function(String message)? onLog,
@@ -61,6 +65,7 @@ class RelayTransport extends ReconnectingTransport {
     endpoint: endpointFor(relay, rendezvous),
     heartbeat: heartbeat,
     connectTimeout: connectTimeout,
+    keepAlive: keepAlive,
     backoff: backoff,
     maxQueuedFrames: maxQueuedFrames,
     onLog: onLog,
@@ -70,6 +75,20 @@ class RelayTransport extends ReconnectingTransport {
   final Uri endpoint;
   final Duration heartbeat;
   final Duration connectTimeout;
+
+  /// Whether this end is a **listener**: one that waits at the rendezvous for
+  /// a peer that may be hours away, as the host does for each paired device.
+  /// It sends the relay heartbeat ([kRelayPing]) so the relay keeps it past
+  /// the lone timeout instead of sending it away every two minutes to dial
+  /// straight back — which, across a host's listeners, was a connection every
+  /// few seconds all day to a relay nobody was using.
+  ///
+  /// Off for an end that dials because it expects its peer now (the phone, a
+  /// desktop client): alone, it should hear `kCloseNoPeer`, not wait.
+  final bool keepAlive;
+
+  /// How often a listener pings.
+  final Duration keepAliveInterval;
 
   /// The live socket. `dart:io`'s [WebSocket] rather than a `WebSocketChannel`
   /// wrapper: closing the wrapper's sink does **not** close the socket, and a
@@ -123,11 +142,42 @@ class RelayTransport extends ReconnectingTransport {
     _socket = socket;
     onConnected();
 
+    // The relay heartbeat, for a listener. A relay that predates it answers
+    // nothing and holds the ping as a frame for the peer, so the first one
+    // unanswered is the last one sent on this connection.
+    var answered = true;
+    Timer? pinger;
+    void ping() {
+      // Closing: `abort()` shut the socket and its done event is still on
+      // its way. Adding to a closed sink throws, and `readyState` still
+      // reads open until the far end has said goodbye too.
+      if (!identical(_socket, socket)) {
+        pinger?.cancel();
+        return;
+      }
+      if (!answered) {
+        pinger?.cancel();
+        onLog?.call('this relay does not answer the heartbeat; not pinging');
+        return;
+      }
+      answered = false;
+      socket.add(kRelayPing);
+    }
+
+    if (keepAlive) {
+      ping();
+      pinger = Timer.periodic(keepAliveInterval, (_) => ping());
+    }
+
     final ended = Completer<void>();
     final subscription = socket.listen(
       (Object? message) {
         if (message is List<int>) {
           onFrame(Uint8List.fromList(message));
+        } else if (message == kRelayPong) {
+          answered = true;
+        } else if (message == kRelayPing) {
+          // The peer's heartbeat, passed on by a relay that predates it.
         } else {
           // Sealed frames are always binary; anything else is not our peer.
           onLog?.call('ignored a non-binary relay message');
@@ -144,6 +194,7 @@ class RelayTransport extends ReconnectingTransport {
     );
 
     await ended.future;
+    pinger?.cancel();
     await subscription.cancel();
     _socket = null;
     _lastCloseCode = socket.closeCode;

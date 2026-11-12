@@ -68,10 +68,16 @@ class RemoteHostService {
        // ignore: prefer_initializing_formals — same.
        _pushPost = pushPost;
 
+  /// Every relay socket the host opens is a listener: it waits for a phone
+  /// that may be hours away, so it pings the relay to be left waiting.
   static RemoteTransport _defaultRelayFactory(
     Uri relay,
     RendezvousId rendezvous,
-  ) => RelayTransport.connect(relay: relay, rendezvous: rendezvous);
+  ) => RelayTransport.connect(
+    relay: relay,
+    rendezvous: rendezvous,
+    keepAlive: true,
+  );
 
   final PairedDeviceStore devices;
   final DeviceId hostId;
