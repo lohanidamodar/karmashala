@@ -546,6 +546,29 @@ void main() {
   });
 
   group('session_answer decision', () {
+    test(
+      'a session cannot answer its own prompt, named or by default',
+      () async {
+        final agent = await runAgent('claude-code-tui');
+        for (final arguments in [
+          {'decision': 'approve'},
+          {'sessionId': 's1', 'optionId': 'allow'},
+        ]) {
+          await expectLater(
+            tools.call('session_answer', arguments, 's1'),
+            throwsA(
+              isA<StateError>().having(
+                (e) => e.message,
+                'message',
+                contains('cannot answer its own prompt'),
+              ),
+            ),
+          );
+        }
+        expect(agent.writes, isEmpty);
+      },
+    );
+
     test('into an idle session with no menu: refused, nothing pressed, no '
         'decision filed', () async {
       final agent = await runAgent('claude-code-tui');

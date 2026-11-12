@@ -165,6 +165,13 @@ class SessionToolSet extends ServerToolSet {
               'options the agent offered, or option a menu row.',
             );
           }
+          // Its own prompt is the person's to answer, as session_rewind.
+          if (sessionId == callerSessionId) {
+            throw StateError(
+              'A session cannot answer its own prompt: that decision is the '
+              "person's. Nothing was pressed. They answer it in the pane.",
+            );
+          }
           if (held && !runsHere) {
             _session(sessionId);
             throw StateError(_onBoxRefusal('answer its prompt'));

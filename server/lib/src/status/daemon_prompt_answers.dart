@@ -81,6 +81,7 @@ class DaemonPromptAnswers implements PromptTerminals {
         approve: request.approve,
         toolCallId: request.ask?.toolUseId,
         optionId: request.optionId,
+        decidedBySessionId: request.decidedBySessionId,
       ),
       MenuAnswerRequest() => throw const SessionPromptRefusal(
         'an agent spoken to over ACP has no menu to answer; approve or deny '

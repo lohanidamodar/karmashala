@@ -11,6 +11,8 @@ import 'package:karmashala_acp/karmashala_acp.dart'
         SessionModeState,
         ToolKind;
 import 'package:karmashala_acp/testing.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show SessionPromptRefusal;
 import 'package:karmashala_host/src/acp/acp_session_runtime.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
@@ -213,6 +215,58 @@ void main() {
       await runtime.stop();
     });
   }
+
+  group('an agent naming an option', () {
+    test(
+      'cannot raise the session above its rung; the ask stays open',
+      () async {
+        final (runtime, _) = await asking(bridge, risk: PermissionRisk.ask);
+        await expectLater(
+          runtime.answerPermission(
+            approve: true,
+            optionId: 'auto',
+            decidedBySessionId: 'other',
+          ),
+          throwsA(
+            isA<SessionPromptRefusal>().having(
+              (r) => r.message,
+              'message',
+              contains('raise this session'),
+            ),
+          ),
+        );
+        expect(runtime.hasOpenPermission, isTrue);
+        await runtime.stop();
+      },
+    );
+
+    test('may choose a mode at the rung', () async {
+      final (runtime, process) = await asking(
+        bridge,
+        risk: PermissionRisk.acceptEdits,
+      );
+      await runtime.answerPermission(
+        approve: true,
+        optionId: 'acceptEdits',
+        decidedBySessionId: 'other',
+      );
+      await runtime.awaitTurn();
+      expect(process.agent.permissionOutcomes, [
+        const PermissionSelected('acceptEdits'),
+      ]);
+      await runtime.stop();
+    });
+
+    test('a person may still choose any option', () async {
+      final (runtime, process) = await asking(bridge, risk: PermissionRisk.ask);
+      await runtime.answerPermission(approve: true, optionId: 'auto');
+      await runtime.awaitTurn();
+      expect(process.agent.permissionOutcomes, [
+        const PermissionSelected('auto'),
+      ]);
+      await runtime.stop();
+    });
+  });
 }
 
 /// The modes claude-agent-acp and the stream-json bridge offer.

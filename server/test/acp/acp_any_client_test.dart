@@ -581,18 +581,32 @@ void main() {
         }, 'caller-1'),
         throwsA(isA<StateError>()),
       );
+      // "Always" writes a lasting rule: a person's to choose, not an agent's.
+      await expectLater(
+        tools().call('session_answer', {
+          'sessionId': 'old',
+          'optionId': 'allow-always',
+        }, 'caller-1'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('only a person decides'),
+          ),
+        ),
+      );
       final answered =
           await tools().call('session_answer', {
                 'sessionId': 'old',
-                'optionId': 'allow-always',
+                'optionId': 'allow',
               }, 'caller-1')!
               as Map;
-      expect(answered['answered'], 'Always allow');
-      expect(answered['effect'], contains('(allow_always)'));
+      expect(answered['answered'], 'Allow');
+      expect(answered['effect'], contains('(allow_once)'));
       await runtime.awaitTurn();
       expect(
         (agent.permissionOutcomes.single as PermissionSelected).optionId,
-        'allow-always',
+        'allow',
       );
     });
 

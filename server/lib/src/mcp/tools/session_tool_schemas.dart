@@ -98,7 +98,10 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'be named. Use session_transcript first to see what is being asked. '
         'An ACP agent names its own answers (allow always, reject always…): '
         'session_wait lists them under blockedOn.options, and optionId '
-        'chooses one exactly. For a session you started (or one of its '
+        'chooses one exactly — except one that would raise the session\'s '
+        'mode above where the person put it, or allow always: those are '
+        "refused, as is answering your own session's prompt; they stay the "
+        "person's. For a session you started (or one of its "
         'descendants), option picks any row of the menu on its screen by '
         'index — session_transcript lists them under menu.options — moving '
         'the highlight there and pressing Enter. A checklist (which of a '

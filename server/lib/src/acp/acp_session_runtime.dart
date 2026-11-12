@@ -754,10 +754,13 @@ class AcpSessionRuntime implements ScreenSession {
   /// `reject_once` (else `reject_always`). Throws [SessionPromptRefusal] when
   /// none is open, when [toolCallId] names another call, or when the agent
   /// offered no such option. An edit waits for the before-turn checkpoint.
+  /// From an agent ([decidedBySessionId]), [optionId] never raises the
+  /// session's mode nor allows always: those stay the person's.
   Future<AcpPermissionAnswer> answerPermission({
     required bool approve,
     String? toolCallId,
     String? optionId,
+    String? decidedBySessionId,
   }) async {
     if (_pending == null) {
       throw const SessionPromptRefusal(
@@ -778,6 +781,23 @@ class AcpSessionRuntime implements ScreenSession {
           '$agentName offered no option "$optionId" for "${pending.title}"; '
           'it offered ${pending.options.map((o) => o.name).join(', ')}',
         );
+      }
+      // A mode switch is held to the session's rung; any other "always"
+      // writes a lasting rule.
+      if (decidedBySessionId != null && option.kind.allows) {
+        final rung = spec.rungOfOption(option.optionId);
+        if (rung != null && !rung.isAtMost(_allowCeiling)) {
+          throw SessionPromptRefusal(
+            '"${option.name}" would raise this session\'s permissions above '
+            '"${_allowCeiling.label}", which only a person decides',
+          );
+        }
+        if (rung == null && option.kind == PermissionOptionKind.allowAlways) {
+          throw SessionPromptRefusal(
+            '"${option.name}" would allow it from now on, which only a '
+            'person decides; approve allows it once',
+          );
+        }
       }
       approve = option.kind.allows;
     } else {
@@ -1696,6 +1716,15 @@ class AcpSessionRuntime implements ScreenSession {
     return null;
   }
 
+  /// The highest rung an allow that switches mode may land on. Approving a
+  /// plan leaves read-only, so asking before every edit is the floor.
+  PermissionRisk get _allowCeiling {
+    final ceiling = _workingRung ?? risk ?? PermissionRisk.ask;
+    return ceiling.isAtMost(PermissionRisk.readOnly)
+        ? PermissionRisk.ask
+        : ceiling;
+  }
+
   /// **An allow that switches the agent's mode never raises the session.**
   /// When any allow option names a mode the spec knows (a plan prompt's
   /// "accept edits", "ask before edits"), the one chosen is the highest at
@@ -1711,10 +1740,7 @@ class AcpSessionRuntime implements ScreenSession {
           (option: option, rung: spec.rungOfOption(option.optionId)),
     ];
     if (!allows.any((allow) => allow.rung != null)) return null;
-    // Approving a plan leaves read-only, so asking before every edit is the
-    // floor: it grants nothing without asking.
-    var ceiling = _workingRung ?? risk ?? PermissionRisk.ask;
-    if (ceiling.isAtMost(PermissionRisk.readOnly)) ceiling = PermissionRisk.ask;
+    final ceiling = _allowCeiling;
     PermissionOption? chosen;
     PermissionRisk? at;
     for (final allow in allows) {
