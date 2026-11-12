@@ -873,6 +873,47 @@ void main() {
       await rt.stop();
     });
 
+    test('a refused limit from a process that was replaced does not make a '
+        'later failure read as a usage limit', () async {
+      final machine = FakeClaudeMachine(
+        ignoreInterrupt: true,
+        turns: [
+          (c, user) async {
+            c.emit({
+              'type': 'rate_limit_event',
+              'rate_limit_info': limit('rejected'),
+            });
+            c.streamText('m1', ['stuck ']);
+          },
+          (c, user) async => c.result(
+            subtype: 'error_during_execution',
+            isError: true,
+            text: 'The tool broke.',
+            stopReason: null,
+          ),
+        ],
+      );
+      final rt = runtime(
+        machine,
+        interruptPatience: const Duration(milliseconds: 100),
+      );
+      await rt.start();
+      await rt.send('Hang');
+      await until(() => rows().any((r) => r.text.contains('stuck')));
+      rt.cancel();
+      expect(await rt.awaitTurn(), StopReason.cancelled);
+      await rt.send('Again');
+      await rt.awaitTurn();
+      expect(
+        machine.launched.where((c) => c.args.contains('--resume')),
+        hasLength(1),
+      );
+      final failed = host.statuses.last;
+      expect(failed.status, AgentActivityStatus.failed);
+      expect(failed.failureReason, isNot(kProtocolUsageLimitReason));
+      await rt.stop();
+    });
+
     test('a compaction is said in the chat as a terminal session says it: '
         "Claude's summary on a row marked as the boundary", () async {
       final machine = FakeClaudeMachine(
@@ -2344,6 +2385,50 @@ void main() {
       // Never idle between the prompt and the subagent's end.
       expect(after.indexOf(AgentActivityStatus.idle), after.length - 1);
       expect(host.statuses.last.inFlight, isEmpty);
+      await rt.stop();
+    });
+
+    test('a background task of an abandoned process does not hold the next '
+        'process\'s turn open', () async {
+      final machine = FakeClaudeMachine(
+        ignoreInterrupt: true,
+        turns: [
+          (c, user) async {
+            c.toolUse('ag', 'Agent', {
+              'description': 'Explore',
+              'prompt': 'look around',
+              'run_in_background': true,
+            });
+            c.system('task_started', {
+              'task_id': 'task1',
+              'tool_use_id': 'ag',
+              'description': 'Explore',
+              'is_backgrounded': true,
+            });
+            c.streamText('m1', ['stuck ']);
+          },
+          (c, user) async => c.result(),
+        ],
+      );
+      final rt = runtime(
+        machine,
+        interruptPatience: const Duration(milliseconds: 100),
+      );
+      await rt.start();
+      await rt.send('Go');
+      await until(() => rows().any((r) => r.text.contains('stuck')));
+      rt.cancel();
+      expect(await rt.awaitTurn(), StopReason.cancelled);
+      await rt.send('Again');
+      expect(await rt.awaitTurn(), StopReason.endTurn);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(
+        machine.launched.where((c) => c.args.contains('--resume')),
+        hasLength(1),
+      );
+      expect(host.statuses.last.status, AgentActivityStatus.idle);
+      expect(host.statuses.last.inFlight, isEmpty);
+      expect(rt.inTurn, isFalse);
       await rt.stop();
     });
 

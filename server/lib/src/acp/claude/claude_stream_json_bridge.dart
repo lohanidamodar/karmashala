@@ -453,7 +453,10 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _lastUsage = null;
     _reported = null;
     _autoCompactAt = null;
-    _agentTurnOpen = false;
+    _rateLimit = null;
+    _limitUnsent = false;
+    _compaction = null;
+    _dropAgentTurn();
     _tools.clear();
     _planCalls.clear();
     _tasks.clear();
@@ -545,12 +548,21 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _turn = null;
     _cancelling = false;
     _abandoned = true;
-    if (_agentTurnOpen) {
-      _agentTurnOpen = false;
-      _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'ended'});
-    }
+    _rateLimit = null;
+    _limitUnsent = false;
+    _compaction = null;
+    _dropAgentTurn();
     if (!turn.isCompleted) turn.complete('cancelled');
     unawaited(claude.kill().catchError((Object _) {}));
+  }
+
+  /// Forgets the background tasks and ends Claude's own turn: the process
+  /// that replaces this one knows nothing of either.
+  void _dropAgentTurn() {
+    _background.clear();
+    if (!_agentTurnOpen) return;
+    _agentTurnOpen = false;
+    _update({'sessionUpdate': AcpExtensions.agentTurn, 'state': 'ended'});
   }
 
   var _abandoned = false;
