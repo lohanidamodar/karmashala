@@ -2685,7 +2685,14 @@
             "type": "string"
           },
           "delivered": {
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "string"
+            ],
+            "description": "true when the message was seen to leave the composer; \"unverified\" when it was typed and Return pressed but the screen could not show it was sent (see note) — read session_transcript before sending it again; false when queued."
+          },
+          "note": {
+            "type": "string"
           },
           "attribution": {
             "type": [
@@ -3289,7 +3296,7 @@
     },
     {
       "name": "subagent_run",
-      "description": "Run a subagent: start a NEW session on any installed agent and model with prompt as its task, wait for its first turn to finish, and get its final answer back. Unless you name a projectId (or scratch) it works in YOUR checkout and directory — your worktree, if you are in one — so it sees the files you see; useWorktree gives it a worktree of its own instead. It is launched as open_new_session launches one — recorded as your child, under the same nesting cap and permission ceiling. A child that answers (done) is ended then, unless keepOpen is true; any other child stays open as a session you can follow up with session_send. state is done, failed, blocked (it stopped for an approval or a question: blockedOn says which), ended, or running when timeoutSeconds ran out first — then continue with session_wait on childSessionId; calling this again starts another agent. If your own tool calls time out sooner than the default 600 seconds, pass a smaller timeoutSeconds.",
+      "description": "Run a subagent: start a NEW session on any installed agent and model with prompt as its task, wait for its first turn to finish, and get its final answer back. Unless you name a projectId (or scratch) it works in YOUR checkout and directory — your worktree, if you are in one — so it sees the files you see; useWorktree gives it a worktree of its own instead. It is launched as open_new_session launches one — recorded as your child, under the same nesting cap and permission ceiling. A child that answers (done) is ended then, unless keepOpen is true; any other child stays open as a session you can follow up with session_send. state is done, failed, blocked (it stopped for an approval or a question: blockedOn says which), ended, waitingForSlot (the concurrency limit holds it; it has not started) or running when timeoutSeconds ran out first — for those two, continue with session_wait on childSessionId; calling this again starts another agent. If your own tool calls time out sooner than the default 600 seconds, pass a smaller timeoutSeconds.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -3412,7 +3419,7 @@
     },
     {
       "name": "delegations",
-      "description": "The sessions you started with open_new_session or subagent_run, each with its state — running, running (background), idle, reported done, blocked, needs input, failed or ended — whether its turn ends are pushed to you (followed), and its last report: what, by whom, when. Read it instead of polling transcripts or files; results and reports arrive by themselves.",
+      "description": "The sessions you started with open_new_session or subagent_run, each with its state — waiting for a slot, running, running (background), idle, reported done, blocked, needs input, failed or ended — whether its turn ends are pushed to you (followed), and its last report: what, by whom, when. Read it instead of polling transcripts or files; results and reports arrive by themselves.",
       "inputSchema": {
         "type": "object",
         "properties": {}

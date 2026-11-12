@@ -54,6 +54,7 @@ void main() {
         if (refusal != null) throw refusal;
         delivered.add((id, text));
         typedLeadIns.add(leadIn);
+        return null;
       },
       hold: holds.add,
       release: releases.add,
@@ -245,7 +246,10 @@ void main() {
         holds: (id) => held[id] ?? false,
         ready: (id) => ready[id] ?? false,
         working: (id) => working[id] ?? false,
-        deliver: (id, text, leadIn) async => delivered.add((id, text)),
+        deliver: (id, text, leadIn) async {
+          delivered.add((id, text));
+          return null;
+        },
         hold: holds.add,
         release: releases.add,
         stillTyped: (id) => stillTyped[id] ?? false,
@@ -301,6 +305,71 @@ void main() {
       await after(HandoffDelivery.confirmAfter + step);
       await after(HandoffDelivery.confirmAfter + step);
       expect(submitted, isEmpty);
+    });
+  });
+
+  // Review 2026-11-12: an opening whose Return was never read back was
+  // consumed at once, so nothing could confirm or retry it.
+  group('an opening typed unverified', () {
+    late List<String> submitted;
+    late bool composerHolds;
+
+    setUp(() async {
+      await delivery.close();
+      submitted = [];
+      composerHolds = false;
+      delivery = HandoffDelivery(
+        handoffs: handoffs,
+        holds: (id) => held[id] ?? false,
+        ready: (id) => ready[id] ?? false,
+        working: (id) => working[id] ?? false,
+        deliver: (id, text, leadIn) async {
+          delivered.add((id, text));
+          return const SessionSent(sent: true, via: SessionSent.unverified);
+        },
+        hold: holds.add,
+        release: releases.add,
+        stillTyped: (_) => composerHolds,
+        submit: (id) {
+          submitted.add(id);
+          return true;
+        },
+        now: () => clock,
+      );
+      handoffs.record('s1', HandoffKind.opening, 'brief', HandoffRoute.typed);
+      delivery.watch('s1');
+      held['s1'] = true;
+      ready['s1'] = true;
+      await after(step);
+      await after(step);
+      expect(delivered, hasLength(1));
+    });
+
+    DateTime? consumedAt() =>
+        SessionHandoffDao(database).get('s1', HandoffKind.opening)!.consumedAt;
+
+    test('keeps its row, is not typed again, and is consumed once its turn '
+        'is seen', () async {
+      expect(consumedAt(), isNull);
+      composerHolds = true;
+      await after(HandoffDelivery.confirmAfter);
+      expect(submitted, ['s1'], reason: 'the resubmit confirms it');
+      expect(consumedAt(), isNull);
+      working['s1'] = true;
+      await after(step);
+      expect(consumedAt(), clock);
+      expect(delivered, hasLength(1));
+    });
+
+    test('is consumed, typed once, when no turn is seen by the end of the '
+        'grace', () async {
+      await after(HandoffDelivery.turnStartGrace);
+      await after(step);
+      expect(consumedAt(), clock);
+      expect(releases, ['s1']);
+      await after(step);
+      expect(delivered, hasLength(1));
+      expect(submitted, isEmpty, reason: 'nothing showed it still typed');
     });
   });
 }

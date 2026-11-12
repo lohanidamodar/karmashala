@@ -4,7 +4,7 @@ import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show composerHolds, messageProbe;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show DataRefused, DataRefusalCode;
+    show DataRefused, DataRefusalCode, SessionSent;
 
 import '../../status/daemon_agent_status.dart';
 import '../../status/turn_settlement.dart';
@@ -41,7 +41,7 @@ class HandoffDelivery {
     required SessionHandoffs handoffs,
     required DaemonAgentStatus status,
     required TurnSettlement turns,
-    required Future<void> Function(
+    required Future<SessionSent> Function(
       String sessionId,
       String text,
       String? leadIn,
@@ -64,6 +64,9 @@ class HandoffDelivery {
             (report.hasOpenPrompt || report.hasOpenQuestion)) {
           return false;
         }
+        // A dialog the status has not read yet (folder trust, an MCP
+        // checklist) would take the opening's keys, however quiet it sits.
+        if (status.menuDrawnOn(id) != null) return false;
         return switch (report?.status) {
           AgentActivityStatus.idle => true,
           AgentActivityStatus.unknown || null => turns.quiet(id),
@@ -106,8 +109,13 @@ class HandoffDelivery {
   final bool Function(String sessionId) working;
 
   /// Types [text] into the session, after a lead-in typed on its own when
-  /// given, and sends it; throws [DataRefused].
-  final Future<void> Function(String sessionId, String text, String? leadIn)
+  /// given, and sends it; throws [DataRefused]. A send it could not read back
+  /// ([SessionSent.unverified]) keeps the row until a turn is seen.
+  final Future<SessionSent?> Function(
+    String sessionId,
+    String text,
+    String? leadIn,
+  )
   deliver;
 
   /// What the session's agent wants typed before an opening, if anything.
@@ -208,7 +216,7 @@ class HandoffDelivery {
     }
 
     final typed = handoffs.pendingTyped(id);
-    if (typed != null) {
+    if (typed != null && !watch.unverified) {
       await _type(id, watch, typed, now);
     } else if (_unconfirmed(watch, now) && !isWorking) {
       _resubmit(id, watch, now);
@@ -217,6 +225,21 @@ class HandoffDelivery {
         watch.holdsQueue = false;
         release?.call(id);
       }
+    }
+    // An opening typed but not read back is kept until its turn is seen, or
+    // until nothing more is waited for.
+    final kept = handoffs.pendingTyped(id);
+    if (kept != null &&
+        watch.unverified &&
+        (watch.sawWorking || !watch.holdsQueue && !_unconfirmed(watch, now))) {
+      watch.unverified = false;
+      handoffs.consume(id, kind: kept.kind);
+      log?.call(
+        watch.sawWorking
+            ? 'handoff $id: the opening typed unverified started its turn'
+            : 'handoff $id: the opening was typed unverified and no turn was '
+                  'seen to start',
+      );
     }
     if (handoffs.pendingTyped(id) == null &&
         handoffs.pendingFiles(id).isEmpty &&
@@ -240,11 +263,17 @@ class HandoffDelivery {
     if (now.difference(since) < settle) return;
     watch.busy = true;
     try {
-      await deliver(id, row.text, leadInFor?.call(id));
-      handoffs.consume(id, kind: row.kind);
+      final sent = await deliver(id, row.text, leadInFor?.call(id));
+      final unverified = sent?.via == SessionSent.unverified;
+      if (!unverified) handoffs.consume(id, kind: row.kind);
+      watch.unverified = unverified;
       watch.typedAt = _now();
       watch.sawWorking = false;
-      log?.call('handoff $id: the opening message was typed in');
+      log?.call(
+        unverified
+            ? 'handoff $id: the opening was typed, its Return not read back'
+            : 'handoff $id: the opening message was typed in',
+      );
     } on DataRefused catch (refusal) {
       watch.readySince = null;
       if (refusal.code != DataRefusalCode.conflict &&
@@ -303,6 +332,9 @@ class _Watch {
   bool busy = false;
   DateTime? readySince;
   DateTime? typedAt;
+
+  /// The opening was typed but its Return not read back: its row is kept.
+  bool unverified = false;
   int resubmits = 0;
   DateTime? resubmittedAt;
 }

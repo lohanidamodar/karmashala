@@ -168,6 +168,46 @@ void main() {
       },
     );
 
+    // Review 2026-11-12: with no markers the Return went in the write right
+    // after the text, where a composer folds it into the paste.
+    test('with no markers, Return waits for the text to be drawn and the '
+        'screen to settle, and is still unverified', () async {
+      final composer = FakeComposer();
+      final typed = <String>[];
+      var drawnAt = DateTime(0);
+      DateTime? pressedAt;
+      final typist = SessionMessageTypist(
+        readScreen: (_) => composer.rows,
+        markersFor: (_) => null,
+        type: (_, text) {
+          typed.add(text);
+          Future<void>.delayed(const Duration(milliseconds: 200), () {
+            composer.field += text;
+            drawnAt = DateTime.now();
+          });
+          return true;
+        },
+        press: (id, keys) {
+          pressedAt ??= DateTime.now();
+          return composer.press(id, keys);
+        },
+        poll: const Duration(milliseconds: 5),
+        typedPatience: const Duration(seconds: 2),
+        settle: const Duration(milliseconds: 100),
+      );
+
+      final delivery = await typist.deliver('s1', 'run the tests');
+
+      expect(delivery, MessageDelivery.unverified);
+      expect(typed, ['run the tests']);
+      expect(
+        pressedAt!.difference(drawnAt),
+        greaterThanOrEqualTo(const Duration(milliseconds: 100)),
+        reason: 'Return only once the drawn text has been still a moment',
+      );
+      expect(composer.queued, ['run the tests']);
+    });
+
     group('a long message the composer folds into a placeholder', () {
       final long = [
         for (var i = 0; i < 40; i++) 'line $i of the brief',

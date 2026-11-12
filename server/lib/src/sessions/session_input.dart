@@ -288,6 +288,8 @@ class SessionInput {
     final report = prompts.status.statusOf(sessionId)?.report;
     if (report?.hasOpenQuestion ?? false) throw _questionOpen;
     if (report?.hasOpenPrompt ?? false) throw _promptOpen;
+    // A dialog the status has not caught up with eats typed keys.
+    if (prompts.status.menuDrawnOn(sessionId) != null) throw _promptOpen;
     if (inputHeld?.call(sessionId) case final held?) {
       throw DataRefused(
         DataRefusalCode.conflict,

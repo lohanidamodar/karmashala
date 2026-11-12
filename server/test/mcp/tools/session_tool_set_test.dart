@@ -165,7 +165,10 @@ void main() {
         'text': 'run the tests',
       }, caller: 'caller');
 
-      expect(sent['delivered'], isTrue);
+      // The fake pane never draws what is typed, so its Return is not read
+      // back, and the answer says so rather than claiming it went.
+      expect(sent['delivered'], 'unverified');
+      expect(sent['note'], contains('could not show the composer let it go'));
       expect(sent['live'], isTrue);
       expect(
         sent['attribution'],
@@ -201,6 +204,26 @@ void main() {
         expect(agent.writes, isEmpty);
       },
     );
+
+    test('is refused, nothing typed, while a dialog the status has not '
+        'read yet is drawn', () async {
+      final agent = await runAgent('claude-code-tui');
+      agent.emit(fixture('claude-code-trust-prompt'));
+      await pumpEventQueue();
+      expect(status.statusOf('s1')!.report.hasOpenPrompt, isFalse);
+
+      await expectLater(
+        tools.call('session_send', {'sessionId': 's1', 'text': 'hi'}, null),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('approval prompt open'),
+          ),
+        ),
+      );
+      expect(agent.writes, isEmpty);
+    });
 
     test(
       'at Codex 0.160\'s folder-trust menu the session needs you: the '

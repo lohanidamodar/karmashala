@@ -77,6 +77,29 @@ class DaemonAgentStatus {
     for (final status in keeper.snapshot()) status.toJson(),
   ];
 
+  /// The agent row [sessionId] runs: the keeper's word, else its
+  /// installation's, for a row the keeper has not taken up yet.
+  AgentDescriptor? installedAgentOf(String sessionId) {
+    var agentId = keeper.agentOf(sessionId);
+    if (agentId == null) {
+      final row = _sessions.getById(sessionId);
+      agentId = row == null
+          ? null
+          : _checkouts.installation(row.agentInstallationId)?.agentId;
+    }
+    return agentId == null ? null : keeper.agents.byId(agentId);
+  }
+
+  /// A menu or dialog drawn on row [sessionId]'s screen now, whatever its
+  /// status says; never a question's rows read as one.
+  AgentScreenMenu? menuDrawnOn(String sessionId) {
+    if (statusOf(sessionId)?.report.hasOpenQuestion ?? false) return null;
+    final support = installedAgentOf(sessionId)?.menus;
+    final rows = liveScreenOf(sessionId)?.tailText(kMenuScreenRows);
+    if (support == null || rows == null) return null;
+    return readScreenMenu(rows, support);
+  }
+
   /// The running session this host holds for the row [sessionId], or null.
   HostSession? runningSessionOf(String sessionId) {
     final session = registry.find(hostSessionIdOf(sessionId));

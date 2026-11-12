@@ -112,9 +112,10 @@ class SessionMessageTypist {
       if (!type(sessionId, leadIn)) return MessageDelivery.none;
       await Future<void>.delayed(leadInGap);
     }
+    final markers = markersFor(sessionId);
+    final before = _rows(sessionId);
     if (!type(sessionId, trimmed)) return MessageDelivery.none;
 
-    final markers = markersFor(sessionId);
     final probe = messageProbe(trimmed);
     // A long message a composer folds into "[Pasted text #1]" never shows its
     // words; its placeholder stands for them. An agent that names none is
@@ -124,7 +125,14 @@ class SessionMessageTypist {
         composerHolds(rows, markers!, probe) ||
         (placeholder != null && composerHolds(rows, markers, placeholder));
     final typed = markers != null && await _until(sessionId, holds);
-    if (typed) await _still(sessionId);
+    if (typed) {
+      await _still(sessionId);
+    } else if (markers == null &&
+        await _until(sessionId, (rows) => rows.join('\n') != before)) {
+      // A composer it cannot read: the Return waits for the text to be drawn
+      // and the screen to settle, so it is not folded into the paste.
+      await _still(sessionId);
+    }
     if (!press(sessionId, _enter)) return MessageDelivery.none;
     if (!typed) return MessageDelivery.unverified;
 
@@ -146,6 +154,9 @@ class SessionMessageTypist {
       press(sessionId, _enter);
     }
   }
+
+  String _rows(String sessionId) =>
+      (readScreen(sessionId) ?? const []).join('\n');
 
   /// Waits until the pane's rows have not changed for [settle], or
   /// [typedPatience] has passed.

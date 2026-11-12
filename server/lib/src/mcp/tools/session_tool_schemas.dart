@@ -53,7 +53,15 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
       'properties': {
         'sessionId': {'type': 'string'},
         'title': {'type': 'string'},
-        'delivered': {'type': 'boolean'},
+        'delivered': {
+          'type': ['boolean', 'string'],
+          'description':
+              'true when the message was seen to leave the composer; '
+              '"unverified" when it was typed and Return pressed but the '
+              'screen could not show it was sent (see note) — read '
+              'session_transcript before sending it again; false when queued.',
+        },
+        'note': {'type': 'string'},
         'attribution': {
           'type': ['string', 'null'],
           'description':

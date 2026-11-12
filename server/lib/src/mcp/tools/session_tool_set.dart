@@ -435,8 +435,9 @@ class SessionToolSet extends ServerToolSet {
       );
     }
     var delivered = false;
+    var verified = false;
     try {
-      delivered = await _deliverNow(
+      verified = await _deliverNow(
         sessionId,
         message,
         held: held,
@@ -445,6 +446,7 @@ class SessionToolSet extends ServerToolSet {
           parentSessionId: session.parentSessionId,
         ),
       );
+      delivered = true;
     } finally {
       queue?.afterImmediate(sessionId, delivered: delivered);
     }
@@ -452,7 +454,12 @@ class SessionToolSet extends ServerToolSet {
     final answer = <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
-      'delivered': true,
+      'delivered': verified ? true : 'unverified',
+      if (!verified)
+        'note':
+            'The message was typed and Return pressed, but the screen could '
+            'not show the composer let it go. Read session_transcript before '
+            'sending it again.',
       // The exact line the recipient sees above the message. Null is the
       // honest answer, never a claim that it went in as the user.
       'attribution': attribution?.line,
@@ -471,7 +478,8 @@ class SessionToolSet extends ServerToolSet {
   }
 
   /// Types or sends [message] into [sessionId] now, resuming it when nothing
-  /// runs it. True once it is in; throws in words when it is refused.
+  /// runs it. True once it is seen in, false when typed but unverified;
+  /// throws in words when it is refused.
   Future<bool> _deliverNow(
     String sessionId,
     String message, {
@@ -493,17 +501,7 @@ class SessionToolSet extends ServerToolSet {
         'companion app, or wait for it to be answered and send then.',
       );
     }
-    if (report?.hasOpenPrompt ?? false) {
-      throw StateError(
-        'That session has an approval prompt open, so this would press keys in '
-        'that prompt rather than send a message — measured against all three '
-        'CLIs, none delivered the text and two of them decided the pending '
-        'request. Read what is being asked with session_transcript and answer '
-        'it with session_answer, which presses the key that agent itself names '
-        'and records who decided. Or wait for the prompt to clear and send '
-        'then.',
-      );
-    }
+    if (report?.hasOpenPrompt ?? false) throw StateError(_promptOpen);
     // Not running: the message is its resume's opening prompt, as the app's
     // composer resumed a stopped session with what was typed. An agent over
     // ACP takes it as `session/prompt`, one turn at a time.
@@ -525,15 +523,28 @@ class SessionToolSet extends ServerToolSet {
       }
       return true;
     }
-    final delivered = await typist.send(sessionId, message);
-    if (!delivered) {
+    // A dialog the status has not caught up with eats typed keys.
+    if (prompts.status.menuDrawnOn(sessionId) != null) {
+      throw StateError(_promptOpen);
+    }
+    final delivery = await typist.deliver(sessionId, message);
+    if (delivery == MessageDelivery.none) {
       throw StateError(
         'That session\'s process ended before the message could be typed '
         'into it. open_session resumes it.',
       );
     }
-    return true;
+    return delivery == MessageDelivery.readBack;
   }
+
+  static const _promptOpen =
+      'That session has an approval prompt open, so this would press keys in '
+      'that prompt rather than send a message — measured against all three '
+      'CLIs, none delivered the text and two of them decided the pending '
+      'request. Read what is being asked with session_transcript and answer '
+      'it with session_answer, which presses the key that agent itself names '
+      'and records who decided. Or wait for the prompt to clear and send '
+      'then.';
 
   /// A message queued behind the target's running turn. With [wait], blocks
   /// until it is delivered and the session settles, within one bound.
@@ -855,15 +866,19 @@ class SessionToolSet extends ServerToolSet {
       sendPatience: sendPatience,
       readScreen: (sessionId) =>
           status.liveScreenOf(sessionId)?.tailText(kMenuScreenRows),
-      markersFor: (sessionId) => prompts.agentOf(sessionId)?.menus?.markers,
+      markersFor: (sessionId) =>
+          status.installedAgentOf(sessionId)?.menus?.markers,
       pastePlaceholderFor: (sessionId) =>
-          prompts.agentOf(sessionId)?.terminal.pastePlaceholder,
+          status.installedAgentOf(sessionId)?.terminal.pastePlaceholder,
       type: (sessionId, text) {
         if (!status.typeAsServer(sessionId, utf8.encode(text))) return false;
         // Ends the paste burst an agent like Codex takes fast typing for,
         // which would fold the Return into a newline — as the app's own
         // typist does.
-        if (prompts.agentOf(sessionId)?.terminal.pasteBurstFoldsReturn ??
+        if (status
+                .installedAgentOf(sessionId)
+                ?.terminal
+                .pasteBurstFoldsReturn ??
             false) {
           status.typeAsServer(sessionId, const [_endOfLineKey]);
         }
