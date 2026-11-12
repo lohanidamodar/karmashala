@@ -88,7 +88,8 @@ class HostedSessionWait {
   }
 
   /// Blocks until [sessionId] settles, ends, or [bound] elapses. [inputSent]
-  /// is carried through so a timed-out caller knows whether its send went in.
+  /// is carried through so a timed-out caller knows whether its send went in,
+  /// and with it a ready reading counts only once the turn it sent began.
   Future<SessionWaitOutcome> wait(
     String sessionId, {
     Duration? bound,
@@ -98,6 +99,7 @@ class HostedSessionWait {
     AgentStatusReport? opening;
     var changed = false;
     var transcriptMoved = false;
+    var worked = false;
 
     void settle(SessionWaitOutcome outcome) {
       if (!completer.isCompleted) completer.complete(outcome);
@@ -148,7 +150,10 @@ class HostedSessionWait {
           report.status == AgentActivityStatus.idle ||
           report.status == AgentActivityStatus.failed ||
           report.status == AgentActivityStatus.awaitingApproval;
+      if (report.status == AgentActivityStatus.working) worked = true;
       if (!ready) return;
+      // Ready before the sent turn shows is the turn not yet begun.
+      if ((inputSent ?? false) && !worked && !transcriptMoved) return;
       settle(
         _outcome(
           changed ? SessionWaitState.done : SessionWaitState.idle,

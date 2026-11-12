@@ -107,7 +107,6 @@ class SessionWaitOutcome {
   final bool? inputSent;
 }
 
-
 /// One wait's answer. Every absence is spelled as an absence: `exitCode` is
 /// null with `exitCodeKnown: false` rather than a zero.
 Map<String, Object?> renderWaitOutcome(SessionWaitOutcome outcome) =>
@@ -156,10 +155,9 @@ String waitOutcomeNote(SessionWaitOutcome outcome) => switch (outcome.state) {
         'its record, and open_session will resume it. '
         '${outcome.exitCodeKnown ? 'It exited with ${outcome.exitCode}.' : 'Its exit code is UNKNOWN — not 0; nothing told us what it exited with.'}',
   SessionWaitState.timeout =>
-    'TIMEOUT — this is your bound, not a verdict about the session. It is '
-        'STILL RUNNING and may finish a moment from now. '
+    'TIMEOUT — this is your bound, not a verdict about the session. '
+        '${(outcome.inputSent ?? false) && !outcome.changed ? 'Nothing moved after the message went in, so its turn may not have begun yet. ' : 'It is STILL RUNNING and may finish a moment from now. '}'
         '${outcome.inputSent ?? false ? 'YOUR MESSAGE WAS ALREADY DELIVERED (inputSent: true): a timeout does not prove nothing was sent, so do not send it again' : 'This call sent nothing (inputSent is null)'}'
         '. Read the session with session_transcript, or call session_wait '
         'to go on waiting.',
 };
-

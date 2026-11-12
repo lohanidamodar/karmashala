@@ -19,6 +19,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:agent_cli/stream.dart';
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show SessionWaitOutcome, SessionWaitState, waitOutcomeNote;
 
 /// The session tools the server answers itself for a session it runs —
 /// `session_send`, `session_wait`, `session_transcript`, `session_end`,
@@ -444,6 +446,47 @@ void main() {
       expect(answer['agentStatus'], 'idle');
       expect(answer['changed'], isTrue);
       expect(answer['note'], startsWith('Ready for input, and its evidence'));
+    });
+
+    test('after a send, an idle reading before the sent turn shows is not '
+        'its end: the wait answers once that turn is over', () async {
+      await runAgent('claude-code-tui');
+      status.hook(hook('Stop'));
+      expect(status.statusOf('s1')?.report.status, AgentActivityStatus.idle);
+      final waits = HostedSessionWait(
+        status: status,
+        deadline: (_) => deadline.future,
+      );
+      SessionWaitOutcome? outcome;
+      unawaited(
+        waits.wait('s1', inputSent: true).then((done) => outcome = done),
+      );
+      await pumpEventQueue();
+      expect(outcome, isNull, reason: 'the sent turn has not begun');
+
+      status.hook(hook('UserPromptSubmit'));
+      await pumpEventQueue();
+      expect(outcome, isNull);
+      status.hook(hook('Stop'));
+      await pumpEventQueue();
+      expect(outcome?.state, SessionWaitState.done);
+      expect(outcome?.inputSent, isTrue);
+    });
+
+    test('after a send that nothing followed, the timeout does not claim the '
+        'turn is running', () async {
+      await runAgent('claude-code-tui');
+      status.hook(hook('Stop'));
+      final waiting = HostedSessionWait(
+        status: status,
+        deadline: (_) => deadline.future,
+      ).wait('s1', inputSent: true);
+      await pumpEventQueue();
+      deadline.complete();
+      final outcome = await waiting;
+      expect(outcome.state, SessionWaitState.timeout);
+      expect(waitOutcomeNote(outcome), contains('may not have begun'));
+      expect(waitOutcomeNote(outcome), isNot(contains('STILL RUNNING')));
     });
 
     test('answers timeout at the caller\'s bound, still running', () async {
