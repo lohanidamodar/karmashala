@@ -8,6 +8,7 @@ import 'package:agent_cli/process.dart'
     show
         CommandRunnerFactory,
         EnvironmentKind,
+        EnvironmentPath,
         ExecutionEnvironment,
         localHostEnvironment,
         localHostEnvironmentId;
@@ -1291,6 +1292,57 @@ Future<int> _serve(
     read: () => database.readMetadata(kRewindCutsKey),
     write: (value) => database.writeMetadata(kRewindCutsKey, value),
   );
+  // Where an agent's settings are for a folder Karmashala made: the folder's
+  // machine, with this one and Windows beside it, which a WSL home is reached
+  // through.
+  final scratchTrust = AgentFolderTrust(
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+    registry: () => agentRegistry.current,
+    storeHome: (environmentId, agentId) async {
+      final environments = [
+        for (final e in data.environments)
+          if (e.id == environmentId ||
+              e.kind == EnvironmentKind.windowsNative ||
+              e.kind == EnvironmentKind.localPosix)
+            e,
+      ];
+      final stores = await CliStoreLocator(
+        runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
+          checkoutRows.environment(id) ??
+              localHostEnvironment(DateTime.now().toUtc()),
+        ),
+        installations: data.installations,
+        environment: hostEnvironment,
+      ).locate(environments);
+      return stores
+          .where((s) => s.environmentId == environmentId)
+          .firstOrNull
+          ?.homeFor(agentId);
+    },
+  );
+  // Only folders Karmashala made: a scratch folder, or a new session's worktree.
+  Future<void> trustMadeFolder(
+    AgentInstallation installation,
+    EnvironmentPath folder,
+  ) async {
+    final where = data.environments
+        .where((e) => e.id == folder.environmentId)
+        .firstOrNull;
+    if (where == null) return;
+    try {
+      await scratchTrust.trust(
+        agentId: installation.agentId,
+        folder: folder,
+        windowsAgent: where.kind == EnvironmentKind.windowsNative,
+      );
+    } on Object catch (error) {
+      errSink.writeln(
+        'karmashala_host: ${folder.path} could not be marked trusted for '
+        '${installation.agentId}: $error',
+      );
+    }
+  }
+
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     agents: liveAgents,
@@ -1302,6 +1354,7 @@ Future<int> _serve(
     now: () => DateTime.now().toUtc(),
     newId: newUuid,
     worktrees: worktrees,
+    trustCreatedWorktree: trustMadeFolder,
     onRowWritten: (sessionId) => data.announceSessions([sessionId]),
     environmentOf: checkoutRows.environment,
     openAgent: openAgent,
@@ -1341,33 +1394,6 @@ Future<int> _serve(
         if (checkoutFacts.isHere(environment)) environment,
     ],
   );
-  // Where an agent's settings are on the machine a scratch folder is on: the
-  // folder's machine, with this one and Windows beside it, which a WSL home
-  // is reached through.
-  final scratchTrust = AgentFolderTrust(
-    registry: () => agentRegistry.current,
-    storeHome: (environmentId, agentId) async {
-      final environments = [
-        for (final e in data.environments)
-          if (e.id == environmentId ||
-              e.kind == EnvironmentKind.windowsNative ||
-              e.kind == EnvironmentKind.localPosix)
-            e,
-      ];
-      final stores = await CliStoreLocator(
-        runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
-          checkoutRows.environment(id) ??
-              localHostEnvironment(DateTime.now().toUtc()),
-        ),
-        installations: data.installations,
-        environment: hostEnvironment,
-      ).locate(environments);
-      return stores
-          .where((s) => s.environmentId == environmentId)
-          .firstOrNull
-          ?.homeFor(agentId);
-    },
-  );
   final launches = ServerSessionLauncher(
     gate: launchGate,
     launcher: hostedLauncher,
@@ -1384,17 +1410,7 @@ Future<int> _serve(
     },
     discardFailedScratch: folders.discardFailedScratch,
     writeScratchInstructions: folders.writeScratchInstructions,
-    trustScratchFolder: (installation, folder) async {
-      final where = data.environments
-          .where((e) => e.id == folder.environmentId)
-          .firstOrNull;
-      if (where == null) return;
-      await scratchTrust.trust(
-        agentId: installation.agentId,
-        folder: folder,
-        windowsAgent: where.kind == EnvironmentKind.windowsNative,
-      );
-    },
+    trustScratchFolder: trustMadeFolder,
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
   late final SessionQueue sessionQueue;

@@ -15,8 +15,9 @@ typedef AgentStoreHome =
 /// **Marks a folder Karmashala made as trusted in an agent's own settings**,
 /// so the agent does not ask about it on its first start there.
 ///
-/// Only for a folder Karmashala created moments before, empty: a session
-/// without a project's scratch folder. Each one is its own git repository,
+/// Only for a folder Karmashala created moments before: a session without a
+/// project's scratch folder, or a new session's own worktree. Each one is
+/// its own git repository,
 /// and the agents keep trust per folder (Claude Code per git root), so
 /// trusting the scratch folder above them would not reach them.
 ///
@@ -29,11 +30,14 @@ class AgentFolderTrust {
   AgentFolderTrust({
     required AgentStoreHome storeHome,
     AgentRegistry Function()? registry,
+    void Function(String message)? log,
   }) : _storeHome = storeHome,
-       _registry = registry ?? (() => AgentRegistry.builtIn);
+       _registry = registry ?? (() => AgentRegistry.builtIn),
+       _log = log;
 
   final AgentStoreHome _storeHome;
   final AgentRegistry Function() _registry;
+  final void Function(String message)? _log;
 
   /// How many times a file the agent saved while it was being edited is read
   /// again before the edit is given up.
@@ -50,13 +54,20 @@ class AgentFolderTrust {
     final spec = _registry().byId(agentId)?.store?.folderTrust;
     if (spec == null) return false;
     final home = await _storeHome(folder.environmentId, agentId);
-    if (home == null || !await Directory(home).exists()) return false;
+    if (home == null || !await Directory(home).exists()) {
+      _log?.call(
+        '$agentId has no settings home found on ${folder.environmentId}; '
+        '${folder.path} is not marked trusted',
+      );
+      return false;
+    }
     final context = home.contains(r'\') ? p.windows : p.posix;
     final file = File(context.normalize(context.join(home, spec.settingsFile)));
     return switch (spec.format) {
       AgentFolderTrustFormat.jsonProjects => _json(
         file,
         (raw) => _jsonTrusting(raw, folder.path.replaceAll(r'\', '/')),
+        folder,
       ),
       AgentFolderTrustFormat.tomlProjects => _rewrite(
         file,
@@ -66,14 +77,21 @@ class AgentFolderTrust {
       AgentFolderTrustFormat.jsonPathList => _json(
         file,
         (raw) => _jsonListTrusting(raw, spec.listKey, folder.path),
+        folder,
       ),
     };
   }
 
-  Future<bool> _json(File file, _Edit edit) async {
+  Future<bool> _json(File file, _Edit edit, EnvironmentPath folder) async {
     // No file is an agent that never ran here: it asks for far more than
     // trust on its first start, and a file made here would skip that.
-    if (!await file.exists()) return false;
+    if (!await file.exists()) {
+      _log?.call(
+        '${file.path} is not there; ${folder.path} is not marked '
+        'trusted',
+      );
+      return false;
+    }
     return _rewrite(file, edit);
   }
 

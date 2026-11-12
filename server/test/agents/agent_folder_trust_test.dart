@@ -337,4 +337,30 @@ void main() {
       expect(home.listSync(), isEmpty);
     },
   );
+
+  test('a miss is logged, one line each: no home found, no settings '
+      'file', () async {
+    final lines = <String>[];
+    AgentFolderTrust logging(Map<String, String> homes) => AgentFolderTrust(
+      storeHome: (environmentId, agentId) async => homes[agentId],
+      log: lines.add,
+    );
+
+    await logging({}).trust(
+      agentId: AgentIds.claudeCode,
+      folder: wslFolder,
+      windowsAgent: false,
+    );
+    await logging({AgentIds.claudeCode: claudeStore()}).trust(
+      agentId: AgentIds.claudeCode,
+      folder: wslFolder,
+      windowsAgent: false,
+    );
+
+    expect(lines, [
+      allOf(contains('no settings home'), contains(wslFolder.path)),
+      allOf(contains(claudeJson().path), contains('not marked trusted')),
+    ]);
+    expect(claudeJson().existsSync(), isFalse);
+  });
 }

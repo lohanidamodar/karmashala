@@ -224,6 +224,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required this.newId,
     this.agents = const DaemonAgents(),
     this.worktrees,
+    this.trustCreatedWorktree,
     this.onLaunched,
     this.onRowWritten,
     this.environmentOf,
@@ -252,6 +253,15 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   /// How a session that asked for a worktree of its own gets one — the
   /// staged creation, with this host's setup panes. Null: none are made here.
   final WorktreeService? worktrees;
+
+  /// Marks a worktree [worktrees] just made trusted in the agent's own
+  /// settings before the agent starts there; never throws. A folder the
+  /// person brought is never passed here.
+  final Future<void> Function(
+    AgentInstallation installation,
+    EnvironmentPath folder,
+  )?
+  trustCreatedWorktree;
 
   /// Told of each agent started, with where: the daemon watches an unattended
   /// start for a question nobody is there to answer.
@@ -430,6 +440,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
       );
       directory = created.worktree.path;
       worktree = created.worktree.path;
+      await trustCreatedWorktree?.call(installation, directory);
       settleWorktree = (error) => error == null
           ? created.tracker.agentStarted()
           : created.tracker.agentFailed(error);
