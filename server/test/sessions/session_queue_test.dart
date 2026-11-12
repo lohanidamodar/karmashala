@@ -640,6 +640,45 @@ void main() {
       },
     );
 
+    group("an agent's send to a paused queue", () {
+      QueueAdmission fromAgent(String text) => queue.admit(
+        's1',
+        text,
+        origin: QueuedMessageOrigin.mcp,
+        originId: 'other',
+      );
+
+      Future<void> pausedAndIdle() async {
+        await runAgent();
+        hook('UserPromptSubmit');
+        send('a');
+        queue.setPaused('s1', paused: true);
+        hook('Stop');
+        await pumpEventQueue();
+      }
+
+      test('joins it and leaves it paused, nothing delivered', () async {
+        await pausedAndIdle();
+        final admitted = fromAgent('b') as AdmitQueued;
+        expect(admitted.paused, isTrue);
+        await pumpEventQueue();
+        expect(delivered, isEmpty);
+        expect(
+          queue.list('s1').map((m) => m.hold?.kind),
+          everyElement(QueueHoldKind.paused),
+        );
+      });
+
+      test("the person's own send lifts it, as before", () async {
+        await pausedAndIdle();
+        fromAgent('b');
+        final admitted = send('c') as AdmitQueued;
+        expect(admitted.paused, isFalse);
+        await pumpEventQueue();
+        expect(delivered, ['a']);
+      });
+    });
+
     test('a turn never seen to start lets the next go after the grace', () {
       return runAgent().then((_) async {
         await queue.close();

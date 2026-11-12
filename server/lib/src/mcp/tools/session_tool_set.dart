@@ -699,10 +699,13 @@ class SessionToolSet extends ServerToolSet {
       'queuedId': queued.message.id,
       'position': queued.position,
       'attribution': attribution?.line,
-      'note':
-          'That session is working, so the message waits at the server and '
-          'is delivered when its turn ends, one message per turn. Do not '
-          'send it again.',
+      'note': queued.paused
+          ? 'The person paused that session\'s queue, so the message waits '
+                'at the server until they resume it; only they can. Do not '
+                'send it again.'
+          : 'That session is working, so the message waits at the server and '
+                'is delivered when its turn ends, one message per turn. Do not '
+                'send it again.',
     };
     final queue = this.queue;
     if (!wait || queue == null) return answer;

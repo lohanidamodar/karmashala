@@ -44,10 +44,13 @@ final class AdmitNow extends QueueAdmission {
 /// It waits at the server as [message], [position] among the session's
 /// waiting messages (from 1).
 final class AdmitQueued extends QueueAdmission {
-  const AdmitQueued(this.message, this.position);
+  const AdmitQueued(this.message, this.position, {this.paused = false});
 
   final QueuedMessage message;
   final int position;
+
+  /// The person paused the queue, so it waits until they resume it.
+  final bool paused;
 }
 
 /// **Every message sent to a session goes through here**: a client's
@@ -468,12 +471,19 @@ class SessionQueue implements ResumeQueue {
     if (requestId != null && requestId.isNotEmpty) {
       final existing = dao.byRequest(sessionId, requestId);
       if (existing != null) {
-        return AdmitQueued(existing, dao.positionOf(sessionId, existing.seq));
+        return AdmitQueued(
+          existing,
+          dao.positionOf(sessionId, existing.seq),
+          paused: _paused.contains(sessionId),
+        );
       }
     }
-    // Sending again is going on: it joins the end and delivery resumes.
-    _unpause(sessionId);
-    if (!busy(sessionId) &&
+    // A person sending again is going on: it joins the end and delivery
+    // resumes. Only the person lifts their pause; an agent's send waits.
+    if (_personOrigins.contains(origin)) _unpause(sessionId);
+    final paused = _paused.contains(sessionId);
+    if (!paused &&
+        !busy(sessionId) &&
         !dao.hasWaiting(sessionId) &&
         !_holdsNewMessages(sessionId) &&
         inputHeld?.call(sessionId) == null) {
@@ -489,11 +499,19 @@ class SessionQueue implements ResumeQueue {
       now: _now(),
     );
     _withQueued.add(sessionId);
-    log?.call('queue $sessionId: ${message.id} queued behind the running turn');
+    log?.call(
+      paused
+          ? 'queue $sessionId: ${message.id} queued behind the person\'s pause'
+          : 'queue $sessionId: ${message.id} queued behind the running turn',
+    );
     _announce(sessionId);
     // Nothing may be running to end a turn: a stopped session is resumed.
     _kick(sessionId, resume: true);
-    return AdmitQueued(message, dao.positionOf(sessionId, message.seq));
+    return AdmitQueued(
+      message,
+      dao.positionOf(sessionId, message.seq),
+      paused: paused,
+    );
   }
 
   /// Puts a delegated child's result [text] into [sessionId]'s queue, waking
