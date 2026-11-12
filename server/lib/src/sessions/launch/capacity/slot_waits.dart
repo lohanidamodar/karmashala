@@ -15,6 +15,13 @@ class SlotWaits {
   };
 
   String? of(String sessionId) => all()[sessionId];
+
+  /// Takes [sessionId]'s wait out of line; false when it waits for none.
+  bool cancel(String sessionId) {
+    final gate = this.gate;
+    final ticket = gate?.ticketForSession(sessionId);
+    return ticket != null && gate!.cancel(ticket.id);
+  }
 }
 
 /// Files each person-started wait in the inbox once, and takes it off when

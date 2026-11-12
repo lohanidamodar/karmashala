@@ -10,9 +10,14 @@ import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
 import 'package:karmashala_host/src/automations/hosted_agent_launcher.dart';
+import 'package:karmashala_host/src/mcp/tools/server_tool_context.dart';
+import 'package:karmashala_host/src/mcp/tools/session_tool_set.dart';
 import 'package:karmashala_host/src/sessions/launch/capacity/launch_slots.dart';
 import 'package:karmashala_host/src/sessions/launch/capacity/session_launch_gate.dart';
+import 'package:karmashala_host/src/sessions/launch/capacity/slot_waits.dart';
 import 'package:karmashala_host/src/sessions/launch/server_session_launcher.dart';
+import 'package:karmashala_host/src/status/daemon_agent_status.dart';
+import 'package:karmashala_host/src/status/daemon_prompt_answers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session_engine/store.dart';
 import 'package:karmashala_store/database.dart';
@@ -424,5 +429,79 @@ void main() {
     await _settle();
     expect(row(person.sessionId).status, SessionStatus.running);
     expect(row(bg.sessionId).status, SessionStatus.created);
+  });
+
+  group('session_end on a child waiting for a slot', () {
+    late DaemonAgentStatus status;
+    late ServerToolContext context;
+    late SessionToolSet tools;
+    final ended = <(String?, String)>[];
+
+    setUp(() {
+      ended.clear();
+      status = DaemonAgentStatus(
+        registry: registry,
+        database: database,
+        publish: (_, _) {},
+        interval: const Duration(hours: 1),
+      );
+      context = ServerToolContext(
+        database: database,
+        data: DataService(database, clock: () => t0),
+        dataDirectory: temp.path,
+        clock: () => t0,
+      );
+      tools = SessionToolSet(
+        context,
+        prompts: DaemonPromptAnswers(status: status, database: database),
+        registry: registry,
+        slotWaits: SlotWaits()..gate = gate,
+        endedBy: (caller, id) => ended.add((caller, id)),
+      );
+    });
+
+    tearDown(() async {
+      context.close();
+      await status.close();
+    });
+
+    test('takes it out of line, cancels its row, and only then closes the '
+        'delegation', () async {
+      limit({'global': 1});
+      await launches.start(spec('One'));
+      final child = await launches.start(spec('Child'));
+      expect(child.waiting, isTrue);
+
+      final answer =
+          await tools.call('session_end', {
+                'sessionId': child.sessionId,
+              }, 'parent')!
+              as Map<String, Object?>;
+      expect(answer['ended'], isTrue);
+      expect(answer['endedAt'], contains('concurrency slot'));
+      expect(gate.ticketForSession(child.sessionId), isNull);
+      expect(gate.snapshot().waiters, isEmpty);
+      expect(row(child.sessionId).status, SessionStatus.cancelled);
+      expect(ended, [('parent', child.sessionId)]);
+    });
+
+    test('an end that fails leaves the delegation open', () async {
+      SessionDao(database).insert(
+        Session(
+          id: 'done',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Done',
+          useWorktree: false,
+          status: SessionStatus.completed,
+          createdAt: t0,
+        ),
+      );
+      await expectLater(
+        tools.call('session_end', {'sessionId': 'done'}, 'parent'),
+        throwsA(isA<StateError>()),
+      );
+      expect(ended, isEmpty);
+    });
   });
 }

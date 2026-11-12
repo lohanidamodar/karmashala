@@ -410,9 +410,10 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'flight is lost and nothing brings it back. The session row and its '
         'transcript survive, and open_session will resume it. Fails if the '
         'session has no live pane, rather than reporting success for something '
-        'that was already stopped. Ending is not archiving: a parent ends its '
-        'child once the child\'s work is merged or handed back, then archives '
-        'it with session_archive.',
+        'that was already stopped; one still waiting for a concurrency slot '
+        'is taken out of line instead. Ending is not archiving: a parent ends '
+        'its child once the child\'s work is merged or handed back, then '
+        'archives it with session_archive.',
     'inputSchema': {
       'type': 'object',
       'properties': {

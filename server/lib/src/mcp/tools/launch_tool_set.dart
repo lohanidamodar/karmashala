@@ -719,8 +719,9 @@ class LaunchToolSet extends ServerToolSet {
         'note':
             'It has not started yet. It starts by itself when a slot frees; '
             'follow it with session_wait (sessionId: ${session.id}), and end '
-            'it with session_end once it has answered. Calling subagent_run '
-            'again starts another agent.',
+            'it with session_end once it has answered — before it starts, '
+            'session_end takes it out of line. Calling subagent_run again '
+            'starts another agent.',
       };
     }
     final ChildTurnOutcome outcome;

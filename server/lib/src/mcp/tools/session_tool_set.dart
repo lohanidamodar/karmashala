@@ -229,13 +229,19 @@ class SessionToolSet extends ServerToolSet {
           () => _rename(sessionId, (arguments['title'] as String?) ?? ''),
         );
       case 'session_end':
-        return runTool(() {
+        return runTool(() async {
           if (held && !runsHere) {
             _session(sessionId);
             throw StateError(_onBoxRefusal('end it'));
           }
+          // Told only once it ended: a failed end leaves the delegation open.
+          final answer = await _end(
+            sessionId,
+            held: runsHere,
+            by: callerSessionId,
+          );
           endedBy?.call(callerSessionId, sessionId);
-          return _end(sessionId, held: runsHere, by: callerSessionId);
+          return answer;
         });
     }
     return null;
@@ -889,18 +895,31 @@ class SessionToolSet extends ServerToolSet {
     String? by,
   }) async {
     final session = _session(sessionId);
+    void cancelQueued() => queue?.ended(
+      sessionId,
+      reason:
+          'The session was ended by an agent (session_end) before it could '
+          'take this message, so it was not sent.',
+      by: by,
+    );
     if (!held) {
+      // Waiting for a slot: taken out of line, so it never starts.
+      if (slotWaits?.cancel(sessionId) ?? false) {
+        cancelQueued();
+        return <String, Object?>{
+          'sessionId': sessionId,
+          'title': session.title,
+          'ended': true,
+          'endedAt':
+              'the line for a concurrency slot: it had not started, and now '
+              'never will',
+        };
+      }
       // A row still saying "running" with nothing behind it — an ACP runtime
       // that went with an old server, say — is recorded ended, so it can be
       // archived. Not on an SSH box: a box out of reach may still run it.
       if (session.status.claimsLive && !_onSshBox(session)) {
-        queue?.ended(
-          sessionId,
-          reason:
-              'The session was ended by an agent (session_end) before it '
-              'could take this message, so it was not sent.',
-          by: by,
-        );
+        cancelQueued();
         _context.write(
           SessionEdit(sessionId, SessionPatch.status(SessionStatus.cancelled)),
         );
@@ -918,14 +937,6 @@ class SessionToolSet extends ServerToolSet {
         'host is not running it, so there is nothing to end.',
       );
     }
-    // What waits for it is cancelled, so the queue never resumes it.
-    queue?.ended(
-      sessionId,
-      reason:
-          'The session was ended by an agent (session_end) before it could '
-          'take this message, so it was not sent.',
-      by: by,
-    );
     try {
       await registry.close(hostSessionIdOf(sessionId));
     } on UnknownSession {
@@ -934,6 +945,8 @@ class SessionToolSet extends ServerToolSet {
         'host is not running it, so there is nothing to end.',
       );
     }
+    // What waits for it is cancelled, so the queue never resumes it.
+    cancelQueued();
     return <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
