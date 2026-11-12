@@ -1483,6 +1483,16 @@ so a client cannot supply the grant and a new creation path cannot forget it. A
 row that needs another value (the live test seed) writes it after inserting.
 Filling a waiting row keeps the grant it was inserted with.
 
+**"Trust registered projects for agents"** is a server setting, **on** by
+default (absent means on; `false` under `kTrustRegisteredProjectsKey` is off),
+changed only by `agents.trustRegisteredProjects.set`. While it is on, a new
+conversation (not a resume or a fork) in a registered checkout, or in a
+worktree a session of one recorded, has that folder written into its agent's
+own trust record first (`RegisteredProjectTrust`, through `trustMadeFolder`),
+so the agent's trust-this-folder question does not stop it. An unregistered
+working directory is never trusted. Karmashala also trusts the folders it
+makes itself (a scratch folder, a session's new worktree) whatever the setting.
+
 ## 25. Plan and task tools in chat sessions
 
 The plan card draws what an agent's own plan tool publishes, and on

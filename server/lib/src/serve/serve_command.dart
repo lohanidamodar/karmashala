@@ -79,6 +79,7 @@ import '../acp/acp_version_cache.dart';
 import '../acp/acp_version_probe.dart';
 import '../agents/agent_folder_trust.dart';
 import '../agents/agent_registry_holder.dart';
+import '../agents/registered_project_trust.dart';
 import '../agents/server_agent_work.dart';
 import '../bot/bot_approvals.dart';
 import '../bot/bot_instructions.dart';
@@ -856,6 +857,65 @@ Future<int> _serve(
   );
   flutter.apps.onLooked = () => unawaited(appDiscovery.looked());
   final checkoutRows = CheckoutRows(database);
+  // Where an agent's settings are for a folder Karmashala made: the folder's
+  // machine, with this one and Windows beside it, which a WSL home is reached
+  // through.
+  final scratchTrust = AgentFolderTrust(
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+    registry: () => agentRegistry.current,
+    storeHome: (environmentId, agentId) async {
+      final environments = [
+        for (final e in data.environments)
+          if (e.id == environmentId ||
+              e.kind == EnvironmentKind.windowsNative ||
+              e.kind == EnvironmentKind.localPosix)
+            e,
+      ];
+      final stores = await CliStoreLocator(
+        runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
+          checkoutRows.environment(id) ??
+              localHostEnvironment(DateTime.now().toUtc()),
+        ),
+        installations: data.installations,
+        environment: hostEnvironment,
+      ).locate(environments);
+      return stores
+          .where((s) => s.environmentId == environmentId)
+          .firstOrNull
+          ?.homeFor(agentId);
+    },
+  );
+  // Only folders Karmashala made (a scratch folder, a new session's worktree)
+  // and, through [projectTrust], registered projects while that setting is on.
+  Future<bool> trustMadeFolder(
+    AgentInstallation installation,
+    EnvironmentPath folder,
+  ) async {
+    final where = data.environments
+        .where((e) => e.id == folder.environmentId)
+        .firstOrNull;
+    if (where == null) return false;
+    try {
+      return await scratchTrust.trust(
+        agentId: installation.agentId,
+        folder: folder,
+        windowsAgent: where.kind == EnvironmentKind.windowsNative,
+      );
+    } on Object catch (error) {
+      errSink.writeln(
+        'karmashala_host: ${folder.path} could not be marked trusted for '
+        '${installation.agentId}: $error',
+      );
+      return false;
+    }
+  }
+
+  final projectTrust = RegisteredProjectTrust(
+    database,
+    trust: trustMadeFolder,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+
   // Which sessions the person let operate Karmashala: read per call, so
   // a grant given a moment ago counts on the next tool call.
   final grantRows = SessionDao(database);
@@ -1166,9 +1226,9 @@ Future<int> _serve(
     openAgent: openAgent,
   );
   // A phone's start is a person's; it waits in line, at the front of it.
-  companion.launcher?.admit = awaitedLaunches.admitAt(
-    LaunchPriority.interactive,
-  );
+  companion.launcher
+    ?..admit = awaitedLaunches.admitAt(LaunchPriority.interactive)
+    ..trustRegisteredProject = projectTrust.trustForNewConversation;
   // An agent whose adapter speaks ACP runs in a runtime of the server's, not
   // a PTY: its conversation is `session_messages`, its status its own word.
   final sessionMessages = SessionMessageDao(database);
@@ -1247,9 +1307,9 @@ Future<int> _serve(
     identities: identities,
   );
   // Automations, webhooks and scheduled resumes are background work.
-  automations?.agentLauncher.admit = awaitedLaunches.admitAt(
-    LaunchPriority.background,
-  );
+  automations?.agentLauncher
+    ?..admit = awaitedLaunches.admitAt(LaunchPriority.background)
+    ..trustRegisteredProject = projectTrust.trustForNewConversation;
   // Webhooks reach this server through the relay it pairs through.
   final webhooks = await _startWebhooks(
     database: database,
@@ -1294,57 +1354,6 @@ Future<int> _serve(
     read: () => database.readMetadata(kRewindCutsKey),
     write: (value) => database.writeMetadata(kRewindCutsKey, value),
   );
-  // Where an agent's settings are for a folder Karmashala made: the folder's
-  // machine, with this one and Windows beside it, which a WSL home is reached
-  // through.
-  final scratchTrust = AgentFolderTrust(
-    log: (message) => errSink.writeln('karmashala_host: $message'),
-    registry: () => agentRegistry.current,
-    storeHome: (environmentId, agentId) async {
-      final environments = [
-        for (final e in data.environments)
-          if (e.id == environmentId ||
-              e.kind == EnvironmentKind.windowsNative ||
-              e.kind == EnvironmentKind.localPosix)
-            e,
-      ];
-      final stores = await CliStoreLocator(
-        runnerFor: (id) => const CommandRunnerFactory().forEnvironment(
-          checkoutRows.environment(id) ??
-              localHostEnvironment(DateTime.now().toUtc()),
-        ),
-        installations: data.installations,
-        environment: hostEnvironment,
-      ).locate(environments);
-      return stores
-          .where((s) => s.environmentId == environmentId)
-          .firstOrNull
-          ?.homeFor(agentId);
-    },
-  );
-  // Only folders Karmashala made: a scratch folder, or a new session's worktree.
-  Future<void> trustMadeFolder(
-    AgentInstallation installation,
-    EnvironmentPath folder,
-  ) async {
-    final where = data.environments
-        .where((e) => e.id == folder.environmentId)
-        .firstOrNull;
-    if (where == null) return;
-    try {
-      await scratchTrust.trust(
-        agentId: installation.agentId,
-        folder: folder,
-        windowsAgent: where.kind == EnvironmentKind.windowsNative,
-      );
-    } on Object catch (error) {
-      errSink.writeln(
-        'karmashala_host: ${folder.path} could not be marked trusted for '
-        '${installation.agentId}: $error',
-      );
-    }
-  }
-
   final hostedLauncher = HostedAgentLauncher(
     registry: registry,
     agents: liveAgents,
@@ -1357,6 +1366,7 @@ Future<int> _serve(
     newId: newUuid,
     worktrees: worktrees,
     trustCreatedWorktree: trustMadeFolder,
+    trustRegisteredProject: projectTrust.trustForNewConversation,
     onRowWritten: (sessionId) => data.announceSessions([sessionId]),
     environmentOf: checkoutRows.environment,
     openAgent: openAgent,

@@ -201,6 +201,30 @@ void main() {
       );
     });
 
+    test('the chat form is trusted where the terminal form keeps it, and '
+        'reads trusted after', () async {
+      final store = codexStore();
+      codexToml().writeAsStringSync('model = "gpt-5"\n');
+      final folderTrust = trust({AgentIds.codex: store});
+
+      expect(
+        await folderTrust.trust(
+          agentId: AgentIds.codexAcp,
+          folder: wslFolder,
+          windowsAgent: false,
+        ),
+        isTrue,
+      );
+      expect(
+        await folderTrust.isTrusted(
+          agentId: AgentIds.codex,
+          folder: wslFolder,
+          windowsAgent: false,
+        ),
+        isTrue,
+      );
+    });
+
     test('a folder already in the file keeps the choice there', () async {
       final store = codexStore();
       final before =

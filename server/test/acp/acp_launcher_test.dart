@@ -120,10 +120,13 @@ void main() {
     void Function(String sessionId)? onRowWritten,
     Future<bool?> Function(String, EnvironmentPath, EnvironmentKind)?
     folderTrusted,
+    Future<bool> Function(AgentInstallation, EnvironmentPath)?
+    trustRegisteredProject,
   }) {
     final rows = CheckoutRows(database);
     return HostedAgentLauncher(
       folderTrusted: folderTrusted,
+      trustRegisteredProject: trustRegisteredProject,
       registry: registry,
       sessions: SessionDao(database),
       mcp: SessionMcpAccessPoint(mcp: null, configDirectory: temp.path),
@@ -302,6 +305,33 @@ void main() {
     await start(false, 'cx1');
     expect(asked, ['${AgentIds.codex} ${temp.path}']);
     expect(notices(), [contains('Codex CLI does not trust this folder')]);
+  });
+
+  test('no notice for a Codex chat whose registered project this launch has '
+      'just trusted', () async {
+    final rows = CheckoutRows(database);
+    final trustedHere = <String>[];
+    await launcher(
+      folderTrusted: (agentId, folder, kind) async => false,
+      trustRegisteredProject: (installation, folder) async {
+        trustedHere.add(folder.path);
+        return true;
+      },
+    ).startDetailed(
+      HostedLaunch(
+        repository: rows.repository('r1')!,
+        installation: rows.installation('cx1')!,
+        title: 'Chat',
+      ),
+    );
+    expect(trustedHere, [temp.path]);
+    expect(
+      SessionMessageDao(database)
+          .listAfter('s1')
+          .where((m) => m.role == SessionMessageRole.notice)
+          .map((m) => m.text),
+      isNot(contains(contains('trust'))),
+    );
   });
 
   for (final (trusted, id) in [(true, 'cx1'), (null, 'cx1'), (false, 'acp1')]) {

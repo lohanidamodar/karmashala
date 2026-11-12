@@ -14,8 +14,25 @@ DataChange? _quickAccessChangeFromJson(
   'operateByDefaultChanged' => OperateByDefaultChanged(
     enabled: json['enabled'] == true,
   ),
+  'trustRegisteredProjectsChanged' => TrustRegisteredProjectsChanged(
+    enabled: json['enabled'] != false,
+  ),
   _ => null,
 };
+
+/// "Trust registered projects for agents" as it now stands. A client that
+/// subscribes is told it only while it is off: silence means on.
+final class TrustRegisteredProjectsChanged extends DataChange {
+  const TrustRegisteredProjectsChanged({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'trustRegisteredProjectsChanged',
+    'enabled': enabled,
+  };
+}
 
 /// "Let new sessions operate Karmashala" as it now stands. A client that
 /// subscribes is told it only while it is on: silence means off.

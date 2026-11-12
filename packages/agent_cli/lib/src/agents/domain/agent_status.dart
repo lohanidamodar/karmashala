@@ -953,8 +953,9 @@ class AgentMissingConversationRules {
 /// Read off the **live** screen, unlike the post-mortems beside it: the agent
 /// is running and waiting. A session somebody watches answers it (the approval
 /// and menu keys already cover it); an unattended launch has nobody to, so the
-/// daemon reads this to stop waiting and say why, never to answer it. Trusting
-/// a directory is the person's decision, and it is not made on their behalf.
+/// daemon reads this to stop waiting and say why, never to answer it. Only the
+/// server writes trust ahead of a start: for folders it made, and for
+/// registered projects while the person's setting allows it.
 ///
 /// Markers are matched with whitespace removed from both sides, as the
 /// post-mortems are: the question is prose that wraps at the pane width.

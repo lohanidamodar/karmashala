@@ -121,8 +121,10 @@ class DaemonAgents {
     if (rules.matchedBy(screen)) {
       return '$name is asking whether to trust $directory, and nobody is '
           'there to answer. Open the session once and answer it, then the '
-          'automation can run unattended. Karmashala does not trust a folder '
-          'on your behalf; $name was left at that question.';
+          'automation can run unattended. Karmashala trusts a folder for you '
+          'only when it made the folder, or when it is a project you added '
+          'and "Trust registered projects for agents" is on in Settings; '
+          '$name was left at that question.';
     }
     final other = rules.otherOn(screen);
     if (other == null) return null;

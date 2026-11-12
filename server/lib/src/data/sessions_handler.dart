@@ -88,6 +88,23 @@ class SessionsHandler {
       ? const [OperateByDefaultChanged(enabled: true)]
       : const [];
 
+  /// Sets "Trust registered projects for agents", read on each new
+  /// conversation's launch.
+  DataAck setTrustRegisteredProjects(
+    AgentsTrustRegisteredProjectsSet request,
+    List<DataChange> changes,
+  ) {
+    _db.writeMetadata(kTrustRegisteredProjectsKey, '${request.enabled}');
+    changes.add(TrustRegisteredProjectsChanged(enabled: request.enabled));
+    return const DataAck();
+  }
+
+  /// What a subscribing client is told: nothing while it is on, the default.
+  List<DataChange> trustRegisteredProjectsGreeting() =>
+      trustsRegisteredProjects(_db.readMetadata(kTrustRegisteredProjectsKey))
+      ? const []
+      : const [TrustRegisteredProjectsChanged(enabled: false)];
+
   Session create(SessionCreate request, List<DataChange> changes) {
     var session = request.session;
     // A placeholder is nobody's name: the agent may still give it one.

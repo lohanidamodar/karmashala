@@ -785,6 +785,8 @@ class DataService {
           r,
           changes,
         ),
+        final AgentsTrustRegisteredProjectsSet r =>
+          _sessions.setTrustRegisteredProjects(r, changes),
         final SessionEdit r => _sessions.edit(r, changes),
         final SessionDelete r => _sessions.delete(r, changes),
         final SessionsDeleteMany r => _sessions.deleteMany(r, changes),
@@ -1289,6 +1291,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       ...?_service.attentionWork?.greeting(),
       ..._service._quickAccess.greeting(),
       ..._service._sessions.operateByDefaultGreeting(),
+      ..._service._sessions.trustRegisteredProjectsGreeting(),
       for (final greeter in _service.greeters) ...greeter(),
     ];
     final viewed = _service.botView.changes(greeting, follower: _followsBot);
@@ -1363,6 +1366,8 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionEdit(:final patch) when patch.touchesOperatorGrant =>
       Capability.startSession,
     SessionsOperateByDefaultSet() => Capability.startSession,
+    // Trusting a folder spares its agent's first question there.
+    AgentsTrustRegisteredProjectsSet() => Capability.startSession,
     // The bot starts and ends sessions at a person's word, and a Yes runs
     // what it asked for.
     BotApprovalAnswer() => Capability.approve,

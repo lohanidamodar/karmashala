@@ -243,6 +243,9 @@ sealed class DataRequest<R> {
       SessionsOperateByDefaultSet.name => SessionsOperateByDefaultSet(
         enabled: args.boolean('enabled'),
       ),
+      AgentsTrustRegisteredProjectsSet.name => AgentsTrustRegisteredProjectsSet(
+        enabled: args.boolean('enabled'),
+      ),
       SessionCreate.name => SessionCreate(
         args.value('session', Session.fromJson),
         repositories: args.strings('repositories', orEmpty: true),

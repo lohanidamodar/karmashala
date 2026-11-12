@@ -225,6 +225,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     this.agents = const DaemonAgents(),
     this.worktrees,
     this.trustCreatedWorktree,
+    this.trustRegisteredProject,
     this.onLaunched,
     this.onRowWritten,
     this.environmentOf,
@@ -263,6 +264,12 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     EnvironmentPath folder,
   )?
   trustCreatedWorktree;
+
+  /// Trusts a registered project's folder before a new conversation's agent
+  /// starts there, while the server's setting is on; true when it did. Never
+  /// throws (`RegisteredProjectTrust.trustForNewConversation`).
+  Future<bool> Function(AgentInstallation installation, EnvironmentPath folder)?
+  trustRegisteredProject;
 
   /// Told of each agent started, with where: the daemon watches an unattended
   /// start for a question nobody is there to answer.
@@ -457,6 +464,12 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     }
     final record = launch.recordDirectory;
     final forking = launch.forkConversationId != null;
+    // A new conversation only: a resume or a fork has started there before.
+    final trustedNow =
+        !launch.worktree &&
+        !forking &&
+        (resumeId == null || resumeId.isEmpty) &&
+        (await trustRegisteredProject?.call(installation, directory) ?? false);
     // A new conversation gets *our* id where the agent takes one; a fork is a
     // create and mints its own.
     final assignsOwnId =
@@ -710,6 +723,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         wslDistribution: agentLaunch.wslDistribution,
         sshHostId: agentLaunch.sshHostId,
         credentialNotice: notice,
+        trustedNow: trustedNow,
         settleWorktree: settleWorktree,
       );
     }
@@ -812,6 +826,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
     required String? wslDistribution,
     required String? sshHostId,
     required String? credentialNotice,
+    required bool trustedNow,
     required void Function(Object? error)? settleWorktree,
   }) async {
     AcpSessionRuntime? opened;
@@ -874,6 +889,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
         onRowWritten?.call(id);
       }
       if (!outcome.resumed &&
+          !trustedNow &&
           acp.nativeBridge == AcpNativeBridge.codexAppServer) {
         await _sayIfUntrusted(runtime, agentId, agentName, directory, kind);
       }
@@ -911,7 +927,7 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
   }
 
   /// Codex's app-server never asks the trust question its terminal does, so
-  /// the chat says the folder is untrusted; the folder is never trusted here.
+  /// the chat says the folder is untrusted, unless this launch just trusted it.
   Future<void> _sayIfUntrusted(
     AcpSessionRuntime runtime,
     String agentId,

@@ -47,6 +47,32 @@ final class SessionsOperateByDefaultSet extends DataRequest<DataAck> {
   DataAck resultFromJson(Object? json) => const DataAck();
 }
 
+/// Sets the server's "Trust registered projects for agents", told to every
+/// client as [TrustRegisteredProjectsChanged]. An older server has no such
+/// request: a client reads [feature] in `welcome.features` first.
+final class AgentsTrustRegisteredProjectsSet extends DataRequest<DataAck> {
+  const AgentsTrustRegisteredProjectsSet({required this.enabled});
+
+  static const String name = 'agents.trustRegisteredProjects.set';
+
+  /// In `welcome.features` when the server keeps this setting.
+  static const String feature = 'agents.trustRegisteredProjects';
+
+  final bool enabled;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'enabled': enabled};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
 /// Records a session under the client's id, linked to its repository as the
 /// primary checkout and to each of [repositories] beside it, in one
 /// transaction: a row no list can place is never left behind. Refused for a

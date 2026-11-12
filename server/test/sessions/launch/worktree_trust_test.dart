@@ -28,7 +28,8 @@ final class _Everywhere implements PathProbe {
 
 /// Against **real git**: a worktree Karmashala makes for a new session is
 /// marked trusted in the agent's settings before the agent starts in it; the
-/// project folder a person registered is never trusted on their behalf.
+/// project folder a person registered is not trusted through that path
+/// (registered_project_trust_test covers the setting that does).
 void main() {
   final hasGit = Process.runSync('git', ['--version']).exitCode == 0;
   final t0 = DateTime.utc(2026, 11, 12, 12);

@@ -12,14 +12,14 @@ import 'package:path/path.dart' as p;
 typedef AgentStoreHome =
     Future<String?> Function(String environmentId, String agentId);
 
-/// **Marks a folder Karmashala made as trusted in an agent's own settings**,
-/// so the agent does not ask about it on its first start there.
+/// **Marks a folder as trusted in an agent's own settings**, so the agent does
+/// not ask about it on its first start there.
 ///
-/// Only for a folder Karmashala created moments before: a session without a
-/// project's scratch folder, or a new session's own worktree. Each one is
-/// its own git repository,
-/// and the agents keep trust per folder (Claude Code per git root), so
-/// trusting the scratch folder above them would not reach them.
+/// Only for a folder Karmashala created moments before (a session's scratch
+/// folder, a new session's own worktree) or, while "Trust registered projects
+/// for agents" is on, a project the person registered. The agents keep trust
+/// per folder (Claude Code per git root), so trusting a folder above would not
+/// reach them.
 ///
 /// Where and how is the agent's own declaration, its store's
 /// `AgentFolderTrustSpec`: Claude Code's `projects` in `~/.claude.json`,
@@ -51,9 +51,17 @@ class AgentFolderTrust {
     required EnvironmentPath folder,
     required bool windowsAgent,
   }) async {
-    final spec = _registry().byId(agentId)?.store?.folderTrust;
-    if (spec == null) return false;
-    final home = await _storeHome(folder.environmentId, agentId);
+    final registry = _registry();
+    var trustId = agentId;
+    var spec = registry.byId(agentId)?.store?.folderTrust;
+    if (spec == null) {
+      // A chat form keeps its trust where its terminal form does.
+      trustId = registry.foldedIdOf(agentId);
+      spec = registry.byId(trustId)?.store?.folderTrust;
+    }
+    final found = spec;
+    if (found == null) return false;
+    final home = await _storeHome(folder.environmentId, trustId);
     if (home == null || !await Directory(home).exists()) {
       _log?.call(
         '$agentId has no settings home found on ${folder.environmentId}; '
@@ -62,8 +70,10 @@ class AgentFolderTrust {
       return false;
     }
     final context = home.contains(r'\') ? p.windows : p.posix;
-    final file = File(context.normalize(context.join(home, spec.settingsFile)));
-    return switch (spec.format) {
+    final file = File(
+      context.normalize(context.join(home, found.settingsFile)),
+    );
+    return switch (found.format) {
       AgentFolderTrustFormat.jsonProjects => _json(
         file,
         (raw) => _jsonTrusting(raw, folder.path.replaceAll(r'\', '/')),
@@ -76,7 +86,7 @@ class AgentFolderTrust {
       ),
       AgentFolderTrustFormat.jsonPathList => _json(
         file,
-        (raw) => _jsonListTrusting(raw, spec.listKey, folder.path),
+        (raw) => _jsonListTrusting(raw, found.listKey, folder.path),
         folder,
       ),
     };
