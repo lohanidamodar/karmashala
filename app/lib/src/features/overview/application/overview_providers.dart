@@ -108,6 +108,18 @@ final overviewGroupByProvider = Provider.autoDispose<OverviewGroupBy>(
   ),
 );
 
+/// The lane keys folded under the grouping drawn now.
+final overviewCollapsedLanesProvider = Provider.autoDispose<Set<String>>((ref) {
+  final by = ref.watch(overviewGroupByProvider);
+  final prefix = overviewLaneFoldKey(by, '');
+  return {
+    for (final key in ref.watch(
+      overviewPrefsProvider.select((p) => p.collapsedLanes),
+    ))
+      if (key.startsWith(prefix)) key.substring(prefix.length),
+  };
+});
+
 /// **The Board**, from the Agents lens's own groups — so it honours Hide
 /// while working and Show archived the way the lists do — filtered and laid
 /// out as this device chose. Recomputed only when those inputs move.

@@ -44,6 +44,7 @@ List<String> overviewDrawnOrder(WidgetRef ref) {
     ref.read(overviewForestProvider),
     waitingSince: (id) => statusOf(id)?.waitingSince,
     folded: ref.read(overviewFoldedParentsProvider),
+    collapsed: ref.read(overviewCollapsedLanesProvider),
   );
   final families = [for (final card in sections.families) card.id];
   final drawn = families.toSet();

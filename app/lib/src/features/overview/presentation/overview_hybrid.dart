@@ -43,13 +43,14 @@ typedef OverviewSections = ({
 });
 
 /// [board]'s sessions as the Overview lays them out: [forest]'s families in
-/// their fixed places, a [folded] family's sub-sessions not drawn, and what
-/// waits on you in the drawer's order.
+/// their fixed places, a [folded] family's sub-sessions and a [collapsed]
+/// group's families not drawn, and what waits on you in the drawer's order.
 OverviewSections overviewSectionsOf(
   OverviewBoard board,
   OverviewForest forest, {
   required DateTime? Function(String id) waitingSince,
   Set<String> folded = const {},
+  Set<String> collapsed = const {},
 }) {
   final queue = [
     for (final lane in board.lanes)
@@ -67,27 +68,30 @@ OverviewSections overviewSectionsOf(
   return (
     queue: queue,
     families: [
-      for (final (_, trees) in forest.lanes)
-        for (final tree in trees)
-          for (final card in overviewDrawnOf(tree, folded))
-            if (seen.add(card.id)) card,
+      for (final (lane, trees) in forest.lanes)
+        if (!collapsed.contains(lane.key))
+          for (final tree in trees)
+            for (final card in overviewDrawnOf(tree, folded))
+              if (seen.add(card.id)) card,
     ],
   );
 }
 
 /// The ids of the lane [id] is drawn in, in drawn order; every drawn session
-/// when it is in none.
+/// when it is in none. A [collapsed] group draws none.
 List<String> overviewLaneOf(
   OverviewForest forest,
   String? id, {
   Set<String> folded = const {},
+  Set<String> collapsed = const {},
 }) {
   final lanes = [
-    for (final (_, trees) in forest.lanes)
-      [
-        for (final tree in trees)
-          for (final card in overviewDrawnOf(tree, folded)) card.id,
-      ],
+    for (final (lane, trees) in forest.lanes)
+      if (!collapsed.contains(lane.key))
+        [
+          for (final tree in trees)
+            for (final card in overviewDrawnOf(tree, folded)) card.id,
+        ],
   ];
   for (final lane in lanes) {
     if (lane.contains(id)) return lane;
@@ -183,6 +187,15 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
       ref
           .read(overviewFoldedParentsProvider.notifier)
           .open(overviewAncestorsIn(forest, id));
+      // A session in a folded group is shown by opening the group.
+      if (overviewFamilyOf(forest, id) case (:final lane, tree: _)) {
+        final key = forest.lanes[lane].$1.key;
+        if (ref.read(overviewCollapsedLanesProvider).contains(key)) {
+          ref
+              .read(overviewPrefsProvider.notifier)
+              .setLaneCollapsed(ref.read(overviewGroupByProvider), key, false);
+        }
+      }
       final focus = ref.read(overviewFocusProvider);
       final card = overviewCardOf(ref.read(overviewBoardProvider), id);
       if (card != null && focus.peeked != null && focus.peeked != id) {
@@ -264,11 +277,13 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     }
     final folded = ref.watch(overviewFoldedParentsProvider);
     final forest = ref.watch(overviewForestProvider);
+    final collapsed = ref.watch(overviewCollapsedLanesProvider);
     final sections = overviewSectionsOf(
       board,
       forest,
       waitingSince: (id) => statusOf(id)?.waitingSince,
       folded: folded,
+      collapsed: collapsed,
     );
     final hasFilters = ref.watch(overviewActiveFiltersProvider).isNotEmpty;
     final pinned = watchOverviewPinned(ref);
@@ -391,15 +406,19 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                   key: _laneKeys.putIfAbsent(lane.key, GlobalKey.new),
                   lane: lane,
                   trees: trees,
+                  collapsed: collapsed.contains(lane.key),
                 ),
-                ..._grid(
-                  [
-                    for (final node in trees)
-                      tree(node, lane.key, [for (final t in trees) t.card.id]),
-                  ],
-                  across,
-                  gap: gap,
-                ),
+                if (!collapsed.contains(lane.key))
+                  ..._grid(
+                    [
+                      for (final node in trees)
+                        tree(node, lane.key, [
+                          for (final t in trees) t.card.id,
+                        ]),
+                    ],
+                    across,
+                    gap: gap,
+                  ),
               ],
           ],
         );
