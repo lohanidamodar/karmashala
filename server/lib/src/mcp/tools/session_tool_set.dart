@@ -540,9 +540,9 @@ class SessionToolSet extends ServerToolSet {
       );
     }
     var delivered = false;
-    var verified = false;
+    Object went = false;
     try {
-      verified = await _deliverNow(
+      went = await _deliverNow(
         sessionId,
         message,
         held: held,
@@ -553,9 +553,31 @@ class SessionToolSet extends ServerToolSet {
       );
       delivered = true;
     } finally {
-      queue?.afterImmediate(sessionId, delivered: delivered);
+      queue?.afterImmediate(
+        sessionId,
+        delivered: delivered,
+        inLine: went is SessionWait,
+      );
     }
     recordRelay();
+    // Nothing runs it yet, so there is no turn to wait on.
+    if (went is SessionWait) {
+      return <String, Object?>{
+        'sessionId': sessionId,
+        'title': session.title,
+        'delivered': false,
+        'queued': true,
+        'waitingForSlot': '${went.reason} (place ${went.place} in line)',
+        'attribution': attribution?.line,
+        'live': false,
+        'note':
+            'That session was not running, and its resume waits for a '
+            'concurrency slot: this message is its opening prompt when it '
+            'starts, by itself, once a slot frees. Do not send it again; '
+            'follow it with session_wait.',
+      };
+    }
+    final verified = went == true;
     final answer = <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
@@ -583,9 +605,9 @@ class SessionToolSet extends ServerToolSet {
   }
 
   /// Types or sends [message] into [sessionId] now, resuming it when nothing
-  /// runs it. True once it is seen in, false when typed but unverified;
-  /// throws in words when it is refused.
-  Future<bool> _deliverNow(
+  /// runs it. True once it is seen in, false when typed but unverified, the
+  /// wait when the resume only joined the slot line; throws when refused.
+  Future<Object> _deliverNow(
     String sessionId,
     String message, {
     required bool held,
@@ -626,6 +648,7 @@ class SessionToolSet extends ServerToolSet {
       if (started is SessionStarted && started.adopted) {
         return _deliverNow(sessionId, message, held: true, reveal: reveal);
       }
+      if (started case SessionStarted(:final wait?)) return wait;
       return true;
     }
     // A dialog the status has not caught up with eats typed keys.

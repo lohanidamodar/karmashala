@@ -1397,10 +1397,21 @@ Future<int> _serve(
     },
     log: (message) => errSink.writeln('karmashala_host: $message'),
   );
+  late final SessionQueue sessionQueue;
+  // A start that leaves the line tells the queue whether its opening went in.
+  void slotWaitOver(LaunchTicket ticket) {
+    if (ticket.claim.sessionId case final id?) sessionQueue.slotWaitOver(id);
+  }
+
   launchGate.onGranted(
     kSessionStartLaunchKind,
-    launches.startGranted,
-    onCancelled: launches.waitCancelled,
+    (ticket, reservation) => launches
+        .startGranted(ticket, reservation)
+        .whenComplete(() => slotWaitOver(ticket)),
+    onCancelled: (ticket) {
+      launches.waitCancelled(ticket);
+      slotWaitOver(ticket);
+    },
   );
   data.greeters.add(() => [CapacityChanged(launchGate.snapshot())]);
   final slotWaitInbox = SlotWaitInbox(
@@ -1489,7 +1500,6 @@ Future<int> _serve(
     );
   }
 
-  late final SessionQueue sessionQueue;
   sessionQueue = SessionQueue(
     dao: SessionQueueDao(database),
     status: prompts.status,
@@ -1634,6 +1644,7 @@ Future<int> _serve(
               reveal: TabReveal.background,
             ),
           );
+          return started;
         },
         now: () => DateTime.now().toUtc(),
         enabled: () =>

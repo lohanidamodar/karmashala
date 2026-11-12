@@ -237,6 +237,10 @@ class SessionQueue implements ResumeQueue {
 
   /// Sessions resumed bare for their head, which waits for the turn to end.
   final _resumedForHead = <String>{};
+
+  /// The row each session waiting for a slot opens with, held `delivering`
+  /// until it starts ([slotWaitOver]).
+  final _openingInLine = <String, String>{};
   final _waiters = <String, List<Completer<QueuedMessage>>>{};
 
   /// The hold each session's clients were last told.
@@ -576,8 +580,17 @@ class SessionQueue implements ResumeQueue {
     required bool delivered,
     bool midTurn = false,
     String? error,
+    bool inLine = false,
   }) {
     _inFlight.remove(sessionId);
+    // The opening of a resume waiting for a slot: on its way until it starts.
+    if (delivered && inLine) {
+      if (_immediate.remove(sessionId) case final id?) {
+        _openingInLine[sessionId] = id;
+        _announce(sessionId);
+      }
+      return;
+    }
     if (_immediate.remove(sessionId) case final id?) {
       dao.transition(
         id,
@@ -730,6 +743,9 @@ class SessionQueue implements ResumeQueue {
 
   void _onStatus(HostedAgentStatus change) {
     final sessionId = change.sessionId;
+    if (_openingInLine.containsKey(sessionId) && status.holds(sessionId)) {
+      slotWaitOver(sessionId);
+    }
     final kind = change.report.turnStatus;
     // Only a reading that is no longer "working" lets the quiet-prompt
     // fallback go again; a redraw of the same stuck reading does not.
@@ -843,6 +859,7 @@ class SessionQueue implements ResumeQueue {
   bool _stopped(String sessionId) =>
       resumeStopped != null &&
       !_inFlight.contains(sessionId) &&
+      !_openingInLine.containsKey(sessionId) &&
       !_held.contains(sessionId) &&
       !_resumedForHead.contains(sessionId) &&
       status.acpRuntimeOf(sessionId) == null &&
@@ -1011,6 +1028,15 @@ class SessionQueue implements ResumeQueue {
       // One already running or starting answers the resume as it is, and
       // the prompt that started it was another's: the head still waits.
       final adopted = started is SessionStarted && started.adopted;
+      if (withPrompt && started is SessionStarted && started.waiting) {
+        // Its opening waits in the slot line with it: on its way, not in.
+        _openingInLine[sessionId] = head.id;
+        log?.call(
+          'queue $sessionId: ${head.id} is the opening prompt of a start '
+          'waiting for a slot',
+        );
+        return;
+      }
       if (withPrompt && !adopted) {
         delivered = true;
         _finish(head, QueuedMessageState.delivered);
@@ -1164,6 +1190,31 @@ class SessionQueue implements ResumeQueue {
       );
     }
     _announce(sessionId);
+  }
+
+  /// [sessionId] left the launch gate's line. Started, the message it opened
+  /// with is delivered; taken out of line unstarted, it was never sent and
+  /// waits again.
+  void slotWaitOver(String sessionId) {
+    final id = _openingInLine.remove(sessionId);
+    final row = id == null ? null : dao.getById(id);
+    if (row == null || row.state != QueuedMessageState.delivering) return;
+    if (status.holds(sessionId) || status.acpRuntimeOf(sessionId) != null) {
+      _finish(row, QueuedMessageState.delivered);
+      _awaitTurnStart(sessionId);
+      log?.call('queue $sessionId: ${row.id} went in as it started');
+    } else {
+      dao.transition(
+        row.id,
+        from: QueuedMessageState.delivering,
+        to: QueuedMessageState.queued,
+        now: _now(),
+      );
+      _withQueued.add(sessionId);
+      log?.call('queue $sessionId: ${row.id} queued again; it never started');
+    }
+    _announce(sessionId);
+    _kick(sessionId);
   }
 
   /// Delivers [sessionId]'s head now, past any hold — resuming a session

@@ -5,6 +5,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart' show PathProbe;
 import 'package:agent_cli/read.dart' show ConversationPresence;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionStarted, SessionWait;
 import 'package:karmashala_host/data.dart' show DataService;
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/automations/daemon_checkout_facts.dart';
@@ -344,6 +346,69 @@ void main() {
     await showsIdle();
     expect(delivered, ['earlier']);
     expect(dao.getById('old')!.state, QueuedMessageState.delivered);
+  });
+
+  group('a resume that only joined the slot line', () {
+    var resumes = 0;
+
+    SessionQueue inLine() {
+      resumes = 0;
+      var n = 0;
+      final queue = SessionQueue(
+        dao: dao,
+        status: status,
+        resumeStopped: (sessionId, prompt) async {
+          resumes++;
+          return SessionStarted(
+            session: SessionDao(database).getById(sessionId)!,
+            wait: const SessionWait(ticketId: 't1', reason: 'full', place: 1),
+          );
+        },
+        takesOpeningMessage: (_) => true,
+        newId: () => 'q${++n}',
+        now: () => t0,
+      )..deliver = ((_, text) async => delivered.add(text));
+      addTearDown(queue.close);
+      return queue..start();
+    }
+
+    test('keeps its head on its way, not delivered, and resumes nothing '
+        'again', () async {
+      queued('old', 'earlier');
+      final queue = inLine();
+      queue.admit('s1', 'later', origin: QueuedMessageOrigin.app);
+      await pumpEventQueue();
+      expect(dao.getById('old')!.state, QueuedMessageState.delivering);
+
+      queue.admit('s1', 'and more', origin: QueuedMessageOrigin.app);
+      await pumpEventQueue();
+      expect(resumes, 1);
+      expect(delivered, isEmpty);
+    });
+
+    test('taken out of line unstarted, its head was never sent and waits '
+        'again', () async {
+      queued('old', 'earlier');
+      final queue = inLine();
+      queue.admit('s1', 'later', origin: QueuedMessageOrigin.app);
+      await pumpEventQueue();
+
+      queue.slotWaitOver('s1');
+      expect(dao.getById('old')!.state, QueuedMessageState.queued);
+      expect(delivered, isEmpty);
+    });
+
+    test('once it starts, its head is delivered', () async {
+      queued('old', 'earlier');
+      final queue = inLine();
+      queue.admit('s1', 'later', origin: QueuedMessageOrigin.app);
+      await pumpEventQueue();
+
+      await launches.resume('s1');
+      queue.slotWaitOver('s1');
+      expect(dao.getById('old')!.state, QueuedMessageState.delivered);
+      expect(delivered, isEmpty, reason: 'it went as the opening prompt');
+    });
   });
 
   test('a resume that is refused fails the head in words rather than '

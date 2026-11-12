@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:agent_cli/descriptors.dart' show AgentActivityStatus;
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionStarted;
 import 'package:karmashala_host_protocol/protocol.dart'
     show LifecycleEvent, LifecycleEventKind, SessionEndedWithoutCode;
 import 'package:karmashala_session/lineage.dart' show SessionLink;
@@ -346,7 +348,9 @@ class InterruptedTurnContinuer {
 
   /// Whether [Session]'s agent can be handed a message as it starts.
   final bool Function(Session session) takesOpeningMessage;
-  final Future<void> Function(String sessionId, String? prompt) resume;
+
+  /// Answers the start (`SessionStarted`), which may only wait for a slot.
+  final Future<Object?> Function(String sessionId, String? prompt) resume;
   final DateTime Function() now;
 
   /// Settings; null is on.
@@ -415,8 +419,27 @@ class InterruptedTurnContinuer {
     bool personFirst = false,
   }) async {
     try {
-      await resume(sessionId, told ? kInterruptedTurnPrompt : null);
+      final started = await resume(
+        sessionId,
+        told ? kInterruptedTurnPrompt : null,
+      );
       continued.add(sessionId);
+      // Only in line for a slot: nothing has reached the agent yet.
+      if (started is SessionStarted && started.waiting) {
+        log?.call('interrupted turns: $sessionId waits for a slot to resume');
+        report?.call(
+          sessionId,
+          '$kTurnCutOffLead Karmashala is reopening the session, but it waits '
+          'for a concurrency slot first; '
+          '${personFirst
+              ? 'the message you had queued goes to it once it starts.'
+              : told
+              ? 'once it starts, the agent is told its turn was cut off.'
+              : 'its agent takes no opening message, so it will not be asked '
+                    'to continue.'}',
+        );
+        return;
+      }
       if (personFirst) {
         log?.call(
           'interrupted turns: $sessionId resumed bare; a message a person '

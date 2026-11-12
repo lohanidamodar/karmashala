@@ -9,7 +9,10 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'Send a message to a session, exactly as typing it into that '
         'session\'s message box would. Omit sessionId to send to the session '
         'you are running in. A session whose agent has stopped is relaunched '
-        'and resumed first, so this works whether or not it is live. A message '
+        'and resumed first, so this works whether or not it is live; when a '
+        'concurrency limit holds that resume, the result says queued: true '
+        'and waitingForSlot, and the message is its opening prompt when it '
+        'starts. A message '
         'to another session arrives with a line naming yours, so the recipient '
         'reads it as a request from a peer rather than as an instruction from '
         'the user; the line is built from the session the transport '
@@ -60,6 +63,12 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
               '"unverified" when it was typed and Return pressed but the '
               'screen could not show it was sent (see note) — read '
               'session_transcript before sending it again; false when queued.',
+        },
+        'waitingForSlot': {
+          'type': 'string',
+          'description':
+              'Why the resume waits, and its place in line: nothing runs the '
+              'session yet, so wait: true does not wait on a turn.',
         },
         'note': {'type': 'string'},
         'attribution': {

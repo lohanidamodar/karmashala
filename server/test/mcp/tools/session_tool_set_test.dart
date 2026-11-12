@@ -331,6 +331,49 @@ void main() {
       );
     });
 
+    test('a resume that only joined the slot line is not reported as '
+        'delivered, and wait: true does not answer ended', () async {
+      final queue = SessionQueue(
+        dao: SessionQueueDao(database),
+        status: status,
+      );
+      addTearDown(queue.close);
+      queue.start();
+      final inLine = SessionToolSet(
+        context,
+        prompts: prompts,
+        registry: registry,
+        queue: queue,
+        waits: HostedSessionWait(
+          status: status,
+          deadline: (_) => deadline.future,
+        ),
+        resumeWith: (sessionId, prompt, reveal) async => SessionStarted(
+          session: SessionDao(database).getById(sessionId)!,
+          wait: const SessionWait(
+            ticketId: 't1',
+            reason: 'Waiting for a slot: 1 of 1 is busy (One)',
+            place: 1,
+          ),
+        ),
+      );
+      final answer =
+          await inLine.call('session_send', {
+                'sessionId': 's1',
+                'text': 'carry on',
+                'wait': true,
+              }, 'caller')!
+              as Map<String, Object?>;
+      expect(answer['delivered'], isFalse);
+      expect(answer['queued'], isTrue);
+      expect(answer['live'], isFalse);
+      expect(answer['waitingForSlot'], contains('place 1 in line'));
+      expect(answer['note'], contains('opening prompt when it starts'));
+      expect(answer.containsKey('state'), isFalse);
+      final row = SessionQueueDao(database).open('s1').single;
+      expect(row.state, QueuedMessageState.delivering);
+    });
+
     test('to a session mid-turn is queued, not typed, and delivered under '
         'the sender\'s name when the turn ends', () async {
       final typist = SessionToolSet.typistOver(

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show HostedAgentStatus;
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionStarted, SessionWait;
 import 'package:karmashala_host/src/sessions/interrupted_turns.dart';
 import 'package:karmashala_host_protocol/protocol.dart'
     show LifecycleEvent, LifecycleEventKind, SessionEndedWithoutCode;
@@ -310,18 +312,14 @@ void main() {
       OpenTurns open, {
       bool enabled = true,
       bool Function(Session)? takes,
-      Future<void> Function(String id, String? prompt)? resume,
+      Future<Object?> Function(String id, String? prompt)? resume,
     }) => InterruptedTurnContinuer(
       turns: open,
       sessionOf: (id) => rows[id],
       childrenOf: (_) => const [],
       runsHere: (_) => false,
       takesOpeningMessage: takes ?? (_) => true,
-      resume:
-          resume ??
-          (id, prompt) async {
-            resumed.add((id, prompt));
-          },
+      resume: resume ?? (id, prompt) async => resumed.add((id, prompt)),
       now: () => t0.add(const Duration(minutes: 1)),
       enabled: () => enabled,
       report: (id, detail) => reported[id] = detail,
@@ -346,6 +344,7 @@ void main() {
         resume: (id, prompt) async {
           recordWhenResumed = stored;
           resumed.add((id, prompt));
+          return null;
         },
       );
       expect(await run.run(), ['s1', 's2']);
@@ -376,6 +375,22 @@ void main() {
       expect(await run.run(), ['s1', 's2']);
       expect(resumed, [('s1', null), ('s2', kInterruptedTurnPrompt)]);
       expect(reported['s1'], contains('you had queued goes to it first'));
+    });
+
+    test('a resume that only joined the slot line does not say the agent '
+        'was told', () async {
+      final open = turns()..statusMoved('s1', AgentActivityStatus.working, t0);
+      final run = continuer(
+        open,
+        resume: (id, prompt) async => SessionStarted(
+          session: rows[id]!,
+          wait: const SessionWait(ticketId: 't1', reason: 'full', place: 1),
+        ),
+      );
+      expect(await run.run(), ['s1']);
+      expect(reported['s1'], contains('waits for a concurrency slot'));
+      expect(reported['s1'], contains('once it starts, the agent is told'));
+      expect(reported['s1'], isNot(contains('continued it')));
     });
 
     test('every resume is started before the first one finishes', () async {
