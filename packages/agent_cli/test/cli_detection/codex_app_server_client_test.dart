@@ -8,6 +8,7 @@ import 'package:agent_cli/src/agents/codex/codex_app_server_client.dart';
 import 'package:agent_cli/src/agents/codex/codex_thread.dart';
 
 import '../support/fake_codex_app_server.dart';
+import '../support/fake_command_runner.dart' show FakeProcessHandle;
 
 /// **The client that finally reaches Codex**, driven by scripted JSON rather
 /// than by a real `codex`.
@@ -391,6 +392,61 @@ void main() {
     );
   });
 
+  test('a timed-out connection that exits late does not take down the one '
+      'opened after it', () async {
+    final stale = _SlowToDie();
+    final server = FakeCodexAppServer(
+      reply: (server, id, method, params) => null,
+    );
+    final handles = <ProcessHandle>[stale, server];
+    final client = CodexAppServerClient(
+      connect: () async => handles.removeAt(0),
+      timeout: const Duration(milliseconds: 50),
+    );
+
+    expect(
+      (await client.setThreadName('t1', 'one')).failure!.kind,
+      CodexAppServerFailureKind.timeout,
+    );
+    expect(stale.killed, isTrue);
+    final pending = client.setThreadName('t2', 'two');
+    while (!server.methods.contains('thread/name/set')) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    stale.complete(137);
+    await Future<void>.delayed(Duration.zero);
+    server.emitStdout(
+      jsonEncode({
+        'id': server.requests.last['id'],
+        'result': <String, Object?>{},
+      }),
+    );
+    expect((await pending).ok, isTrue);
+
+    await client.close();
+    expect(server.killed, isTrue, reason: 'the newer process is not leaked');
+  });
+
+  test('a server request whose id matches a waiting call is not its '
+      'reply', () async {
+    final server = FakeCodexAppServer(
+      reply: (server, id, method, params) {
+        server.emitStdout(
+          jsonEncode({
+            'id': id,
+            'method': 'item/commandExecution/requestApproval',
+            'params': <String, Object?>{},
+          }),
+        );
+        return jsonEncode({'id': id, 'result': <String, Object?>{}});
+      },
+    );
+    final client = _clientFor(server);
+    addTearDown(client.close);
+
+    expect((await client.setThreadName('t1', 'one')).ok, isTrue);
+  });
+
   test('close fails a call that was still waiting', () async {
     final server = FakeCodexAppServer(
       reply: (server, id, method, params) => null,
@@ -579,6 +635,13 @@ void main() {
       expect(list.failure!.kind, CodexAppServerFailureKind.malformed);
     });
   });
+}
+
+/// A process that answers nothing and exits only when the test says, after
+/// it was killed.
+class _SlowToDie extends FakeProcessHandle {
+  @override
+  Future<void> kill() async => killed = true;
 }
 
 /// A `thread/list` row with only the fields that must be present.

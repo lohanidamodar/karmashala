@@ -415,16 +415,24 @@ class CodexAppServerClient {
   /// Kills the connection and fails what was waiting on it, without deciding
   /// whether the client itself is finished — a handshake that failed tears down
   /// but stays reusable, [close] does not.
-  Future<void> _teardown(CodexAppServerFailure failure) async {
-    final handle = _handle;
-    _handle = null;
-    _ready = null;
-    _failPending(failure);
-    await _stdout?.cancel();
-    await _stderr?.cancel();
-    _stdout = null;
-    _stderr = null;
-    _stderrTail.clear();
+  /// [opened] is the handle an `_open` tears down: once it is no longer the
+  /// current one, only it is killed, and the newer connection is left alone.
+  Future<void> _teardown(
+    CodexAppServerFailure failure, [
+    ProcessHandle? opened,
+  ]) async {
+    final handle = opened ?? _handle;
+    if (identical(handle, _handle)) {
+      _handle = null;
+      _ready = null;
+      _failPending(failure);
+      final stdout = _stdout, stderr = _stderr;
+      _stdout = null;
+      _stderr = null;
+      _stderrTail.clear();
+      await stdout?.cancel();
+      await stderr?.cancel();
+    }
     if (handle != null) {
       try {
         await handle.kill();
@@ -477,7 +485,11 @@ class CodexAppServerClient {
       _rememberStderr,
       onError: (Object _) {},
     );
-    unawaited(handle.exitCode.then(_onExit).catchError((Object _) {}));
+    unawaited(
+      handle.exitCode
+          .then((code) => _onExit(handle, code))
+          .catchError((Object _) {}),
+    );
 
     final init = await _request(handle, 'initialize', {
       'clientInfo': {
@@ -488,7 +500,7 @@ class CodexAppServerClient {
     });
     final failure = init.failure ?? _rejectWrongStore(init.value!);
     if (failure != null) {
-      await _teardown(failure);
+      await _teardown(failure, handle);
       throw failure;
     }
     _info = CodexAppServerInfo.fromResult(init.value!);
@@ -606,6 +618,8 @@ class CodexAppServerClient {
       _onNotification(decoded);
       return;
     }
+    // A line with a method is Codex's own request, never a reply to a call.
+    if (decoded.containsKey('method')) return;
     final completer = _pending.remove(id);
     if (completer == null || completer.isCompleted) return;
     if (error != null) {
@@ -664,7 +678,9 @@ class CodexAppServerClient {
     if (_stderrTail.length > 5) _stderrTail.removeAt(0);
   }
 
-  void _onExit(int code) {
+  void _onExit(ProcessHandle handle, int code) {
+    // An old connection's exit is not the current one's.
+    if (!identical(_handle, handle)) return;
     _handle = null;
     _ready = null;
     _failPending(
