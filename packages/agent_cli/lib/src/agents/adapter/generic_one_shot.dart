@@ -15,14 +15,17 @@ CliInvocation genericOneShot(
 }) {
   final text = systemPrompt == null ? prompt : '$systemPrompt\n\n$prompt';
   final spec = descriptor?.launch;
+  // A CLI nobody checked may not know `--`; a leading space keeps the text
+  // and is an option to no parser.
+  final bare = text.startsWith('-') ? ' $text' : text;
   return CliInvocation(
     arguments: spec == null
-        ? [text]
+        ? [bare]
         : [
             ...spec.model.argumentsFor(model),
             ...spec.prompt.isSupported
                 ? spec.prompt.argumentsFor(text)
-                : [text],
+                : [bare],
           ],
     parse: (line) => assistantTextIn(parseGenericAgentLine(line)),
   );

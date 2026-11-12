@@ -74,11 +74,16 @@ class AgentPromptSupport {
   List<String> argumentsFor(String prompt) {
     if (prompt.isEmpty) return const [];
     return switch (style) {
-      AgentPromptStyle.positional => [prompt],
+      AgentPromptStyle.positional => asPositional(prompt),
       AgentPromptStyle.flag => [token, prompt],
       AgentPromptStyle.unsupported => const [],
     };
   }
+
+  /// [prompt] as the trailing positional of Claude Code or Codex: behind `--`
+  /// when it starts with `-`, which both CLIs' parsers would read as an option.
+  static List<String> asPositional(String prompt) =>
+      prompt.startsWith('-') ? ['--', prompt] : [prompt];
 }
 
 /// How one CLI is asked for a recap of a conversation, non-interactively.

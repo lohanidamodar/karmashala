@@ -248,6 +248,41 @@ void main() {
       // does — and better than refusing to ask at all.
       expect(genericOneShot(null, 'hi').arguments, ['hi']);
     });
+
+    for (final prompt in ['- [ ] fix it', '--verbose is broken']) {
+      group('a prompt "$prompt" is never read as an option', () {
+        test('claude: after --, with -p taking no value', () {
+          final args = const ClaudeCodeAdapter().oneShot(prompt).arguments;
+          expect(args.sublist(args.length - 2), ['--', prompt]);
+          expect(args[1], '--output-format');
+        });
+
+        test('codex exec: after --', () {
+          final args = const CodexAdapter().oneShot(prompt).arguments;
+          expect(args.sublist(args.length - 2), ['--', prompt]);
+        });
+
+        test('a positional descriptor prompt: after --', () {
+          expect(const AgentPromptSupport.positional().argumentsFor(prompt), [
+            '--',
+            prompt,
+          ]);
+        });
+
+        test('an agent nobody checked: behind a leading space', () {
+          expect(genericOneShot(null, prompt).arguments, [' $prompt']);
+        });
+      });
+    }
+
+    test('a prompt not starting with - is unchanged', () {
+      expect(const CodexAdapter().oneShot('hi').arguments.last, 'hi');
+      expect(
+        const CodexAdapter().oneShot('hi').arguments,
+        isNot(contains('--')),
+      );
+      expect(const AgentPromptSupport.positional().argumentsFor('hi'), ['hi']);
+    });
   });
 
   group('parseAgentVersion', () {

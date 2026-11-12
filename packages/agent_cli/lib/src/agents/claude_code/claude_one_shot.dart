@@ -9,13 +9,16 @@ CliInvocation claudeOneShot(
   String? model,
 }) => CliInvocation(
   arguments: [
-    '-p', prompt,
+    '-p',
     '--output-format', 'stream-json',
     '--verbose',
     // No tools: answer from the conversation, do not act on it.
     '--allowed-tools', '',
     if (systemPrompt != null) ...['--system-prompt', systemPrompt],
     if (model != null) ...['--model', model],
+    // `-p` takes no value: the prompt is the positional, after `--` so one
+    // starting with `-` is not an option and `--allowed-tools` swallows nothing.
+    '--', prompt,
   ],
   parse: (line) => assistantTextIn(parseClaudeMessage(line)),
 );

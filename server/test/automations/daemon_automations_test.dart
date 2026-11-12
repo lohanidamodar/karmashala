@@ -252,6 +252,7 @@ void main() {
     DateTime? armedAt,
     AutomationSteps steps = AutomationSteps.standard,
     String? modelId,
+    String prompt = 'Fix what broke.',
   }) => automationDao().insert(
     Automation(
       id: 'auto-$repositoryId',
@@ -259,7 +260,7 @@ void main() {
       name: 'Nightly sweep',
       schedule: const AutomationSchedule.cron('0 3 * * *'),
       agentInstallationId: 'a1',
-      prompt: 'Fix what broke.',
+      prompt: prompt,
       permissionMode: const PermissionSelection({'mode': 'bypassPermissions'}),
       enabled: true,
       armedAt: armedAt ?? due.subtract(const Duration(hours: 2)).toUtc(),
@@ -345,6 +346,18 @@ void main() {
       expect(runs(), hasLength(1));
       expect(launcher.started, hasLength(1));
     });
+
+    for (final prompt in ['- [ ] fix it', '--verbose is broken']) {
+      test(
+        'a prompt "$prompt" rides argv behind --, not as an option',
+        () async {
+          nightly(prompt: prompt);
+          await startDaemon();
+          final argv = launcher.started.single.argv;
+          expect(argv.sublist(argv.length - 2), ['--', prompt]);
+        },
+      );
+    }
 
     test(
       'beyond the grace it is recorded as missed, and nothing starts',

@@ -1,5 +1,6 @@
 import '../../ask/assistant_text.dart';
 import '../../ask/cli_invocation.dart';
+import '../domain/agent_descriptor.dart';
 import 'codex_chat_protocol.dart';
 
 /// One question to `codex exec`, answered as JSON events.
@@ -15,7 +16,9 @@ CliInvocation codexOneShot(
     '--skip-git-repo-check',
     '--json',
     if (model != null) ...['--model', model],
-    if (systemPrompt != null) '$systemPrompt\n\n$prompt' else prompt,
+    ...AgentPromptSupport.asPositional(
+      systemPrompt != null ? '$systemPrompt\n\n$prompt' : prompt,
+    ),
   ],
   parse: (line) {
     final event = parseCodexMessage(line);
