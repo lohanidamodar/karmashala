@@ -17,6 +17,25 @@ installs claim the same version name.
 
 ---
 
+## 1.34.24 — 2026-11-12 (build 91)
+
+- **The dashboard is one tile per project.** Each tile says what its sessions are doing ("1 needs you · 5 running"), its name shows the project in the Explorer, + starts a session there and ⋯ is the project's own menu. A session that needs you, runs or is new keeps its card; one finished and seen is one line, until its chat is opened. Tiles and sessions never change place when a state changes. "Finished sessions as cards" in the filter brings every card back.
+- **Group the projects by Context, Machine, Status, Agent or Last active**, or not at all, from Group by beside the group chips. Status files a project under the most urgent of its sessions: Needs you, Running, New, To go back to. Groups and tiles fold.
+- **The dashboard's search filters.** Typing leaves only what matches, by title, latest line or project name, and says "1 of 5"; ↑ and ↓ move the pick and Enter opens it. It looks past the filters, at what ended before today, and at projects with no session.
+- **An ask is answered on its own card**, a sub-session's under its name. N goes to it; the waiting drawer stays behind Waiting as the list of every ask.
+- **The dashboard's keys work as soon as its tab shows**, with no click first. New keys: O shows the selected session's project, E edits it, C starts a session in it, G groups, M messages, S stops the turn, . opens the menu, Space folds; ← and → step by project.
+- **A session read in its own tab is seen on the dashboard**, not "new" there for ever.
+- **Settings are grouped by what you are doing**, one topic to a page: Sessions and Permissions together, MCP and skills and Bot on pages of their own, Connections for machines, server, phone, GitHub, stores and secrets.
+- **Fixes from a review of sessions, agents and approvals** ([docs/review/2026-11-12-fable-review.md](docs/review/2026-11-12-fable-review.md)):
+  - An agent's `session_answer` presses no key when no prompt is open, cannot raise a session's mode or allow always, cannot answer its own prompt, and answers a checklist by its ticks.
+  - A typed message waits for the screen before Return and says "unverified" when it cannot tell it arrived; nothing is typed into a dialog.
+  - Concurrent permission requests in a chat wait in line instead of one being lost.
+  - A child waiting for a concurrency slot is reported waiting, not ended; `session_end` takes it out of line; a resuming send that only joined the line says so.
+  - A stale "working" hook no longer reads working for ever; an external-terminal session's own hooks move it to running and ended.
+  - Stop reaches a turn the agent began itself and says when there is nothing to stop; a cancel the agent ignores ends the turn after 15 seconds.
+  - Worktrees Karmashala makes, and registered projects while "Trust registered projects for agents" is on, are trusted before the agent starts.
+  - `list_sessions` says whether a session is live and what it is doing. A prompt starting with `-` is never read as an option. Windows hook callbacks no longer share temp files. Codex usage windows are labelled by their own length; an expired Antigravity token reads as a sign-in failure.
+
 ## 1.34.23 — 2026-11-05 (build 90)
 
 - **A Codex approval reads as Codex draws it, and is answered from the chat again.** Codex 0.166 redraws its transcript while a command approval waits, so the prompt read off the screen kept changing and an answer from the chat, the phone or the dashboard was refused as "the prompt changed". The prompt now ends at Codex's own heading, and only Codex's numbered options are buttons: no more "Environment: local", the command line or the "Press enter to confirm" footer as choices.
