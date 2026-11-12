@@ -100,6 +100,25 @@ void main() {
     },
   );
 
+  test('an expired token is a sign-in failure, and nothing is asked', () async {
+    File(p.join(home.path, 'antigravity-oauth-token')).writeAsStringSync(
+      jsonEncode({
+        'token': {'access_token': 'made-up', 'expiry': '2026-09-27T00:00:00Z'},
+      }),
+    );
+    final http = _QuotaService((_) => fail('an expired token is not sent'));
+
+    await expectLater(
+      const AntigravityUsageEndpoint().read(contextOver(http)),
+      throwsA(
+        isA<UsageException>()
+            .having((e) => e.kind, 'kind', UsageFailureKind.auth)
+            .having((e) => e.message, 'message', contains('expired')),
+      ),
+    );
+    expect(http.asked, isEmpty);
+  });
+
   test('a refused quota is reported as refused, never as a tier', () async {
     final http = _QuotaService(
       (_) => throw UsageException('Usage request failed (HTTP 403).'),

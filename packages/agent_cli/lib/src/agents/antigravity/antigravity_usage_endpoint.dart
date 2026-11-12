@@ -4,6 +4,7 @@ import '../data/usage_exception.dart';
 import '../data/usage_throttle.dart'
     show kUsageFiveHourWindow, kUsageSevenDayWindow;
 import '../domain/agent_usage.dart';
+import '../domain/usage_failure.dart';
 
 /// Antigravity's usage, authorised with the OAuth token `agy` keeps in its
 /// store: the quota buckets `retrieveUserQuotaSummary` reports
@@ -46,6 +47,7 @@ class AntigravityUsageEndpoint implements AgentUsageEndpoint {
       if (tokenExpiry != null && context.clock.nowUtc().isAfter(tokenExpiry)) {
         throw UsageException(
           'Access token expired. Run the agent once to refresh, then retry.',
+          kind: UsageFailureKind.auth,
         );
       }
     }
