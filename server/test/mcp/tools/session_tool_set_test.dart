@@ -479,6 +479,54 @@ void main() {
     });
   });
 
+  group('session_answer decision', () {
+    test('into an idle session with no menu: refused, nothing pressed, no '
+        'decision filed', () async {
+      final agent = await runAgent('claude-code-tui');
+      for (final decision in ['approve', 'deny']) {
+        await expectLater(
+          tools.call('session_answer', {
+            'sessionId': 's1',
+            'decision': decision,
+          }, 'caller'),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains(
+                'No prompt is open in that session, so nothing was '
+                'pressed',
+              ),
+            ),
+          ),
+        );
+      }
+      expect(agent.writes, isEmpty);
+      expect(database.query('SELECT * FROM session_decisions;'), isEmpty);
+    });
+
+    test('a menu drawn before the status caught up is read off the screen '
+        'and answered by its option', () async {
+      final agent = await runAgent('claude-code-tui');
+      agent.emit(fixture('claude-code-trust-prompt'));
+      await pumpEventQueue();
+      expect(status.statusOf('s1')!.report.hasOpenPrompt, isFalse);
+
+      final read = await call('session_transcript', {'sessionId': 's1'});
+      expect((read['menu']! as Map)['options'], [
+        'No, exit',
+        'Yes, I trust this folder',
+      ]);
+      // The fake pane draws no moved highlight, so the one already on "No".
+      final answer = await call('session_answer', {
+        'sessionId': 's1',
+        'decision': 'deny',
+      }, caller: 'caller');
+      expect(answer['answered'], 'No, exit');
+      expect(typedInto(agent), '\r');
+    });
+  });
+
   group('session_answer option: a parent picks a menu row in its child', () {
     late FakePtyHandle agent;
 

@@ -21,6 +21,7 @@ void main() {
     AgentDescriptor agent, {
     AgentMenuSupport? menus,
     bool question = false,
+    bool prompt = true,
   }) => SessionApprovalAnswerer(
     menus: SessionMenuAnswerer(
       readScreen: (_) => screen.rows(),
@@ -33,20 +34,19 @@ void main() {
     rulesFor: (_) => agent.approval,
     agentNameFor: (_) => agent.displayName,
     hasOpenQuestion: (_) => question,
-    pressAnswerKey: (
-      _,
-      keys, {
-      required decidedBy,
-      required decidedBySessionId,
-    }) => screen.press(keys),
-    recordMenuAnswer: (
-      _, {
-      required granted,
-      required option,
-      required effect,
-      required decidedBy,
-      required decidedBySessionId,
-    }) => recorded.add((granted: granted, option: option)),
+    hasOpenPrompt: (_) => prompt,
+    pressAnswerKey:
+        (_, keys, {required decidedBy, required decidedBySessionId}) =>
+            screen.press(keys),
+    recordMenuAnswer:
+        (
+          _, {
+          required granted,
+          required option,
+          required effect,
+          required decidedBy,
+          required decidedBySessionId,
+        }) => recorded.add((granted: granted, option: option)),
   );
 
   final claude = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
@@ -314,6 +314,42 @@ void main() {
         ),
       ),
     );
+  });
+
+  // Review 2026-11-12: Enter into an idle composer submitted its draft, Esc
+  // into a running turn interrupted it, and both were filed as answers.
+  test(
+    'no menu drawn and no prompt reported: refused, nothing pressed',
+    () async {
+      screen = FixtureMenuScreen.text('', marker: '❯');
+
+      for (final approve in [true, false]) {
+        await expectLater(
+          answererFor(claude, prompt: false).answer('s', approve: approve),
+          throwsA(
+            isA<SessionPromptRefusal>().having(
+              (r) => r.message,
+              'message',
+              'no prompt is open in that session, so nothing was pressed',
+            ),
+          ),
+        );
+      }
+      expect(screen.sent, isEmpty);
+      expect(recorded, isEmpty);
+    },
+  );
+
+  test('a menu drawn before the status caught up is still answered', () async {
+    screen = FixtureMenuScreen.fixture('claude-code-trust-prompt', marker: '❯');
+
+    final answer = await answererFor(
+      claude,
+      prompt: false,
+    ).answer('s', approve: true);
+
+    expect(answer.answered, 'Yes, I trust this folder');
+    expect(screen.sent, ['\x1b[B', '\r']);
   });
 
   group("Claude Code's project-MCP checklist (the owner's screen)", () {

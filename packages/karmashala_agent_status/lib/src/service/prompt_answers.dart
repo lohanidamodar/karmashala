@@ -61,6 +61,7 @@ class SessionPromptAnswers implements PromptAnswering {
         terminals.agentOf(sessionId)?.displayName ?? 'The agent',
     hasOpenQuestion: (sessionId) =>
         terminals.statusOf(sessionId)?.hasOpenQuestion ?? false,
+    hasOpenPrompt: _hasOpenPrompt,
     pressAnswerKey: _pressAnswerKey,
     recordMenuAnswer: _recordMenuAnswer,
   );
@@ -98,6 +99,13 @@ class SessionPromptAnswers implements PromptAnswering {
   /// The menu open in [sessionId] now, by its status and its screen.
   @override
   AgentScreenMenu? menuOnScreen(String sessionId) => menus.read(sessionId);
+
+  /// The menu drawn on [sessionId]'s screen, whether or not the status has
+  /// caught up with it; never a question's rows read as one.
+  AgentScreenMenu? drawnMenu(String sessionId) =>
+      terminals.statusOf(sessionId)?.hasOpenQuestion ?? false
+      ? null
+      : menus.onScreen(sessionId);
 
   Future<SessionApprovalAnswer> _approve(ApprovalAnswerRequest request) async {
     final sessionId = _existing(request.sessionId);
@@ -147,12 +155,13 @@ class SessionPromptAnswers implements PromptAnswering {
 
   Future<SessionApprovalAnswer> _chooseMenu(MenuAnswerRequest request) async {
     final sessionId = _existing(request.sessionId);
-    if (!_hasOpenPrompt(sessionId)) {
+    // A menu drawn on the screen is answered though the status lags it.
+    final menu = drawnMenu(sessionId);
+    if (!_hasOpenPrompt(sessionId) && menu == null) {
       throw const SessionPromptRefusal(
         'this session has no prompt open to answer',
       );
     }
-    final menu = menus.onScreen(sessionId);
     if (request.dismiss || request.ticks != null) {
       return _answerChecklist(sessionId, request, menu);
     }

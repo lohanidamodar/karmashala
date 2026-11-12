@@ -93,6 +93,7 @@ void main() {
             rulesFor: (_) => agent.approval,
             agentNameFor: (_) => agent.displayName,
             hasOpenQuestion: (_) => false,
+            hasOpenPrompt: (_) => true,
             pressAnswerKey:
                 (_, keys, {required decidedBy, required decidedBySessionId}) =>
                     screen.press(keys),

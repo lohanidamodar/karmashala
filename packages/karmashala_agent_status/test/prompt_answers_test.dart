@@ -47,6 +47,14 @@ AgentStatusReport _asking(AgentWaitKind waiting) => AgentStatusReport(
   waiting: waiting,
 );
 
+final _idle = AgentStatusReport(
+  agentId: 'claudeCode',
+  sessionId: 'conv',
+  status: AgentActivityStatus.idle,
+  source: AgentStatusSource.terminalGrid,
+  observedAt: DateTime.utc(2026, 11, 12),
+);
+
 void main() {
   final claude = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
 
@@ -89,6 +97,51 @@ void main() {
       throwsA(isA<SessionPromptRefusal>()),
     );
     expect(terminals.screenOf!.sent, isEmpty);
+  });
+
+  test('an agent\'s approve into an idle session with no menu presses '
+      'nothing and files nothing', () async {
+    final terminals = _Terminals(
+      claude,
+      FixtureMenuScreen.text('', marker: '❯'),
+    )..status = _idle;
+
+    for (final approve in [true, false]) {
+      await expectLater(
+        answersOver(terminals).answer(
+          ApprovalAnswerRequest(
+            sessionId: 's1',
+            approve: approve,
+            requireOpenPrompt: false,
+          ),
+        ),
+        throwsA(
+          isA<SessionPromptRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('no prompt is open in that session'),
+          ),
+        ),
+      );
+    }
+    expect(terminals.screenOf!.sent, isEmpty);
+    expect(terminals.recorded, isEmpty);
+  });
+
+  test('a menu drawn before the status caught up is chosen from', () async {
+    final terminals = _Terminals(
+      claude,
+      FixtureMenuScreen.fixture('claude-code-trust-prompt', marker: '❯'),
+    )..status = _idle;
+    final answers = answersOver(terminals);
+    final menu = answers.drawnMenu('s1')!;
+    expect(answers.menuOnScreen('s1'), isNull);
+
+    final answer = await answers.answer(
+      MenuAnswerRequest(sessionId: 's1', menuId: menu.id, option: 1),
+    );
+
+    expect(answer.answered, 'Yes, I trust this folder');
   });
 
   test('an unknown session is refused as not found', () async {

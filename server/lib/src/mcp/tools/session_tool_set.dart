@@ -254,7 +254,8 @@ class SessionToolSet extends ServerToolSet {
           approve: approve,
           optionId: optionId,
           // The caller read the screen; the menu reader and the question
-          // guard still stand between it and a blind Enter.
+          // guard still stand between it and a blind Enter, and with no
+          // menu drawn and no prompt reported nothing is pressed.
           requireOpenPrompt: false,
           // Named rather than left to default to "the user": the decision
           // record this lands in is read by somebody who was not there.
@@ -295,7 +296,7 @@ class SessionToolSet extends ServerToolSet {
         'decision, or in its pane.',
       );
     }
-    final menu = prompts.answers.menuOnScreen(sessionId);
+    final menu = prompts.answers.drawnMenu(sessionId);
     if (menu == null) {
       throw StateError(
         'No menu Karmashala can read is open in that session, so nothing was '
@@ -722,10 +723,10 @@ class SessionToolSet extends ServerToolSet {
           ? 'the pane as it stood when its process '
                 '${ended.lifecycle.describe()}'
           : 'the pane as it stands now',
-      // What session_answer's `option` indexes.
-      if (held &&
-          (prompts.status.statusOf(sessionId)?.report.hasOpenPrompt ?? false))
-        if (prompts.answers.menuOnScreen(sessionId) case final menu?)
+      // What session_answer's `option` indexes, read off the screen: the
+      // status may not have caught up with a menu drawn there.
+      if (held)
+        if (prompts.answers.drawnMenu(sessionId) case final menu?)
           'menu': <String, Object?>{
             'prompt': menu.prompt,
             'options': menu.options,

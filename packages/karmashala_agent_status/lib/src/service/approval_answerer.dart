@@ -22,6 +22,7 @@ class SessionApprovalAnswerer {
     required this.rulesFor,
     required this.agentNameFor,
     required this.hasOpenQuestion,
+    required this.hasOpenPrompt,
     required this.pressAnswerKey,
     required this.recordMenuAnswer,
   });
@@ -35,6 +36,9 @@ class SessionApprovalAnswerer {
 
   /// A question's screen has rows a menu reader would misread as options.
   final bool Function(String sessionId) hasOpenQuestion;
+
+  /// Whether the status reports an approval prompt open in [sessionId].
+  final bool Function(String sessionId) hasOpenPrompt;
 
   /// Presses one declared key and records what the agent's table says it
   /// authorised; false without a terminal to press into.
@@ -125,6 +129,13 @@ class SessionApprovalAnswerer {
       return SessionApprovalAnswer(answered: chosen, effect: effect);
     }
 
+    // No menu drawn and no prompt reported: a bare Enter would submit a
+    // draft, an Esc interrupt a turn.
+    if (menu == null && !hasOpenPrompt(sessionId)) {
+      throw const SessionPromptRefusal(
+        'no prompt is open in that session, so nothing was pressed',
+      );
+    }
     if (key == null) {
       throw SessionPromptRefusal(
         'this agent names no way to $decision from outside its terminal, so '
