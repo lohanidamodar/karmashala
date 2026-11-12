@@ -122,10 +122,31 @@ class SessionToolSet extends ServerToolSet {
           final decision = arguments['decision'];
           final optionId = arguments['optionId'];
           final option = arguments['option'];
+          final ticks = arguments['ticks'];
+          final dismiss = arguments['dismiss'];
           if (optionId != null && (optionId is! String || optionId.isEmpty)) {
             throw ArgumentError('optionId must be an option id.');
           }
-          if (option != null) {
+          if (ticks != null || dismiss != null) {
+            if (ticks != null &&
+                (ticks is! List || ticks.any((t) => t is! bool))) {
+              throw ArgumentError(
+                'ticks must be a list of true or false, one per box.',
+              );
+            }
+            if (dismiss != null && dismiss != true) {
+              throw ArgumentError('dismiss, when given, must be true.');
+            }
+            if ((ticks != null && dismiss != null) ||
+                decision != null ||
+                optionId != null ||
+                option != null) {
+              throw ArgumentError(
+                'Give ticks or dismiss alone: each answers a checklist by '
+                'itself.',
+              );
+            }
+          } else if (option != null) {
             if (option is! int || option < 0) {
               throw ArgumentError(
                 'option must be the index of a menu option, from 0.',
@@ -157,6 +178,13 @@ class SessionToolSet extends ServerToolSet {
           }
           if (option is int) {
             return _chooseRow(sessionId, option, callerSessionId);
+          }
+          if (ticks != null || dismiss != null) {
+            return _answerChecklist(
+              sessionId,
+              ticks: (ticks as List?)?.cast<bool>(),
+              callerSessionId: callerSessionId,
+            );
           }
           return _answer(
             sessionId,
@@ -246,6 +274,18 @@ class SessionToolSet extends ServerToolSet {
                   .firstOrNull
                   ?.allows ??
               false;
+    // On a checklist approve enables every box and deny rejects them all:
+    // both say exactly what they choose.
+    if (optionId == null) {
+      if (prompts.answers.drawnMenu(sessionId) case final menu?
+          when menu.isChecklist) {
+        return _answerChecklist(
+          sessionId,
+          ticks: approve ? [for (final _ in menu.boxes) true] : null,
+          callerSessionId: callerSessionId,
+        );
+      }
+    }
     final SessionApprovalAnswer answer;
     try {
       answer = await prompts.answer(
@@ -264,6 +304,65 @@ class SessionToolSet extends ServerToolSet {
               : 'an agent in session $callerSessionId',
           decidedBySessionId: callerSessionId,
         ),
+      );
+    } on SessionPromptRefusal catch (refusal) {
+      final message = refusal.message;
+      throw StateError(
+        '${message[0].toUpperCase()}${message.substring(1)}'
+        '${message.endsWith('.') ? '' : '.'} Answer it in the pane.',
+      );
+    }
+    return <String, Object?>{
+      'sessionId': sessionId,
+      'answered': answer.answered,
+      'effect': answer.effect,
+    };
+  }
+
+  /// Submits the checklist open in [sessionId] with [ticks] ticked, box by
+  /// box, or rejects it all with the agent's cancel when [ticks] is null.
+  Future<Object?> _answerChecklist(
+    String sessionId, {
+    required List<bool>? ticks,
+    required String? callerSessionId,
+  }) async {
+    _session(sessionId);
+    final menu = prompts.answers.drawnMenu(sessionId);
+    final submit = menu?.submit;
+    if (menu == null || !menu.isChecklist || submit == null) {
+      throw StateError(
+        'No checklist Karmashala can read is open in that session, so '
+        'nothing was pressed. Read it with session_transcript.',
+      );
+    }
+    final boxes = menu.boxes;
+    if (ticks != null && ticks.length != boxes.length) {
+      throw ArgumentError(
+        'ticks must give one true or false per box, in order: '
+        '${[for (final b in boxes) '"${menu.options[b]}"'].join(', ')}.',
+      );
+    }
+    final decidedBy = callerSessionId == null
+        ? 'an agent through the MCP bridge'
+        : 'an agent in session $callerSessionId';
+    final SessionApprovalAnswer answer;
+    try {
+      answer = await prompts.answer(
+        ticks == null
+            ? MenuAnswerRequest.dismiss(
+                sessionId: sessionId,
+                menuId: menu.id,
+                decidedBy: decidedBy,
+                decidedBySessionId: callerSessionId,
+              )
+            : MenuAnswerRequest.checklist(
+                sessionId: sessionId,
+                menuId: menu.id,
+                submit: submit,
+                ticks: ticks,
+                decidedBy: decidedBy,
+                decidedBySessionId: callerSessionId,
+              ),
       );
     } on SessionPromptRefusal catch (refusal) {
       final message = refusal.message;
@@ -306,7 +405,7 @@ class SessionToolSet extends ServerToolSet {
     if (menu.isChecklist || option >= menu.options.length) {
       throw ArgumentError(
         menu.isChecklist
-            ? 'That menu is a checklist; answer it in its pane.'
+            ? 'That menu is a checklist; answer it with ticks or dismiss.'
             : 'option must be below ${menu.options.length}: '
                   '${[for (var i = 0; i < menu.options.length; i++) '$i "${menu.options[i]}"'].join(', ')}.',
       );
@@ -742,6 +841,12 @@ class SessionToolSet extends ServerToolSet {
             'prompt': menu.prompt,
             'options': menu.options,
             'highlighted': menu.highlighted,
+            // What session_answer's `ticks` follows, box by box.
+            if (menu.isChecklist) ...{
+              'checked': menu.checked,
+              'boxes': menu.boxes,
+              'submit': menu.submit,
+            },
           },
     };
   }

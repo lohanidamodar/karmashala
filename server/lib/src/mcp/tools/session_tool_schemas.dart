@@ -92,7 +92,11 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'chooses one exactly. For a session you started (or one of its '
         'descendants), option picks any row of the menu on its screen by '
         'index — session_transcript lists them under menu.options — moving '
-        'the highlight there and pressing Enter.',
+        'the highlight there and pressing Enter. A checklist (which of a '
+        "project's MCP servers to enable) is answered with ticks, one per "
+        'box in menu.boxes order, or dismiss to reject them all; on one, '
+        'approve ticks every box and submits, and deny rejects them all. '
+        'Nothing is pressed when no menu is drawn and no prompt is open.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -103,7 +107,9 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'decision': {
           'type': 'string',
           'enum': ['approve', 'deny'],
-          'description': 'What to answer. Give this, optionId or option.',
+          'description':
+              'What to answer. Give this, optionId, option, ticks or '
+              'dismiss.',
         },
         'optionId': {
           'type': 'string',
@@ -118,6 +124,20 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
           'description':
               'A row of the menu on screen, from 0 (session_transcript '
               'menu.options). Only in a session you started.',
+        },
+        'ticks': {
+          'type': 'array',
+          'items': {'type': 'boolean'},
+          'description':
+              "A checklist's answer: true to enable a box, false to leave it, "
+              'one per box in session_transcript menu.boxes order. The boxes '
+              'are set exactly so, then the checklist is submitted.',
+        },
+        'dismiss': {
+          'type': 'boolean',
+          'description':
+              "Rejects a checklist with the agent's cancel, enabling none of "
+              'its boxes.',
         },
       },
     },
@@ -319,8 +339,9 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
         'menu': {
           'type': 'object',
           'description':
-              'The menu an open prompt draws, when one can be read: '
-              "session_answer's option indexes its options.",
+              'The menu drawn on the screen, when one can be read: '
+              "session_answer's option indexes its options. A checklist "
+              'adds checked, boxes and submit.',
           'properties': {
             'prompt': {
               'type': 'array',
@@ -331,6 +352,26 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
               'items': {'type': 'string'},
             },
             'highlighted': {'type': 'integer'},
+            'checked': {
+              'type': 'array',
+              'items': {
+                'type': ['boolean', 'null'],
+              },
+              'description':
+                  'Per option: whether its box is ticked, null for the row '
+                  'that submits.',
+            },
+            'boxes': {
+              'type': 'array',
+              'items': {'type': 'integer'},
+              'description':
+                  "The options with a box, in the order session_answer's "
+                  'ticks follows.',
+            },
+            'submit': {
+              'type': 'integer',
+              'description': 'The option that submits the checklist.',
+            },
           },
         },
       },
