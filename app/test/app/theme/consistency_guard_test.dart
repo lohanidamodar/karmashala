@@ -155,6 +155,10 @@ void main() {
         scaffold,
       ),
       'RunningTabView': ('lib/src/app/shell/running_tab_view.dart', scaffold),
+      'ProjectTabView': (
+        'lib/src/features/projects/presentation/project_tab_view.dart',
+        scaffold,
+      ),
       'WorkflowsTabView': (
         'lib/src/features/workflows/presentation/workflows_tab_view.dart',
         scaffold,

@@ -33,6 +33,7 @@ import '../../sessions/presentation/archive_session_action.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_row.dart';
+import '../../settings/presentation/settings_section.dart' show SettingsCard;
 import '../../workspaces/application/workspaces_controller.dart';
 import '../application/project_page.dart';
 import '../application/projects_controller.dart';
@@ -530,10 +531,9 @@ class _CheckoutsSection extends ConsumerWidget {
     return _Column(
       children: [
         for (final checkout in tree)
-          Card(
-            margin: const EdgeInsets.only(bottom: Insets.sm),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+          Padding(
+            padding: const EdgeInsets.only(bottom: Insets.sm),
+            child: SettingsCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
