@@ -162,7 +162,7 @@ class OverviewSearchButton extends ConsumerWidget {
         ref.watch(overviewSearchProvider.select((s) => s.active));
     return IconButton(
       key: const ValueKey('overview-header-search'),
-      tooltip: 'Search sessions',
+      tooltip: 'Find on dashboard',
       isSelected: open || narrowing,
       onPressed: () {
         final sheets = ref.read(overviewSearchSheetProvider.notifier);

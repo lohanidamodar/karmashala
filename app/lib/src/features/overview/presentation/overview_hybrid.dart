@@ -339,8 +339,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
     final matches = searching
         ? {for (final card in watchOverviewSearchMatches(ref)) card.id}
         : null;
-    // Projects the search found by name that have no session to draw.
-    final found = ref.watch(overviewSearchEmptyProjectsProvider);
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -454,13 +452,10 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (forest.lanes.isEmpty && found.isNotEmpty)
-              const SizedBox.shrink()
-            else if (forest.lanes.isEmpty &&
-                (whole.lanes.isNotEmpty || searching))
+            if (forest.lanes.isEmpty && (whole.lanes.isNotEmpty || searching))
               Text(
                 searching
-                    ? 'No session or project matches.'
+                    ? 'No session on the dashboard matches.'
                     : 'Nothing here is new or pinned.',
                 key: const ValueKey('overview-none-match'),
                 style: muted,
@@ -510,25 +505,6 @@ class _OverviewHybridState extends ConsumerState<OverviewHybrid> {
                     gap: gap,
                   ),
               ],
-            if (found.isNotEmpty)
-              ..._grid(
-                [
-                  for (final project in found)
-                    OverviewProjectTile(
-                      tile: (
-                        key: project.id,
-                        label: project.label,
-                        trees: const [],
-                      ),
-                      lines: const {},
-                      drawn: const {},
-                      framed: !phone,
-                      onFold: (_) {},
-                    ),
-                ],
-                across,
-                gap: gap,
-              ),
           ],
         );
         _treeKeys.removeWhere((id, _) => !drawn.contains(id));

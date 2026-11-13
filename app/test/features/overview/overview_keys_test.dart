@@ -73,7 +73,7 @@ void main() {
     expect(keysOf('Stop the selected session\'s turn'), ['S']);
     expect(keysOf('Open the selected session\'s menu'), ['.']);
     expect(keysOf('Next new session'), ['U']);
-    expect(keysOf('Find a session or project'), ['/']);
+    expect(keysOf('Find on dashboard'), ['/']);
     final search = overviewKeyRows().where((r) => r.group == 'In the search');
     expect(
       [for (final r in search) r.does],

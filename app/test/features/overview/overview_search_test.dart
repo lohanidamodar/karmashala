@@ -200,8 +200,10 @@ void main() {
     await unmountMission(tester);
   });
 
-  testWidgets('it reaches past the filters, to what ended before today, and '
-      'to a project with no session', (tester) async {
+  testWidgets('it finds only what the dashboard shows: not past the filters, '
+      'not what ended before today, not a project with no session', (
+    tester,
+  ) async {
     final c = await pumpMission(
       tester,
       fixture: MissionFixture(
@@ -219,29 +221,27 @@ void main() {
     expect(familyCard('old'), findsNothing);
 
     await slash(tester);
+    // Filtered out: quick open finds it, not the dashboard.
     await tester.enterText(field, 'busy parent');
     await settleMission(tester);
-    expect(familyCard('c-root'), findsOneWidget);
-    expect(selected(c), 'c-root');
+    expect(familyCard('c-root'), findsNothing);
+    expect(find.text('No match'), findsOneWidget);
+    expect(byKey('overview-none-match'), findsOneWidget);
 
     await tester.enterText(field, 'yak');
     await settleMission(tester);
-    expect(familyCard('old'), findsOneWidget);
-    expect(find.text('1 of 1'), findsOneWidget);
+    expect(familyCard('old'), findsNothing);
+    expect(find.text('No match'), findsOneWidget);
 
-    // A project with no session is a tile with its header alone.
     await tester.enterText(field, 'docs');
     await settleMission(tester);
-    expect(byKey('overview-tile:p-docs'), findsOneWidget);
-    expect(byKey('overview-tile-empty:p-docs'), findsOneWidget);
-    expect(find.text('1 project'), findsOneWidget);
-    expect(byKey('overview-none-match'), findsNothing);
+    expect(byKey('overview-tile:p-docs'), findsNothing);
+    expect(find.text('No match'), findsOneWidget);
 
-    // Cleared, the filter holds again.
+    // Cleared, the board is as it was.
     await key(tester, LogicalKeyboardKey.escape);
     expect(familyCard('c-root'), findsNothing);
     expect(familyCard('o-root'), findsOneWidget);
-    expect(byKey('overview-tile:p-docs'), findsNothing);
     expect(tester.takeException(), isNull);
     await unmountMission(tester);
   });

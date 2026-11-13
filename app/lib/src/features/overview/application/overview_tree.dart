@@ -46,7 +46,6 @@ OverviewForest overviewForestOf(
   OverviewBoard board, {
   Map<String, List<String>> order = const {},
   Set<String> pinned = const {},
-  bool older = false,
 }) {
   final byId = <String, OverviewCard>{};
   final laneOf = <String, String>{};
@@ -57,9 +56,8 @@ OverviewForest overviewForestOf(
       for (final card in lane.cards(BoardColumn.working)) (card, true),
       for (final card in lane.cards(BoardColumn.ready)) (card, true),
       for (final card in lane.doneToday) (card, true),
-      // With [older], what ended before today is on a tree too: a search
-      // reaches every session.
-      for (final card in lane.doneOlder) (card, older),
+      // Known, so a shown sub-session's older parent can head its family.
+      for (final card in lane.doneOlder) (card, false),
     ]) {
       if (byId.containsKey(card.id)) continue;
       byId[card.id] = card;

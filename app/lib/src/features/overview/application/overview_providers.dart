@@ -140,10 +140,8 @@ final overviewCollapsedLanesProvider = Provider.autoDispose<Set<String>>((ref) {
 /// out as this device chose. Recomputed only when those inputs move.
 final overviewBoardProvider = Provider.autoDispose<OverviewBoard>((ref) {
   // The filter alone: a pin or a fold never rebuilds the board. A search
-  // looks past it: any session on any project is found by typing.
-  final filter = ref.watch(overviewSearchProvider.select((s) => s.active))
-      ? const OverviewFilter()
-      : ref.watch(overviewPrefsProvider.select((p) => p.filter));
+  // keeps it: it finds what the board shows, and quick open the rest.
+  final filter = ref.watch(overviewPrefsProvider.select((p) => p.filter));
   return buildOverviewBoard(
     ref.watch(agentStateGroupsProvider),
     facts: ref.watch(overviewFactsProvider),

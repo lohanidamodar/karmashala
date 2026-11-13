@@ -247,7 +247,7 @@ final Map<ShortcutActivator, Intent> overviewTriageShortcuts = {
     does: 'Open the selected session\'s menu',
   ),
   OverviewNextNewIntent() => (group: 'Move', does: 'Next new session'),
-  OverviewSearchIntent() => (group: 'Move', does: 'Find a session or project'),
+  OverviewSearchIntent() => (group: 'Move', does: 'Find on dashboard'),
   OverviewDismissIntent() => (
     group: 'Move',
     does: 'Close the peek, clear the search, or clear the selection',

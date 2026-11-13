@@ -138,7 +138,7 @@ class _OverviewSearchSheetState extends ConsumerState<OverviewSearchSheet> {
                     controller: _controller,
                     autofocus: true,
                     decoration: compactSearchDecoration(
-                      hintText: 'Search sessions',
+                      hintText: 'Find on dashboard',
                     ),
                     onChanged: ref.read(overviewSearchProvider.notifier).type,
                     onSubmitted: (_) {
@@ -201,9 +201,10 @@ class _OverviewSearchSheetState extends ConsumerState<OverviewSearchSheet> {
                     padding: const EdgeInsets.all(Insets.lg),
                     child: Text(
                       search.active
-                          ? 'No session matches "${search.query.trim()}".'
+                          ? 'No session on the dashboard matches '
+                                '"${search.query.trim()}".'
                           : 'Nothing needs you and nothing is new. Type to '
-                                'search every session.',
+                                'find a session on the dashboard.',
                       key: const ValueKey('overview-search-sheet-empty'),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(

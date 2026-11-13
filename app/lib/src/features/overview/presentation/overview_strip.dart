@@ -11,7 +11,6 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/adaptive_modal.dart';
 import '../../explorer/application/agent_states.dart';
-import '../../projects/application/projects_controller.dart';
 import '../../sessions/presentation/prompt_cards/question_prompt_card.dart';
 import '../application/overview_board.dart';
 import '../application/overview_drawer.dart';
@@ -25,7 +24,6 @@ import 'overview_card_links.dart';
 import 'overview_card_parts.dart';
 import 'overview_counters.dart';
 import 'overview_done_card.dart';
-import 'overview_project_tile.dart' show openOverviewProject;
 import 'overview_queue_card.dart';
 import 'overview_session_parts.dart';
 
@@ -758,22 +756,7 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
   /// picked off the empty field's list is selected and no more.
   void _go([String? id]) {
     final to = id ?? _pick();
-    if (to == null) {
-      // No session matches, but a project does: Enter opens the first.
-      final key = ref.read(overviewSearchEmptyProjectsProvider).firstOrNull;
-      final project = key == null
-          ? null
-          : ref
-                .read(projectsControllerProvider)
-                .where((p) => p.id == key.id)
-                .firstOrNull;
-      if (project == null) return;
-      _search.clear();
-      _controller.clear();
-      _leave();
-      openOverviewProject(context, ref, project);
-      return;
-    }
+    if (to == null) return;
     final searched = ref.read(overviewSearchProvider).active;
     _search.clear();
     _controller.clear();
@@ -856,12 +839,9 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
       sections = const [];
       _ids = [for (final card in matches) card.id];
       final at = _ids.indexOf(search.current ?? '');
-      final projects = ref.watch(overviewSearchEmptyProjectsProvider).length;
       count = _ids.isNotEmpty
           ? '${at < 0 ? 1 : at + 1} of ${_ids.length}'
-          : projects == 0
-          ? 'No match'
-          : '$projects ${projects == 1 ? 'project' : 'projects'}';
+          : 'No match';
     } else if (_focus.hasFocus) {
       sections = watchOverviewSearchHints(ref, forest, widget.queue);
       _ids = [
@@ -903,10 +883,8 @@ class _OverviewSearchBoxState extends ConsumerState<OverviewSearchBox> {
             controller: _controller,
             focusNode: _focus,
             clearOnEscape: false,
-            decoration:
-                compactSearchDecoration(
-                  hintText: 'Find a session or project',
-                ).copyWith(
+            decoration: compactSearchDecoration(hintText: 'Find on dashboard')
+                .copyWith(
                   // Which match Enter opens, of how many.
                   suffixIcon: count == null
                       ? null

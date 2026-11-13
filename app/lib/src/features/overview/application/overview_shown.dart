@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
-import 'package:karmashala_core/util.dart' show matchesSearchAny;
 
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_state_providers.dart';
@@ -80,26 +79,6 @@ final overviewSearchMatchesProvider = Provider.autoDispose<List<OverviewCard>>((
     ].join(' ');
   });
 });
-
-/// The projects whose name matches what is typed in the search and that
-/// have no session on the board: each is drawn as a tile with its header
-/// alone, so a project is found, opened and started in from here too.
-final overviewSearchEmptyProjectsProvider =
-    Provider.autoDispose<List<OverviewLaneKey>>((ref) {
-      final query = ref.watch(overviewSearchProvider.select((s) => s.query));
-      if (query.trim().isEmpty) return const [];
-      final facts = ref.watch(overviewFactsProvider);
-      final held = {
-        for (final (_, trees) in ref.watch(overviewForestProvider).lanes)
-          for (final tree in trees) overviewTileKeyOf(tree, facts),
-      };
-      return [
-        for (final project in facts.projects)
-          if (!held.contains(project.id) &&
-              matchesSearchAny(query, [project.label]))
-            project,
-      ];
-    });
 
 /// **What the board draws**: every family, or — while a search is typed or
 /// New or Pinned is on — only the families with a session that fits, in the

@@ -64,7 +64,7 @@ class _SearchButton extends ConsumerWidget {
     final open = board && ref.watch(overviewSearchSheetProvider);
     return IconButton(
       key: const ValueKey('phone-top-search'),
-      tooltip: board ? 'Search sessions' : 'Search',
+      tooltip: board ? 'Find on dashboard' : 'Search',
       isSelected: open,
       icon: const Icon(AppIcons.magnifyingGlass),
       onPressed: () {
