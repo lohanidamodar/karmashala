@@ -54,6 +54,7 @@ void main() {
 
   test('the menu: open and new, the project, More…, then danger', () {
     expect(labelsOf(main()), [
+      'Open project page',
       'New session…',
       'Open terminal',
       'Open in editor',
@@ -67,6 +68,17 @@ void main() {
       '---',
       'Remove from workspace',
     ]);
+  });
+
+  test('the project page leaves out the entry that would lead to itself', () {
+    final onPage = projectMenuItems(
+      project: project(),
+      pinned: false,
+      checkedSuffix: '',
+      page: false,
+    );
+    expect(valuesOf(onPage), isNot(contains('open-page')));
+    expect(valuesOf(main()), contains('open-page'));
   });
 
   test('More… holds the rare verbs', () {
@@ -87,25 +99,28 @@ void main() {
 
   test('every verb the old menu had is still offered by one of the two', () {
     final offered = {...valuesOf(main()), ...valuesOf(more())};
-    expect(offered, containsAll(<String>[
-      'new-session',
-      'terminal',
-      'new-with:a',
-      'new-with:b',
-      'copy-cmd',
-      'open-editor',
-      'open-editor-subfolder',
-      'reveal',
-      'copy-path',
-      'context:w1',
-      'context:new',
-      'edit',
-      'pin',
-      'refresh',
-      'rescan',
-      'delete',
-      'select',
-      kMoreMenuValue,
-    ]));
+    expect(
+      offered,
+      containsAll(<String>[
+        'new-session',
+        'terminal',
+        'new-with:a',
+        'new-with:b',
+        'copy-cmd',
+        'open-editor',
+        'open-editor-subfolder',
+        'reveal',
+        'copy-path',
+        'context:w1',
+        'context:new',
+        'edit',
+        'pin',
+        'refresh',
+        'rescan',
+        'delete',
+        'select',
+        kMoreMenuValue,
+      ]),
+    );
   });
 }

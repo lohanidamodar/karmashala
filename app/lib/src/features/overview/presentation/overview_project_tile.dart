@@ -8,6 +8,7 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:karmashala_ui/tokens.dart';
 
+import '../../../app/shell/workbench_tabs.dart' show openProjectTab;
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/agent_states.dart';
 import '../../explorer/presentation/explorer_project_row.dart'
@@ -33,16 +34,13 @@ Project? overviewProjectOf(WidgetRef ref, String key) => ref
     .where((project) => project.id == key)
     .firstOrNull;
 
-/// Shows [project] in the Explorer: what "Open project" does until a
-/// project has a page of its own.
-void openOverviewProject(BuildContext context, WidgetRef ref, Project project) {
-  ProjectRowActions(ref, context, project).show();
-  ScaffoldMessenger.maybeOf(context)
-    ?..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(content: Text('${project.name} is selected in the Explorer.')),
-    );
-}
+/// Opens [project]'s page: what "Open project" does — its name on a tile, O
+/// on the board, Enter on a project the search found.
+void openOverviewProject(
+  BuildContext context,
+  WidgetRef ref,
+  Project project,
+) => openProjectTab(ref, project.id);
 
 /// Starts a session in [project] as its row's + does: at once with the
 /// defaults, or through the dialog when a piece is missing.

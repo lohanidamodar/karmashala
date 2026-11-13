@@ -22,6 +22,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../workspaces/data/workspace_data.dart';
 import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_runtime/scrollback.dart';

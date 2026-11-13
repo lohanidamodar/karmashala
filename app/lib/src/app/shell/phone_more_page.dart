@@ -10,6 +10,9 @@ import '../../features/agents/presentation/usage_tab/usage_tab_view.dart';
 import '../../features/workflows/presentation/workflows_tab_view.dart';
 import '../../features/notes/presentation/notes_view.dart';
 import '../../features/explorer/presentation/agents_lens.dart';
+import '../../features/projects/application/project_page.dart'
+    show projectByIdProvider;
+import '../../features/projects/presentation/project_tab_view.dart';
 import '../../features/remote/presentation/machines_section.dart';
 import '../../features/settings/presentation/about_page.dart';
 import '../../features/settings/presentation/settings_layout.dart';
@@ -96,6 +99,12 @@ class PhoneMoreList extends StatelessWidget {
     final (label, _, page) = _entry(entry);
     return _route(label, page);
   }
+
+  /// Project [projectId]'s page, under one row of back and its name.
+  static Route<void> projectRoute(WidgetRef ref, String projectId) => _route(
+    ref.read(projectByIdProvider(projectId))?.name ?? 'Project',
+    (_) => PaneTitleOverride(child: ProjectTabView(projectId: projectId)),
+  );
 
   @override
   Widget build(BuildContext context) => Scaffold(

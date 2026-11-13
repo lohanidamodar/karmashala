@@ -130,7 +130,8 @@ class ProjectRowActions {
     unawaited(NewSessionDialog.show(context));
   }
 
-  void openTerminal() {
+  /// Opens a shell on the project's machine, in its folder or in [at].
+  void openTerminal({String? at}) {
     final env = ref
         .read(environmentsDataProvider)
         .getById(project.environmentId);
@@ -150,7 +151,7 @@ class ProjectRowActions {
     } else {
       profile = TerminalProfile.powerShell;
     }
-    controller.openTab(profile, workingDirectory: project.root.path);
+    controller.openTab(profile, workingDirectory: at ?? project.root.path);
     controller.showTerminalHere();
   }
 
@@ -294,6 +295,8 @@ class ProjectRowActions {
       return;
     }
     switch (action) {
+      case 'open-page':
+        openProjectTab(ref, project.id);
       case 'new-session':
         newSessionDialog();
       case 'terminal':
@@ -338,6 +341,7 @@ Future<void> showProjectMenu(
   Offset? at,
   List<PopupMenuEntry<String>> extras = const [],
   void Function(String value)? onExtra,
+  bool page = true,
 }) async {
   final actions = ProjectRowActions(ref, anchor, project);
   final canOpenExternally = ref.read(capabilitiesProvider).readsServerDisk;
@@ -350,6 +354,7 @@ Future<void> showProjectMenu(
           pinned: ref.read(settingsControllerProvider).isPinned(project.id),
           checkedSuffix: actions.checkedSuffix(),
           canOpenExternally: canOpenExternally,
+          page: page,
         ),
       ], at: at);
   if (action == kMoreMenuValue && anchor.mounted) {

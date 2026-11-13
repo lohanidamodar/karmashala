@@ -185,4 +185,20 @@ void main() {
       expect(isChatPane(notePaneId('n1')), isFalse);
     });
   });
+
+  group('a project pane id', () {
+    test('round-trips the project id and is a document pane', () {
+      const id = 'p-7f3a';
+      expect(projectPaneProjectId(projectPaneId(id)), id);
+      expect(isProjectPane(projectPaneId(id)), isTrue);
+      expect(isDocumentPane(projectPaneId(id)), isTrue);
+      expect(isNotePane(projectPaneId(id)), isFalse);
+    });
+
+    test('names no project when the id is not one', () {
+      expect(projectPaneProjectId(kOverviewPaneId), isNull);
+      expect(projectPaneProjectId(kProjectPanePrefix), isNull);
+      expect(isProjectPane(notePaneId('n1')), isFalse);
+    });
+  });
 }

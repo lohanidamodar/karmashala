@@ -13,6 +13,8 @@ import '../../features/workflows/application/workflow_runs.dart'
 import '../../features/workflows/application/workflows_state.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/notes/application/notes_providers.dart';
+import '../../features/projects/application/project_page.dart'
+    show ProjectSection, projectPageSectionsProvider;
 import '../../features/running/application/running_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
@@ -204,6 +206,27 @@ void openRunningTab(WidgetRef ref, {String? sessionId}) {
   final tabId = ref
       .read(terminalSessionsControllerProvider.notifier)
       .openRunningTab();
+  activateTerminalTab(ref, tabId);
+}
+
+/// Opens project [projectId]'s page in a tab of its own, or brings its open
+/// tab forward; [section] picks what it shows. On the phone it is a page.
+void openProjectTab(
+  WidgetRef ref,
+  String projectId, {
+  ProjectSection? section,
+}) {
+  if (section != null) {
+    ref.read(projectPageSectionsProvider.notifier).show(projectId, section);
+  }
+  final phone = ref.read(phoneShellRouterProvider).current;
+  if (phone != null) {
+    phone.showProject(projectId);
+    return;
+  }
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openDocumentTab(projectPaneId(projectId));
   activateTerminalTab(ref, tabId);
 }
 

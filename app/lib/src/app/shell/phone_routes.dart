@@ -36,6 +36,9 @@ abstract interface class PhoneShellRoutes {
 
   /// Opens [entry] as the only page over More's list.
   void showMore(PhoneMoreEntry entry);
+
+  /// Opens project [projectId]'s page over the Projects tab.
+  void showProject(String projectId);
 }
 
 /// Holds the phone shell's routes while it is the shell on screen. Read at the

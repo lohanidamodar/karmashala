@@ -263,6 +263,9 @@ class _Routes implements PhoneShellRoutes {
   void showMore(PhoneMoreEntry entry) => shown.add('more:${entry.name}');
 
   @override
+  void showProject(String projectId) => shown.add('project:$projectId');
+
+  @override
   void showProjects() => shown.add('projects');
 
   @override

@@ -34,7 +34,15 @@ List<PopupMenuEntry<String>> projectMenuItems({
   required String checkedSuffix,
   bool canOpenExternally = true,
   PopupMenuEntry<String>? select,
+  bool page = true,
 }) => [
+  // Left out on the page itself, which is where it would lead.
+  if (page)
+    DesktopMenuItem(
+      value: 'open-page',
+      label: 'Open project page',
+      icon: AppIcons.folder,
+    ),
   DesktopMenuItem(
     value: 'new-session',
     label: 'New session…',

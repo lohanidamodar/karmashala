@@ -158,6 +158,14 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (diffTargetOf(paneId) case final target?) {
       return DiffTabView(key: ValueKey(paneId), target: target);
     }
+    // A project's page. The same gate as Settings: off screen it would read
+    // the project's checkouts and sessions for nobody. Keyed by the pane:
+    // two projects' pages can share a region.
+    if (projectPaneProjectId(paneId) case final projectId?) {
+      return showing
+          ? ProjectTabView(key: ValueKey(paneId), projectId: projectId)
+          : const SizedBox.shrink();
+    }
     // Keyed by the pane, as the editor is: two browsers can share a region,
     // and without a key the one leaving hands the other its two machines.
     if (isFilesPane(paneId)) {

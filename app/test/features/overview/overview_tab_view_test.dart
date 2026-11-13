@@ -13,8 +13,6 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
-import 'package:karmashala/src/features/explorer/application/explorer_tree_state.dart';
-import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/overview/application/overview_board.dart';
 import 'package:karmashala/src/features/overview/application/overview_prefs.dart';
@@ -34,6 +32,7 @@ import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_terminal_core/geometry.dart' show projectPaneId;
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -238,16 +237,20 @@ void main() {
       await settle(tester);
     }
 
-    testBoard('the name shows the project in the Explorer; + and ⋯ are its '
-        'own', (tester) async {
+    bool pageOpen(ProviderContainer c, String projectId) => c
+        .read(terminalTabsProvider)
+        .any((tab) => tab.layout.panes.contains(projectPaneId(projectId)));
+
+    testBoard('the name opens the project\'s page; + and ⋯ are its own', (
+      tester,
+    ) async {
       final c = await pump(tester, const Size(1440, 900));
       expect(byKey('overview-tile:p1'), findsOneWidget);
       expect(byKey('overview-tile:p2'), findsOneWidget);
 
       await tester.tap(byKey('overview-tile-open:p2'));
       await settle(tester);
-      expect(c.read(selectedProjectIdProvider), 'p2');
-      expect(c.read(explorerExpandedProjectsProvider), contains('p2'));
+      expect(pageOpen(c, 'p2'), isTrue);
 
       // The menu is the project row's own.
       await tester.tap(byKey('overview-tile-menu:p1'));
@@ -266,11 +269,11 @@ void main() {
       // With nothing selected a key that needs a session picks the first.
       await press(tester, LogicalKeyboardKey.keyO);
       expect(c.read(overviewFocusProvider).selected, isNotNull);
-      expect(c.read(selectedProjectIdProvider), isNot('p2'));
+      expect(pageOpen(c, 'p2'), isFalse);
 
       c.read(overviewFocusProvider.notifier).select('beta-done');
       await press(tester, LogicalKeyboardKey.keyO);
-      expect(c.read(selectedProjectIdProvider), 'p2');
+      expect(pageOpen(c, 'p2'), isTrue);
 
       await press(tester, LogicalKeyboardKey.keyG);
       expect(byKey('overview-group-by:status'), findsOneWidget);

@@ -158,6 +158,14 @@ class _PhoneShellState extends ConsumerState<PhoneShell>
       ..push(PhoneMoreList.routeFor(entry));
   }
 
+  /// Over whichever tab is up, with a way back to it: a project's page is
+  /// reached from the dashboard and the Projects tab alike.
+  @override
+  void showProject(String projectId) {
+    ref.read(phoneWorkbenchProvider.notifier).close();
+    Navigator.of(context).push(PhoneMoreList.projectRoute(ref, projectId));
+  }
+
   void _pick(PhoneTab tab) {
     if (ref.read(phoneTabProvider) == tab) {
       _backToTop(tab);

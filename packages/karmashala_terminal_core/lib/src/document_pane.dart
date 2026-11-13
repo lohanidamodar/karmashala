@@ -202,6 +202,23 @@ String? devicePreviewSerial(String paneId) {
 /// Whether [paneId] is a device's live preview.
 bool isDevicePreviewPane(String paneId) => devicePreviewSerial(paneId) != null;
 
+/// The prefix a project's page carries. The project id follows it: one tab
+/// per project, so opening a project that is already open is that tab.
+const String kProjectPanePrefix = '${kDocumentPanePrefix}project:';
+
+/// The pane id for the page of project [projectId].
+String projectPaneId(String projectId) => '$kProjectPanePrefix$projectId';
+
+/// The project [paneId]'s page shows, or null when it is not a project page.
+String? projectPaneProjectId(String paneId) {
+  if (!paneId.startsWith(kProjectPanePrefix)) return null;
+  final id = paneId.substring(kProjectPanePrefix.length);
+  return id.isEmpty ? null : id;
+}
+
+/// Whether [paneId] is a project's page.
+bool isProjectPane(String paneId) => projectPaneProjectId(paneId) != null;
+
 /// The prefix a session's **chat pane** carries: a conversation with no
 /// terminal behind it, for an agent the server speaks to over a protocol and
 /// runs itself. The session id follows, so restore reopens the conversation

@@ -64,6 +64,11 @@ extension TerminalPaneTitles on TerminalSessionsController {
     if (isAutomationsPane(paneId)) return 'Workflows';
     if (isFilesPane(paneId)) return 'Files';
     if (isBrowserPane(paneId)) return 'Browser';
+    // A project's page is named for the project, read live.
+    if (projectPaneProjectId(paneId) case final projectId?) {
+      return ref.read(workspaceDataProvider).project(projectId)?.name ??
+          'Project';
+    }
     // A document id: a host path, which reads `/` and `\` alike, or a POSIX
     // path on another machine, where `\` is part of a name.
     if (editorPanePath(paneId) case final path?) {

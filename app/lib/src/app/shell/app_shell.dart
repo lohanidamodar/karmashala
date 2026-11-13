@@ -41,6 +41,7 @@ import '../../features/onboarding/application/quick_start.dart';
 import '../../features/terminal/application/client_intents.dart';
 import '../../features/terminal/application/client_presence.dart';
 import '../../features/notes/application/note_tabs.dart';
+import '../../features/projects/application/project_tabs.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/sessions/application/pending_live_switches.dart';
 import '../../features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
@@ -317,6 +318,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(botUnreadProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
+    // And for project tabs, which close with their project.
+    ref.watch(projectTabsObserverProvider);
     // And for an archived session, whose tabs here close.
     ref.watch(archivedSessionTabsCloserProvider);
     // And for a terminal the server closed, whose tabs here close.

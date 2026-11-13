@@ -936,6 +936,10 @@ class Chrome {
   /// The narrowest a project's tile is on the dashboard's grid, at 1x text.
   static const projectTileMin = 440.0;
 
+  /// The label column of a project page's facts — "Checkouts" in
+  /// `bodySmall` — at 1x text.
+  static const projectFactLabel = 88.0;
+
   /// A family card's state pill, at 1x text, a fixed slot so a change of
   /// state never moves what sits beside it.
   static const familyStateSlot = 112.0;

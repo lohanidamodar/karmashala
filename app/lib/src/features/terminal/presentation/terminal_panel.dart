@@ -14,6 +14,7 @@ import '../../editor/presentation/editor_tab_view.dart';
 import '../../editor/domain/media_kind.dart';
 import '../../editor/presentation/media/media_pane.dart';
 import '../../files/presentation/files_tab_view.dart';
+import '../../projects/presentation/project_tab_view.dart';
 import '../../browser/presentation/browser_pane.dart';
 import '../application/browser_document_pane.dart';
 import '../../git/application/diff_tab_actions.dart';

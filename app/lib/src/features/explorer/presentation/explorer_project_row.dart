@@ -20,6 +20,7 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
+import '../../../app/shell/workbench_tabs.dart' show openProjectTab;
 import '../../../core/capabilities/capabilities.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
