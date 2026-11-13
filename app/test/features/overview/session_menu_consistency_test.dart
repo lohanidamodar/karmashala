@@ -71,6 +71,7 @@ void main() {
       'changed-files',
       'copy-id',
       'more',
+      'restart',
       'delete',
     ]) {
       expect(shared, contains(always), reason: '$surface lacks $always');
@@ -233,6 +234,51 @@ void main() {
       ],
       ['pin', 'sections', 'select'],
     );
+    await unmountMission(tester);
+  });
+
+  testWidgets('Restart session: one wording, after End and before Archive, '
+      'and none on an archived session', (tester) async {
+    late List<PopupMenuEntry<String>> live;
+    late List<PopupMenuEntry<String>> archived;
+    await pumpBoard(
+      tester,
+      home: Consumer(
+        builder: (context, ref, _) {
+          final session = overviewCardOf(
+            ref.watch(overviewBoardProvider),
+            id,
+          )?.entry.native;
+          if (session != null) {
+            live = sessionMenuItems(ref, session, terminals: const []);
+            archived = sessionMenuItems(
+              ref,
+              session.copyWith(archivedAt: DateTime.utc(2026, 11, 13)),
+              terminals: const [],
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+    PopupMenuItem<String>? restartIn(List<PopupMenuEntry<String>> items) =>
+        items
+            .whereType<PopupMenuItem<String>>()
+            .where((i) => i.value == 'restart')
+            .firstOrNull;
+    final restart = restartIn(live);
+    expect(restart, isNotNull);
+    expect(restart!.key, const ValueKey('session-menu:restart'));
+    expect(kSessionMenuOrder.indexOf('restart'), greaterThan(-1));
+    expect(
+      kSessionMenuOrder.indexOf('restart'),
+      kSessionMenuOrder.indexOf('end') + 1,
+    );
+    expect(
+      kSessionMenuOrder.indexOf('archive'),
+      kSessionMenuOrder.indexOf('restart') + 1,
+    );
+    expect(restartIn(archived), isNull, reason: 'an archived one is read');
     await unmountMission(tester);
   });
 }

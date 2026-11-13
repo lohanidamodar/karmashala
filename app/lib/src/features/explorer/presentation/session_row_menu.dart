@@ -30,6 +30,7 @@ import '../../sessions/presentation/archive_session_action.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/export_session_action.dart';
+import '../../sessions/presentation/restart_session_action.dart';
 import '../../sessions/presentation/session_changed_files_dialog.dart';
 import '../../sessions/presentation/session_recap_card.dart';
 import '../../settings/application/settings_controller.dart';
@@ -115,6 +116,14 @@ List<PopupMenuEntry<String>> sessionMenuItems(
     // Only while something runs it: an ended session has nothing to end. Not
     // red — ending stops the process and keeps the conversation.
     if (sessionRunsNow(ref, id)) item('end', 'End session', AppIcons.power),
+    // An archived one is read, not run, as Open treats it.
+    if (!session.isArchived)
+      item(
+        'restart',
+        resuming ? 'Restart session — resuming…' : 'Restart session',
+        AppIcons.arrowClockwise,
+        enabled: !resuming,
+      ),
     // Offered on a live one too, which says why it cannot be archived yet.
     if (session.isArchived)
       item('unarchive', 'Unarchive', AppIcons.tray)
@@ -154,6 +163,7 @@ const kSessionMenuOrder = [
   'detach',
   'attach',
   'end',
+  'restart',
   'archive',
   'unarchive',
   'delete-worktree',
@@ -324,6 +334,8 @@ Future<void> runNativeSessionMenuAction(
       unawaited(renameNativeSession(context, ref, session));
     case 'end':
       await endSessionFromRow(context, ref, session.id, title: session.title);
+    case 'restart':
+      await restartSessionFromRow(context, ref, session);
     case 'archive':
       await archiveSessionsFromUi(context, ref, [session]);
     case 'unarchive':
