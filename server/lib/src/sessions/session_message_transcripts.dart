@@ -3,7 +3,11 @@ import 'dart:convert';
 import 'package:agent_cli/descriptors.dart' show AgentPlan, AgentPlanItem;
 import 'package:agent_cli/descriptors.dart' show AgentPlanItemState;
 import 'package:agent_cli/read.dart'
-    show CompactionBoundary, TranscriptMessage, kTranscriptRewindRole;
+    show
+        CompactionBoundary,
+        SubagentRef,
+        TranscriptMessage,
+        kTranscriptRewindRole;
 import 'package:agent_cli/stream.dart'
     show
         FileEditKind,
@@ -22,6 +26,7 @@ import 'package:karmashala_session_engine/store.dart'
 import '../acp/acp_extensions.dart';
 import '../acp/acp_prompt_images.dart' show splitAttachedImages;
 import '../acp/acp_tool_json.dart' show kEditsTruncatedKey;
+import '../acp/claude/claude_tools.dart' show ClaudeTools;
 
 /// One row of `session_messages` as a transcript row: its [ordinal] is its
 /// index, [revision] is when it last changed.
@@ -96,6 +101,33 @@ class SessionMessageTranscriptSource {
       parentToolUseId: _parentIn(row.toolJson),
       images: attached,
       model: row.role == SessionMessageRole.agent ? row.model : null,
+      subagent: _subagentOf(row.toolJson),
+    );
+  }
+
+  /// The subagent a Claude `Agent` call started, by the task id its bridge
+  /// put in `_meta.claudeCode.task`. The server reads it by that id.
+  static SubagentRef? _subagentOf(String? toolJson) {
+    final json = _object(toolJson);
+    final meta = json?['_meta'];
+    final claude = meta is Map ? meta['claudeCode'] : null;
+    if (claude is! Map) return null;
+    final task = claude['task'];
+    final name = _string(claude['toolName']);
+    if (task is! Map ||
+        (name != null && !ClaudeTools.subagentTools.contains(name))) {
+      return null;
+    }
+    final taskId = _string(task['taskId']);
+    final callId = _string(json!['toolCallId']);
+    if (taskId == null || callId == null) return null;
+    return SubagentRef(
+      toolUseId: callId,
+      filePath: '',
+      agentType: _string(task['subagentType']) ?? '',
+      description: _string(task['description']) ?? '',
+      spawnDepth: 1,
+      agentId: taskId,
     );
   }
 
@@ -152,7 +184,11 @@ class SessionMessageTranscriptSource {
     final (edits, editsCut) = boundedToolEdits(_editsOf(json['content']));
     final kind = _string(json['kind']);
     final named =
-        _toolNameIn(json['_meta']) ?? _string(json['name']) ?? _kindNames[kind];
+        _toolNameIn(json['_meta']) ??
+        _string(json['name']) ??
+        _kindNames[kind] ??
+        // A row stored before the bridge kept the name beside the task.
+        (_subagentOf(row.toolJson) == null ? null : 'Agent');
     return (
       activity: ToolActivity(
         name: named ?? _string(json['title']) ?? kind ?? 'tool',

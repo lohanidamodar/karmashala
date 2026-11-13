@@ -274,4 +274,37 @@ void main() {
 
     expect(messages.single.subagent, isNull);
   });
+
+  test('a subagent known only by its agent id travels and compares by it', () {
+    SubagentRef acp(String agentId) => SubagentRef(
+      toolUseId: 'toolu_$agentId',
+      filePath: '',
+      agentType: 'Explore',
+      description: 'survey',
+      spawnDepth: 1,
+      agentId: agentId,
+    );
+    final back = SubagentRef.fromJson(acp('abc').toJson());
+    expect(back.agentId, 'abc');
+    expect(back.filePath, '');
+    expect(back, acp('abc'));
+    expect(acp('abc') == acp('def'), isFalse);
+
+    // An older peer's form carries no id, and still reads.
+    final old = SubagentRef.fromJson(const {
+      'toolUseId': 't',
+      'filePath': '/s/subagents/agent-x.jsonl',
+    });
+    expect(old.agentId, isNull);
+    expect(
+      SubagentRef(
+        toolUseId: 't',
+        filePath: '/s/subagents/agent-x.jsonl',
+        agentType: '',
+        description: '',
+        spawnDepth: 1,
+      ).toJson().containsKey('agentId'),
+      isFalse,
+    );
+  });
 }

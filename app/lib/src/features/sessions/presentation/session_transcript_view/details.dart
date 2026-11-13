@@ -98,6 +98,7 @@ mixin _TranscriptDetails on ConsumerState<SessionTranscriptView> {
             reference: reference,
             resolveHostPath: _hostPathResolver(),
             sessionId: widget.sessionId,
+            agentId: reference.agentId,
           );
         }
         if (lead == null || ask == null) return lead ?? ask;

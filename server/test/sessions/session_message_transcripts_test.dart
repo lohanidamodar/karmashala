@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:agent_cli/descriptors.dart' show AgentPlanItemState;
+import 'package:agent_cli/read.dart' show TranscriptMessage;
 import 'package:agent_cli/stream.dart' show ToolActivity;
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala_host/src/sessions/session_message_transcripts.dart';
@@ -354,6 +355,87 @@ void main() {
       );
       expect(wireShape.tool!.plan!.note, 'short');
       expect(wireShape.tool!.plan!.isFinished, isTrue);
+    });
+
+    test("a subagent call carries its subagent, known by Claude's task id", () {
+      final call = SessionMessageTranscriptSource.project(
+        row(
+          'ag',
+          role: SessionMessageRole.tool,
+          tool: {
+            'toolCallId': 'toolu_ag',
+            'title': 'List files',
+            'kind': 'think',
+            'status': 'completed',
+            'rawInput': {'description': 'List files', 'prompt': 'list them'},
+            '_meta': {
+              'claudeCode': {
+                'toolName': 'Agent',
+                'task': {
+                  'taskId': 'a1b2c3',
+                  'description': 'List files',
+                  'subagentType': 'Explore',
+                  'background': false,
+                },
+              },
+            },
+          },
+        ),
+      );
+      expect(call.tool!.name, 'Agent');
+      final subagent = call.subagent!;
+      expect(subagent.toolUseId, 'toolu_ag');
+      expect(subagent.agentId, 'a1b2c3');
+      expect(subagent.filePath, '');
+      expect(subagent.agentType, 'Explore');
+      expect(subagent.description, 'List files');
+      expect(subagent.spawnDepth, 1);
+
+      // A row stored before the bridge kept the tool's name beside the task.
+      final older = SessionMessageTranscriptSource.project(
+        row(
+          'ag2',
+          role: SessionMessageRole.tool,
+          tool: {
+            'toolCallId': 'toolu_ag2',
+            'title': 'List files',
+            'kind': 'think',
+            'status': 'completed',
+            '_meta': {
+              'claudeCode': {
+                'task': {'taskId': 'd4e5'},
+              },
+            },
+          },
+        ),
+      );
+      expect(older.tool!.name, 'Agent');
+      expect(older.subagent!.agentId, 'd4e5');
+    });
+
+    test('a call with no task, or a task with no id, has no subagent', () {
+      TranscriptMessage project(Map<String, Object?> claudeCode) =>
+          SessionMessageTranscriptSource.project(
+            row(
+              'x',
+              role: SessionMessageRole.tool,
+              tool: {
+                'toolCallId': 'c',
+                'kind': 'think',
+                'status': 'pending',
+                '_meta': {'claudeCode': claudeCode},
+              },
+            ),
+          );
+      expect(project({'toolName': 'Agent'}).subagent, isNull);
+      expect(
+        project({
+          'toolName': 'Agent',
+          'task': {'description': 'x'},
+        }).subagent,
+        isNull,
+      );
+      expect(project({'toolName': 'Bash'}).subagent, isNull);
     });
 
     test('malformed JSON reads as no tool rather than throwing', () {

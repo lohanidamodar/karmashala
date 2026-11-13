@@ -84,6 +84,7 @@ void main() {
   Widget build({
     required List<TranscriptMessage> messages,
     Map<String, List<TranscriptMessage>> turns = const {},
+    List<TranscriptMessage> Function(SubagentTurnsKey key)? turnsOf,
   }) {
     final db = TestMachine();
     server.environmentRows.upsert(windowsEnv());
@@ -133,6 +134,8 @@ void main() {
           reads.add(path);
           return turns[path] ?? const [];
         }),
+        if (turnsOf != null)
+          subagentTurnsProvider.overrideWith((ref, key) async => turnsOf(key)),
       ],
       child: const MaterialApp(
         home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
@@ -235,6 +238,38 @@ void main() {
     await tester.tap(find.byTooltip('Show what this subagent did'));
     await tester.pumpAndSettle();
     expect(reads, [ref.filePath]);
+  });
+
+  testWidgets('an ACP subagent, known by its agent id, shows under its call '
+      'without opening a fold, and is read by that id', (tester) async {
+    roomy(tester);
+    const acp = SubagentRef(
+      toolUseId: 'toolu_01',
+      filePath: '',
+      agentType: 'Explore',
+      description: 'survey the readers',
+      spawnDepth: 1,
+      agentId: 'abc',
+    );
+    final asked = <SubagentTurnsKey>[];
+    await tester.pumpWidget(
+      build(
+        messages: transcript(subagent: acp),
+        turnsOf: (key) {
+          asked.add(key);
+          return delegateTurns;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Show what this subagent did'), findsOneWidget);
+    expect(asked, isEmpty);
+
+    await tester.tap(find.byTooltip('Show what this subagent did'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('only one reader opens a path'), findsOneWidget);
+    expect(asked.single, (sessionId: 's1', filePath: '', agentId: 'abc'));
   });
 
   testWidgets('a Task call without a subagent renders as it does today', (

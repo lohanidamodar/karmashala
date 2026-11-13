@@ -788,8 +788,16 @@ void main() {
       ).firstWhere((u) => u['toolCallId'] == 'ag' && u['_meta'] != null);
       expect(
         ((started['_meta'] as Json)['claudeCode'] as Json)['task'],
-        containsPair('subagentType', 'Explore'),
+        allOf(
+          containsPair('subagentType', 'Explore'),
+          containsPair('taskId', 'task1'),
+        ),
       );
+      // The stored call keeps its tool's name beside the task: an update's
+      // `_meta.claudeCode` replaces the one before it.
+      final stored = (calls['ag']!['_meta'] as Json)['claudeCode'] as Json;
+      expect(stored, containsPair('toolName', 'Agent'));
+      expect(stored['task'], containsPair('taskId', 'task1'));
       // The subagent's words never reach the main reply.
       expect(
         rows().where((r) => r.role == SessionMessageRole.agent && r.text != ''),

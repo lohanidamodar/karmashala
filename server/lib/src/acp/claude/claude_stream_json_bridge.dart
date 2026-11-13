@@ -1431,12 +1431,15 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     final id = message['tool_use_id'];
     final tool = id is String ? _tools[id] : null;
     if (tool == null) return;
-    final task = {
+    final task = tool.task = {
+      ...tool.task,
       'taskId': ?message['task_id'],
       'description': ?message['description'],
       'subagentType': ?message['subagent_type'],
       'lastToolName': ?message['last_tool_name'],
     };
+    // With the tool's name: a stored call's `claudeCode` is replaced whole by
+    // the next update's.
     switch (message['subtype']) {
       case 'task_started':
         tool.background = message['is_backgrounded'] != false;
@@ -1446,6 +1449,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           'status': 'in_progress',
           '_meta': {
             'claudeCode': {
+              'toolName': tool.name,
               'task': {...task, 'background': tool.background},
             },
           },
@@ -1455,7 +1459,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
           'sessionUpdate': 'tool_call_update',
           'toolCallId': id,
           '_meta': {
-            'claudeCode': {'task': task},
+            'claudeCode': {'toolName': tool.name, 'task': task},
           },
         });
       case 'task_notification':
@@ -1972,4 +1976,7 @@ final class _Tool {
   /// What a backgrounded subagent's call answered at once.
   final notes = <String>[];
   var background = false;
+
+  /// Its subagent's task as told so far: a progress report may omit fields.
+  JsonMap task = const {};
 }

@@ -22,6 +22,7 @@ class SubagentRef {
     required this.description,
     required this.spawnDepth,
     this.model,
+    this.agentId,
   });
 
   /// The parent's `tool_use.id` for the `Task` call that spawned this agent.
@@ -47,6 +48,10 @@ class SubagentRef {
   /// The model it ran on, when the meta carried one. Some do not.
   final String? model;
 
+  /// Claude's own id for the agent, naming `agent-<id>.jsonl`: set where the
+  /// server knows no file, as for an ACP session, whose [filePath] is empty.
+  final String? agentId;
+
   /// The wire form. [filePath] is the server machine's path: a client asks
   /// the server for the turns, never opens it.
   Map<String, Object?> toJson() => {
@@ -56,6 +61,7 @@ class SubagentRef {
     'description': description,
     'spawnDepth': spawnDepth,
     'model': ?model,
+    'agentId': ?agentId,
   };
 
   /// Throws [FormatException] without the join or the path.
@@ -67,6 +73,7 @@ class SubagentRef {
     }
     final depth = json['spawnDepth'];
     final model = json['model'];
+    final agentId = json['agentId'];
     return SubagentRef(
       toolUseId: toolUseId,
       filePath: filePath,
@@ -74,15 +81,19 @@ class SubagentRef {
       description: _string(json['description']),
       spawnDepth: depth is int && depth > 0 ? depth : 1,
       model: model is String && model.isNotEmpty ? model : null,
+      agentId: agentId is String && agentId.isNotEmpty ? agentId : null,
     );
   }
 
+  /// The file names the subagent; with none, its [agentId] does.
   @override
   bool operator ==(Object other) =>
-      other is SubagentRef && other.filePath == filePath;
+      other is SubagentRef &&
+      other.filePath == filePath &&
+      (filePath.isNotEmpty || other.agentId == agentId);
 
   @override
-  int get hashCode => filePath.hashCode;
+  int get hashCode => filePath.isEmpty ? agentId.hashCode : filePath.hashCode;
 }
 
 /// Where a Claude Code session keeps its subagents: the transcript's own path

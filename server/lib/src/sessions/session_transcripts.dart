@@ -110,7 +110,9 @@ class SessionTranscripts {
   Future<TranscriptPage> subagent(SessionTranscriptSubagent request) async {
     final held = _hold(request.sessionId);
     await _refresh(held);
-    final record = held.file;
+    // A session served from its messages holds no file; its agent still
+    // wrote one, and its subagents sit beside it.
+    final record = held.file ?? await _recordOf(request.sessionId);
     final agentId = request.agentId;
     if (agentId != null && !_agentIdShape.hasMatch(agentId)) {
       throw const DataRefused.invalid('that is not an agent id');
@@ -147,6 +149,15 @@ class SessionTranscripts {
       messages: messages.sublist(from, end),
       path: path,
     );
+  }
+
+  /// The agent's own record of [sessionId], looked up afresh, or null.
+  Future<String?> _recordOf(String sessionId) async {
+    final found = await lookUp(sessionId);
+    final storePath = found.path;
+    final agentId = found.agentId;
+    if (storePath == null || agentId == null) return null;
+    return transcriptFileFor(storePath, agentId);
   }
 
   /// Every row of [sessionId]'s transcript as it stands now; empty while there
@@ -748,7 +759,8 @@ bool _sameSubagent(SubagentRef? a, SubagentRef? b) => a == null
           a.agentType == b.agentType &&
           a.description == b.description &&
           a.spawnDepth == b.spawnDepth &&
-          a.model == b.model;
+          a.model == b.model &&
+          a.agentId == b.agentId;
 
 bool _sameTool(ToolActivity? a, ToolActivity? b) => a == null
     ? b == null
