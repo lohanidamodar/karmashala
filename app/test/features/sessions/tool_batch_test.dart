@@ -198,14 +198,78 @@ void main() {
       expect(rows.single.pinned, isEmpty);
     });
 
-    test('subagent calls fold with the rest and say what they were', () {
-      final run = [
+    test('a subagent call is its own row, never folded, so what it did can '
+        'be opened under it', () {
+      final rows = transcriptRows([
+        tool('Read', subject: 'a.dart'),
+        tool('Agent', subject: 'review'),
+        tool('Read', subject: 'b.dart'),
+      ], turn: TranscriptTurn.idle);
+      expect(rows.map((r) => (r.from, r.to, r.isBatch)), [
+        (0, 1, true),
+        (1, 2, false),
+        (2, 3, true),
+      ]);
+
+      final fanOut = transcriptRows([
+        tool('Read'),
+        tool('Read'),
         tool('Task', subject: 'survey the parser'),
         tool('Agent', subject: 'review'),
-        tool('Read', subject: 'a.dart'),
-      ];
-      expect(transcriptRows(run).single.isBatch, isTrue);
-      expect(describeToolRun(run), 'Delegated 2 tasks, read 1 file');
+        tool('Read'),
+      ]);
+      expect(fanOut.map((r) => (r.from, r.to, r.isBatch)), [
+        (0, 2, true),
+        (2, 3, false),
+        (3, 4, false),
+        (4, 5, true),
+      ]);
+      expect(
+        isDelegationCall(
+          const ChatMessage(
+            role: 'tool',
+            text: 'x',
+            tool: ToolActivity(name: 'Task'),
+          ),
+        ),
+        isTrue,
+      );
+      expect(isDelegationCall(tool('Read')), isFalse);
+    });
+
+    test('a fold that holds a subagent call still says what it was', () {
+      expect(
+        describeToolRun([
+          tool('Task', subject: 'survey the parser'),
+          tool('Agent', subject: 'review'),
+          tool('Read', subject: 'a.dart'),
+        ]),
+        'Delegated 2 tasks, read 1 file',
+      );
+    });
+
+    test('in a live run a subagent call is drawn where it happened', () {
+      final running = transcriptRows([
+        tool('Read'),
+        tool('Read'),
+        tool('Read'),
+        tool('Agent', subject: 'review', output: null, pending: true),
+      ], turn: TranscriptTurn.working);
+      expect(running.single.live, isTrue);
+      expect(running.single.pinned, [3]);
+
+      final earlier = transcriptRows([
+        tool('Read'),
+        tool('Agent', subject: 'review'),
+        tool('Read'),
+        tool('Read'),
+        tool('Read'),
+      ], turn: TranscriptTurn.working);
+      expect(earlier.map((r) => (r.from, r.to, r.isBatch, r.live)), [
+        (0, 1, false, false),
+        (1, 2, false, false),
+        (2, 5, true, true),
+      ]);
     });
 
     test('an empty transcript has no rows', () {
@@ -447,6 +511,35 @@ void main() {
         tester.getTopLeft(find.text('FAILED')).dy,
         lessThan(tester.getTopLeft(find.text('Working')).dy),
       );
+    });
+
+    testWidgets('a finished subagent call draws its card and what hangs under '
+        'it, with the calls around it folded', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChatTranscriptView(
+              messages: [
+                said('delegating'),
+                tool('Read', subject: 'lib/one.dart'),
+                tool('Agent', subject: 'survey the readers'),
+                tool('Read', subject: 'lib/two.dart'),
+                said('done'),
+              ],
+              turn: TranscriptTurn.idle,
+              detailBuilder: (message, ordinal) => message.tool?.name == 'Agent'
+                  ? const Text('subagent turns', key: ValueKey('hung'))
+                  : null,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('hung')), findsOneWidget);
+      expect(shown('survey the readers'), findsWidgets);
+      expect(find.text('Read 1 file'), findsNWidgets(2));
+      expect(shown('lib/one.dart'), findsNothing);
     });
 
     testWidgets('what the agent said is never folded', (tester) async {

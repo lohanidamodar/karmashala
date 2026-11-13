@@ -68,7 +68,8 @@ class TranscriptRow {
 /// Groups maximal runs of consecutive tool calls, leaving every other message
 /// its own row.
 ///
-/// A settled run always folds, and folds whole: nothing is pinned beneath its
+/// A subagent call is always its own row, in any run: what it did hangs under
+/// its card. Around it, a settled run always folds: nothing is pinned beneath its
 /// line, because a failure is already counted on it (`· 1 failed`), reasoning
 /// is one click away in the opened card, and a call nobody answered in a turn
 /// that ended is no longer waiting on anyone. Pinning any of those was what
@@ -106,7 +107,15 @@ List<TranscriptRow> transcriptRows(
           TranscriptTurn.idle => false,
         };
     if (!live) {
-      rows.add(TranscriptRow(i, end, folded: true));
+      // A subagent's turns hang under its own card, so it is never folded.
+      var start = i;
+      for (var k = i; k < end; k++) {
+        if (!isDelegationCall(messages[k])) continue;
+        if (k > start) rows.add(TranscriptRow(start, k, folded: true));
+        rows.add(TranscriptRow(k, k + 1));
+        start = k + 1;
+      }
+      if (end > start) rows.add(TranscriptRow(start, end, folded: true));
       i = end;
       continue;
     }
@@ -159,12 +168,13 @@ void _addSegment(
   }
 }
 
-/// The rows a reader is looking for in a live run. A pending call there is
+/// The rows a reader is looking for in a live run: a failure, a subagent, a
+/// call reasoned to. A pending call there is
 /// merely running, unless it is a question or plan approval, or the turn is
 /// waiting on the user — then it is the approval, and it stays.
 bool _staysVisible(ChatMessage message, {required TranscriptTurn turn}) {
   final tool = message.tool!;
-  if (tool.isError) return true;
+  if (tool.isError || isDelegationCall(message)) return true;
   if (message.thinking != null && message.thinking!.trim().isNotEmpty) {
     return true;
   }
@@ -283,6 +293,13 @@ String? describeWorkedFor(Iterable<ChatMessage> messages) {
       ? '${minutes}m ${seconds}s'
       : '${seconds}s';
   return 'Worked for $text';
+}
+
+/// Whether [message] is a call that handed work to a subagent: Task, Agent.
+bool isDelegationCall(ChatMessage message) {
+  final tool = message.tool;
+  return tool != null &&
+      toolKindOf(tool.name, kind: tool.kind) == ToolKind.delegate;
 }
 
 /// Whether [message] is a call that ran a command: Run, Shell, Bash, exec.
