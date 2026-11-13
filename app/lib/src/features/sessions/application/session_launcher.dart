@@ -8,7 +8,16 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/folded_installations.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionStartSpec, SessionStarted, TabReveal;
+    show
+        DataRefused,
+        SessionModelOutcome,
+        SessionModelSet,
+        SessionSetModel,
+        SessionStartSpec,
+        SessionStarted,
+        TabReveal;
+import '../../../core/capabilities/capabilities.dart';
+import '../../../core/data/data_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_providers.dart';

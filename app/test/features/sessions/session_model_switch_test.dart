@@ -24,6 +24,11 @@ import '../../support/fixtures.dart';
 import '../../support/test_machine.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionModelOutcome, SessionModelSet;
+import 'package:karmashala_session/session.dart' show SessionStatus;
 
 /// **Live where supported, next launch otherwise — and never into a busy pane.**
 ///
@@ -49,6 +54,8 @@ harness({
   AgentActivityStatus status = AgentActivityStatus.idle,
   AgentActivityStatus Function()? statusNow,
   Stream<String>? becameIdle,
+  Set<String> runningOnHost = const {},
+  Set<String> features = const {},
 }) async {
   final db = TestMachine();
   final server = FakeDataServer()..runsOn(db);
@@ -75,6 +82,11 @@ harness({
         (ref) => PendingLiveSwitches(ref, becameIdle ?? const Stream.empty()),
       ),
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),
+      // The server's word for a session it runs with no pane of ours.
+      sessionRunningOnHostProvider.overrideWithValue(runningOnHost.contains),
+      serverOfferProvider.overrideWithValue(
+        ServerOffer(sameMachine: true, features: features),
+      ),
       // A resume refuses when the CLI has no record of the conversation, and
       // nothing here writes a real transcript. The question this file asks is
       // what the *arguments* carry, so the presence probe is answered rather
@@ -355,6 +367,103 @@ void main() {
     );
     expect(launcher.effectiveModelFor(session.id)!.modelId, isNull);
     expect(launcher.effectiveModelFor(session.id)!.inherited, isTrue);
+  });
+
+  group('a session the server runs with no pane here', () {
+    const hosted = 'h1';
+    const offered = {'sessions.setModel'};
+
+    Future<
+      ({ProviderContainer container, TestMachine db, FakeDataServer server})
+    >
+    hostedHarness({
+      AgentActivityStatus status = AgentActivityStatus.idle,
+      Set<String> features = offered,
+    }) async {
+      final h = await harness(
+        status: status,
+        runningOnHost: const {hosted},
+        features: features,
+      );
+      h.server.sessionRows.insert(
+        session(id: hosted, status: SessionStatus.running),
+      );
+      return h;
+    }
+
+    test('idle: the server types the switch, and nothing waits here', () async {
+      final h = await hostedHarness();
+      addTearDown(h.container.dispose);
+      h.server.modelAnswer = const SessionModelSet(
+        outcome: SessionModelOutcome.now,
+        line: '/model opus',
+      );
+      final launcher = h.container.read(sessionLauncherProvider);
+
+      expect(launcher.modelSwitchesAtServer(hosted), isTrue);
+      expect(launcher.liveModelSwitchBlockerFor(hosted), isNull);
+      final outcome = await launcher.applyModel(hosted, 'opus');
+
+      expect(outcome.switchedNow, isTrue);
+      expect(outcome.command, '/model opus');
+      expect(h.server.modelsSet, [(hosted, 'opus')]);
+      expect(
+        h.container.read(sessionsDataProvider).getById(hosted)!.modelId,
+        'opus',
+      );
+    });
+
+    test('mid-turn: the server holds it for the turn\'s end, not this '
+        'client', () async {
+      final h = await hostedHarness(status: AgentActivityStatus.working);
+      addTearDown(h.container.dispose);
+      h.server.modelAnswer = const SessionModelSet(
+        outcome: SessionModelOutcome.afterTurn,
+      );
+      final launcher = h.container.read(sessionLauncherProvider);
+
+      expect(launcher.liveModelSwitchBlockerFor(hosted), ModelDeferral.busy);
+      final outcome = await launcher.applyModel(hosted, 'opus');
+
+      expect(outcome.switchedNow, isFalse);
+      expect(outcome.deferral, ModelDeferral.busy);
+      expect(h.server.modelsSet, [(hosted, 'opus')]);
+      expect(
+        h.container.read(pendingLiveSwitchesProvider).holds(hosted),
+        isFalse,
+        reason: 'no pane here to type into; the server types it',
+      );
+    });
+
+    test('a server that takes no sessions.setModel: next launch, as '
+        'before', () async {
+      final h = await hostedHarness(features: const {});
+      addTearDown(h.container.dispose);
+      final launcher = h.container.read(sessionLauncherProvider);
+
+      expect(launcher.modelSwitchesAtServer(hosted), isFalse);
+      expect(
+        launcher.liveModelSwitchBlockerFor(hosted),
+        ModelDeferral.notRunning,
+      );
+      final outcome = await launcher.applyModel(hosted, 'opus');
+      expect(outcome.deferral, ModelDeferral.notRunning);
+      expect(h.server.modelsSet, isEmpty);
+    });
+
+    test('a pane here keeps the pane\'s own path', () async {
+      final h = await harness(features: offered);
+      addTearDown(h.container.dispose);
+      final local = await launched(h.container);
+
+      final outcome = await h.container
+          .read(sessionLauncherProvider)
+          .applyModel(local.id, 'opus');
+
+      expect(outcome.switchedNow, isTrue);
+      expect(local.written.join(), contains('/model opus'));
+      expect(h.server.modelsSet, isEmpty);
+    });
   });
 
   test('a session that never chose passes no model flag at all', () async {

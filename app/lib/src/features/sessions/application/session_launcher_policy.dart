@@ -135,10 +135,78 @@ extension SessionPolicyVerbs on SessionLauncher {
     if (support == null || !support.switchesLive) {
       return ModelDeferral.noCommand;
     }
-    if (livePaneFor(sessionId) == null) return ModelDeferral.notRunning;
+    if (livePaneFor(sessionId) == null && !modelSwitchesAtServer(sessionId)) {
+      return ModelDeferral.notRunning;
+    }
+    // With no pane here, the server's status: the one it types by.
     return activityOf(sessionId) == AgentActivityStatus.idle
         ? null
         : ModelDeferral.busy;
+  }
+
+  /// Records the model [sessionId] runs on from its next launch; null follows
+  /// the default. Touches no running session.
+  void recordModel(String sessionId, String? modelId) {
+    _ref.read(sessionsDataProvider).updateModel(sessionId, modelId);
+    // One row's own policy, exactly as a permission change publishes it.
+    _publish(SessionChange.reconfigured(sessionId));
+  }
+
+  /// Whether a model pick for [sessionId] is the server's to type: it runs
+  /// the session, no pane of ours shows it, and it takes `sessions.setModel`.
+  bool modelSwitchesAtServer(String sessionId) =>
+      heldByHostOnly(sessionId) &&
+      _ref.read(capabilitiesProvider).serverOffers(SessionSetModel.name);
+
+  /// [setModel], or — for a session [modelSwitchesAtServer] — the same asked
+  /// of the server, which writes the row and types the switch itself.
+  Future<({bool switchedNow, String? command, ModelDeferral? deferral})>
+  applyModel(String sessionId, String? modelId) async {
+    if (!modelSwitchesAtServer(sessionId)) return setModel(sessionId, modelId);
+    final blocker = liveModelSwitchBlockerFor(sessionId);
+    // Written here too, so the chip moves before the server's answer.
+    recordModel(sessionId, modelId);
+    final SessionModelSet answer;
+    try {
+      answer =
+          (await _ref
+                  .read(dataClientProvider)
+                  .send(
+                    SessionSetModel(sessionId: sessionId, modelId: modelId),
+                  ))
+              .value;
+    } on DataRefused catch (refusal) {
+      _log.warning('The server refused a model switch: ${refusal.message}');
+      return (
+        switchedNow: false,
+        command: null,
+        deferral: ModelDeferral.notRunning,
+      );
+    }
+    return switch (answer.outcome) {
+      SessionModelOutcome.now => (
+        switchedNow: true,
+        command: answer.line,
+        deferral: null,
+      ),
+      SessionModelOutcome.afterTurn => (
+        switchedNow: false,
+        command: null,
+        deferral: ModelDeferral.busy,
+      ),
+      SessionModelOutcome.pickerOpened => (
+        switchedNow: false,
+        command: answer.line,
+        deferral: ModelDeferral.openedPicker,
+      ),
+      SessionModelOutcome.recorded => (
+        switchedNow: false,
+        command: null,
+        deferral: effectiveModelFor(sessionId)?.modelId == null
+            ? ModelDeferral.noModel
+            : blocker ?? ModelDeferral.notRunning,
+      ),
+    };
   }
 
   /// Records the model [sessionId] should run on and, **only where that is
@@ -147,9 +215,7 @@ extension SessionPolicyVerbs on SessionLauncher {
     String sessionId,
     String? modelId,
   ) {
-    _ref.read(sessionsDataProvider).updateModel(sessionId, modelId);
-    // One row's own policy, exactly as a permission change publishes it.
-    _publish(SessionChange.reconfigured(sessionId));
+    recordModel(sessionId, modelId);
 
     final effective = effectiveModelFor(sessionId);
     final target = effective?.modelId;
@@ -160,7 +226,11 @@ extension SessionPolicyVerbs on SessionLauncher {
         deferral: ModelDeferral.noModel,
       );
     }
-    final blocker = liveModelSwitchBlockerFor(sessionId);
+    var blocker = liveModelSwitchBlockerFor(sessionId);
+    // This verb types into a pane here only; [applyModel] asks the server.
+    if (blocker != ModelDeferral.noCommand && livePaneFor(sessionId) == null) {
+      blocker = ModelDeferral.notRunning;
+    }
     final picker = effective?.descriptor?.launch.model.pickerCommand ?? '';
     if (blocker == ModelDeferral.noCommand &&
         picker.isNotEmpty &&

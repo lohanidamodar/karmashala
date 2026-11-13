@@ -19,7 +19,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show SessionActiveModelChanged;
+    show
+        SessionActiveModelChanged,
+        SessionModelOutcome,
+        SessionModelSet,
+        SessionResume;
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
+import 'package:karmashala/src/features/sessions/application/host_lifecycle/host_lifecycle_providers.dart';
+import 'package:karmashala/src/features/sessions/presentation/model_switch_dialogs.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'package:karmashala_session/session.dart' show SessionStatus;
 
 import '../../support/fake_data_server.dart';
 import '../../support/test_machine.dart';
@@ -60,6 +69,8 @@ const _unknownModels = AgentDescriptor(
   binaries: AgentBinaries(windows: ['x'], posix: ['x']),
 );
 
+const _hosted = 'h1';
+
 class Harness {
   Harness(this.db, this.container, this.sessionId, this.written);
 
@@ -99,6 +110,8 @@ Future<Harness> harness(
   String? model,
   String? defaultModel,
   Map<String, AgentModelCatalog> catalogs = const {},
+  bool hostedOnly = false,
+  Set<String> features = const {},
 }) async {
   final db = TestMachine();
   final server = FakeDataServer()..runsOn(db);
@@ -123,8 +136,25 @@ Future<Harness> harness(
       ),
       sessionActivityLookupProvider.overrideWithValue((_) => status),
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),
+      sessionRunningOnHostProvider.overrideWithValue(
+        (id) => hostedOnly && id == _hosted,
+      ),
+      serverOfferProvider.overrideWithValue(
+        ServerOffer(sameMachine: true, features: features),
+      ),
     ],
   );
+  if (hostedOnly) {
+    // Run at the server, shown in no pane here: the chat view's own case.
+    server.sessionRows.insert(
+      session(
+        id: _hosted,
+        agentInstallationId: agentInstallation(agentId: agentId).id,
+        status: SessionStatus.running,
+      ),
+    );
+    return Harness(db, container, _hosted, []);
+  }
   // A real launch, so the chip is bound to a session with a live (process-free)
   // pane — the only way the live-switch branch can be reached at all.
   final launched = await container
@@ -410,10 +440,165 @@ void main() {
     await tester.tap(find.text('Opus'));
     await tester.pumpAndSettle();
 
+    // Mid-turn is a choice, asked, never a silent wait.
+    expect(find.text('Switch to Opus?'), findsOneWidget);
+    expect(find.text(kStopAndRelaunchLabel), findsOneWidget);
+    await tester.tap(find.text(kSwitchAfterTurnLabel));
+    await tester.pumpAndSettle();
+
     expect(h.written, isEmpty);
     expect(find.textContaining('finishes this turn'), findsOneWidget);
     // The override is still recorded, so the next launch runs on it.
     expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
+  });
+
+  testWidgets('working: Cancel leaves the session exactly as it was', (
+    tester,
+  ) async {
+    final h = await harness(tester, status: AgentActivityStatus.working);
+    addTearDown(h.container.dispose);
+    await tester.pumpWidget(h.app);
+    await openMenu(tester);
+    await tester.tap(find.text('Opus'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Switch to Opus?'), findsNothing);
+    expect(h.written, isEmpty);
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, isNull);
+  });
+
+  testWidgets('working: Stop and relaunch records the model and restarts the '
+      'session on its conversation', (tester) async {
+    final h = await harness(tester, status: AgentActivityStatus.working);
+    addTearDown(h.container.dispose);
+    h.db.server.sessionRows.updateExternalSessionId(h.sessionId, 'conv-1');
+    await tester.pumpWidget(h.app);
+    await openMenu(tester);
+    await tester.tap(find.text('Opus'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(kStopAndRelaunchLabel));
+    await tester.pumpAndSettle();
+
+    expect(h.written, isEmpty, reason: 'nothing is typed into the turn');
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
+    final resume = h.db.server.sessionWork.asked
+        .whereType<SessionResume>()
+        .single;
+    expect(resume.sessionId, h.sessionId);
+    expect(resume.restart, isTrue);
+    expect(find.textContaining('relaunching Claude Code'), findsOneWidget);
+  });
+
+  testWidgets('run at the server with no pane here: the badge says now and '
+      'the server types the switch', (tester) async {
+    final h = await harness(
+      tester,
+      hostedOnly: true,
+      features: const {'sessions.setModel'},
+    );
+    addTearDown(h.container.dispose);
+    h.db.server.modelAnswer = const SessionModelSet(
+      outcome: SessionModelOutcome.now,
+      line: '/model opus',
+    );
+    await tester.pumpWidget(h.app);
+    await openMenu(tester);
+
+    expect(find.text('now'), findsNWidgets(4));
+    expect(find.text('next launch'), findsOneWidget);
+
+    await tester.tap(find.text('Opus'));
+    await tester.pumpAndSettle();
+
+    expect(h.db.server.modelsSet, [(h.sessionId, 'opus')]);
+    expect(find.textContaining('the server typed'), findsOneWidget);
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
+  });
+
+  group('nothing running the session', () {
+    Future<Harness> ended(WidgetTester tester) async {
+      final h = await harness(tester);
+      h.db.server.sessionRows.updateExternalSessionId(h.sessionId, 'conv-1');
+      final paneId = h.container
+          .read(sessionsDataProvider)
+          .getById(h.sessionId)!
+          .paneId!;
+      (h.container
+                  .read(terminalSessionsControllerProvider.notifier)
+                  .instanceFor(paneId)!
+              as FakeTerminalInstance)
+          .exitCleanly();
+      return h;
+    }
+
+    testWidgets('Keep for next launch records it and starts nothing', (
+      tester,
+    ) async {
+      final h = await ended(tester);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await openMenu(tester);
+      expect(find.text('next launch'), findsNWidgets(5));
+      await tester.tap(find.text('Opus'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start on Opus?'), findsOneWidget);
+      await tester.tap(find.text(kKeepForNextLaunchLabel));
+      await tester.pumpAndSettle();
+
+      expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
+      expect(h.db.server.sessionWork.asked.whereType<SessionResume>(), isEmpty);
+      expect(
+        find.textContaining('applies when this session next runs'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Start now resumes it at the server, which starts it on the '
+        'recorded model', (tester) async {
+      final h = await ended(tester);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await openMenu(tester);
+      await tester.tap(find.text('Opus'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(kStartNowLabel));
+      await tester.pumpAndSettle();
+
+      expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
+      final resume = h.db.server.sessionWork.asked
+          .whereType<SessionResume>()
+          .single;
+      expect(resume.restart, isFalse);
+      expect(find.textContaining('starting the session on it'), findsOneWidget);
+    });
+  });
+
+  testWidgets('the mid-turn choice fits a 360 px phone at text scale 1.6', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final h = await harness(tester, status: AgentActivityStatus.working);
+    addTearDown(h.container.dispose);
+    await tester.pumpWidget(h.app);
+    await openMenu(tester);
+    await tester.tap(find.text('Opus'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Switch to Opus?'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(kSwitchAfterTurnLabel));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Codex, idle: its own picker opens, and the chip says so', (

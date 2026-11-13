@@ -16,6 +16,8 @@ import '../application/acp_session_providers.dart';
 import '../application/session_active_model_providers.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
+import '../application/session_providers.dart';
+import 'model_switch_dialogs.dart';
 import 'session_config_option_picker.dart';
 
 /// Everything the chip draws, resolved from one session's model state. A value
@@ -458,16 +460,18 @@ Widget _buildModelChip(
             'after this turn',
           _ => 'next launch',
         },
-    onSelected: (choice) => _apply(ref, launcher, state, choice),
+    onSelected: (choice) =>
+        unawaited(_apply(context, ref, launcher, state, choice)),
   );
 }
 
-void _apply(
+Future<void> _apply(
+  BuildContext context,
   WidgetRef ref,
   SessionLauncher launcher,
   SessionModelState state,
   ModelChoice choice,
-) {
+) async {
   // Into the session's own bar: every sentence below is about one session, and
   // a snackbar beside a chip would be one event told two ways.
   final notices = ref.read(sessionNoticesProvider.notifier);
@@ -494,7 +498,7 @@ void _apply(
     );
     return;
   }
-  final outcome = launcher.setModel(state.sessionId, choice.modelId);
+  final id = state.sessionId;
   String label(String id) => state.support.modelFor(id)?.label ?? id;
   final target = choice.modelId ?? state.defaultModelId;
   final what = choice.modelId != null
@@ -502,10 +506,67 @@ void _apply(
       : target == null
       ? '${state.agentName} will choose its own model'
       : 'Following the Settings default (${label(target)})';
+  void post(String message) =>
+      notices.post(id, SessionNotice(message: message));
+
+  // Mid-turn is a choice, not a silent wait: after the turn, or a relaunch.
+  if (target != null &&
+      launcher.liveModelSwitchBlockerFor(id) == ModelDeferral.busy &&
+      launcher.turnWillEnd(id)) {
+    final picked = await askMidTurnModelSwitch(
+      context,
+      agentName: state.agentName,
+      model: label(target),
+    );
+    if (picked == null) return;
+    if (picked == MidTurnModelChoice.relaunch) {
+      launcher.recordModel(id, choice.modelId);
+      post(
+        '$what — stopping the turn and relaunching ${state.agentName} on it, '
+        'with the conversation resumed.',
+      );
+      try {
+        await launcher.restartSession(id);
+      } on Object catch (error) {
+        post('$what — recorded, but the relaunch failed: $error');
+      }
+      return;
+    }
+  }
+
+  final atServer = launcher.modelSwitchesAtServer(id);
+  final outcome = await launcher.applyModel(id, choice.modelId);
+
+  // Nothing runs it: recorded, and it can start now on that model.
+  final conversation = ref
+      .read(sessionsDataProvider)
+      .getById(id)
+      ?.externalSessionId;
+  if (outcome.deferral == ModelDeferral.notRunning &&
+      target != null &&
+      conversation != null &&
+      conversation.isNotEmpty &&
+      launcher.livePaneFor(id) == null &&
+      !launcher.heldByHostOnly(id) &&
+      context.mounted &&
+      await askStartOnModel(context, model: label(target))) {
+    post('$what — starting the session on it.');
+    try {
+      await launcher.resumeAtServer(id);
+    } on Object catch (error) {
+      post('$what — recorded, but the session did not start: $error');
+    }
+    return;
+  }
+
   // Only ever one of two sentences. The deferral says *why*: "the agent is
   // mid-turn" is a wait a moment, "takes its model at launch" is a never.
   final message = outcome.switchedNow
-      ? '$what — switched now: "${outcome.command}" was sent to the session.'
+      ? atServer
+            ? '$what — switched now: the server typed "${outcome.command}" '
+                  'into the session.'
+            : '$what — switched now: "${outcome.command}" was sent to the '
+                  'session.'
       : switch (outcome.deferral) {
           ModelDeferral.busy when launcher.turnWillEnd(state.sessionId) =>
             '$what — switches when ${state.agentName} finishes this turn. '
@@ -527,5 +588,5 @@ void _apply(
                 'to, so the session running now is unchanged.',
           _ => '$what — applies when this session next runs.',
         };
-  notices.post(state.sessionId, SessionNotice(message: message));
+  post(message);
 }
