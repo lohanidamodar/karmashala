@@ -175,9 +175,11 @@ class SessionTranscripts {
     }
     final rows = [
       for (final message in held.messages)
-        if (!request.spoken ||
-            ((message.role == 'user' || message.role == 'agent') &&
-                message.text.trim().isNotEmpty))
+        // A queue entry's words are quoted where it was taken, not twice.
+        if (!message.isQueueEntry &&
+            (!request.spoken ||
+                ((message.role == 'user' || message.role == 'agent') &&
+                    message.text.trim().isNotEmpty)))
           TranscriptMessage(
             role: message.role,
             text: message.text,
@@ -434,11 +436,7 @@ class SessionTranscripts {
     for (final span in all) {
       final installation = span.agentInstallationId;
       if (readers.speaksAcp(installation)) {
-        sources.add((
-          span: span,
-          fromMessages: true,
-          rows: _messageRows(held),
-        ));
+        sources.add((span: span, fromMessages: true, rows: _messageRows(held)));
         continue;
       }
       sources.add((
@@ -734,6 +732,7 @@ bool sameTranscriptMessage(TranscriptMessage a, TranscriptMessage b) =>
         a.pendingBackgroundAgentId == b.pendingBackgroundAgentId &&
         a.background == b.background &&
         a.agentInstallationId == b.agentInstallationId &&
+        a.queueState == b.queueState &&
         _sameCompaction(a.compaction, b.compaction) &&
         _sameSubagent(a.subagent, b.subagent) &&
         _sameTool(a.tool, b.tool));

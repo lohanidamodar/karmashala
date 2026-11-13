@@ -73,6 +73,8 @@ List<ChatMessage> chatMessagesFromTranscript(
     final message = messages[i];
     // A subagent's own call: drawn as a step on its Agent row.
     if (message.parentToolUseId != null) continue;
+    // Left the agent's queue: the row that took it says its words.
+    if (message.queueState == QueuedState.retired) continue;
     if (summaryOf(message) case final summary?) {
       if (i == from && boundary != null) continue;
       final trigger = message.compaction!.trigger;
@@ -120,7 +122,7 @@ List<ChatMessage> chatMessagesFromTranscript(
         pendingToolUseId: message.pendingToolUseId,
         agentName: named ? agent?.name ?? 'another agent' : null,
         agentId: agent?.agentId,
-        queued: message.queued,
+        queueState: message.queueState,
         images: message.images,
         model: modelChanged ? modelLabelOf?.call(model) ?? model : null,
       ),

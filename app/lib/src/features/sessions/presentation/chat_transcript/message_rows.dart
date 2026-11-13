@@ -109,6 +109,7 @@ class _MessageRowState extends State<_MessageRow> {
       raw: rawMessageText(message),
       child: _ChatMessageTile(
         message: message,
+        ordinal: ordinal,
         previousPlan: widget.previousPlan,
         resolveHostPath: widget.resolveHostPath,
         onPathTap: onPreview == null
@@ -160,8 +161,10 @@ class _ChatMessageTile extends StatelessWidget {
     this.prose,
     this.toolImages = const [],
     this.sentencePerLine = false,
+    this.ordinal = 0,
   });
   final ChatMessage message;
+  final int ordinal;
   final AgentPlan? previousPlan;
   final AgentProse? prose;
   final List<String> toolImages;
@@ -235,6 +238,14 @@ class _ChatMessageTile extends StatelessWidget {
     // agent stays with the agent.
     'user' when botNoticeLine(message.text) != null => _TranscriptNote(
       text: botNoticeLine(message.text)!,
+    ),
+    // Still in the agent's own queue: outlined, as the app's queue draws it,
+    // and offering no turn's actions — it has not reached the agent.
+    'user' when message.queueState == QueuedState.waiting => _QueuedMessageCard(
+      key: ValueKey('claude-queued-$ordinal'),
+      message: message,
+      onPathTap: onPathTap,
+      onLinkTap: onLinkTap,
     ),
     'user' => _UserMessageCard(
       message: message,

@@ -126,6 +126,80 @@ class _UserMessageCard extends StatelessWidget {
   }
 }
 
+/// A message waiting in the agent's own queue: the person's bubble outlined
+/// rather than filled, as the app's own queue draws one, under "Queued".
+class _QueuedMessageCard extends StatelessWidget {
+  const _QueuedMessageCard({
+    super.key,
+    required this.message,
+    required this.onPathTap,
+    required this.onLinkTap,
+  });
+
+  final ChatMessage message;
+  final PathLinkCallback? onPathTap;
+  final ValueChanged<String>? onLinkTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) => Align(
+        alignment: Alignment.centerRight,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: constraints.maxWidth * Chrome.chatBubbleShare,
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: _UserMessageCard._corners,
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Radii.lg,
+                vertical: Radii.md,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        AppIcons.clock,
+                        size: Touch.iconSmall,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: Insets.xs),
+                      Flexible(child: Text('Queued', style: muted)),
+                    ],
+                  ),
+                  const SizedBox(height: Insets.xs),
+                  MarkdownMessage(
+                    message.text,
+                    onPathTap: onPathTap,
+                    onLinkTap: onLinkTap,
+                    selectable: false,
+                    foldLong: true,
+                    foldAt: 12,
+                    foldTo: 8,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// What Karmashala told the agent ahead of the person's first words, folded
 /// to one line.
 class _SessionNote extends StatefulWidget {

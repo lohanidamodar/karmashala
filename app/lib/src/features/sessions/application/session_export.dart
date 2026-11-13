@@ -234,7 +234,8 @@ class SessionExporter {
       final turns = [
         for (final message in messages)
           if (message.role == 'user' || message.role == 'agent')
-            if (message.text.trim().isNotEmpty) message,
+            if (message.text.trim().isNotEmpty && !message.isQueueEntry)
+              message,
       ];
       if (turns.length <= kExportTurnLimit) {
         return _Transcript(turns: turns);

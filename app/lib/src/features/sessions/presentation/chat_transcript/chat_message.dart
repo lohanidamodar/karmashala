@@ -24,10 +24,11 @@ class ChatMessage {
     this.agentName,
     this.agentId,
     this.detail,
-    this.queued = false,
+    bool queued = false,
+    QueuedState queueState = QueuedState.none,
     this.images = const [],
     this.model,
-  });
+  }) : queueState = queued ? QueuedState.sent : queueState;
 
   /// `user`, `agent`, `tool`, or `error`.
   final String role;
@@ -59,7 +60,11 @@ class ChatMessage {
   final String? detail;
 
   /// A `user` row the person sent while the agent was still working.
-  final bool queued;
+  bool get queued => queueState == QueuedState.sent;
+
+  /// Where a `user` row stands in the agent's own queue: [QueuedState.waiting]
+  /// is drawn as queued, not yet read.
+  final QueuedState queueState;
 
   /// Images the person pasted into a `user` row, as paths on the session's
   /// machine.
@@ -83,7 +88,7 @@ class ChatMessage {
           other.agentId == agentId &&
           other.thinking == thinking &&
           other.detail == detail &&
-          other.queued == queued &&
+          other.queueState == queueState &&
           other.model == model &&
           _samePaths(other.images, images) &&
           _sameTool(other.tool, tool) &&

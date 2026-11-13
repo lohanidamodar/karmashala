@@ -87,6 +87,26 @@ const String kRedactedThinking = 'Thinking (redacted)';
 /// a `!` shell line — with what it printed as its tool's output.
 const String kTranscriptCommandRole = 'command';
 
+/// Where a `user` row stands in the CLI's own queue of mid-turn messages.
+///
+/// Claude Code writes a `queue-operation` record the moment a message typed
+/// mid-turn enters its queue, and another when it leaves; the message itself
+/// is recorded only once it is taken. A row is never removed when it leaves:
+/// the wire diffs rows by index, so it is retired in place.
+enum QueuedState {
+  /// A row that never passed through the queue.
+  none,
+
+  /// In the queue, not yet read by the agent.
+  waiting,
+
+  /// Taken mid-turn and recorded as a `queued_command`: "Sent while working".
+  sent,
+
+  /// Left the queue; the row that took it carries its words. Draws nothing.
+  retired,
+}
+
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
 class TranscriptMessage {
@@ -102,11 +122,12 @@ class TranscriptMessage {
     this.thinking,
     this.compaction,
     this.agentInstallationId,
-    this.queued = false,
+    bool queued = false,
+    QueuedState queueState = QueuedState.none,
     this.parentToolUseId,
     this.images = const [],
     this.model,
-  });
+  }) : queueState = queued ? QueuedState.sent : queueState;
 
   /// `user`, `agent`, or `tool`.
   final String role;
@@ -180,7 +201,36 @@ class TranscriptMessage {
 
   /// A `user` row the person sent while the agent was still working, which
   /// the CLI queued rather than recorded as a turn.
-  final bool queued;
+  bool get queued => queueState == QueuedState.sent;
+
+  /// Where a `user` row stands in the CLI's own queue; [QueuedState.none]
+  /// for every row that never passed through it.
+  final QueuedState queueState;
+
+  /// A row standing for a message in the CLI's queue — waiting, or retired
+  /// once it left — whose words the row that took it tells again. Drawn
+  /// while it waits; never indexed or quoted.
+  bool get isQueueEntry =>
+      queueState == QueuedState.waiting || queueState == QueuedState.retired;
+
+  /// This row with [queueState] set.
+  TranscriptMessage withQueueState(QueuedState value) => TranscriptMessage(
+    role: role,
+    text: text,
+    tool: tool,
+    subagent: subagent,
+    at: at,
+    pendingToolUseId: pendingToolUseId,
+    pendingBackgroundAgentId: pendingBackgroundAgentId,
+    background: background,
+    thinking: thinking,
+    compaction: compaction,
+    agentInstallationId: agentInstallationId,
+    queueState: value,
+    parentToolUseId: parentToolUseId,
+    images: images,
+    model: model,
+  );
 
   /// The subagent call a chat session's tool row ran under; its steps are
   /// drawn on that call, not at the top level.
@@ -207,7 +257,7 @@ class TranscriptMessage {
     thinking: value,
     compaction: compaction,
     agentInstallationId: agentInstallationId,
-    queued: queued,
+    queueState: queueState,
     parentToolUseId: parentToolUseId,
     images: images,
     model: model,
@@ -226,7 +276,7 @@ class TranscriptMessage {
     thinking: thinking,
     compaction: compaction,
     agentInstallationId: agentInstallationId,
-    queued: queued,
+    queueState: queueState,
     parentToolUseId: parentToolUseId,
     images: images,
     model: model,
@@ -245,7 +295,7 @@ class TranscriptMessage {
     thinking: thinking,
     compaction: compaction,
     agentInstallationId: installationId,
-    queued: queued,
+    queueState: queueState,
     parentToolUseId: parentToolUseId,
     images: images,
     model: model,
@@ -264,7 +314,7 @@ class TranscriptMessage {
     thinking: thinking,
     compaction: compaction,
     agentInstallationId: agentInstallationId,
-    queued: queued,
+    queueState: queueState,
     parentToolUseId: parentToolUseId,
     images: value,
     model: model,
@@ -283,7 +333,7 @@ class TranscriptMessage {
     thinking: thinking,
     compaction: compaction,
     agentInstallationId: agentInstallationId,
-    queued: queued,
+    queueState: queueState,
     parentToolUseId: parentToolUseId,
     images: images,
     model: value,
@@ -305,6 +355,7 @@ class TranscriptMessage {
     'compaction': ?compaction?.toJson(),
     'agentInstallationId': ?agentInstallationId,
     if (queued) 'queued': true,
+    if (queueState != QueuedState.none) 'queueState': queueState.name,
     'parentToolUseId': ?parentToolUseId,
     if (images.isNotEmpty) 'images': images,
     'model': ?model,
@@ -349,7 +400,11 @@ class TranscriptMessage {
           ? CompactionBoundary.fromJson(compaction.cast<String, Object?>())
           : null,
       agentInstallationId: string('agentInstallationId'),
+      // `queued` alone is what a server from before `queueState` wrote.
       queued: json['queued'] == true,
+      queueState:
+          QueuedState.values.asNameMap()[json['queueState']] ??
+          QueuedState.none,
       parentToolUseId: string('parentToolUseId'),
       images: [
         if (json['images'] case final List<Object?> list)
@@ -515,11 +570,17 @@ class _TranscriptParse {
   String? turnModel;
   _CodexCalls codex = _CodexCalls();
   ClaudeCodeTaskLedger taskPlan = ClaudeCodeTaskLedger();
+  // Claude Code's queue, oldest first: every entry it enqueued, with the row
+  // drawn for it (null for one drawn as nothing — a background run's notice,
+  // or an older CLI's record with no `content`) and its words. All of them,
+  // so a `dequeue`, which names nothing, takes the right one.
+  final List<({int? row, String? text})> claudeQueue = [];
 
   /// An independent copy, for a line that may yet be rewritten by the writer.
   _TranscriptParse copy() => _TranscriptParse(dialect, injected)
     ..codex = codex.copy()
     ..taskPlan = taskPlan.copy()
+    ..claudeQueue.addAll(claudeQueue)
     ..messages.addAll(messages)
     ..pending.addAll(pending)
     ..tasks.addAll(tasks)
@@ -539,6 +600,13 @@ class _TranscriptParse {
       return;
     }
     if (decoded is! Map<String, dynamic>) return;
+    // Before the reasoning and the compaction are spent: a queued message is
+    // not the row either was waiting for.
+    if (dialect == TranscriptDialect.claudeJsonl &&
+        decoded['type'] == 'queue-operation') {
+      _claudeQueueOperation(decoded);
+      return;
+    }
     if (dialect == TranscriptDialect.codexRollout) {
       turnModel = transcriptLineModel(decoded, dialect) ?? turnModel;
     }
@@ -553,6 +621,50 @@ class _TranscriptParse {
       _spendThinking(first);
       _stampModel(first, decoded);
     }
+  }
+
+  /// One `queue-operation` record: a message entering Claude Code's own queue
+  /// is drawn waiting at once, and retired in place when it leaves — the row
+  /// that took it (a `queued_command`, or the next turn) tells its words.
+  ///
+  /// `enqueue` carries `content` on current builds and nothing on older ones;
+  /// `remove` (taken mid-turn) carries it, `dequeue` (taken as the next turn)
+  /// does not, and `popAll` pulls every one back into the prompt. FIFO.
+  void _claudeQueueOperation(Map<String, dynamic> json) {
+    final text = _queuedText(json['content']);
+    switch (json['operation']) {
+      case 'enqueue':
+        int? row;
+        if (text != null && !text.contains(_taskNotificationMarker)) {
+          row = messages.length;
+          messages.add(
+            TranscriptMessage(
+              role: 'user',
+              text: text,
+              at: _lineTimestamp(json),
+              queueState: QueuedState.waiting,
+            ),
+          );
+        }
+        claudeQueue.add((row: row, text: text));
+      case 'remove' || 'dequeue':
+        if (claudeQueue.isEmpty) return;
+        var at = text == null
+            ? -1
+            : claudeQueue.indexWhere((entry) => entry.text == text);
+        if (at < 0) at = 0;
+        _retireQueued(claudeQueue.removeAt(at).row);
+      case 'popAll':
+        for (final entry in claudeQueue) {
+          _retireQueued(entry.row);
+        }
+        claudeQueue.clear();
+    }
+  }
+
+  void _retireQueued(int? row) {
+    if (row == null || row >= messages.length) return;
+    messages[row] = messages[row].withQueueState(QueuedState.retired);
   }
 
   /// Names the model on the agent rows this line made.
@@ -693,6 +805,7 @@ TranscriptMessage _withCompaction(
   pendingBackgroundAgentId: row.pendingBackgroundAgentId,
   thinking: row.thinking,
   compaction: boundary,
+  queueState: row.queueState,
   images: row.images,
   model: row.model,
 );
@@ -1275,23 +1388,23 @@ void _addQueuedPrompt(
   DateTime? at,
 ) {
   if (attachment['commandMode'] == 'task-notification') return;
-  final prompt = attachment['prompt'];
+  final text = _queuedText(attachment['prompt']);
+  if (text == null || text.contains(_taskNotificationMarker)) return;
+  out.add(TranscriptMessage(role: 'user', text: text, at: at, queued: true));
+}
+
+/// A queued message's words as its row shows them — a string, or the text
+/// of its blocks — or null when it has none.
+String? _queuedText(Object? prompt) {
   final text = prompt is List
       ? [
           for (final block in prompt)
             if (block is Map && block['text'] is String) block['text'],
         ].join('\n')
       : prompt;
-  if (text is! String || text.trim().isEmpty) return;
-  if (text.contains(_taskNotificationMarker)) return;
-  out.add(
-    TranscriptMessage(
-      role: 'user',
-      text: boundedText(_withoutPasteTags(text).trim()).$1,
-      at: at,
-      queued: true,
-    ),
-  );
+  if (text is! String) return null;
+  final trimmed = _withoutPasteTags(text).trim();
+  return trimmed.isEmpty ? null : boundedText(trimmed).$1;
 }
 
 /// [text] without Claude Code's `<pasted_content id="…">` tags around a paste.

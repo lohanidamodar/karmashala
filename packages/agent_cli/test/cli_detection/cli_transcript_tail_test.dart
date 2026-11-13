@@ -121,6 +121,9 @@ void main() {
           ),
           ('a compaction', (m) => m.compaction != null),
           ('a truncated result', (m) => m.tool?.outputTruncated ?? false),
+          ('a queued message', (m) => m.queueState == QueuedState.waiting),
+          ('a retired queue row', (m) => m.queueState == QueuedState.retired),
+          ('a message sent while working', (m) => m.queued),
         ]) {
           expect(rows.where(has), isNotEmpty, reason: 'fixture lacks $what');
         }
@@ -298,6 +301,54 @@ void main() {
       );
     },
   );
+
+  test('a queued message is retired in place on a later delta', () async {
+    // The wire is append-only by index: the waiting row must keep its place
+    // and change state, never vanish.
+    final file = File(p.join(dir.path, 'queue.jsonl'))
+      ..writeAsStringSync(
+        _line({'type': 'user', 'message': _msg('user', 'Run the tests')}) +
+            _line({
+              'type': 'queue-operation',
+              'operation': 'enqueue',
+              'content': 'And the docs',
+            }),
+      );
+    final tail = CliTranscriptTail(file.path, AgentIds.claudeCode);
+    final before = await tail.read();
+    expect(before.map((m) => m.queueState), [
+      QueuedState.none,
+      QueuedState.waiting,
+    ]);
+
+    file.writeAsStringSync(
+      _line({
+            'type': 'queue-operation',
+            'operation': 'remove',
+            'content': 'And the docs',
+          }) +
+          _line({
+            'type': 'attachment',
+            'attachment': {
+              'type': 'queued_command',
+              'prompt': 'And the docs',
+              'commandMode': 'prompt',
+            },
+          }),
+      mode: FileMode.append,
+    );
+    final after = await tail.read();
+    expect(tail.lastRead, TranscriptTailRead.delta);
+    expect(after.map((m) => '${m.queueState.name}:${m.text}'), [
+      'none:Run the tests',
+      'retired:And the docs',
+      'sent:And the docs',
+    ]);
+    expect(
+      describe(after),
+      describe(await readCliTranscript(file.path, AgentIds.claudeCode)),
+    );
+  });
 }
 
 /// Every field a row carries, so two lists compare by what they say.
@@ -310,6 +361,7 @@ List<String> describe(List<TranscriptMessage> rows) => [
       'at': m.at?.toIso8601String(),
       'pending': m.pendingToolUseId,
       'background': m.pendingBackgroundAgentId,
+      'queue': m.queueState.name,
       'compaction':
           m.compaction?.trigger ?? (m.compaction == null ? null : '?'),
       'tool': m.tool == null
@@ -364,6 +416,40 @@ String _claudeFixture(
   var n = 0;
   for (var i = 0; i < events; i++) {
     final t = _stamp(i);
+    // Claude Code's own queue, on a beat of its own so the dice below roll
+    // as they always did: a row waits, then is retired in place.
+    out.write(switch (i % 13) {
+      3 || 9 => _line({
+        'type': 'queue-operation',
+        'operation': 'enqueue',
+        'timestamp': t,
+        'content': 'queued $i',
+      }),
+      6 =>
+        _line({
+              'type': 'queue-operation',
+              'operation': 'remove',
+              'timestamp': t,
+              'content': 'queued ${i - 3}',
+            }) +
+            _line({
+              'type': 'attachment',
+              'timestamp': t,
+              'attachment': {
+                'type': 'queued_command',
+                'prompt': 'queued ${i - 3}',
+                'commandMode': 'prompt',
+              },
+            }),
+      12 =>
+        _line({'type': 'queue-operation', 'operation': 'dequeue'}) +
+            _line({
+              'type': 'user',
+              'timestamp': t,
+              'message': _msg('user', 'queued ${i - 3}'),
+            }),
+      _ => '',
+    });
     switch (r.nextInt(14)) {
       case 0 || 1:
         out.write(
@@ -522,6 +608,14 @@ String _claudeFixture(
           {'type': 'tool_result', 'tool_use_id': 'toolu_last', 'content': 'ok'},
         ]),
         'toolUseResult': {'isAsync': true, 'agentId': 'agent_last'},
+      }),
+    )
+    // And one message still waiting in the CLI's queue.
+    ..write(
+      _line({
+        'type': 'queue-operation',
+        'operation': 'enqueue',
+        'content': 'still waiting',
       }),
     );
   return out.toString();

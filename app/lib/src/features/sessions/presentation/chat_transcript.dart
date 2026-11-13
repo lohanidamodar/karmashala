@@ -23,6 +23,7 @@ import 'package:karmashala_ui/rows.dart'
 import 'package:agent_cli/descriptors.dart' show AgentPlan;
 import 'package:agent_cli/read.dart'
     show
+        QueuedState,
         RewindMarker,
         kTranscriptNoticeRole,
         kTranscriptRewindRole,

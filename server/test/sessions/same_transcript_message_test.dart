@@ -32,4 +32,25 @@ void main() {
       isTrue,
     );
   });
+
+  test('a queued message that left the queue is a changed row', () {
+    // Retired in place, so its index and text stay: only its state moved.
+    TranscriptMessage row(QueuedState state) => TranscriptMessage(
+      role: 'user',
+      text: 'And the docs',
+      queueState: state,
+    );
+    expect(
+      sameTranscriptMessage(row(QueuedState.waiting), row(QueuedState.retired)),
+      isFalse,
+    );
+    expect(
+      sameTranscriptMessage(row(QueuedState.none), row(QueuedState.sent)),
+      isFalse,
+    );
+    expect(
+      sameTranscriptMessage(row(QueuedState.waiting), row(QueuedState.waiting)),
+      isTrue,
+    );
+  });
 }

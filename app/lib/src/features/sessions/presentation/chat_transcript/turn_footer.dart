@@ -88,7 +88,7 @@ Map<int, TurnFooter> turnFooters(
 /// queue.
 bool _opensTurn(ChatMessage message) =>
     message.role == 'user' &&
-    !message.queued &&
+    message.queueState == QueuedState.none &&
     botNoticeLine(message.text) == null &&
     !_interruptionNote.hasMatch(message.text.trim());
 

@@ -74,13 +74,16 @@ class TranscriptTurnsRead {
 
 /// The rows of [messages] whose role is in [roles] and which say something,
 /// numbered from [firstOrdinal]. `text` only — a row's `thinking` never is.
+/// A queue entry never is either: the row that took it says the same words.
 List<IndexableTurn> transcriptTurnsOf(
   List<TranscriptMessage> messages,
   Set<String> roles, {
   int firstOrdinal = 0,
 }) => [
   for (var i = 0; i < messages.length; i++)
-    if (roles.contains(messages[i].role) && messages[i].text.isNotEmpty)
+    if (roles.contains(messages[i].role) &&
+        messages[i].text.isNotEmpty &&
+        !messages[i].isQueueEntry)
       IndexableTurn(
         ordinal: firstOrdinal + i,
         role: messages[i].role,
