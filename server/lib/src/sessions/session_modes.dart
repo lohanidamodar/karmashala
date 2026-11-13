@@ -17,6 +17,16 @@ abstract class SessionModeChanger {
   Future<void> setConfigOption(String sessionId, String configId, Object value);
 }
 
+/// **Where `sessions.setModel` lands**: the row is written and, where this
+/// server runs the session in a terminal, its agent is moved too. Null on
+/// `DataService.sessionModels` refuses the request `unavailable`.
+abstract interface class SessionModelChanger {
+  /// Records [modelId] for [sessionId] (null: back to the default) and says
+  /// what became of the running session. Throws [DataRefused] `notFound` for
+  /// a session that is gone.
+  Future<SessionModelSet> setModel(String sessionId, String? modelId);
+}
+
 /// The default: no session served here has modes or config options.
 class NoSessionModes implements SessionModeChanger {
   const NoSessionModes();

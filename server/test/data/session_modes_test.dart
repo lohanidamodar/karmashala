@@ -135,4 +135,46 @@ void main() {
       ),
     );
   });
+
+  test('sessions.setModel reaches the model switcher and answers what it '
+      'did; without one it is refused unavailable', () async {
+    final link = service.open((_) {});
+    const pick = SessionSetModel(sessionId: 's1', modelId: 'opus');
+    await expectLater(
+      link.handleLater(pick),
+      throwsA(
+        isA<DataRefused>().having(
+          (r) => r.code,
+          'code',
+          DataRefusalCode.unavailable,
+        ),
+      ),
+    );
+
+    final models = _RecordingModels();
+    service.sessionModels = models;
+    final reply = await link.handleLater(pick);
+    expect(reply.value.outcome, SessionModelOutcome.afterTurn);
+    expect(models.set, [('s1', 'opus')]);
+    expect(
+      () => link.handle(pick),
+      throwsA(
+        isA<DataRefused>().having(
+          (r) => r.code,
+          'code',
+          DataRefusalCode.invalid,
+        ),
+      ),
+    );
+  });
+}
+
+class _RecordingModels implements SessionModelChanger {
+  final set = <(String, String?)>[];
+
+  @override
+  Future<SessionModelSet> setModel(String sessionId, String? modelId) async {
+    set.add((sessionId, modelId));
+    return const SessionModelSet(outcome: SessionModelOutcome.afterTurn);
+  }
 }

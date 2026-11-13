@@ -1233,6 +1233,8 @@ Future<int> _serve(
     ),
     openAgent: openAgent,
   );
+  // A desktop's model pick moves the agent this server runs, as a phone's does.
+  data.sessionModels = companion.modelSwitcher;
   // A phone's start is a person's; it waits in line, at the front of it.
   companion.launcher?.admit = awaitedLaunches.admitAt(
     LaunchPriority.interactive,

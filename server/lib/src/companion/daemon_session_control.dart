@@ -7,6 +7,8 @@ import 'package:karmashala_agent_status/karmashala_agent_status.dart'
     show PermissionCycleOutcome, cyclePermissionTo;
 import 'package:karmashala_automations/store.dart' show CheckoutRows;
 import 'package:karmashala_companion_server/karmashala_companion_server.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show SessionModelOutcome;
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_session/resume.dart';
@@ -17,6 +19,7 @@ import '../automations/daemon_agents.dart';
 import '../automations/daemon_checkout_facts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../domain/session_registry.dart';
+import 'session_model_switcher.dart';
 import 'package:karmashala_session_engine/store.dart';
 
 /// Asks an agent's own store whether it holds a conversation: `present`,
@@ -41,6 +44,7 @@ class DaemonSessionControl implements HostedSessionControl {
     required this.launcher,
     required this.screens,
     required this.presenceOf,
+    required this.models,
     this.statusOf,
     this.press,
     this.screenOf,
@@ -61,6 +65,10 @@ class DaemonSessionControl implements HostedSessionControl {
   /// Typing a line — a model command — into a session, as a phone's prompt is.
   final CompanionScreens screens;
   final ConversationPresenceOf presenceOf;
+
+  /// Records a session's model and moves its running agent, as the desktop's
+  /// `sessions.setModel` does.
+  final SessionModelSwitcher models;
 
   /// What a held session's agent is doing; null keeps no status (no live
   /// switch is then tried).
@@ -239,9 +247,12 @@ class DaemonSessionControl implements HostedSessionControl {
     final (:row, :descriptor) = _rowAndAgent(sessionId);
     var outcome = RemoteConfigureOutcome.recorded;
     if (model != null) {
-      sessions.updateModel(row.id, model.id);
-      onRowWritten?.call(row.id);
-      outcome = await _switchModel(row.id, descriptor, model.id);
+      outcome = switch ((await models.setModel(row.id, model.id)).outcome) {
+        SessionModelOutcome.now => RemoteConfigureOutcome.now,
+        SessionModelOutcome.afterTurn => RemoteConfigureOutcome.afterTurn,
+        SessionModelOutcome.pickerOpened => RemoteConfigureOutcome.pickerOpened,
+        SessionModelOutcome.recorded => RemoteConfigureOutcome.recorded,
+      };
     }
     if (permission != null) {
       final modes = descriptor?.launch.permission;
@@ -259,42 +270,6 @@ class DaemonSessionControl implements HostedSessionControl {
       outcome = await _switchPermission(row.id, modes, selection);
     }
     return outcome;
-  }
-
-  /// Types the agent's model command when it takes one by name and is idle at
-  /// its prompt; opens its own picker — a menu the phone answers — when that
-  /// is all it has. Anything else applies from the next launch.
-  Future<RemoteConfigureOutcome> _switchModel(
-    String rowId,
-    AgentDescriptor? descriptor,
-    String? modelId,
-  ) async {
-    final support = descriptor?.launch.model;
-    if (support == null || modelId == null || !_runningHere(rowId)) {
-      return RemoteConfigureOutcome.recorded;
-    }
-    if (statusOf?.call(rowId)?.status != AgentActivityStatus.idle) {
-      return RemoteConfigureOutcome.recorded;
-    }
-    final String line;
-    final RemoteConfigureOutcome done;
-    if (support.switchesLive) {
-      final command = support.commandFor(modelId);
-      if (command == null) return RemoteConfigureOutcome.recorded;
-      line = command;
-      done = RemoteConfigureOutcome.now;
-    } else if (support.pickerCommand.isNotEmpty) {
-      line = support.pickerCommand;
-      done = RemoteConfigureOutcome.pickerOpened;
-    } else {
-      return RemoteConfigureOutcome.recorded;
-    }
-    try {
-      await screens.type(hostSessionIdOf(rowId), line);
-    } on RemoteApiRefusal {
-      return RemoteConfigureOutcome.recorded;
-    }
-    return done;
   }
 
   /// Steps the agent's own permission cycle on its screen until it shows the

@@ -86,6 +86,9 @@ const Set<String> kServerFeatures = <String>{
   // options, as its agent announces them.
   'sessions.setMode',
   'sessions.setConfigOption',
+  // `sessions.setModel`: a session's model, recorded and — where this server
+  // runs it in a terminal — typed into it at its prompt, or after its turn.
+  'sessions.setModel',
   // `acpAgents.list`, `.put`, `.delete`: the ACP agents a person adds;
   // `acpAgents.install`: one the registry ships as an archive, installed here.
   'acpAgents',

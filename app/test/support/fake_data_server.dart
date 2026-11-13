@@ -492,6 +492,17 @@ class FakeDataServer {
   /// words.
   String? configOptionRefusal;
 
+  /// Each `sessions.setModel` asked, in order.
+  final modelsSet = <(String, String?)>[];
+
+  /// What `sessions.setModel` answers; the row is written either way.
+  SessionModelSet modelAnswer = const SessionModelSet(
+    outcome: SessionModelOutcome.recorded,
+  );
+
+  /// When set, `sessions.setModel` throws it.
+  DataRefused? modelRefusal;
+
   /// When set, answers wait for it — a slow server, or one mid-answer.
   Completer<void>? hold;
 
@@ -823,6 +834,13 @@ class FakeDataServer {
       _tell(null, [after]);
       return DataReply(const DataAck() as R, revision, const []);
     }
+    if (request case SessionSetModel(:final sessionId, :final modelId)) {
+      modelsSet.add((sessionId, modelId));
+      if (modelRefusal case final refusal?) throw refusal;
+      // The server writes the row, as the companion's switcher does.
+      sessionRows.updateModel(sessionId, modelId);
+      return DataReply(modelAnswer as R, revision, const []);
+    }
     if (request case final SshWorkRequest<Object?> work) {
       return DataReply(sshWork._handle(work) as R, revision, const []);
     }
@@ -1058,6 +1076,7 @@ class FakeDataServer {
       final SessionInputRequest<Object?> r => sessionWork._input(r),
       SessionSetMode() ||
       SessionSetConfigOption() ||
+      SessionSetModel() ||
       StoreRequest() => throw StateError('answered above'),
     };
     _tell(origin, changes);

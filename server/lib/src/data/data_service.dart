@@ -231,6 +231,10 @@ class DataService {
   /// the default, which refuses every session as having no modes.
   SessionModeChanger sessionModes = const NoSessionModes();
 
+  /// Where `sessions.setModel` lands: the companion's model switcher, set by
+  /// `serve`; without it that work is refused `unavailable`.
+  SessionModelChanger? sessionModels;
+
   /// The session ids an ACP runtime of this server runs right now; set by
   /// `serve`. A project holding one is not deleted.
   Set<String> Function() liveAcpSessions = _noLiveAcpSessions;
@@ -684,6 +688,7 @@ class DataService {
         SessionInputRequest() ||
         SessionSetMode() ||
         SessionSetConfigOption() ||
+        SessionSetModel() ||
         EnvVaultRequest() ||
         GithubAccessRequest() ||
         SecretRequestWork() ||
@@ -922,6 +927,7 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
       request is SessionInputRequest ||
       request is SessionSetMode ||
       request is SessionSetConfigOption ||
+      request is SessionSetModel ||
       request is EnvVaultRequest ||
       request is GithubAccessRequest ||
       request is SecretRequestWork ||
@@ -1062,6 +1068,15 @@ class DataSession implements FileWatchLink, TranscriptWatchLink {
     )) {
       await _service.sessionModes.setConfigOption(sessionId, configId, value);
       return DataReply(const DataAck() as R, _service._revision);
+    }
+    if (request case SessionSetModel(:final sessionId, :final modelId)) {
+      final models =
+          _service.sessionModels ??
+          (throw const DataRefused.unavailable(
+            'this server moves no session onto another model',
+          ));
+      final result = await models.setModel(sessionId, modelId);
+      return DataReply(result as R, _service._revision);
     }
     if (request case final PipelinesRequest<Object?> asked) {
       final work =
@@ -1360,7 +1375,8 @@ String? phoneRefusal(DataRequest<Object?> request, {CapabilitySet? grants}) {
     SessionQueueSendAll() ||
     SessionQueuePause() ||
     SessionSetMode() ||
-    SessionSetConfigOption() => Capability.sendPrompt,
+    SessionSetConfigOption() ||
+    SessionSetModel() => Capability.sendPrompt,
     // Letting an agent operate Karmashala lets it start and send to
     // sessions: no more than the phone may do itself.
     SessionEdit(:final patch) when patch.touchesOperatorGrant =>

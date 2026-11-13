@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart'
-    show AgentRegistry, AgentStatusReport;
+    show AgentActivityStatus, AgentRegistry, AgentStatusReport;
 import 'package:karmashala_notifications/attention.dart'
     show InboxItem, InboxItemKind;
 import 'package:agent_cli/discovery.dart' show SystemClock;
@@ -27,12 +27,14 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:path/path.dart' as p;
 
+import '../automations/daemon_agents.dart';
 import '../automations/daemon_checkout_facts.dart';
 import '../automations/hosted_agent_launcher.dart';
 import '../automations/session_mcp_access.dart';
 import '../data/data_service.dart';
 import '../domain/session_registry.dart';
 import '../domain/uuid.dart';
+import '../sessions/launch/launch_settings.dart';
 import '../sessions/session_records.dart';
 import 'package:karmashala_host_protocol/protocol.dart';
 import '../status/daemon_prompt_answers.dart';
@@ -40,7 +42,10 @@ import 'companion_handler.dart';
 import 'daemon_session_control.dart';
 import 'daemon_worktrees.dart';
 import 'local_relay.dart';
+import 'session_model_switcher.dart';
 import 'registry_screens.dart';
+import 'package:karmashala_session_engine/karmashala_session_engine.dart'
+    show hostSessionIdOf;
 import 'package:karmashala_session_engine/store.dart';
 
 /// The phone companion, served by the daemon: the one companion server on a
@@ -367,7 +372,44 @@ class DaemonCompanion implements CompanionHandler {
       ),
     );
     this.launcher = launcher;
+    modelSwitcher?.dispose();
+    final status = prompts?.status;
+    final models = modelSwitcher = SessionModelSwitcher(
+      rowOf: _sessions.getById,
+      record: (sessionId, modelId) {
+        _sessions.updateModel(sessionId, modelId);
+        _announceSession(sessionId);
+      },
+      agentOf: (row) {
+        final installation = _rows.installation(row.agentInstallationId);
+        return installation == null
+            ? null
+            : const DaemonAgents().descriptorOf(installation.agentId);
+      },
+      defaultModelOf: (row) {
+        final agentId = _rows.installation(row.agentInstallationId)?.agentId;
+        if (agentId == null) return null;
+        return LaunchSettings.parse(
+          database.readMetadata(kLaunchSettingsKey),
+        ).defaultModels[agentId];
+      },
+      runningHere: (sessionId) {
+        final session = registry.findProcess(hostSessionIdOf(sessionId));
+        return session != null && !session.lifecycle.hasEnded;
+      },
+      statusOf: (sessionId) => status?.statusOf(sessionId)?.report.status,
+      type: (sessionId, line) => screens.type(hostSessionIdOf(sessionId), line),
+      becameIdle: status == null
+          ? const Stream.empty()
+          : status.changes
+                .where((s) => s.report.status == AgentActivityStatus.idle)
+                .map((s) => s.sessionId),
+      notice: (sessionId, message) => _dataService.announce([
+        SessionNoticed(sessionId: sessionId, message: message),
+      ]),
+    );
     _control = DaemonSessionControl(
+      models: models,
       rows: _rows,
       facts: facts,
       sessions: _sessions,
@@ -386,6 +428,11 @@ class DaemonCompanion implements CompanionHandler {
   /// phone's start, and an agent's `open_new_session` while no app is open.
   /// Null until [serveSessions].
   HostedAgentLauncher? launcher;
+
+  /// Moves a session's running agent onto another model — the phone's
+  /// `session.configure` and every client's `sessions.setModel`. Null until
+  /// [serveSessions].
+  SessionModelSwitcher? modelSwitcher;
 
   /// A row this companion wrote, told to every client on the data channel.
   void _announceSession(String sessionId) =>
@@ -649,6 +696,7 @@ class DaemonCompanion implements CompanionHandler {
   Future<void> close() async {
     await _events?.cancel();
     _events = null;
+    modelSwitcher?.dispose();
     await _serialised(() async {
       await _stopService();
       await localRelay.stop();

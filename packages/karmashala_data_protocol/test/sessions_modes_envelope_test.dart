@@ -186,4 +186,38 @@ void main() {
     expect(option.current, isNull);
     expect(option.choices.single.name, 'a');
   });
+
+  test('sessions.setModel names the model, or none, and answers what '
+      'became of it', () {
+    const pick = SessionSetModel(sessionId: 's1', modelId: 'opus');
+    final read =
+        DataRequest.fromJson(pick.kind, wire(pick.argumentsToJson()))
+            as SessionSetModel;
+    expect(read.kind, 'sessions.setModel');
+    expect(read.sessionId, 's1');
+    expect(read.modelId, 'opus');
+
+    const back = SessionSetModel(sessionId: 's1', modelId: null);
+    expect(
+      (DataRequest.fromJson(back.kind, wire(back.argumentsToJson()))
+              as SessionSetModel)
+          .modelId,
+      isNull,
+    );
+
+    const answer = SessionModelSet(
+      outcome: SessionModelOutcome.now,
+      line: '/model opus',
+    );
+    final echoed = pick.resultFromJson(
+      jsonDecode(jsonEncode(pick.resultToJson(answer))),
+    );
+    expect(echoed.outcome, SessionModelOutcome.now);
+    expect(echoed.line, '/model opus');
+    // A word this client does not know is a recorded change, never a switch.
+    expect(
+      pick.resultFromJson({'outcome': 'teleported'}).outcome,
+      SessionModelOutcome.recorded,
+    );
+  });
 }

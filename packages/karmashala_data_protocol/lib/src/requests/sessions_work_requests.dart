@@ -133,6 +133,10 @@ DataRequest<Object?>? _sessionWorkRequestFromJson(
     configId: args.string('configId'),
     value: args.stringOrBool('value'),
   ),
+  SessionSetModel.name => SessionSetModel(
+    sessionId: args.string('sessionId'),
+    modelId: args.optionalString('modelId'),
+  ),
   _ => null,
 };
 
@@ -198,6 +202,72 @@ final class SessionSetConfigOption extends DataRequest<DataAck> {
 
   @override
   DataAck resultFromJson(Object? json) => const DataAck();
+}
+
+/// Records [modelId] as the model session [sessionId] runs on — null hands it
+/// back to the default — and, where the server runs it in a terminal, moves
+/// the running agent too: its model command typed while it is at its prompt,
+/// or held until the turn it is in ends. Never typed into a running turn.
+final class SessionSetModel extends DataRequest<SessionModelSet> {
+  const SessionSetModel({required this.sessionId, required this.modelId});
+
+  static const String name = 'sessions.setModel';
+
+  final String sessionId;
+  final String? modelId;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {
+    'sessionId': sessionId,
+    'modelId': modelId,
+  };
+
+  @override
+  Object? resultToJson(SessionModelSet result) => result.toJson();
+
+  @override
+  SessionModelSet resultFromJson(Object? json) =>
+      _decode(kind, () => SessionModelSet.fromJson(_object(json, kind)));
+}
+
+/// What a `sessions.setModel` did to the session running now. A word a
+/// client does not know reads as [recorded]: the row is written either way.
+enum SessionModelOutcome {
+  /// The running agent was told: its model command was typed.
+  now,
+
+  /// It is mid-turn; the command is typed the moment that turn ends.
+  afterTurn,
+
+  /// Its own model picker is open in its terminal; the person chooses there.
+  pickerOpened,
+
+  /// Recorded for the next launch; the running session is unchanged.
+  recorded,
+}
+
+/// The answer to a `sessions.setModel`: its [outcome] and the [line] typed,
+/// if one was.
+final class SessionModelSet {
+  const SessionModelSet({required this.outcome, this.line});
+
+  factory SessionModelSet.fromJson(Map<String, Object?> json) =>
+      SessionModelSet(
+        outcome:
+            SessionModelOutcome.values
+                .where((value) => value.name == json['outcome'])
+                .firstOrNull ??
+            SessionModelOutcome.recorded,
+        line: json['line'] is String ? json['line']! as String : null,
+      );
+
+  final SessionModelOutcome outcome;
+  final String? line;
+
+  Map<String, Object?> toJson() => {'outcome': outcome.name, 'line': ?line};
 }
 
 /// Sessions the server starts and runs; answered when done.
