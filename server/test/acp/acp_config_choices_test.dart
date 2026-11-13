@@ -93,4 +93,41 @@ void main() {
     );
     await runtime.stop();
   });
+
+  test('the model the row records is put to the agent at its start', () async {
+    final process = FakeAcpProcess(FakeAcpAgent(configOptions: [model]));
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      startModelId: 'gpt-5-mini',
+    );
+    final outcome = await runtime.start();
+    expect(host.configOptions.last.option('model')!.currentValue, 'gpt-5-mini');
+    expect(outcome.notices.where((n) => n.contains('gpt-5-mini')), isEmpty);
+    await runtime.stop();
+  });
+
+  test('a recorded model the agent no longer offers starts on its own, and '
+      'says so', () async {
+    final process = FakeAcpProcess(FakeAcpAgent(configOptions: [model]));
+    final runtime = runtimeOver(
+      process,
+      database: database,
+      workingDirectory: temp.path,
+      host: host,
+      startModelId: 'retired-model',
+    );
+    final outcome = await runtime.start();
+    expect(
+      host.configOptions.last.option('model')!.currentValue,
+      'claude-sonnet-5',
+    );
+    expect(
+      outcome.notices.where((n) => n.contains('retired-model')),
+      hasLength(1),
+    );
+    await runtime.stop();
+  });
 }

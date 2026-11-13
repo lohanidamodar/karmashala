@@ -898,6 +898,9 @@ class HostedAgentLauncher implements AutomationSessionLauncher {
           onCutTaken: () => rewindCuts?.taken(id),
           risk: risk,
           startModeId: startModeId,
+          // The row's own pick: a Settings default names a terminal agent's
+          // model, never an ACP agent's option value.
+          startModelId: session.modelId,
         ),
       );
       opened = registry.openAcp(hostSessionIdOf(id), runtime);

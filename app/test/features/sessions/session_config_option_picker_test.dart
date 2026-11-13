@@ -164,6 +164,28 @@ void main() {
           ?.currentValue,
       'gpt-6',
     );
+    // Recorded on the row too, so the session's next start asks for it.
+    expect(server.sessionRows.getById('s1')!.modelId, 'gpt-6');
+  });
+
+  testWidgets('another option, or a refused model, writes no model to the '
+      'row', (tester) async {
+    await pump(tester);
+    server.writeAsAnotherClient([announced]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Medium'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Low'));
+    await tester.pumpAndSettle();
+    expect(server.sessionRows.getById('s1')!.modelId, isNull);
+
+    server.configOptionRefusal = 'The agent refused the option: busy.';
+    await tester.tap(find.text('Claude Sonnet 5'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GPT-6'));
+    await tester.pumpAndSettle();
+    expect(server.sessionRows.getById('s1')!.modelId, isNull);
   });
 
   testWidgets('a refusal is shown in the server\'s words', (tester) async {

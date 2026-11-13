@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/presentation/picker_face.dart';
 import '../application/session_active_model_providers.dart';
 import '../application/session_config_options_providers.dart';
+import '../application/session_launcher.dart';
 import 'model_chip.dart' show kModelNotRecorded, kModelRunningBadge;
 
 /// **One `select` config option of the session's agent**: its
@@ -88,7 +89,14 @@ class SessionConfigOptionPicker extends ConsumerWidget {
     final refusal = await ref
         .read(sessionConfigOptionsActionsProvider)
         .setOption(sessionId, option.id, value);
-    if (refusal == null) return;
+    if (refusal == null) {
+      // The agent's word wins while it runs; the row is what its next start
+      // asks for, so a relaunch keeps the pick.
+      if (option.isModel) {
+        ref.read(sessionLauncherProvider).recordModel(sessionId, value);
+      }
+      return;
+    }
     messenger?.showSnackBar(SnackBar(content: Text(refusal)));
   }
 }

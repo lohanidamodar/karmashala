@@ -93,6 +93,7 @@ class AcpSessionRuntime implements ScreenSession {
     this.mcpBridge,
     this.risk,
     this.startModeId,
+    this.startModelId,
     this.resumeSessionId,
     this.resumeAt,
     this.onCutTaken,
@@ -152,6 +153,10 @@ class AcpSessionRuntime implements ScreenSession {
   /// The mode the person picked, by the agent's own id: started in when the
   /// agent offers it and the spec places it on [risk]'s rung.
   final String? startModeId;
+
+  /// The model the row records, by the agent's own value: put to its
+  /// `model` option at the start when that is not what it holds.
+  final String? startModelId;
 
   /// The agent's session to `session/load`, when it can.
   final String? resumeSessionId;
@@ -453,6 +458,7 @@ class AcpSessionRuntime implements ScreenSession {
       await _applyInitialMode(modes, notices);
       // Kept when the answer has none: an update may have come first.
       if (options != null) _configOptions = _distinct(options);
+      await _applyStartModel(notices);
       _announceConfigOptions();
       host.promptKindsChanged(promptKinds!);
       _publish(
@@ -1344,6 +1350,33 @@ class AcpSessionRuntime implements ScreenSession {
         );
       }
       return call();
+    }
+  }
+
+  /// Puts [startModelId] to the agent's model option, so a relaunch keeps the
+  /// model picked before it; one it no longer offers is said, not forced.
+  Future<void> _applyStartModel(List<String> notices) async {
+    final wanted = startModelId;
+    if (wanted == null || wanted.isEmpty) return;
+    final option = _configOptions
+        ?.where((o) => o.id == 'model' || o.category == 'model')
+        .firstOrNull;
+    if (option == null || option.currentValue == wanted) return;
+    if (option.options.isNotEmpty &&
+        !option.options.any((choice) => choice.value == wanted)) {
+      notices.add(
+        '$agentName no longer offers the model "$wanted" this session was '
+        'set to, so it starts on "${option.currentValue}".',
+      );
+      return;
+    }
+    try {
+      await setConfigOption(option.id, wanted);
+    } on Object catch (error) {
+      notices.add(
+        '$agentName did not take the model "$wanted" this session was set '
+        'to: $error',
+      );
     }
   }
 
