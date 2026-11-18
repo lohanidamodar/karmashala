@@ -179,6 +179,28 @@ class AgentHookReceiver {
         status != AgentActivityStatus.failed) {
       return before;
     }
+    // A notice that names the question tool is the question's own, whatever
+    // was recorded since it opened: a message typed in meanwhile is one.
+    final questionTool = registry.byId(id)?.questions?.toolName;
+    if (report.waiting == AgentWaitKind.approval &&
+        questionTool != null &&
+        !(before?.hasOpenQuestion ?? false) &&
+        RegExp(
+          'permission to use ${RegExp.escape(questionTool)}\\b',
+        ).hasMatch(message)) {
+      final asking = AgentStatusReport(
+        agentId: report.agentId,
+        sessionId: report.sessionId,
+        status: AgentActivityStatus.awaitingApproval,
+        source: report.source,
+        observedAt: report.observedAt,
+        detail: '$name/question',
+        evidence: report.evidence,
+        waiting: AgentWaitKind.question,
+      );
+      reports.record(asking);
+      return asking;
+    }
     if (report.waiting == AgentWaitKind.approval &&
         before != null &&
         before.waiting == AgentWaitKind.question &&

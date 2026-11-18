@@ -93,6 +93,54 @@ void main() {
       expect(report.evidence, ['Pick a fruit']);
     });
 
+    // The owner, 2026-11-18: a message sent while a question was open turned
+    // the question into Approve/Deny. Typed into the session, it is taken
+    // into Claude's own queue (its transcript records the enqueue, 2026-11-08)
+    // — and any word recorded between the question and its notice let that
+    // notice read as an approval, though it names the question's own tool.
+    test('a notice naming the question tool stays the question, whatever '
+        'came between', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PreToolUse',
+        body: preToolUse('AskUserQuestion', {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        }),
+      );
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'UserPromptSubmit',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'UserPromptSubmit',
+          'prompt': 'one more thing',
+        }),
+      );
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Notification',
+          'notification_type': 'permission_prompt',
+          'message': 'Claude needs your permission to use AskUserQuestion',
+        }),
+      );
+      expect(report.waiting, AgentWaitKind.question);
+      expect(report.hasOpenPrompt, isFalse, reason: 'no Approve for it');
+      expect(
+        receiver.reports.latest('claudeCode', 's1')!.hasOpenQuestion,
+        isTrue,
+      );
+    });
+
     test('but a permission notice after the question was answered is one', () {
       receiver.handle(
         agentId: 'claudeCode',
@@ -163,31 +211,34 @@ void main() {
       expect(latest.evidence, ['Pick a fruit']);
     });
 
-    test('the main thread\'s own tool call after it still ends the question', () {
-      receiver.handle(
-        agentId: 'claudeCode',
-        event: 'PreToolUse',
-        body: preToolUse('AskUserQuestion', {
-          'questions': [
-            {
-              'question': 'Pick a fruit',
-              'options': [
-                {'label': 'Apple'},
-              ],
-            },
-          ],
-        }),
-      );
-      receiver.handle(
-        agentId: 'claudeCode',
-        event: 'PostToolUse',
-        body: preToolUse('AskUserQuestion', const {}),
-      );
-      expect(
-        receiver.reports.latest('claudeCode', 's1')!.hasOpenQuestion,
-        isFalse,
-      );
-    });
+    test(
+      'the main thread\'s own tool call after it still ends the question',
+      () {
+        receiver.handle(
+          agentId: 'claudeCode',
+          event: 'PreToolUse',
+          body: preToolUse('AskUserQuestion', {
+            'questions': [
+              {
+                'question': 'Pick a fruit',
+                'options': [
+                  {'label': 'Apple'},
+                ],
+              },
+            ],
+          }),
+        );
+        receiver.handle(
+          agentId: 'claudeCode',
+          event: 'PostToolUse',
+          body: preToolUse('AskUserQuestion', const {}),
+        );
+        expect(
+          receiver.reports.latest('claudeCode', 's1')!.hasOpenQuestion,
+          isFalse,
+        );
+      },
+    );
 
     test('any other tool is still just work', () {
       final report = receiver.handle(
