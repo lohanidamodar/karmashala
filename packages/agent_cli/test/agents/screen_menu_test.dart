@@ -128,6 +128,81 @@ void main() {
       ]);
     });
 
+    // Read off a live Claude Code session in Karmashala, 2026-11-18: the
+    // person's last message is echoed `❯ …` with its wrap under it, which
+    // read as a two-option menu. Every send was then refused as "the session
+    // has an approval prompt open" while the terminal showed nothing.
+    group('a sent message echoed above the composer', () {
+      final menus = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!.menus!;
+      const echo = [
+        '✻ Brewed for 30s · done 1:48 AM · 1 shell still running',
+        '',
+        "❯ nice improvements, make sure we don't have to focus on each tier "
+            'to fill plate or place the plate to cook it should',
+        '  auto do it? when there two different both ready may pick last in '
+            "first out as that's how it should work",
+        '',
+        '● Agent(FP12 auto tier pick LIFO)',
+        '  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)',
+        '',
+        '✻ Waiting for 1 background agent to finish',
+        '',
+      ];
+      const composer = [
+        '────────────────────────────────────────',
+        '❯',
+        '────────────────────────────────────────',
+        '  ⏵⏵ auto mode on · 1 shell · ↓ to manage',
+        '',
+        '  ● main',
+        '  ◯ general-purpose  Updating fp-hands.md and PLAN status',
+      ];
+
+      test('is no menu', () {
+        expect(readScreenMenu([...echo, ...composer], menus), isNull);
+      });
+
+      test('nor with a draft wrapped in the composer, its rule titled', () {
+        expect(
+          readScreenMenu([
+            ...echo,
+            '──────────────────────── karmashala new features ─',
+            '❯ a draft long enough that the composer wraps it onto',
+            '  a second row',
+            '────────────────────────────────────────',
+            '  ⏵⏵ auto mode on (shift+tab to cycle)',
+          ], menus),
+          isNull,
+        );
+      });
+
+      test('but a menu drawn under the composer is still read', () {
+        final menu = readScreenMenu([
+          ...echo,
+          ...composer,
+          ' Teach auto mode about your environment?',
+          ' ❯ 1. Yes',
+          '   2. Not now',
+        ], menus)!;
+        expect(menu.options, ['Yes', 'Not now']);
+      });
+
+      test('and a modal in place of the composer is still read', () {
+        final menu = readScreenMenu([
+          ...echo,
+          '────────────────────────────────────────',
+          ' Bash command',
+          '   ls',
+          ' Do you want to proceed?',
+          ' ❯ 1. Yes',
+          '   2. No',
+          '',
+          ' Esc to cancel',
+        ], menus)!;
+        expect(menu.options, ['Yes', 'No']);
+      });
+    });
+
     test('the idle composer is no menu', () {
       expect(
         readScreenMenu(const [

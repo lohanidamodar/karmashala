@@ -925,6 +925,9 @@ const claudeCodeDescriptor = AgentDescriptor(
     // Esc on the project-MCP checklist rejects every server and leaves
     // Claude running (2.1.287, probe 2026-10-08).
     cancelDeclines: ['Do you want to', 'new MCP servers found in this project'],
+    // Its composer is `────` / `❯ …` / `────`; above it, each message sent
+    // is echoed `❯ …` (read off a live session, 2026-11-18).
+    ruledInputBox: true,
   ),
   // Claude Code reads a picture off a path a prompt names — measured in this
   // repo rather than read off `--help`: `SessionMediaOrigin.read` exists

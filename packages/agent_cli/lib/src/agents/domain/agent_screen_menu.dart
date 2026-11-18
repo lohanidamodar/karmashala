@@ -66,7 +66,17 @@ class AgentMenuSupport {
     this.numbered = false,
     this.promptGap,
     this.promptHeadings = const [],
+    this.ruledInputBox = false,
   });
+
+  /// **The agent draws its own input as a marker row between two rules**
+  /// (Claude Code: `────` / `❯ draft` / `────`, the top rule sometimes
+  /// titled). Everything down to the lowest such box is its transcript, and
+  /// nothing there is a menu: a sent message is echoed `❯ …` with its wrapped
+  /// rows under it, which reads exactly as a highlighted option and the ones
+  /// after it (2026-11-18). A menu drawn under the box — a startup offer —
+  /// is still read.
+  final bool ruledInputBox;
 
   /// The rows that open a prompt, as regular expressions over a row's words
   /// (case-insensitive): read up to one, the prompt ends there — nothing
@@ -165,6 +175,10 @@ class AgentMenuSupport {
 /// can read whole. The lowest highlighted row wins: a menu is drawn at the
 /// bottom, above only its own footer.
 AgentScreenMenu? readScreenMenu(List<String> rows, AgentMenuSupport support) {
+  if (support.ruledInputBox) {
+    final below = _belowInputBox(rows, support.markers);
+    if (below != null) rows = rows.sublist(below);
+  }
   for (var i = rows.length - 1; i >= 0; i--) {
     final menu = _menuAt(rows, i, support);
     if (menu != null) return menu;
@@ -270,6 +284,30 @@ AgentScreenMenu? _menuAt(List<String> rows, int at, AgentMenuSupport support) {
     highlighted: highlighted,
   );
 }
+
+/// The first row under the lowest input box in [rows] — a rule, then a row
+/// opening with one of [markers], then rows up to the next rule — or null when
+/// none is drawn.
+int? _belowInputBox(List<String> rows, List<String> markers) {
+  bool opensBox(String row) {
+    final text = row.trimLeft();
+    return markers.any((m) => text == m || text.startsWith('$m '));
+  }
+
+  int? bottom;
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (!_isEdge(rows[i])) continue;
+    if (bottom != null && bottom - i >= 2 && opensBox(rows[i + 1])) {
+      return bottom + 1;
+    }
+    bottom = i;
+  }
+  return null;
+}
+
+/// A rule across the screen, perhaps titled (`──── name ─`): its row opens
+/// with a run of box-drawing dashes.
+bool _isEdge(String row) => RegExp(r'^\s*[─━═]{3,}').hasMatch(row);
 
 /// An option's number, `1.` to `99.`, and the space after it.
 final _number = RegExp(r'(\d{1,2})\.\s');
