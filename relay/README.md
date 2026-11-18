@@ -71,6 +71,16 @@ replaced by a newer one, `4413` a frame above the size cap,
 `4429` a lone socket sent more than 8 frames before pairing. (WebSocket only
 lets an application send 1000 or 3000-4999, so every refusal is in the 4000s.)
 
+**The heartbeat.** A text frame of exactly `ping` is answered `pong` to its
+sender, on a rendezvous or a hooks listener. It is never forwarded to the
+peer and does not count among a lone socket's 8 frames. A lone socket whose
+last ping is under 75 seconds old when the lone timeout comes round is a
+listener still waiting for its peer, and is left there; one that never
+pinged, or stopped, gets `4408` as before. The host pings every 25 seconds on
+each of its listeners, so an idle host holds one connection per listener
+instead of dialling each again every two minutes. A phone does not ping: it
+dials when it expects its host, and alone it should be told so.
+
 ## Push delivery (optional)
 
 Push is how a paired phone hears "a session needs you" while it is not

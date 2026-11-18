@@ -77,6 +77,8 @@ class TransportFramingException extends TransportException {
 /// meet every host at once: one second, doubling, to a thirty-second ceiling.
 /// A link that worked, the app returning to the foreground and the user asking
 /// all reset it, so the ceiling is never what the user is actually waiting out.
+/// "Worked" is a frame from the peer or [kLinkStableAfter] connected — never
+/// the connection alone, which a relay grants to anyone.
 /// A path with different physics passes its own — see `_localBackoff`.
 class Backoff {
   Backoff({
@@ -111,6 +113,13 @@ class Backoff {
 
   void reset() => _attempts = 0;
 }
+
+/// How long a connection must hold before its drop is redialled from the
+/// first backoff step again. Shorter than any shared relay's lone timeout, so
+/// a listener the relay sends away for want of a peer is back in a second;
+/// long enough that a relay which takes a socket and hangs up at once is
+/// dialled less and less often rather than once a second for ever.
+const Duration kLinkStableAfter = Duration(seconds: 30);
 
 /// Length-prefixed framing for a stream transport: `uint32be length || frame`.
 /// WebSocket already has message boundaries, so only the LAN path needs this.
@@ -187,8 +196,13 @@ abstract class ReconnectingTransport implements RemoteTransport {
     Backoff? backoff,
     this.maxQueuedFrames = 256,
     this.maxQueuedBytes = kMaxQueuedBytes,
+    this.stableAfter = kLinkStableAfter,
     this.onLog,
   }) : backoff = backoff ?? Backoff();
+
+  /// How long a connection must hold to count as one that worked — see
+  /// [kLinkStableAfter].
+  final Duration stableAfter;
 
   /// Frames the caller sent while disconnected. Oldest is dropped on overflow.
   final int maxQueuedFrames;
@@ -263,6 +277,11 @@ abstract class ReconnectingTransport implements RemoteTransport {
       } on Object catch (error) {
         onLog?.call('connection attempt failed: $error');
       }
+      // A connection that held was a working one, whether or not the peer
+      // ever spoke on it: its drop is news, not the next turn of a loop.
+      final held = _connectedFor;
+      _connectedFor = null;
+      if (held != null && held.elapsed >= stableAfter) backoff.reset();
       if (_closed) break;
       _setState(TransportState.disconnected);
       if (!reconnects) break;
@@ -273,9 +292,19 @@ abstract class ReconnectingTransport implements RemoteTransport {
     await close();
   }
 
+  /// Running since the current connection came up; null between connections.
+  Stopwatch? _connectedFor;
+
   /// Called by a subclass once its connection is usable.
+  ///
+  /// The backoff is **not** reset here. A relay upgrades any socket, peer or
+  /// no peer, so a connection that opens proves nothing — and resetting on it
+  /// made every refusal that arrives after the upgrade (a rendezvous that is
+  /// busy, a relay that hangs up at once) a dial a second for as long as the
+  /// app stayed open. A frame from the peer resets it, in [onFrame], and so
+  /// does a connection that held for [stableAfter], in the loop.
   void onConnected() {
-    backoff.reset();
+    _connectedFor = Stopwatch()..start();
     _setState(TransportState.connected);
     final queued = List<Uint8List>.of(_queue);
     _queue.clear();
@@ -300,6 +329,8 @@ abstract class ReconnectingTransport implements RemoteTransport {
 
   /// Called by a subclass for each frame that arrives.
   void onFrame(Uint8List frame) {
+    // The peer is there: this link works.
+    backoff.reset();
     if (!_frames.isClosed) _frames.add(frame);
   }
 

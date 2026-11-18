@@ -52,6 +52,7 @@ class RelayOptions {
     this.connectionsPerMinute = kDefaultConnectionsPerMinute,
     this.maxRendezvous = kDefaultMaxRendezvous,
     this.pingInterval = kDefaultPingInterval,
+    this.pingStaleAfter = kRelayPingStaleAfter,
     this.delivery,
     this.maxPushTokens = kDefaultMaxPushTokens,
     this.maxPushPayloadBytes = kDefaultMaxPushPayloadBytes,
@@ -90,6 +91,10 @@ class RelayOptions {
   final int connectionsPerMinute;
   final int maxRendezvous;
   final Duration pingInterval;
+
+  /// How long after its last heartbeat ping a lone socket still counts as a
+  /// listener waiting for its peer, and is not dropped at [loneTimeout].
+  final Duration pingStaleAfter;
 
   /// Where `/v1/push` hands an accepted request. Null — the default, and
   /// every test — leaves push delivery unconfigured: registration still
@@ -487,13 +492,27 @@ class RelayServer {
 class _Rendezvous {
   _Rendezvous(this._first, {required this.options, required this.onEmpty}) {
     _subscriptions.add(_attach(_first));
-    if (options.loneTimeout > Duration.zero) {
-      _loneTimer = Timer(
-        options.loneTimeout,
-        () => dispose(kCloseNoPeer, 'no peer'),
-      );
-    }
+    _armLoneTimer();
   }
+
+  void _armLoneTimer() {
+    if (options.loneTimeout <= Duration.zero) return;
+    _loneTimer = Timer(options.loneTimeout, _onLoneTimeout);
+  }
+
+  /// A lone socket still pinging is a listener waiting for its peer, and
+  /// stays; any other has waited long enough.
+  void _onLoneTimeout() {
+    final pinged = _firstPingedAt;
+    if (pinged != null && pinged.elapsed < options.pingStaleAfter) {
+      _armLoneTimer();
+      return;
+    }
+    dispose(kCloseNoPeer, 'no peer');
+  }
+
+  /// Running since the first socket's last ping; null until it pings.
+  Stopwatch? _firstPingedAt;
 
   final WebSocketChannel _first;
   final RelayOptions options;
@@ -531,6 +550,13 @@ class _Rendezvous {
       );
 
   void _forward(WebSocketChannel from, Object? frame) {
+    if (frame == kRelayPing) {
+      // The heartbeat: answered here, never the peer's to read, and no part
+      // of what a lone socket may send before pairing.
+      if (identical(from, _first)) _firstPingedAt = Stopwatch()..start();
+      from.sink.add(kRelayPong);
+      return;
+    }
     final size = frame is String
         ? frame.length
         : (frame is List<int> ? frame.length : 0);
@@ -680,6 +706,10 @@ class _HookListener {
   }
 
   void _onFrame(Object? frame) {
+    if (frame == kRelayPing) {
+      _socket.sink.add(kRelayPong);
+      return;
+    }
     if (frame is! String || frame.length > kHookMaxAnswerBytes * 2) return;
     final Object? json;
     try {
