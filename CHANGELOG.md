@@ -17,6 +17,17 @@ installs claim the same version name.
 
 ---
 
+## 1.34.25 — 2026-11-18 (build 92)
+
+- **Switch machines from the title bar.** Once a second machine is paired, the desktop title bar names the server the window uses; its menu lists this computer and every paired machine, and one pick switches. Quick open has "Switch to <machine>" and "Add a machine…". The phone's machine list switches on a pick too.
+- **A project has a page of its own**, with its details, and the shared card and header.
+- **Restart session** is in every session menu.
+- **Chat view:** a message waiting in Claude Code's own queue shows while it waits; each subagent call is its own row and a Claude chat's subagents can be read; a model pick switches now when it can, asks when it cannot, and survives a relaunch.
+- **An idle host costs the relay nothing.** Its relay listeners ping and are kept waiting instead of being sent away and redialled every two minutes; a relay that hangs up at once is dialled less and less often.
+- **The dashboard's find looks only at what the dashboard shows**; quick open searches the rest.
+- **A message no longer reads as "the session has an approval prompt open"** when Claude has only echoed it above its input box.
+- **A question stays a question** when a message is sent while it is open, instead of turning into Approve/Deny.
+
 ## 1.34.24 — 2026-11-12 (build 91)
 
 - **The dashboard is one tile per project.** Each tile says what its sessions are doing ("1 needs you · 5 running"), its name shows the project in the Explorer, + starts a session there and ⋯ is the project's own menu. A session that needs you, runs or is new keeps its card; one finished and seen is one line, until its chat is opened. Tiles and sessions never change place when a state changes. "Finished sessions as cards" in the filter brings every card back.
