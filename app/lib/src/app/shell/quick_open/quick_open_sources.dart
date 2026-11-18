@@ -31,6 +31,9 @@ import '../../../features/notes/application/notes_providers.dart';
 import '../../../features/notifications/application/focus_mode.dart';
 import '../../../features/notifications/application/notification_providers.dart';
 import '../../../features/projects/application/projects_controller.dart';
+import '../../../features/remote/application/machines_providers.dart'
+    show machinesProvider;
+import '../../../features/remote/presentation/machine_switch.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
 import '../../../features/editor/application/editor_tab_actions.dart';
 import '../../../features/git/application/diff_tab_actions.dart';

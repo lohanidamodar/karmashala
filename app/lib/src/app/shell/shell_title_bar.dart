@@ -13,6 +13,7 @@ import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import '../../features/pipelines/presentation/pipeline_run_dialog.dart';
+import 'machine_picker_button.dart';
 import 'native_menus.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_menus.dart';
@@ -65,6 +66,9 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
                   const ShellMenuButton(),
                   const SizedBox(width: Insets.sm),
                 ],
+                // Which server this window uses, and a switch to another:
+                // nothing until a second machine is paired.
+                const MachinePickerButton(),
                 const Expanded(child: _QuickOpenSlot()),
                 const _BarDivider(),
                 BotButton(

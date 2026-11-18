@@ -827,6 +827,10 @@ class Chrome {
   /// against 30 read as one slab.
   static const titleBar = 38.0;
 
+  /// The title bar's machine picker at its widest: a long machine name is
+  /// ellipsised there rather than squeezing the quick open field.
+  static const titleBarMachineMaxWidth = 180.0;
+
   /// A **pane** header. Deliberately not [tabStrip]: drawn at the same height,
   /// the region header read as "an extra tab that doesn't do anything".
   static const paneStrip = 24.0;

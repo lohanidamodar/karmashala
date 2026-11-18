@@ -3,6 +3,36 @@ part of '../quick_open_sources.dart';
 // Quick open's command rows.
 
 extension _CommandSources on QuickOpenSources {
+  /// "Switch to <machine>" for every other server this window could use, the
+  /// switch the title bar's machine picker makes; then "Add a machine…".
+  /// Nothing where this process keeps no machine list.
+  List<QuickOpenItem> _machineCommands() {
+    if (ref.read(machinesProvider) == null) return const [];
+    final choices = machinePickChoices(ref);
+    return [
+      for (final machine in choices)
+        if (!machineInUse(ref, machine))
+          QuickOpenItem(
+            id: 'command/machine/${machine?.hostId.value ?? 'local'}',
+            group: QuickOpenGroup.commands,
+            title: 'Switch to ${machinePickName(machine)}',
+            subtitle: 'Make this window a client of that server',
+            icon: AppIcons.arrowsClockwise,
+            keywords: const ['machine', 'server', 'switch', 'remote', 'host'],
+            weight: _commandWeight,
+            onSelect: () => dismiss(() => useMachine(context, ref, machine)),
+          ),
+      _command(
+        'Add a machine…',
+        subtitle: 'Pair a Karmashala server on another computer',
+        icon: AppIcons.plus,
+        keywords: const ['machine', 'server', 'pair', 'remote', 'host'],
+        onlyWhenSearched: true,
+        onSelect: () => addMachine(context, ref),
+      ),
+    ];
+  }
+
   List<QuickOpenItem> _commands() {
     final panel = ref.read(sidePanelProvider.notifier);
     final shell = ref.read(shellControllerProvider.notifier);
@@ -21,6 +51,7 @@ extension _CommandSources on QuickOpenSources {
         shortcut: shellCommandLabel('session.new'),
         onSelect: _newSessionDialog,
       ),
+      ..._machineCommands(),
       if (ref.read(selectedRepositoryIdProvider) != null)
         // A step, not a dismissal: git is asked only once it is picked.
         QuickOpenItem(

@@ -8,7 +8,6 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../core/capabilities/capabilities.dart';
-import '../../core/lifecycle/server_switcher.dart';
 import '../../features/bot/presentation/bot_button.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
@@ -16,10 +15,8 @@ import '../../features/overview/application/overview_drawer.dart';
 import '../../features/overview/application/overview_prefs.dart';
 import '../../features/remote/application/machines_providers.dart';
 import '../../features/remote/presentation/machine_route.dart'
-    show machineName, machineRouteLine;
-import '../../features/remote/presentation/machines_section.dart'
-    show AddMachineDialog;
-import '../../features/remote/presentation/pair_machine_page.dart';
+    show machineRouteLine;
+import '../../features/remote/presentation/machine_switch.dart';
 import '../../features/remote/presentation/route_switch_sheet.dart'
     show LinkRouteChip;
 import '../widgets/adaptive_modal.dart';
@@ -101,10 +98,7 @@ final class _AddMachine extends _HostPick {
 class PhoneHostSwitcher extends ConsumerWidget {
   const PhoneHostSwitcher({super.key});
 
-  static String nameOf(CompanionPairing? machine) {
-    if (machine == null) return 'This computer';
-    return machineName(machine);
-  }
+  static String nameOf(CompanionPairing? machine) => machinePickName(machine);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -158,72 +152,11 @@ class PhoneHostSwitcher extends ConsumerWidget {
     if (!context.mounted) return;
     switch (pick) {
       case _UseMachine(:final machine):
-        await _use(context, ref, machine);
+        await useMachine(context, ref, machine);
       case _AddMachine():
-        await _add(context, ref);
+        await addMachine(context, ref);
       case null:
         break;
-    }
-  }
-
-  /// The desktop's dialog where this client hosts a server; elsewhere the
-  /// phone's pairing page (scan, paste, address), as Settings › Machines.
-  static Future<void> _add(BuildContext context, WidgetRef ref) {
-    final client = ref.read(clientCapabilitiesProvider);
-    final machines = ref.read(machinesProvider);
-    if (client.hostsServer || machines == null) {
-      return AddMachineDialog.show(context);
-    }
-    return PairMachinePage.push(
-      context,
-      machines: machines,
-      client: client,
-      switcher: ref.read(serverSwitcherProvider),
-      onListChanged: () => ref.invalidate(pairedMachinesProvider),
-    );
-  }
-
-  static Future<void> _use(
-    BuildContext context,
-    WidgetRef ref,
-    CompanionPairing? machine,
-  ) async {
-    final switcher = ref.read(serverSwitcherProvider);
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (switcher == null) {
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('Switching is not available here.')),
-      );
-      return;
-    }
-    final name = nameOf(machine);
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Use $name?'),
-        content: const Text(
-          'This app becomes a client of that server: its sessions and '
-          'terminals replace these. Nothing running on either server stops.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Switch'),
-          ),
-        ],
-      ),
-    );
-    if (go != true) return;
-    // This tree goes with the old server: nothing here reads `ref` after.
-    final outcome = await switcher.switchTo(machine);
-    if (outcome == ServerSwitchOutcome.busy) {
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('A switch is already under way.')),
-      );
     }
   }
 }

@@ -1,12 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/capabilities/capabilities.dart';
-import '../../../core/lifecycle/relaunch.dart';
 import '../../../core/lifecycle/server_switcher.dart';
 import '../../../core/paths/app_support_directory.dart';
 import '../../../core/server/machine_pairing.dart';
@@ -14,10 +11,10 @@ import '../../../core/util/failure_words.dart';
 import '../../explorer/application/session_list_snapshot.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
-import '../../system/system_integration_service.dart';
 import '../application/machines_providers.dart';
 import 'machine_rename.dart';
 import 'machine_route.dart';
+import 'machine_switch.dart';
 import 'pair_machine_page.dart';
 
 /// Settings → Machines (slice 5e): the Karmashala server this window is a
@@ -106,54 +103,12 @@ class MachinesSection extends ConsumerWidget {
     );
   }
 
+  /// Settings' Use button: the shared switch ([useMachine]), asked first.
   static Future<void> _switch(
     BuildContext context,
     WidgetRef ref,
     CompanionPairing? to,
-  ) async {
-    final machines = ref.read(machinesProvider);
-    if (machines == null) return;
-    final name = to == null ? 'this computer' : machineName(to);
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Use $name?'),
-        content: const Text(
-          'This window becomes a client of that server: its panes, sessions '
-          'and notes replace these. Nothing running on either server stops.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Switch'),
-          ),
-        ],
-      ),
-    );
-    if (go != true || !context.mounted) return;
-    // In process (plan step 14): this section's tree goes with the old
-    // server, so nothing below reads `ref` once the switch has begun.
-    final switcher = ref.read(serverSwitcherProvider);
-    if (switcher == null) {
-      // No switcher in this process: start afresh, as before step 14.
-      await machines.use(to?.hostId.value);
-      await relaunchAfterExit();
-      final system = ref.read(systemIntegrationProvider);
-      if (system != null) unawaited(system.quit());
-      return;
-    }
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    final outcome = await switcher.switchTo(to);
-    if (outcome == ServerSwitchOutcome.busy) {
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('A switch is already under way.')),
-      );
-    }
-  }
+  ) => useMachine(context, ref, to, confirm: true);
 
   static Future<void> _forget(
     BuildContext context,
