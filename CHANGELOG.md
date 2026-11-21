@@ -17,6 +17,13 @@ installs claim the same version name.
 
 ---
 
+## 1.34.26 — 2026-11-22 (build 93)
+
+- **Session details** puts Model, Thinking level, Speed and Permission in one place. Open it from the desktop session menu or the phone's Session button. Tap anywhere on a setting's row to open its picker.
+- **Codex and Claude can change models and thinking levels in chat.** A selection made during a turn stays ready for the next request, even if the current turn reports a different model. Terminal sessions link to the CLI's own model and thinking controls.
+- **Permission controls follow the agent.** Codex identifies custom policies, Claude updates its available modes, and reconnecting clears stale chat controls until the agent reports fresh settings.
+- **The dashboard stays compact.** The model stays in view and secondary controls move into the overflow menu when space is tight.
+
 ## 1.34.25 — 2026-11-18 (build 92)
 
 - **Switch machines from the title bar.** Once a second machine is paired, the desktop title bar names the server the window uses; its menu lists this computer and every paired machine, and one pick switches. Quick open has "Switch to <machine>" and "Add a machine…". The phone's machine list switches on a pick too.
