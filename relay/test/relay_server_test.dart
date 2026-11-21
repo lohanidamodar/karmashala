@@ -279,7 +279,9 @@ void main() {
       phone.sink.add(kRelayPing);
       host.sink.add('after');
       await _until(() => atPhone.length == 2 && atHost.length == 13);
-      expect(atPhone, [kRelayPong, 'after']);
+      // The pong and forwarded frame originate from different sockets.
+      expect(atPhone, unorderedEquals([kRelayPong, 'after']));
+      expect(atHost, everyElement(kRelayPong));
       await host.sink.close();
     });
 
