@@ -591,6 +591,39 @@ void main() {
     await runtime.stop();
   });
 
+  test('a model-only update keeps the selected mode and a custom policy '
+      'is displayed without replacing it on the next turn', () async {
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async => turn.end('completed'),
+    );
+    final runtime = runtimeOver(codex);
+    await runtime.start();
+    addTearDown(runtime.stop);
+    await runtime.setMode('agent');
+    codex.notify('thread/settings/updated', {
+      'threadId': 'thr-new',
+      'threadSettings': {'model': 'gpt-fast', 'effort': 'low'},
+    });
+    await pump(40);
+    expect(runtime.modes!.currentModeId, 'agent');
+
+    codex.notify('thread/settings/updated', {
+      'threadId': 'thr-new',
+      'threadSettings': {
+        'approvalPolicy': 'on-request',
+        'sandboxPolicy': {'type': 'dangerFullAccess'},
+      },
+    });
+    await pump(40);
+    expect(runtime.modes!.currentModeId, 'Custom permissions (no sandbox)');
+    expect(runtime.modes!.current, isNull);
+    await runtime.send('Reply briefly');
+    await runtime.awaitTurn();
+    final turn = codex.callsTo('turn/start').last;
+    expect(turn, isNot(contains('approvalPolicy')));
+    expect(turn, isNot(contains('sandboxPolicy')));
+  });
+
   test('a settings change Codex reports moves the mode and model shown, and '
       'a model the list lacks has the list read again', () async {
     final codex = FakeCodexAppServer();

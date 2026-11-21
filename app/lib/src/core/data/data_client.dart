@@ -1464,6 +1464,19 @@ class DataClient {
     // What the server's connections were doing is no longer known.
     sshConnections.clear();
     sessionQueues.clear();
+    // The next greeting only lists running chat agents. Drop modes for
+    // sessions that could have ended while the link was down.
+    final modeSessions = sessionModes.keys.toList();
+    sessionModes.clear();
+    for (final sessionId in modeSessions) {
+      _sessionModeChanges.add(
+        SessionModesChanged(
+          sessionId: sessionId,
+          currentModeId: null,
+          availableModes: const [],
+        ),
+      );
+    }
     // An ask is answered wherever it is answered: one kept from before the
     // drop would hold the composer, the card and the queue on a closed ask.
     // The server's greeting tells what is still open.

@@ -29,6 +29,7 @@ import '../../git/presentation/diff_view.dart';
 import '../../sessions/presentation/slot_wait_notice.dart';
 import '../../sessions/presentation/hunk_review.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/checkout_occupancy_views.dart'
     show SharedCheckoutBadge;

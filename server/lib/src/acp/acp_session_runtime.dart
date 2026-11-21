@@ -689,10 +689,12 @@ class AcpSessionRuntime implements ScreenSession {
       );
     }
     await client.setMode(agent, modeId);
+    if (_torn) return;
     _modeChosen(modeId);
+    if (_modes?.currentModeId == modeId) return;
     _modes = SessionModeState(
       currentModeId: modeId,
-      availableModes: modes.availableModes,
+      availableModes: _modes?.availableModes ?? modes.availableModes,
     );
     _announceModes();
   }
@@ -1410,7 +1412,7 @@ class AcpSessionRuntime implements ScreenSession {
           await _client!.setMode(_agentSessionId!, wanted);
           _modes = SessionModeState(
             currentModeId: wanted,
-            availableModes: modes.availableModes,
+            availableModes: _modes?.availableModes ?? modes.availableModes,
           );
         } on AcpRpcError catch (refused) {
           // Auto mode is refused on a model without it. The session works in
@@ -1644,9 +1646,21 @@ class AcpSessionRuntime implements ScreenSession {
           .where((o) => o.kind == PermissionOptionKind.allowOnce)
           .firstOrNull;
       final PermissionOption? unasked;
-      final screened = spec.screenedModes.contains(_modes?.currentModeId);
+      final mode = _modes;
+      final currentRung = mode == null
+          ? rung
+          : spec.rungOfOffered(
+              mode.currentModeId,
+              mode.availableModes
+                  .where((option) => option.id == mode.currentModeId)
+                  .firstOrNull
+                  ?.name,
+            );
+      final screened = spec.screenedModes.contains(mode?.currentModeId);
       if (rung != null &&
           !screened &&
+          currentRung != null &&
+          !currentRung.isAtMost(PermissionRisk.acceptEdits) &&
           !rung.isAtMost(PermissionRisk.acceptEdits)) {
         unasked = switching != null ? switching.option : allowOnce;
       } else if (switching == null && _readsOnly(call)) {

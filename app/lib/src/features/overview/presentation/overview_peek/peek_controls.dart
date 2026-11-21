@@ -20,6 +20,7 @@ class OverviewPeekControls extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final card = this.card;
     final native = card == null || card.entry.native != null;
+    final acp = native && ref.watch(isAcpSessionProvider(sessionId));
     return Container(
       key: const ValueKey('overview-peek-controls'),
       padding: const EdgeInsetsDirectional.only(start: Insets.sm),
@@ -51,14 +52,16 @@ class OverviewPeekControls extends ConsumerWidget {
           if (native) ...[
             StatusStripItem(
               id: 'permission',
-              builder: (_, short) =>
-                  PermissionModeChip(sessionId: sessionId, short: short),
+              builder: (_, short) => acp
+                  ? SessionModePicker(sessionId: sessionId, leadingGap: false)
+                  : PermissionModeChip(sessionId: sessionId, short: short),
             ),
-            StatusStripItem(
-              id: 'mode',
-              builder: (_, _) =>
-                  SessionModePicker(sessionId: sessionId, leadingGap: false),
-            ),
+            if (!acp)
+              StatusStripItem(
+                id: 'mode',
+                builder: (_, _) =>
+                    SessionModePicker(sessionId: sessionId, leadingGap: false),
+              ),
           ],
           StatusStripItem(
             id: 'agent',

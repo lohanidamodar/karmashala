@@ -72,9 +72,11 @@ final class CodexAppServerBridge implements AcpTransport {
 
   String? _threadId;
   String _cwd = '';
-  CodexMode _mode = codexModeById('workspace-write')!;
+  CodexMode? _mode;
   JsonMap? _sandbox;
+  Object? _approvalPolicy;
   Object? _reviewer;
+  Object? _collaborationMode;
   var _modeChosen = false;
   String? _model;
   String? _effort;
@@ -311,7 +313,7 @@ final class CodexAppServerBridge implements AcpTransport {
     await _adopt(started);
     return {
       'sessionId': _threadId,
-      'modes': codexModeState(_mode, planOffered: _planPreset != null),
+      'modes': codexModeState(_modeId, planOffered: _planPreset != null),
       'configOptions': _configOptions(),
       '_meta': _threadMeta(started),
     };
@@ -350,7 +352,7 @@ final class CodexAppServerBridge implements AcpTransport {
       }
     }
     return {
-      'modes': codexModeState(_mode, planOffered: _planPreset != null),
+      'modes': codexModeState(_modeId, planOffered: _planPreset != null),
       'configOptions': _configOptions(),
       '_meta': _threadMeta(resumed),
     };
@@ -361,9 +363,11 @@ final class CodexAppServerBridge implements AcpTransport {
     _threadId = thread['id'] as String?;
     _cwd = '${opened['cwd'] ?? thread['cwd'] ?? ''}';
     _sandbox = opened['sandbox'] is Map ? _map(opened['sandbox']) : null;
+    _approvalPolicy = opened['approvalPolicy'];
     _reviewer = opened['approvalsReviewer'];
+    _collaborationMode = null;
     _mode = codexModeOf(
-      opened['approvalPolicy'],
+      _approvalPolicy,
       _sandbox,
       approvalsReviewer: _reviewer,
     );
@@ -378,6 +382,8 @@ final class CodexAppServerBridge implements AcpTransport {
       _update({'sessionUpdate': 'session_info_update', 'title': name});
     }
   }
+
+  String get _modeId => codexModeId(_mode, _sandbox);
 
   /// Codex's collaboration presets, read once: 0.160.0 lists Plan (`mode:
   /// plan`, its own reasoning effort) and Default. A Codex that lists no
@@ -452,26 +458,33 @@ final class CodexAppServerBridge implements AcpTransport {
   /// does not hold has the list read again.
   Future<void> _settingsUpdated(JsonMap settings) async {
     if (settings.isEmpty) return;
-    if (settings['sandboxPolicy'] case final Map<Object?, Object?> sandbox) {
-      _sandbox = _map(sandbox);
-    }
-    if (settings.containsKey('approvalsReviewer')) {
-      _reviewer = settings['approvalsReviewer'];
-    }
-    final mode = codexModeOf(
-      settings['approvalPolicy'],
-      _sandbox,
-      approvalsReviewer: _reviewer,
-      collaboration: _planPreset == null
-          ? null
-          : _map(settings['collaborationMode'])['mode'],
-    );
-    if (mode.id != _mode.id) {
-      _mode = mode;
-      _update({
-        'sessionUpdate': 'current_mode_update',
-        'currentModeId': mode.id,
-      });
+    if (settings.keys.any(_permissionSettingKeys.contains)) {
+      final previousId = _modeId;
+      if (settings['sandboxPolicy'] case final Map<Object?, Object?> sandbox) {
+        _sandbox = _map(sandbox);
+      }
+      if (settings.containsKey('approvalPolicy')) {
+        _approvalPolicy = settings['approvalPolicy'];
+      }
+      if (settings.containsKey('approvalsReviewer')) {
+        _reviewer = settings['approvalsReviewer'];
+      }
+      if (settings.containsKey('collaborationMode')) {
+        _collaborationMode = _map(settings['collaborationMode'])['mode'];
+      }
+      _mode = codexModeOf(
+        _approvalPolicy,
+        _sandbox,
+        approvalsReviewer: _reviewer,
+        collaboration: _planPreset == null ? null : _collaborationMode,
+      );
+      if (_mode == null) _modeChosen = false;
+      if (_modeId != previousId) {
+        _update({
+          'sessionUpdate': 'current_mode_update',
+          'currentModeId': _modeId,
+        });
+      }
     }
     final model = settings['model'] as String? ?? _model;
     final effort = settings.containsKey('effort')
@@ -488,6 +501,13 @@ final class CodexAppServerBridge implements AcpTransport {
       'configOptions': _configOptions(),
     });
   }
+
+  static const _permissionSettingKeys = {
+    'sandboxPolicy',
+    'approvalPolicy',
+    'approvalsReviewer',
+    'collaborationMode',
+  };
 
   List<JsonMap> _configOptions() =>
       codexConfigOptions(_models, _model, _effort);
@@ -662,6 +682,7 @@ final class CodexAppServerBridge implements AcpTransport {
   /// One Codex turn on [thread], with what the person chose since.
   Future<void> _startTurn(String thread, List<JsonMap> input) async {
     _newTurn();
+    final mode = _modeChosen ? _mode : null;
     final started = _map(
       await _call(
         'turn/start',
@@ -670,11 +691,11 @@ final class CodexAppServerBridge implements AcpTransport {
           'input': input,
           // The reviewer and collaboration mode always ride with the mode,
           // so leaving Auto or Plan takes; each sticks for later turns.
-          if (_modeChosen) ...{
-            'approvalPolicy': _mode.approvalPolicy,
-            'sandboxPolicy': codexSandboxPolicy(_mode, _sandbox),
-            'approvalsReviewer': _mode.approvalsReviewer,
-            'collaborationMode': _collaborationFor(_mode),
+          if (mode != null) ...{
+            'approvalPolicy': mode.approvalPolicy,
+            'sandboxPolicy': codexSandboxPolicy(mode, _sandbox),
+            'approvalsReviewer': mode.approvalsReviewer,
+            'collaborationMode': _collaborationFor(mode),
           },
           if (_modelChosen) ...{'model': _model, 'effort': _effort},
         }),
@@ -826,7 +847,7 @@ final class CodexAppServerBridge implements AcpTransport {
       default:
         final ended = {'stopReason': 'end_turn', '_meta': meta};
         final plan = _turnPlan;
-        if (_mode.id == kCodexPlanMode && plan != null && !_cancelAsked) {
+        if (_mode?.id == kCodexPlanMode && plan != null && !_cancelAsked) {
           unawaited(_offerImplement(done, plan, ended));
         } else {
           done.complete(ended);

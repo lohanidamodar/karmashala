@@ -56,6 +56,7 @@ class SessionFactList extends ConsumerWidget {
         this.card ??
         overviewCardOf(ref.watch(overviewBoardProvider), sessionId);
     final native = card == null || card.entry.native != null;
+    final acp = native && ref.watch(isAcpSessionProvider(sessionId));
     final directory = card?.entry.directory;
     final branch = directory == null
         ? null
@@ -95,20 +96,22 @@ class SessionFactList extends ConsumerWidget {
             label: 'Model',
             value: SessionModelValue(sessionId: sessionId, native: native),
           ),
-          if (native) ...[
+          if (native)
             FactRow(
               key: const ValueKey('session-list:permission'),
               icon: AppIcons.shield,
               label: 'Permission',
-              value: PermissionModeChip(sessionId: sessionId),
+              value: acp
+                  ? SessionModePicker(sessionId: sessionId, leadingGap: false)
+                  : PermissionModeChip(sessionId: sessionId),
             ),
+          if (native && !acp)
             FactRow(
               key: const ValueKey('session-list:mode'),
               icon: AppIcons.slidersHorizontal,
               label: 'Agent mode',
               value: SessionModePicker(sessionId: sessionId, leadingGap: false),
             ),
-          ],
           _AgentRow(sessionId: sessionId, card: card),
           if (native) _OperateRow(sessionId: sessionId),
           if (branch != null || repositories) ...[

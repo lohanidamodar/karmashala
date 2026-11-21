@@ -77,6 +77,32 @@ void main() {
     expect(AppPreferences(client).read('k'), isNull);
   });
 
+  test(
+    'a reconnect drops modes for sessions absent from the new greeting',
+    () async {
+      final client = await server.connect();
+      server.writeAsAnotherClient([
+        const SessionModesChanged(
+          sessionId: 'chat',
+          currentModeId: 'plan',
+          availableModes: [SessionModeOption(id: 'plan', name: 'Plan')],
+        ),
+      ]);
+      await until(() => client.sessionModes.containsKey('chat'));
+    SessionModesChanged? cleared;
+    final subscription = client.sessionModeChanges.listen((change) {
+      if (change.sessionId == 'chat') cleared = change;
+    });
+    addTearDown(subscription.cancel);
+      server.stop();
+    await until(() => cleared?.availableModes.isEmpty ?? false);
+      expect(client.sessionModes, isEmpty);
+      server.start();
+      await until(() => client.connection.state == DataLinkState.connected);
+      expect(client.sessionModes, isEmpty);
+    },
+  );
+
   test('a late answer never overwrites a newer change', () async {
     final client = await server.connect();
     client.preferences.applyAt('k', 'new', 5);

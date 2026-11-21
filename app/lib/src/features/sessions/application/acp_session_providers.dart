@@ -2,8 +2,7 @@ import 'package:agent_cli/descriptors.dart' show AcpLaunchSpec;
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import 'session_providers.dart';
-import 'session_signals.dart';
+import 'session_agent_providers.dart';
 
 /// **Whether [sessionId]'s agent is spoken to over ACP**: its installation's
 /// agent passes [agentSpeaksAcp]. Such a session has no terminal of ours — the server owns
@@ -12,20 +11,9 @@ final isAcpSessionProvider = Provider.autoDispose.family<bool, String>((
   ref,
   sessionId,
 ) {
-  // The row appearing or going is `membership`; a switch in place moves its
-  // installation, told as `placement`.
-  ref.watchSessionKinds(const {
-    SessionChangeKind.membership,
-    SessionChangeKind.placement,
-  });
-  final row = ref.read(sessionsDataProvider).getById(sessionId);
-  if (row == null) return false;
-  final installations = ref.watch(agentInstallationsDataProvider);
-  // The installation can arrive after the row on a fresh connection.
-  final arrivals = installations.changes.listen((_) => ref.invalidateSelf());
-  ref.onDispose(arrivals.cancel);
-  ref.watch(agentRegistryProvider);
-  return installationSpeaksAcp(ref, row.agentInstallationId);
+  final agentId = ref.watch(sessionAgentIdProvider(sessionId));
+  return agentId != null &&
+      agentSpeaksAcp(ref.watch(agentRegistryProvider), agentId);
 });
 
 /// The rule behind [isAcpSessionProvider], for a row in hand — a launch's
@@ -43,13 +31,7 @@ bool installationSpeaksAcp(Ref ref, String installationId) {
 /// rungs — or null for a session that is not ACP or not yet known.
 final sessionAcpSpecProvider = Provider.autoDispose
     .family<AcpLaunchSpec?, String>((ref, sessionId) {
-      if (!ref.watch(isAcpSessionProvider(sessionId))) return null;
-      final row = ref.read(sessionsDataProvider).getById(sessionId);
-      if (row == null) return null;
-      final agentId = ref
-          .read(agentInstallationsDataProvider)
-          .getById(row.agentInstallationId)
-          ?.agentId;
+      final agentId = ref.watch(sessionAgentIdProvider(sessionId));
       if (agentId == null) return null;
       return ref.watch(agentRegistryProvider).adapterFor(agentId)?.acp;
     });

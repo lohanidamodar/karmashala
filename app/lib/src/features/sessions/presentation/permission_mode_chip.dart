@@ -7,6 +7,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/picker_face.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/acp_session_providers.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
@@ -69,6 +70,14 @@ class PermissionModeChip extends ConsumerWidget {
     final launcher = ref.read(sessionLauncherProvider);
     final effective = launcher.effectivePermissionFor(sessionId);
     if (effective == null) return const SizedBox.shrink();
+    if (effective.inherited) {
+      final agentId = effective.descriptor?.id;
+      if (agentId != null) {
+        ref.watch(
+          settingsControllerProvider.select((s) => s.permissionsFor(agentId)),
+        );
+      }
+    }
 
     final agentName = effective.descriptor?.displayName ?? 'This agent';
     final support = effective.descriptor?.launch.permission;
@@ -196,7 +205,8 @@ class PermissionModeChip extends ConsumerWidget {
           '$agentName default shown here instead.';
     }
     final detail = describeSelectionDetail(support, selection) ?? '';
-    return '${describeSelection(support, selection)}\n$origin\n$detail';
+    return 'Launch permissions: ${describeSelection(support, selection)}\n'
+        '$origin\n$detail';
   }
 
   Future<void> _apply(
@@ -226,7 +236,9 @@ class PermissionModeChip extends ConsumerWidget {
     // The session's own bar rather than `ScaffoldMessenger`: everything below
     // is true of this session and false of the others open beside it.
     final notices = ref.read(sessionNoticesProvider.notifier);
-    final running = launcher.livePaneFor(sessionId) != null;
+    final running =
+        launcher.livePaneFor(sessionId) != null ||
+        launcher.heldByHostOnly(sessionId);
 
     // Asked **before** the row is written, so Cancel leaves the session as the
     // user found it: writing first would record a session that bypasses.
@@ -263,9 +275,8 @@ class PermissionModeChip extends ConsumerWidget {
           '$what — $agentName has a prompt open, so it switches when the '
               'session is next idle.',
         LivePermissionOutcome.openedPicker =>
-          '$what — $agentName opened its own permission picker in the '
-              'session; choose it there to switch now. It is also recorded '
-              'for the next launch.',
+          '$what is saved for the next launch. Choose the matching '
+              'permissions in the $agentName terminal to switch now.',
         _ => null,
       };
       if (said != null) {

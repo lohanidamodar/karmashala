@@ -13,6 +13,8 @@ import 'package:karmashala/src/features/sessions/application/session_launcher.da
     show kPermissionCycleSettle;
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_mode_picker.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 import 'package:karmashala/src/app/widgets/status_strip.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_notice_line.dart';
@@ -29,29 +31,29 @@ import '../terminal/fake_instance.dart';
 /// one the session's tab shows.
 void main() {
   late TestMachine db;
+  late FakeDataServer server;
 
   Future<void> pump(
     WidgetTester tester, {
     Size size = const Size(820, 600),
     double textScale = 1,
     double? stripWidth,
+    String agentId = AgentIds.claudeCode,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     db = TestMachine();
-    final server = FakeDataServer()..runsOn(db);
+    server = FakeDataServer()..runsOn(db);
     server.environmentRows.upsert(windowsEnv());
     server.projectRows.insert(project());
     server.repositoryRows.insert(repository());
-    server.installationRows.insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    server.installationRows.insert(agentInstallation(agentId: agentId));
     db.server.sessionRows.insert(
       Session(
         id: 's1',
         repositoryId: repository().id,
-        agentInstallationId: agentInstallation(agentId: AgentIds.claudeCode).id,
+        agentInstallationId: agentInstallation(agentId: agentId).id,
         title: 'Session',
         useWorktree: false,
         status: SessionStatus.running,
@@ -196,6 +198,53 @@ void main() {
     bool drawn(WidgetTester tester, String id) {
       final row = inList(find.byKey(ValueKey('session-list:$id')));
       return row.evaluate().isNotEmpty && tester.getSize(row).height > 0;
+    }
+
+    for (final (agentId, modeId, modeName, size) in [
+      (
+        AgentIds.codexAcp,
+        'workspace-write',
+        'Workspace write',
+        const Size(360, 800),
+      ),
+      (
+        AgentIds.claudeAcp,
+        'acceptEdits',
+        'Accept edits',
+        const Size(1440, 900),
+      ),
+    ]) {
+      testWidgets('$agentId chat exposes its live picker in Permission', (
+        tester,
+      ) async {
+        await pump(
+          tester,
+          agentId: agentId,
+          size: size,
+          stripWidth: 240,
+          textScale: 1.6,
+        );
+        await tester.tap(inPeek(find.byKey(StatusStrip.foldKey)));
+        await tester.pumpAndSettle();
+        expect(drawn(tester, 'permission'), isTrue);
+        expect(drawn(tester, 'mode'), isFalse);
+
+        server.writeAsAnotherClient([
+          SessionModesChanged(
+            sessionId: 's1',
+            currentModeId: modeId,
+            availableModes: [SessionModeOption(id: modeId, name: modeName)],
+          ),
+        ]);
+        await tester.pumpAndSettle();
+        final picker = inList(find.byType(SessionModePicker));
+        expect(picker, findsOneWidget);
+        expect(inList(find.text(modeName)), findsOneWidget);
+        await tester.tap(picker);
+        await tester.pumpAndSettle();
+        expect(find.text(modeName), findsWidgets);
+        expect(tester.takeException(), isNull);
+      });
     }
 
     testWidgets('one row per fact, under its group', (tester) async {

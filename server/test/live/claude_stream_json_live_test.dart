@@ -156,7 +156,9 @@ Future<void> _exercise(_Place place) async {
     expect(outcome.resumed, isFalse);
     expect(outcome.notices, isEmpty, reason: 'an MCP endpoint was handed');
     expect(first.modes!.currentModeId, 'default');
-    final models = first.configOptions!.options.single;
+    final models = first.configOptions!.options.singleWhere(
+      (option) => option.id == 'model',
+    );
     expect(models.choices.map((c) => c.value), contains('haiku'));
     await first.setConfigOption('model', 'haiku');
 

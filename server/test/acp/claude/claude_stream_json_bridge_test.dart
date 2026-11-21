@@ -2086,6 +2086,12 @@ void main() {
       ]);
       await rt.setConfigOption('model', 'default');
       await until(() => offered().contains('auto'));
+      await rt.setMode('auto');
+      await rt.setConfigOption('model', 'claude-haiku-4-5-20251001');
+      expect(offered(), contains('auto'));
+      await rt.setMode('default');
+      expect(rt.modes!.currentModeId, 'default');
+      expect(offered(), isNot(contains('auto')));
       await rt.stop();
     });
 
@@ -2111,6 +2117,30 @@ void main() {
       expect((await answered.future)['behavior'], 'allow');
       await rt.awaitTurn();
       await rt.stop();
+    });
+
+    test('a downgrade Claude reports still asks before a command', () async {
+      final answered = Completer<Json>();
+      final machine = FakeClaudeMachine(
+        turns: [
+          (c, user) async {
+            c.system('status', {'status': null, 'permissionMode': 'default'});
+            final input = {'command': 'echo hello'};
+            c.toolUse('b1', 'Bash', input);
+            answered.complete(await c.askPermission('b1', 'Bash', input));
+            c.result();
+          },
+        ],
+      );
+      final rt = runtime(machine, risk: PermissionRisk.autoRun);
+      await rt.start();
+      addTearDown(rt.stop);
+      await rt.send('Print hello');
+      await until(() => rt.hasOpenPermission);
+      expect(rt.modes!.currentModeId, 'default');
+      await rt.answerPermission(approve: false);
+      expect((await answered.future)['behavior'], 'deny');
+      await rt.awaitTurn();
     });
 
     test("the mode picked before the start is the one started in: Don't "

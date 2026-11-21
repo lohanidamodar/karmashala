@@ -105,27 +105,34 @@ CodexMode _mode(String id) => codexModeById(id)!;
 
 /// The mode a thread's own approval policy, sandbox, reviewer and
 /// collaboration mode (ThreadSettings' `collaborationMode.mode`) amount to.
-CodexMode codexModeOf(
+CodexMode? codexModeOf(
   Object? approvalPolicy,
   JsonMap? sandbox, {
   Object? approvalsReviewer,
   Object? collaboration,
 }) {
-  final never = approvalPolicy == 'never';
   if (collaboration == 'plan') return _mode(kCodexPlanMode);
-  return switch (sandbox?['type']) {
-    'readOnly' => _mode('read-only'),
-    'dangerFullAccess' => _mode('agent-full-access'),
-    _ when never => _mode('agent'),
-    _ when approvalsReviewer == 'auto_review' => _mode('auto'),
-    _ => _mode('workspace-write'),
-  };
+  return kCodexModes
+      .where(
+        (mode) =>
+            mode.collaboration == 'default' &&
+            mode.sandboxType == sandbox?['type'] &&
+            mode.approvalPolicy == approvalPolicy &&
+            mode.approvalsReviewer == (approvalsReviewer ?? 'user'),
+      )
+      .firstOrNull;
 }
+
+String codexModeId(CodexMode? mode, JsonMap? sandbox) =>
+    mode?.id ??
+    (sandbox?['type'] == 'dangerFullAccess'
+        ? 'Custom permissions (no sandbox)'
+        : 'Custom permissions');
 
 /// ACP's `modes` for [current]: Plan only where Codex lists it
 /// ([planOffered], from `collaborationMode/list`).
-JsonMap codexModeState(CodexMode current, {required bool planOffered}) => {
-  'currentModeId': current.id,
+JsonMap codexModeState(String currentModeId, {required bool planOffered}) => {
+  'currentModeId': currentModeId,
   'availableModes': [
     for (final mode in kCodexModes)
       if (planOffered || mode.id != kCodexPlanMode)

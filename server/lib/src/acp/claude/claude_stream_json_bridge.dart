@@ -746,6 +746,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       throw AcpRpcError(JsonRpcErrorCodes.invalidParams, error.message);
     }
     _mode = mode;
+    _retellModes();
     return const {};
   }
 
@@ -848,15 +849,16 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     return modes;
   }
 
-  /// After a model change: the modes again, where the model offers others.
-  void _retellModes() {
+  /// Updates the list if a model or permission change affects the choices.
+  bool _retellModes() {
     final modes = _modes();
     final ids = [
       for (final mode in jsonObjects(modes['availableModes'])) '${mode['id']}',
     ];
-    if (ids.join(',') == _toldModes.join(',')) return;
+    if (ids.join(',') == _toldModes.join(',')) return false;
     _toldModesOf(modes);
     _update({'sessionUpdate': AcpExtensions.availableModes, ...modes});
+    return true;
   }
 
   List<JsonMap> _configOptions() => [
@@ -1002,7 +1004,9 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   void _followMode(String mode) {
     if (mode == _mode) return;
     _mode = mode;
-    _update({'sessionUpdate': 'current_mode_update', 'currentModeId': mode});
+    if (!_retellModes()) {
+      _update({'sessionUpdate': 'current_mode_update', 'currentModeId': mode});
+    }
   }
 
   String? _resolvedOf(String value) {

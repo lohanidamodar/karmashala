@@ -14,6 +14,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../agents/presentation/picker_face.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/acp_session_providers.dart';
 import '../application/session_launcher.dart';
 import '../application/session_modes_providers.dart';
@@ -59,28 +60,41 @@ class SessionModePicker extends ConsumerWidget {
       );
     }
     final spec = ref.watch(sessionAcpSpecProvider(sessionId));
+    final support = ref
+        .read(sessionLauncherProvider)
+        .effectivePermissionFor(sessionId)
+        ?.descriptor
+        ?.launch
+        .permission;
     final current = modes.current;
-    final label = current?.name ?? modes.currentModeId ?? 'Mode';
-    final rung = current == null ? null : rungOfModeOption(spec, current);
+    final label = current?.name ?? modes.currentModeId ?? 'Mode unknown';
+    PermissionRisk? displayRung(SessionModeOption mode) =>
+        support?.axes
+            .expand((axis) => axis.values)
+            .where((value) => value.id == mode.id)
+            .firstOrNull
+            ?.permits ??
+        rungOfModeOption(spec, mode);
+    final rung = current == null ? null : displayRung(current);
     final scheme = Theme.of(context).colorScheme;
     final picker = PopupMenuButton<String>(
       tooltip: '',
       position: PopupMenuPosition.over,
-      onSelected: (modeId) => _apply(context, ref, modeId, spec),
+      onSelected: (modeId) => _apply(context, ref, modeId),
       itemBuilder: (context) => [
         for (final mode in modes.availableModes)
           _item(
             mode,
-            rungOfModeOption(spec, mode),
+            displayRung(mode),
             mode.id == modes.currentModeId,
             scheme,
           ),
       ],
       child: Tooltip(
         message: [
-          'Agent mode: $label',
+          'Permission mode: $label',
           ?current?.description,
-          if (rung != null) '${rung.label}: ${rung.description}',
+          if (current?.description == null && rung != null) rung.description,
         ].join('\n'),
         child: _ModeFace(
           label: label,
@@ -110,21 +124,15 @@ class SessionModePicker extends ConsumerWidget {
         'The agent\'s own mode "${mode.id}".',
   );
 
-  Future<void> _apply(
-    BuildContext context,
-    WidgetRef ref,
-    String modeId,
-    AcpLaunchSpec? spec,
-  ) async {
+  Future<void> _apply(BuildContext context, WidgetRef ref, String modeId) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final modes = ref.read(sessionModesProvider(sessionId));
     final mode = modes?.availableModes.where((m) => m.id == modeId).firstOrNull;
-    final rung = mode == null ? null : rungOfModeOption(spec, mode);
-    if (mode != null &&
-        (rung?.isDangerous ?? false) &&
-        modeId != modes?.currentModeId) {
+    if (mode == null || modeId == modes?.currentModeId) return;
+    final spec = ref.read(sessionAcpSpecProvider(sessionId));
+    if (rungOfModeOption(spec, mode)?.isDangerous ?? false) {
       final confirmed = await _confirmDangerous(context, mode.name);
-      if (confirmed != true) return;
+      if (confirmed != true || !context.mounted) return;
     }
     final refusal = await ref
         .read(sessionModesActionsProvider)
@@ -161,12 +169,20 @@ class _StartingModePicker extends ConsumerWidget {
     if (effective == null || support == null || support.axes.length != 1) {
       return const SizedBox.shrink();
     }
+    final descriptor = effective.descriptor!;
+    if (effective.inherited) {
+      ref.watch(
+        settingsControllerProvider.select(
+          (s) => s.permissionsFor(descriptor.id),
+        ),
+      );
+    }
     final axis = support.axes.single;
     final selectedId =
         effective.selection.valueFor(axis.id) ?? axis.defaultValueId;
     final selected = axis.values.where((v) => v.id == selectedId).firstOrNull;
     if (selected == null) return const SizedBox.shrink();
-    final agentName = effective.descriptor?.displayName ?? 'This agent';
+    final agentName = descriptor.displayName;
     final scheme = Theme.of(context).colorScheme;
     final origin = effective.inherited
         ? 'Following the $agentName default in Settings.'
@@ -200,7 +216,6 @@ class _StartingModePicker extends ConsumerWidget {
         message: [
           'Starts in: ${selected.label}',
           selected.description,
-          '${selected.permits.label}: ${selected.permits.description}',
           origin,
         ].join('\n'),
         child: _ModeFace(

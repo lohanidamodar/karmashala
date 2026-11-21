@@ -3103,7 +3103,7 @@ WorkbenchView
                                                                                                 GestureDetector
                                                                                                   RawGestureDetector
                                                                                                     Listener
-                                                                                                      Tooltip tooltip="Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
+                                                                                                      Tooltip tooltip="Launch permissions: Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
                                                                                                         RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                           OverlayPortal
                                                                                                             _OverlayPortal
@@ -4369,7 +4369,7 @@ WorkbenchView
                                                                                                 GestureDetector
                                                                                                   RawGestureDetector
                                                                                                     Listener
-                                                                                                      Tooltip tooltip="Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
+                                                                                                      Tooltip tooltip="Launch permissions: Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
                                                                                                         RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                           OverlayPortal
                                                                                                             _OverlayPortal
@@ -5215,7 +5215,7 @@ WorkbenchView
                                                                                                 GestureDetector
                                                                                                   RawGestureDetector
                                                                                                     Listener
-                                                                                                      Tooltip tooltip="Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
+                                                                                                      Tooltip tooltip="Launch permissions: Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
                                                                                                         RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                           OverlayPortal
                                                                                                             _OverlayPortal
@@ -6082,7 +6082,7 @@ WorkbenchView
                                                                                                                         GestureDetector
                                                                                                                           RawGestureDetector
                                                                                                                             Listener
-                                                                                                                              Tooltip tooltip="Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
+                                                                                                                              Tooltip tooltip="Launch permissions: Ask every time\nFollowing the Claude Code default in Settings, so it changes when that setting does.\nAsk each time, before edits and commands."
                                                                                                                                 RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                                                   OverlayPortal
                                                                                                                                     _OverlayPortal
