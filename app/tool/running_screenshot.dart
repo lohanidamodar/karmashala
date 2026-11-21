@@ -64,6 +64,8 @@ class _Routes implements PhoneShellRoutes {
   @override
   void showProjects() {}
   @override
+  void showProject(String projectId) {}
+  @override
   void showWorkbench() {}
 }
 

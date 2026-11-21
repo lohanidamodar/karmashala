@@ -30,6 +30,7 @@ import '../../sessions/presentation/slot_wait_notice.dart';
 import '../../sessions/presentation/hunk_review.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/acp_session_providers.dart';
+import '../../sessions/application/session_config_options_providers.dart';
 import '../../sessions/presentation/approval_request_card.dart';
 import '../../sessions/presentation/checkout_occupancy_views.dart'
     show SharedCheckoutBadge;
@@ -38,6 +39,7 @@ import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/operator_chip.dart';
 import '../../sessions/presentation/permission_mode_chip.dart';
 import '../../sessions/presentation/session_environment_mark.dart';
+import '../../sessions/presentation/session_config_option_picker.dart';
 import '../../sessions/presentation/session_mode_picker.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
 import '../../sessions/presentation/shown_chat.dart';

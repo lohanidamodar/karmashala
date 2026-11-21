@@ -790,7 +790,7 @@ void main() {
     expect(find.text('Commit'), findsOneWidget);
     // Handoff and fork, the two the brief named, behind the same one dialog the
     // conversation opens — on the bar's Ship menu, beside the next step.
-    await tester.tap(find.text('Ship ▾'));
+    await tester.tap(find.text('Ship'));
     await tester.pumpAndSettle();
     expect(find.text('Continue with…'), findsOneWidget);
   });
@@ -846,7 +846,7 @@ void main() {
     /// Everything the user can press, where it is: the next step on the bar,
     /// the rest in the Ship menu.
     Future<void> openShip(WidgetTester tester) async {
-      await tester.tap(find.text('Ship ▾'));
+      await tester.tap(find.text('Ship'));
       await tester.pumpAndSettle();
     }
 
@@ -949,9 +949,9 @@ void main() {
           tester.widget<Text>(inTheBar(label)).style?.color;
 
       expect(fillBehind('Commit'), isNull);
-      expect(fillBehind('Ship ▾'), isNull);
+      expect(fillBehind('Ship'), isNull);
       expect(ink('Commit'), scheme.primary);
-      expect(ink('Ship ▾'), isNot(scheme.primary));
+      expect(ink('Ship'), isNot(scheme.primary));
     });
 
     testWidgets('below its width the facts are a caption over the controls', (

@@ -124,7 +124,11 @@ class SessionModePicker extends ConsumerWidget {
         'The agent\'s own mode "${mode.id}".',
   );
 
-  Future<void> _apply(BuildContext context, WidgetRef ref, String modeId) async {
+  Future<void> _apply(
+    BuildContext context,
+    WidgetRef ref,
+    String modeId,
+  ) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final modes = ref.read(sessionModesProvider(sessionId));
     final mode = modes?.availableModes.where((m) => m.id == modeId).firstOrNull;
@@ -276,7 +280,7 @@ class _ModeFace extends StatelessWidget {
     final alarming = dangerous || (rung?.isDangerous ?? false);
     final qualifier = rung?.shortLabel;
     return PickerFace(
-      icon: alarming ? AppIcons.warning : AppIcons.slidersHorizontal,
+      icon: alarming ? AppIcons.warning : AppIcons.shield,
       label: label,
       qualifiers: [if (qualifier != null && qualifier != label) qualifier],
       alarming: alarming,

@@ -202,11 +202,7 @@ class _SessionSheetButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
         foregroundColor: scheme.onSurface,
       ),
-      onPressed: () => showAdaptiveModal<void>(
-        context: context,
-        title: 'Session',
-        builder: (_) => SessionFactList(sessionId: sessionId),
-      ),
+      onPressed: () => showSessionDetails(context, sessionId),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

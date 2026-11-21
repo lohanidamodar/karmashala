@@ -344,6 +344,7 @@ class SessionModelChip extends ConsumerWidget {
     required this.sessionId,
     this.maxLabelWidth = 120,
     this.short = false,
+    this.modelOnly = false,
     super.key,
   });
 
@@ -356,6 +357,9 @@ class SessionModelChip extends ConsumerWidget {
   /// See [ModelChip.short].
   final bool short;
 
+  /// Keeps other chat settings in their own controls.
+  final bool modelOnly;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // An ACP agent takes no model flag: its model is a config option it
@@ -364,7 +368,7 @@ class SessionModelChip extends ConsumerWidget {
       return SessionConfigPickers(
         sessionId: sessionId,
         maxLabelWidth: maxLabelWidth,
-        modelOnly: short,
+        modelOnly: short || modelOnly,
       );
     }
     return _buildModelChip(

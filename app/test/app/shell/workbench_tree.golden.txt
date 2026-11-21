@@ -3285,8 +3285,15 @@ WorkbenchView
                                                                                                                                             RichText
                                                                                                                                   SizedBox
                                                                                                                                   Flexible
-                                                                                                                                    Text text="Ship ▾"
+                                                                                                                                    Text text="Ship"
                                                                                                                                       RichText
+                                                                                                                                  SizedBox
+                                                                                                                                  Icon
+                                                                                                                                    Semantics
+                                                                                                                                      ExcludeSemantics
+                                                                                                                                        SizedBox
+                                                                                                                                          Center
+                                                                                                                                            RichText
                                                       ExcludeFocus
                                                         Focus
                                                           _FocusInheritedScope
@@ -4551,8 +4558,15 @@ WorkbenchView
                                                                                                                                             RichText
                                                                                                                                   SizedBox
                                                                                                                                   Flexible
-                                                                                                                                    Text text="Ship ▾"
+                                                                                                                                    Text text="Ship"
                                                                                                                                       RichText
+                                                                                                                                  SizedBox
+                                                                                                                                  Icon
+                                                                                                                                    Semantics
+                                                                                                                                      ExcludeSemantics
+                                                                                                                                        SizedBox
+                                                                                                                                          Center
+                                                                                                                                            RichText
                                                       ExcludeFocus
                                                         Focus
                                                           _FocusInheritedScope
@@ -5397,8 +5411,15 @@ WorkbenchView
                                                                                                                                             RichText
                                                                                                                                   SizedBox
                                                                                                                                   Flexible
-                                                                                                                                    Text text="Ship ▾"
+                                                                                                                                    Text text="Ship"
                                                                                                                                       RichText
+                                                                                                                                  SizedBox
+                                                                                                                                  Icon
+                                                                                                                                    Semantics
+                                                                                                                                      ExcludeSemantics
+                                                                                                                                        SizedBox
+                                                                                                                                          Center
+                                                                                                                                            RichText
                                                       ExcludeFocus
                                                         Focus
                                                           _FocusInheritedScope
@@ -6260,8 +6281,15 @@ WorkbenchView
                                                                                                                                 RichText
                                                                                                                       SizedBox
                                                                                                                       Flexible
-                                                                                                                        Text text="Ship ▾"
+                                                                                                                        Text text="Ship"
                                                                                                                           RichText
+                                                                                                                      SizedBox
+                                                                                                                      Icon
+                                                                                                                        Semantics
+                                                                                                                          ExcludeSemantics
+                                                                                                                            SizedBox
+                                                                                                                              Center
+                                                                                                                                RichText
                                               SessionMoreButton
                                                 MenuAnchor
                                                   _MenuAnchorScope

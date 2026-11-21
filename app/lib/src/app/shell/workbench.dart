@@ -72,7 +72,6 @@ import 'workbench_conversation.dart';
 import 'workbench_tabs.dart';
 import 'workbench_split.dart';
 import 'tab_strip_metrics.dart';
-import '../widgets/adaptive_modal.dart';
 import 'zen_bar.dart' show kZenBarRoom;
 import '../../features/sessions/presentation/session_subagents_panel.dart'
     show SessionSubagentsBadge;

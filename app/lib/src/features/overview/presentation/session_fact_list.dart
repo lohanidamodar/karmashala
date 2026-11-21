@@ -5,11 +5,13 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/widgets/fact_list.dart';
+import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/capabilities/capabilities.dart';
 import '../../explorer/presentation/more_menu.dart' show kMoreMenuValue;
 import '../../explorer/presentation/session_row_menu.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/presentation/agent_logo.dart';
+import '../../agents/presentation/picker_face.dart';
 import '../../automations/presentation/session_origin_label.dart';
 import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_active_model_providers.dart';
@@ -36,6 +38,25 @@ import '../application/overview_providers.dart';
 import '../application/overview_tiles.dart';
 import 'overview_card_parts.dart';
 import 'overview_session_parts.dart';
+
+const sessionDetailsTitle = 'Session details';
+
+Future<void> showSessionDetails(BuildContext context, String sessionId) =>
+    showAdaptiveModal<void>(
+      context: context,
+      title: sessionDetailsTitle,
+      builder: (_) => SessionFactList(sessionId: sessionId),
+    );
+
+Widget _factPicker({
+  Key? key,
+  required IconData icon,
+  required String label,
+  required Widget picker,
+}) => PickerFaceLayout(
+  wrap: (value) => FactRow(key: key, icon: icon, label: label, value: value),
+  child: picker,
+);
 
 /// **Everything about one session, as a list** (owner, 2026-10-08: the
 /// cloud of chips "looks unorganized"): one row per fact, its value at the
@@ -97,41 +118,40 @@ class SessionFactList extends ConsumerWidget {
             value: OverviewUsageLine(sessionId: sessionId),
           ),
           const FactListHeader('Agent'),
-          FactRow(
-            key: const ValueKey('session-list:model'),
-            icon: AppIcons.robot,
-            label: 'Model',
-            value: SessionModelValue(
-              sessionId: sessionId,
-              native: native,
-              short: acp,
-            ),
+          SessionModelValue(
+            sessionId: sessionId,
+            native: native,
+            modelOnly: true,
+            inDetails: true,
           ),
           for (final option in options)
             if (!option.isModel)
-              FactRow(
-                icon: AppIcons.slidersHorizontal,
+              _factPicker(
+                icon: configOptionIcon(option),
                 label: configOptionLabel(option),
-                value: SessionConfigOptionPicker(
+                picker: SessionConfigOptionPicker(
                   sessionId: sessionId,
                   option: option,
                 ),
               ),
           if (native)
-            FactRow(
+            _factPicker(
               key: const ValueKey('session-list:permission'),
               icon: AppIcons.shield,
               label: 'Permission',
-              value: acp
+              picker: acp
                   ? SessionModePicker(sessionId: sessionId, leadingGap: false)
                   : PermissionModeChip(sessionId: sessionId),
             ),
           if (native && !acp)
-            FactRow(
+            _factPicker(
               key: const ValueKey('session-list:mode'),
               icon: AppIcons.slidersHorizontal,
               label: 'Agent mode',
-              value: SessionModePicker(sessionId: sessionId, leadingGap: false),
+              picker: SessionModePicker(
+                sessionId: sessionId,
+                leadingGap: false,
+              ),
             ),
           _AgentRow(sessionId: sessionId, card: card),
           if (native) _OperateRow(sessionId: sessionId),
@@ -246,6 +266,8 @@ class SessionModelValue extends ConsumerWidget {
     required this.sessionId,
     required this.native,
     this.short = false,
+    this.modelOnly = false,
+    this.inDetails = false,
     this.bare = true,
     this.maxLabelWidth = 160,
     super.key,
@@ -254,6 +276,8 @@ class SessionModelValue extends ConsumerWidget {
   final String sessionId;
   final bool native;
   final bool short;
+  final bool modelOnly;
+  final bool inDetails;
   final bool bare;
 
   /// The most of the model's name the picker shows before it ends.
@@ -261,6 +285,7 @@ class SessionModelValue extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    const modelKey = ValueKey('session-list:model');
     if (native) {
       ref.watchSession(sessionId);
       // The bar's own test for a session with agent controls.
@@ -269,24 +294,41 @@ class SessionModelValue extends ConsumerWidget {
           ref.read(sessionLauncherProvider).effectivePermissionFor(sessionId) !=
               null;
       if (controls) {
-        return SessionModelChip(
+        final picker = SessionModelChip(
           sessionId: sessionId,
           short: short,
+          modelOnly: modelOnly,
           maxLabelWidth: maxLabelWidth,
         );
+        return inDetails
+            ? _factPicker(
+                key: modelKey,
+                icon: AppIcons.robot,
+                label: 'Model',
+                picker: picker,
+              )
+            : picker;
       }
     }
     final model = ref.watch(sessionActiveModelProvider(sessionId))?.label;
     if (model == null) return const SizedBox.shrink();
     if (bare) {
       final theme = Theme.of(context);
-      return Text(
+      final value = Text(
         model,
         key: const ValueKey('overview-peek-model'),
         style: theme.textTheme.labelSmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       );
+      return inDetails
+          ? FactRow(
+              key: modelKey,
+              icon: AppIcons.robot,
+              label: 'Model',
+              value: value,
+            )
+          : value;
     }
     return SessionStripFact(
       key: const ValueKey('overview-peek-model'),

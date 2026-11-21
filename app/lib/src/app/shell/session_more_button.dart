@@ -15,6 +15,7 @@ import '../../features/sessions/presentation/session_repositories_bar.dart';
 import '../../features/sessions/presentation/session_stats_dialog.dart';
 import '../../features/sessions/presentation/session_subagents_panel.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
+import '../../features/overview/presentation/session_fact_list.dart';
 
 /// **⋯ on the pane status line**: the session's rarer verbs, which lived in
 /// the chat view's header until the header went (owner, 2026-09-28: the tab
@@ -103,6 +104,17 @@ class _SessionMoreButtonState extends ConsumerState<SessionMoreButton> {
                     spacing: Insets.sm,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          _controller.close();
+                          showSessionDetails(context, widget.sessionId);
+                        },
+                        icon: const Icon(
+                          AppIcons.slidersHorizontal,
+                          size: Chrome.iconSmall,
+                        ),
+                        label: const Text(sessionDetailsTitle),
+                      ),
                       SessionStatsButton(sessionId: widget.sessionId),
                       if (!operating)
                         TextButton.icon(

@@ -135,13 +135,13 @@ class _StatusStripState extends State<StatusStrip> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (var i = 0; i < pinned.length; i++)
-                    if (i == 0)
+                    if (i == 0 && pinned.length > 1)
                       _item(context, pinned[i], short)
                     else
                       Flexible(
                         child: Padding(
-                          padding: const EdgeInsetsDirectional.only(
-                            start: Insets.xs,
+                          padding: EdgeInsetsDirectional.only(
+                            start: i == 0 ? 0 : Insets.xs,
                           ),
                           child: _item(context, pinned[i], short),
                         ),
@@ -155,6 +155,7 @@ class _StatusStripState extends State<StatusStrip> {
                 alignment: AlignmentDirectional.centerStart,
                 child: YieldingRow(
                   yieldFromStart: false,
+                  keepsOne: false,
                   spacing: Insets.xs,
                   onHiddenChanged: _hiddenChanged,
                   children: [

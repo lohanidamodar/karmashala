@@ -50,7 +50,7 @@ class SessionConfigOptionPicker extends ConsumerWidget {
           ?option.description,
         ].join('\n'),
         child: PickerFace(
-          icon: option.isModel ? AppIcons.robot : AppIcons.slidersHorizontal,
+          icon: configOptionIcon(option),
           label: face.label,
           qualifiers: [?face.qualifier],
           maxLabelWidth: maxLabelWidth,
@@ -63,21 +63,33 @@ class SessionConfigOptionPicker extends ConsumerWidget {
   /// choice, only when the agent grouped them. The one [running] names says
   /// so.
   List<PopupMenuEntry<String>> _items(String? running) {
-    final items = <PopupMenuEntry<String>>[];
+    final items = <PopupMenuEntry<String>>[
+      DesktopMenuHeader<String>(configOptionLabel(option)),
+    ];
     String? heading;
     for (final choice in option.choices) {
       if (choice.group != null && choice.group != heading) {
         heading = choice.group;
         items.add(DesktopMenuHeader<String>(heading!));
       }
+      final description = choice.description;
+      final selected = choice.value == option.currentValue;
+      final isRunning = choice.value == running;
       items.add(
-        DesktopMenuDetailItem<String>(
-          value: choice.value,
-          selected: choice.value == option.currentValue,
-          label: choice.name,
-          badge: choice.value == running ? kModelRunningBadge : null,
-          detail: choice.description ?? 'The agent\'s own "${choice.value}".',
-        ),
+        (description == null || description.trim().isEmpty) && !isRunning
+            ? DesktopMenuItem<String>(
+                value: choice.value,
+                label: choice.name,
+                icon: configOptionIcon(option),
+                selected: selected,
+              )
+            : DesktopMenuDetailItem<String>(
+                value: choice.value,
+                selected: selected,
+                label: choice.name,
+                badge: isRunning ? kModelRunningBadge : null,
+                detail: description ?? '',
+              ),
       );
     }
     return items;
@@ -104,6 +116,12 @@ class SessionConfigOptionPicker extends ConsumerWidget {
 
 String configOptionLabel(SessionConfigOption option) =>
     option.isThinkingLevel ? 'Thinking level' : option.name;
+
+IconData configOptionIcon(SessionConfigOption option) => switch (option) {
+  _ when option.isModel => AppIcons.robot,
+  _ when option.id == 'fast_mode' => AppIcons.lightning,
+  _ => AppIcons.slidersHorizontal,
+};
 
 /// The selected setting for the next request. For an unresolved default, use
 /// the last model the agent actually reported.
@@ -151,8 +169,11 @@ class SessionConfigPickers extends ConsumerWidget {
         if (option.isSelect && option.choices.isNotEmpty && !option.isMode)
           option,
     ];
-    options.sort((a, b) => (a.isModel ? 0 : 1) - (b.isModel ? 0 : 1));
-    return options;
+    return [
+      ...options.where((option) => option.isModel),
+      ...options.where((option) => !option.isModel && option.isThinkingLevel),
+      ...options.where((option) => !option.isModel && !option.isThinkingLevel),
+    ];
   }
 
   @override
@@ -164,6 +185,13 @@ class SessionConfigPickers extends ConsumerWidget {
         if (!modelOnly || option.isModel) option,
     ];
     if (options.isEmpty) return const SizedBox.shrink();
+    if (options.length == 1) {
+      return SessionConfigOptionPicker(
+        sessionId: sessionId,
+        option: options.single,
+        maxLabelWidth: maxLabelWidth,
+      );
+    }
     return Wrap(
       spacing: Insets.xs,
       runSpacing: Insets.xs,

@@ -59,7 +59,8 @@ class _ShipMenu extends StatelessWidget {
   Widget build(BuildContext context) => Builder(
     builder: (anchor) => _BarAction(
       icon: AppIcons.rocketLaunch,
-      label: 'Ship ▾',
+      label: 'Ship',
+      dropdown: true,
       tooltip: 'Review, checks, pull request and handing the session on',
       onPressed: () async {
         final picked = await showDesktopMenuUnder<int>(anchor, [
@@ -91,6 +92,7 @@ class _BarAction extends StatelessWidget {
     required this.onPressed,
     this.primary = false,
     this.compact = false,
+    this.dropdown = false,
   });
 
   final IconData icon;
@@ -98,6 +100,7 @@ class _BarAction extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onPressed;
   final bool primary;
+  final bool dropdown;
 
   /// Glyph only — see [DeliveryStrip.compact].
   final bool compact;
@@ -155,6 +158,14 @@ class _BarAction extends StatelessWidget {
                         fontWeight: primary ? FontWeight.w600 : null,
                       ),
                     ),
+                  ),
+                ],
+                if (dropdown) ...[
+                  const SizedBox(width: Insets.xs),
+                  Icon(
+                    AppIcons.caretDown,
+                    size: Chrome.iconSmall,
+                    color: foreground,
                   ),
                 ],
               ],

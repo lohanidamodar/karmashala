@@ -3,6 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+/// Lets a detail list put the picker value and its label in one tap target.
+class PickerFaceLayout extends InheritedWidget {
+  const PickerFaceLayout({required this.wrap, required super.child, super.key});
+
+  final Widget Function(Widget value) wrap;
+
+  @override
+  bool updateShouldNotify(PickerFaceLayout oldWidget) => wrap != oldWidget.wrap;
+}
+
 /// The closed face of a model or permission menu: a glyph, a name, its quiet
 /// qualifiers and a caret, in one outlined pill. Pure — the menu around it
 /// decides what it says.
@@ -54,7 +64,11 @@ class PickerFace extends StatelessWidget {
       );
     }
 
-    // Always the child of a menu button's InkWell, so this is its hit area.
+    final layout = context
+        .dependOnInheritedWidgetOfExactType<PickerFaceLayout>();
+    if (layout != null) {
+      return layout.wrap(_contents(foreground, name, style, inRow: true));
+    }
     return TouchTarget(child: _face(scheme, foreground, name, style));
   }
 
@@ -73,27 +87,37 @@ class PickerFace extends StatelessWidget {
         borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: Chrome.iconSmall, color: foreground),
-          const SizedBox(width: Insets.xs),
-          Flexible(child: name),
-          for (final qualifier in qualifiers) ...[
-            const SizedBox(width: Insets.xs),
-            Flexible(
-              child: Text(
-                '· $qualifier',
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-                style: style,
-              ),
-            ),
-          ],
-          Icon(AppIcons.caretDown, size: caretSize, color: foreground),
-        ],
-      ),
+      child: _contents(foreground, name, style),
     );
   }
+
+  Widget _contents(
+    Color foreground,
+    Widget name,
+    TextStyle? style, {
+    bool inRow = false,
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (!inRow || alarming) ...[
+        Icon(icon, size: Chrome.iconSmall, color: foreground),
+        const SizedBox(width: Insets.xs),
+      ],
+      Flexible(child: name),
+      for (final qualifier in qualifiers) ...[
+        const SizedBox(width: Insets.xs),
+        Flexible(
+          child: Text(
+            '· $qualifier',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
+      ],
+      if (inRow) const SizedBox(width: Insets.xs),
+      Icon(AppIcons.caretDown, size: caretSize, color: foreground),
+    ],
+  );
 }

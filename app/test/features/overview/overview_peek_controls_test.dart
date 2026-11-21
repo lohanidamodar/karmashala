@@ -135,6 +135,20 @@ void main() {
     );
   });
 
+  testWidgets('desktop More opens the same Session details as the phone', (
+    tester,
+  ) async {
+    await pump(tester, size: const Size(1440, 900), textScale: 1.6);
+    await tester.tap(inPeek(find.byKey(const ValueKey('session-more'))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(sessionDetailsTitle));
+    await tester.pumpAndSettle();
+    expect(find.byType(SessionFactList), findsOneWidget);
+    expect(find.text(sessionDetailsTitle), findsOneWidget);
+    expect(inList(find.text('Model')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a permission chosen in the peek is the one the tab shows', (
     tester,
   ) async {
@@ -239,6 +253,15 @@ void main() {
             sessionId: 's1',
             options: [
               SessionConfigOption(
+                id: 'model',
+                name: 'Model',
+                type: 'select',
+                currentValue: 'balanced',
+                choices: [
+                  SessionConfigChoice(value: 'balanced', name: 'Balanced'),
+                ],
+              ),
+              SessionConfigOption(
                 id: 'reasoning_effort',
                 name: 'Reasoning effort',
                 type: 'select',
@@ -252,21 +275,30 @@ void main() {
           ),
         ]);
         await tester.pumpAndSettle();
+        final strip = tester.widget<StatusStrip>(find.byType(StatusStrip));
+        expect(strip.pinned.map((item) => item.id), contains('model'));
+        expect(
+          strip.items.map((item) => item.id),
+          contains('agent-option:reasoning_effort'),
+        );
         final picker = inList(find.byType(SessionModePicker));
         expect(picker, findsOneWidget);
         expect(inList(find.text(modeName)), findsOneWidget);
-        await tester.tap(picker);
+        await tester.tap(inList(find.text('Permission')));
         await tester.pumpAndSettle();
         expect(find.text(modeName), findsWidgets);
         tester.state<NavigatorState>(find.byType(Navigator)).pop();
         await tester.pumpAndSettle();
         expect(inList(find.text('Thinking level')), findsOneWidget);
-        await tester.tap(inList(find.text('Medium')));
+        await tester.tap(inList(find.text('Thinking level')));
         await tester.pumpAndSettle();
         await tester.tap(find.text('High'));
         await tester.pumpAndSettle();
         expect(inList(find.text('High')), findsOneWidget);
         expect(server.requests, contains('sessions.setConfigOption'));
+        await tester.tap(inList(find.text('Model')));
+        await tester.pumpAndSettle();
+        expect(find.text('MODEL'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
     }
@@ -332,12 +364,7 @@ void main() {
 
     testWidgets('a picker opens from its row', (tester) async {
       await openList(tester);
-      await tester.tap(
-        find.descendant(
-          of: find.byKey(const ValueKey('session-list:permission')),
-          matching: find.byType(PermissionModeChip),
-        ),
-      );
+      await tester.tap(inList(find.text('Permission')));
       await tester.pumpAndSettle();
       expect(find.text('Follow the Settings default'), findsOneWidget);
       expect(find.text('Build · Accept edits'), findsWidgets);

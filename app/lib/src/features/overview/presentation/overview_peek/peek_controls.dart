@@ -21,6 +21,11 @@ class OverviewPeekControls extends ConsumerWidget {
     final card = this.card;
     final native = card == null || card.entry.native != null;
     final acp = native && ref.watch(isAcpSessionProvider(sessionId));
+    final options = acp
+        ? SessionConfigPickers.selectable(
+            ref.watch(sessionConfigOptionsProvider(sessionId)),
+          )
+        : const [];
     return Container(
       key: const ValueKey('overview-peek-controls'),
       padding: const EdgeInsetsDirectional.only(start: Insets.sm),
@@ -30,7 +35,7 @@ class OverviewPeekControls extends ConsumerWidget {
         ),
       ),
       child: StatusStrip(
-        sheetTitle: 'Session',
+        sheetTitle: sessionDetailsTitle,
         sheet: (_) => SessionFactList(sessionId: sessionId, card: card),
         pinned: [
           if (card != null)
@@ -44,6 +49,7 @@ class OverviewPeekControls extends ConsumerWidget {
               sessionId: sessionId,
               short: short,
               native: native,
+              modelOnly: true,
               bare: false,
             ),
           ),
@@ -63,6 +69,15 @@ class OverviewPeekControls extends ConsumerWidget {
                     SessionModePicker(sessionId: sessionId, leadingGap: false),
               ),
           ],
+          for (final option in options)
+            if (!option.isModel)
+              StatusStripItem(
+                id: 'agent-option:${option.id}',
+                builder: (_, _) => SessionConfigOptionPicker(
+                  sessionId: sessionId,
+                  option: option,
+                ),
+              ),
           StatusStripItem(
             id: 'agent',
             builder: (_, _) => _PeekAgentFact(sessionId: sessionId, card: card),
