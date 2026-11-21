@@ -1464,7 +1464,7 @@ class DataClient {
     // What the server's connections were doing is no longer known.
     sshConnections.clear();
     sessionQueues.clear();
-    // The next greeting only lists running chat agents. Drop modes for
+    // The next greeting only lists running chat agents. Drop controls for
     // sessions that could have ended while the link was down.
     final modeSessions = sessionModes.keys.toList();
     sessionModes.clear();
@@ -1475,6 +1475,13 @@ class DataClient {
           currentModeId: null,
           availableModes: const [],
         ),
+      );
+    }
+    final configSessions = sessionConfigOptions.keys.toList();
+    sessionConfigOptions.clear();
+    for (final sessionId in configSessions) {
+      _sessionConfigOptionChanges.add(
+        SessionConfigOptionsChanged(sessionId: sessionId, options: const []),
       );
     }
     // An ask is answered wherever it is answered: one kept from before the

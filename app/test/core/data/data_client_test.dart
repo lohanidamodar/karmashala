@@ -78,7 +78,7 @@ void main() {
   });
 
   test(
-    'a reconnect drops modes for sessions absent from the new greeting',
+    'a reconnect drops live controls absent from the new greeting',
     () async {
       final client = await server.connect();
       server.writeAsAnotherClient([
@@ -87,19 +87,36 @@ void main() {
           currentModeId: 'plan',
           availableModes: [SessionModeOption(id: 'plan', name: 'Plan')],
         ),
+        const SessionConfigOptionsChanged(
+          sessionId: 'chat',
+          options: [
+            SessionConfigOption(
+              id: 'effort',
+              name: 'Effort',
+              type: 'select',
+              currentValue: 'medium',
+            ),
+          ],
+        ),
       ]);
-      await until(() => client.sessionModes.containsKey('chat'));
-    SessionModesChanged? cleared;
-    final subscription = client.sessionModeChanges.listen((change) {
-      if (change.sessionId == 'chat') cleared = change;
-    });
-    addTearDown(subscription.cancel);
+      await until(
+        () =>
+            client.sessionModes.containsKey('chat') &&
+            client.sessionConfigOptions.containsKey('chat'),
+      );
+      SessionModesChanged? cleared;
+      final subscription = client.sessionModeChanges.listen((change) {
+        if (change.sessionId == 'chat') cleared = change;
+      });
+      addTearDown(subscription.cancel);
       server.stop();
-    await until(() => cleared?.availableModes.isEmpty ?? false);
+      await until(() => cleared?.availableModes.isEmpty ?? false);
       expect(client.sessionModes, isEmpty);
+      expect(client.sessionConfigOptions, isEmpty);
       server.start();
       await until(() => client.connection.state == DataLinkState.connected);
       expect(client.sessionModes, isEmpty);
+      expect(client.sessionConfigOptions, isEmpty);
     },
   );
 

@@ -81,6 +81,8 @@ final class CodexAppServerBridge implements AcpTransport {
   String? _model;
   String? _effort;
   var _modelChosen = false;
+  var _configRevision = 0;
+  var _appliedConfigRevision = 0;
   List<JsonMap> _models = const [];
 
   /// Codex's Plan preset from `collaborationMode/list`, or null where it
@@ -90,6 +92,7 @@ final class CodexAppServerBridge implements AcpTransport {
 
   Completer<JsonMap>? _turn;
   String? _turnId;
+  var _turnRerouted = false;
   var _interruptWanted = false;
   var _cancelAsked = false;
   String? _turnDiff;
@@ -360,6 +363,8 @@ final class CodexAppServerBridge implements AcpTransport {
 
   Future<void> _adopt(JsonMap opened) async {
     final thread = _map(opened['thread']);
+    final keepPendingConfig =
+        _threadId == thread['id'] && _configRevision != _appliedConfigRevision;
     _threadId = thread['id'] as String?;
     _cwd = '${opened['cwd'] ?? thread['cwd'] ?? ''}';
     _sandbox = opened['sandbox'] is Map ? _map(opened['sandbox']) : null;
@@ -371,10 +376,12 @@ final class CodexAppServerBridge implements AcpTransport {
       _sandbox,
       approvalsReviewer: _reviewer,
     );
-    _model = opened['model'] as String? ?? thread['model'] as String?;
-    _effort =
-        opened['reasoningEffort'] as String? ??
-        thread['reasoningEffort'] as String?;
+    if (!keepPendingConfig) {
+      _model = opened['model'] as String? ?? thread['model'] as String?;
+      _effort =
+          opened['reasoningEffort'] as String? ??
+          thread['reasoningEffort'] as String?;
+    }
     _models = await _listModels();
     await _readPresets();
     await _readSkills();
@@ -486,6 +493,8 @@ final class CodexAppServerBridge implements AcpTransport {
         });
       }
     }
+    // A turn already in progress can still report its previous settings.
+    if (_appliedConfigRevision != _configRevision) return;
     final model = settings['model'] as String? ?? _model;
     final effort = settings.containsKey('effort')
         ? settings['effort'] as String?
@@ -562,9 +571,11 @@ final class CodexAppServerBridge implements AcpTransport {
         _model = value;
         _effort = codexEffortFor(_models, value, _effort);
         _modelChosen = true;
+        _configRevision++;
       case kCodexEffortOption when value is String:
         _effort = value;
         _modelChosen = true;
+        _configRevision++;
       default:
         throw AcpRpcError(
           JsonRpcErrorCodes.invalidParams,
@@ -655,6 +666,7 @@ final class CodexAppServerBridge implements AcpTransport {
 
   void _newTurn() {
     _turnId = null;
+    _turnRerouted = false;
     _interruptWanted = false;
     _turnDiff = null;
     _turnPlan = null;
@@ -683,6 +695,8 @@ final class CodexAppServerBridge implements AcpTransport {
   Future<void> _startTurn(String thread, List<JsonMap> input) async {
     _newTurn();
     final mode = _modeChosen ? _mode : null;
+    final revision = _configRevision;
+    final model = _model;
     final started = _map(
       await _call(
         'turn/start',
@@ -697,10 +711,14 @@ final class CodexAppServerBridge implements AcpTransport {
             'approvalsReviewer': mode.approvalsReviewer,
             'collaborationMode': _collaborationFor(mode),
           },
-          if (_modelChosen) ...{'model': _model, 'effort': _effort},
+          if (_modelChosen) ...{'model': model, 'effort': _effort},
         }),
       ),
     );
+    _appliedConfigRevision = revision;
+    if (model != null && !_turnRerouted) {
+      _update({'sessionUpdate': AcpExtensions.activeModel, 'modelId': model});
+    }
     _turnId ??= _map(started['turn'])['id'] as String?;
     if (_interruptWanted) _interrupt();
   }
@@ -941,17 +959,13 @@ final class CodexAppServerBridge implements AcpTransport {
       case 'thread/settings/updated':
         unawaited(_settingsUpdated(_map(params['threadSettings'])));
       case 'model/rerouted':
-        _model = params['toModel'] as String? ?? _model;
-        _update({
-          'sessionUpdate': 'config_option_update',
-          'configOptions': _configOptions(),
-          '_meta': {
-            'codex': {
-              'reroutedFrom': params['fromModel'],
-              'reason': params['reason'],
-            },
-          },
-        });
+        if (params['toModel'] case final String model) {
+          _turnRerouted = true;
+          _update({
+            'sessionUpdate': AcpExtensions.activeModel,
+            'modelId': model,
+          });
+        }
       case 'turn/started':
         // A compaction's turn is named only here.
         if (_turn != null && _turnId == null) {

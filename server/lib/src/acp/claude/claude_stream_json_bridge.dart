@@ -81,6 +81,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
   String _sessionId = '';
   String _mode = 'default';
   String _model = 'default';
+  var _modelChangedDuringTurn = false;
 
   /// The effort `get_settings` last applied, or null where it named none or
   /// could not be read.
@@ -494,6 +495,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
     _planCalls.clear();
     _tasks.clear();
     _model = 'default';
+    _modelChangedDuringTurn = false;
     _reportedModel = null;
   }
 
@@ -522,6 +524,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
       );
     }
     final turn = _turn = Completer<String>();
+    _modelChangedDuringTurn = false;
     _cancelling = false;
     claude.send({
       'type': 'user',
@@ -776,9 +779,12 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
         case 'model':
           await claude.control('set_model', {'model': value});
           _model = value;
-          _reportModel(
-            _resolvedOf(value) ?? (value == 'default' ? null : value),
-          );
+          _modelChangedDuringTurn = _turn != null || _agentTurnOpen;
+          if (!_modelChangedDuringTurn) {
+            _reportModel(
+              _resolvedOf(value) ?? (value == 'default' ? null : value),
+            );
+          }
           _retellModes();
         case 'effort':
           await claude.control('apply_flag_settings', {
@@ -1030,7 +1036,7 @@ final class ClaudeStreamJsonBridge implements AcpTransport {
 
   void _followModel(String resolved) {
     _reportModel(resolved);
-    if (_resolvedOf(_model) == resolved) return;
+    if (_modelChangedDuringTurn || _resolvedOf(_model) == resolved) return;
     for (final model in _models) {
       if (model['resolvedModel'] == resolved || model['value'] == resolved) {
         _model = '${model['value']}';

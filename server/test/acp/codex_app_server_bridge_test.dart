@@ -591,6 +591,46 @@ void main() {
     await runtime.stop();
   });
 
+  test('a model and effort picked mid-turn survive settings and rerouting '
+      'from the old turn', () async {
+    final finish = Completer<void>();
+    var turns = 0;
+    final codex = FakeCodexAppServer(
+      onTurn: (turn) async {
+        if (++turns == 1) await finish.future;
+        turn.end('completed');
+      },
+    );
+    final runtime = runtimeOver(codex);
+    await runtime.start();
+    addTearDown(runtime.stop);
+    await runtime.send('First');
+    await pump(40);
+
+    await runtime.setConfigOption('model', 'gpt-deep');
+    await runtime.setConfigOption('reasoning_effort', 'xhigh');
+    codex.notify('thread/settings/updated', {
+      'threadId': 'thr-new',
+      'threadSettings': {'model': 'gpt-fast', 'effort': 'low'},
+    });
+    codex.notify('model/rerouted', {
+      'threadId': 'thr-new',
+      'toModel': 'gpt-fast-fallback',
+    });
+    await pump(40);
+    expect(runtime.configOptions!.option('model')!.currentValue, 'gpt-deep');
+    expect(runtime.activeModelId, 'gpt-fast-fallback');
+    finish.complete();
+    await runtime.awaitTurn();
+
+    await runtime.send('Second');
+    await runtime.awaitTurn();
+    final turn = codex.callsTo('turn/start').last;
+    expect(turn['model'], 'gpt-deep');
+    expect(turn['effort'], 'xhigh');
+    expect(runtime.activeModelId, 'gpt-deep');
+  });
+
   test('a model-only update keeps the selected mode and a custom policy '
       'is displayed without replacing it on the next turn', () async {
     final codex = FakeCodexAppServer(

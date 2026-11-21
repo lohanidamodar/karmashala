@@ -147,6 +147,10 @@ void main() {
         label: 'GPT-6 Astra',
         qualifier: null,
       ));
+      expect(
+        configOptionFace(model('gpt-6-astra'), active: reported('gpt-6.2-sol')),
+        (label: 'GPT-6 Astra', qualifier: null),
+      );
     });
   });
 

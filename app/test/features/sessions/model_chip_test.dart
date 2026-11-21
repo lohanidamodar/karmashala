@@ -420,10 +420,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(h.written, ['/model opus', kEndOfLineKey, '\r']);
-    expect(find.textContaining('switched now'), findsOneWidget);
+    expect(find.textContaining('was sent to the session'), findsOneWidget);
     expect(find.textContaining('/model opus'), findsOneWidget);
     expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
     expect(find.text('Opus'), findsOneWidget);
+  });
+
+  testWidgets('thinking opens the Claude terminal without typing over a turn', (
+    tester,
+  ) async {
+    final h = await harness(tester, status: AgentActivityStatus.working);
+    addTearDown(h.container.dispose);
+    await tester.pumpWidget(h.app);
+    await openMenu(tester);
+
+    await tester.tap(find.text('Thinking level in terminal'));
+    await tester.pumpAndSettle();
+
+    expect(h.written, isEmpty);
+    expect(find.textContaining('Run /effort in the terminal'), findsOneWidget);
+    expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, isNull);
   });
 
   testWidgets('working: nothing is typed, and the chip says after this turn', (
@@ -515,7 +531,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(h.db.server.modelsSet, [(h.sessionId, 'opus')]);
-    expect(find.textContaining('the server typed'), findsOneWidget);
+    expect(find.textContaining('the server sent'), findsOneWidget);
     expect(h.db.server.sessionRows.getById(h.sessionId)!.modelId, 'opus');
   });
 
@@ -626,7 +642,7 @@ void main() {
     await openMenu(tester);
 
     // Four models, the way back to the default, and where the list came from.
-    expect(find.byType(DesktopMenuDetailItem<ModelChoice>), findsNWidgets(6));
+    expect(find.byType(DesktopMenuDetailItem<ModelChoice>), findsNWidgets(7));
     expect(
       find.descendant(
         of: find.byType(DesktopMenuDetailItem<ModelChoice>),

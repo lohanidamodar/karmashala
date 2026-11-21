@@ -35,6 +35,7 @@ class SessionConfigOptionPicker extends ConsumerWidget {
         ? ref.watch(sessionActiveModelProvider(sessionId))
         : null;
     final face = configOptionFace(option, active: active);
+    final name = configOptionLabel(option);
     return PopupMenuButton<String>(
       tooltip: '',
       position: PopupMenuPosition.over,
@@ -42,11 +43,9 @@ class SessionConfigOptionPicker extends ConsumerWidget {
       itemBuilder: (context) => _items(active?.modelId),
       child: Tooltip(
         message: [
-          '${option.name}: ${face.label}',
-          if (active != null)
-            'What the agent last said it runs.'
-          else if (option.isModel)
-            'The agent has not said which model it runs yet.',
+          '$name: ${face.label}',
+          if (active != null && active.label != face.label)
+            'Last reported model: ${active.label}',
           ?option.current?.description,
           ?option.description,
         ].join('\n'),
@@ -85,7 +84,9 @@ class SessionConfigOptionPicker extends ConsumerWidget {
   }
 
   Future<void> _apply(BuildContext context, WidgetRef ref, String value) async {
+    if (value == option.currentValue) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final launcher = ref.read(sessionLauncherProvider);
     final refusal = await ref
         .read(sessionConfigOptionsActionsProvider)
         .setOption(sessionId, option.id, value);
@@ -93,7 +94,7 @@ class SessionConfigOptionPicker extends ConsumerWidget {
       // The agent's word wins while it runs; the row is what its next start
       // asks for, so a relaunch keeps the pick.
       if (option.isModel) {
-        ref.read(sessionLauncherProvider).recordModel(sessionId, value);
+        launcher.recordModel(sessionId, value);
       }
       return;
     }
@@ -101,9 +102,11 @@ class SessionConfigOptionPicker extends ConsumerWidget {
   }
 }
 
-/// What [option]'s picker face says. A model option names the model the agent
-/// says it runs, with `default` beside it while the option holds its default;
-/// a `default` nothing has resolved yet is [kModelNotRecorded], never bare.
+String configOptionLabel(SessionConfigOption option) =>
+    option.isThinkingLevel ? 'Thinking level' : option.name;
+
+/// The selected setting for the next request. For an unresolved default, use
+/// the last model the agent actually reported.
 ({String label, String? qualifier}) configOptionFace(
   SessionConfigOption option, {
   SessionActiveModel? active,
@@ -113,7 +116,7 @@ class SessionConfigOptionPicker extends ConsumerWidget {
   if (!option.isModel) return (label: named, qualifier: null);
   final followsDefault = option.currentValue == 'default';
   return (
-    label: active?.label ?? (followsDefault ? kModelNotRecorded : named),
+    label: followsDefault ? active?.label ?? kModelNotRecorded : named,
     qualifier: followsDefault && active != null ? 'default' : null,
   );
 }

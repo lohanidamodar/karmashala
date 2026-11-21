@@ -213,6 +213,9 @@ final class SessionConfigOption {
   /// shown.
   bool get isModel => id == 'model' || category == 'model';
 
+  bool get isThinkingLevel =>
+      category == 'thought_level' || id == 'effort' || id == 'reasoning_effort';
+
   /// An option that is the session's mode again: an agent may expose its
   /// modes both as `modes` and as a `mode` config option, and the mode
   /// picker already stands for it.

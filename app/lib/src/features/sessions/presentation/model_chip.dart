@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_agent_status/karmashala_agent_status.dart'
+    show SessionPromptRefusal;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
@@ -14,6 +16,7 @@ import '../../agents/presentation/model_picker.dart';
 import '../../agents/presentation/picker_face.dart';
 import '../application/acp_session_providers.dart';
 import '../application/session_active_model_providers.dart';
+import '../application/session_input.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
 import '../application/session_providers.dart';
@@ -154,7 +157,10 @@ ModelChipView modelChipViewFor(
                   'when that setting moves.'
       : 'Set for this session, and it stays set across a relaunch.';
   final rule = tellable
-      ? state.support.switchesLive
+      ? state.support.pickerCommand.isNotEmpty
+            ? 'Use ${state.support.pickerCommand} in the terminal to change '
+                  'the running model or thinking level.'
+            : state.support.switchesLive
             ? 'Picking one switches the session running now when '
                   '${state.agentName} is at its prompt, and otherwise applies '
                   'on the next launch.'
@@ -214,6 +220,7 @@ class ModelChip extends StatelessWidget {
     required this.view,
     required this.whenPicked,
     required this.onSelected,
+    this.terminalCommands,
     this.maxLabelWidth = 120,
     this.short = false,
     super.key,
@@ -232,6 +239,8 @@ class ModelChip extends StatelessWidget {
   final String Function() whenPicked;
 
   final ValueChanged<ModelChoice> onSelected;
+
+  final Map<String, String> Function()? terminalCommands;
 
   /// How much room the model's name may take. At 720px this is the difference
   /// between a row that yields and a row that overflows.
@@ -256,6 +265,7 @@ class ModelChip extends StatelessWidget {
         // lands is a property of the agent and the moment, not of the model.
         final lands = whenPicked();
         final live = lands == 'now';
+        final commands = terminalCommands?.call() ?? const <String, String>{};
         return [
           // First, and its own row: handing the session back to the default is
           // where every session starts and the only way back from a pick.
@@ -269,6 +279,12 @@ class ModelChip extends StatelessWidget {
             detail: view.defaultDetail,
           ),
           const DesktopMenuDivider(),
+          for (final MapEntry(key: label, value: command) in commands.entries)
+            DesktopMenuDetailItem<ModelChoice>(
+              value: ModelChoice.terminal(command),
+              label: label,
+              detail: 'Use $command in the running terminal.',
+            ),
           for (final option in view.options)
             DesktopMenuDetailItem<ModelChoice>(
               value: ModelChoice(option.model.id),
@@ -453,6 +469,15 @@ Widget _buildModelChip(
     view: view,
     maxLabelWidth: maxLabelWidth,
     short: short,
+    terminalCommands: () => {
+      if (launcher.livePaneFor(state.sessionId) != null ||
+          launcher.heldByHostOnly(state.sessionId)) ...{
+        if (state.support.pickerCommand.isNotEmpty)
+          'Model and thinking level in terminal': state.support.pickerCommand,
+        if (state.support.thinkingPickerCommand.isNotEmpty)
+          'Thinking level in terminal': state.support.thinkingPickerCommand,
+      },
+    },
     whenPicked: () =>
         switch (launcher.liveModelSwitchBlockerFor(state.sessionId)) {
           null => 'now',
@@ -475,6 +500,46 @@ Future<void> _apply(
   // Into the session's own bar: every sentence below is about one session, and
   // a snackbar beside a chip would be one event told two ways.
   final notices = ref.read(sessionNoticesProvider.notifier);
+  if (choice.terminalCommand case final String command) {
+    final id = state.sessionId;
+    final input = ref.read(sessionInputProvider);
+    final container = ref.container;
+    final instruction =
+        'Run $command in the terminal to open ${state.agentName}’s picker.';
+    final bool opened;
+    try {
+      opened = await launcher.showModelTerminal(id);
+    } on Object catch (error) {
+      notices.post(
+        id,
+        SessionNotice(message: 'Could not open the terminal: $error'),
+      );
+      return;
+    }
+    var message = opened
+        ? instruction
+        : 'The session terminal could not be opened.';
+    // The server's send path checks for a draft or dialog before typing.
+    if (opened &&
+        input.viaServer &&
+        launcher.activityOf(id) == AgentActivityStatus.idle) {
+      try {
+        final requestId = newSessionInputId();
+        if (await input.send(id, command, requestId: requestId)) {
+          final sent = container.read(sessionSendRepliesProvider)[requestId];
+          if (sent != null) {
+            message = sent.queued
+                ? '$command is queued for the terminal.'
+                : 'Sent $command to the terminal.';
+          }
+        }
+      } on SessionPromptRefusal catch (refusal) {
+        message = '$instruction ${refusal.message}';
+      }
+    }
+    notices.post(id, SessionNotice(message: message));
+    return;
+  }
   if (choice.refreshesList) {
     final key = state.modelsKey;
     if (key == null) return;
@@ -535,13 +600,21 @@ Future<void> _apply(
   }
 
   final atServer = launcher.modelSwitchesAtServer(id);
-  final outcome = await launcher.applyModel(id, choice.modelId);
-
-  // Nothing runs it: recorded, and it can start now on that model.
   final conversation = ref
       .read(sessionsDataProvider)
       .getById(id)
       ?.externalSessionId;
+  final outcome = await launcher.applyModel(id, choice.modelId);
+  if (outcome.deferral == ModelDeferral.openedPicker) {
+    try {
+      await launcher.showModelTerminal(id);
+    } on Object catch (error) {
+      post('$what is saved. Could not open the session terminal: $error');
+      return;
+    }
+  }
+
+  // Nothing runs it: recorded, and it can start now on that model.
   if (outcome.deferral == ModelDeferral.notRunning &&
       target != null &&
       conversation != null &&
@@ -563,9 +636,9 @@ Future<void> _apply(
   // mid-turn" is a wait a moment, "takes its model at launch" is a never.
   final message = outcome.switchedNow
       ? atServer
-            ? '$what — switched now: the server typed "${outcome.command}" '
+            ? '$what — the server sent "${outcome.command}" '
                   'into the session.'
-            : '$what — switched now: "${outcome.command}" was sent to the '
+            : '$what — "${outcome.command}" was sent to the '
                   'session.'
       : switch (outcome.deferral) {
           ModelDeferral.busy when launcher.turnWillEnd(state.sessionId) =>

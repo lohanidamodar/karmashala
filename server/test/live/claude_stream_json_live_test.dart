@@ -160,6 +160,18 @@ Future<void> _exercise(_Place place) async {
       (option) => option.id == 'model',
     );
     expect(models.choices.map((c) => c.value), contains('haiku'));
+    final thinking = first.configOptions!.option('effort');
+    final level = thinking?.choices
+        .where((choice) => choice.value != thinking.currentValue)
+        .firstOrNull;
+    if (thinking != null && level != null) {
+      await first.setConfigOption(thinking.id, level.value);
+      note('changed thinking level to ${level.value}');
+      expect(
+        first.configOptions!.option(thinking.id)?.currentValue,
+        level.value,
+      );
+    }
     await first.setConfigOption('model', 'haiku');
 
     // A read-only turn.

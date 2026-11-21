@@ -237,6 +237,7 @@ class AcpSessionRuntime implements ScreenSession {
   }
 
   List<ConfigOption>? _configOptions;
+  Future<void> _configUpdate = Future.value();
   List<AvailableCommand>? _commands;
   UsageUpdate? _latestUsage;
   UsageUpdate? _turnUsage;
@@ -503,10 +504,12 @@ class AcpSessionRuntime implements ScreenSession {
       );
     }
     if (text.trim().isEmpty) throw StateError('there is no message to send');
-    await (_retelling = _retellRoots(
-      client,
-      agent,
+    await (_retelling = _configUpdate.then(
+      (_) => _retellRoots(client, agent),
     )).whenComplete(() => _retelling = null);
+    if (_torn || _lifecycle.hasEnded) {
+      throw StateError('$agentName ended before the message could be sent');
+    }
     final (prompt, notice) = _promptOf(text);
     _writer.user(text);
     host.checkpointPrompt(sessionId, text);
@@ -703,11 +706,21 @@ class AcpSessionRuntime implements ScreenSession {
   /// option, a bool for a `boolean` one. Throws [StateError] in words for an
   /// option the agent does not expose or a value it does not offer. The
   /// options as the agent then holds them are announced.
-  Future<void> setConfigOption(String configId, Object value) async {
+  Future<void> setConfigOption(String configId, Object value) {
+    final next = _configUpdate.then((_) => _setConfigOption(configId, value));
+    _configUpdate = next.then<void>((_) {}, onError: (Object _) {});
+    return next;
+  }
+
+  Future<void> _setConfigOption(String configId, Object value) async {
     final options = _configOptions;
     final client = _client;
     final agent = _agentSessionId;
-    if (options == null || options.isEmpty || client == null || agent == null) {
+    if (_torn ||
+        options == null ||
+        options.isEmpty ||
+        client == null ||
+        agent == null) {
       throw StateError('$agentName exposes no config options to set');
     }
     final option = options.where((o) => o.id == configId).firstOrNull;
@@ -736,11 +749,12 @@ class AcpSessionRuntime implements ScreenSession {
       }
       answered = await client.setConfigOption(agent, configId, valueId: value);
     }
+    if (_torn) return;
     // An agent that answers with no list has still taken the value.
     _configOptions = answered.isNotEmpty
         ? _distinct(answered)
         : [
-            for (final o in options)
+            for (final o in _configOptions ?? options)
               if (o.id == configId) _moved(o, value) else o,
           ];
     _announceConfigOptions();

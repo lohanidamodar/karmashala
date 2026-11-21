@@ -457,6 +457,7 @@ const claudeCodeDescriptor = AgentDescriptor(
     model: AgentModelSupport.liveAndAtLaunch(
       flag: '--model',
       slashCommand: '/model',
+      thinkingPickerCommand: '/effort',
       models: [
         AgentModel(
           id: 'fable',

@@ -235,6 +235,21 @@ void main() {
             currentModeId: modeId,
             availableModes: [SessionModeOption(id: modeId, name: modeName)],
           ),
+          const SessionConfigOptionsChanged(
+            sessionId: 's1',
+            options: [
+              SessionConfigOption(
+                id: 'reasoning_effort',
+                name: 'Reasoning effort',
+                type: 'select',
+                currentValue: 'medium',
+                choices: [
+                  SessionConfigChoice(value: 'medium', name: 'Medium'),
+                  SessionConfigChoice(value: 'high', name: 'High'),
+                ],
+              ),
+            ],
+          ),
         ]);
         await tester.pumpAndSettle();
         final picker = inList(find.byType(SessionModePicker));
@@ -243,6 +258,15 @@ void main() {
         await tester.tap(picker);
         await tester.pumpAndSettle();
         expect(find.text(modeName), findsWidgets);
+        tester.state<NavigatorState>(find.byType(Navigator)).pop();
+        await tester.pumpAndSettle();
+        expect(inList(find.text('Thinking level')), findsOneWidget);
+        await tester.tap(inList(find.text('Medium')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('High'));
+        await tester.pumpAndSettle();
+        expect(inList(find.text('High')), findsOneWidget);
+        expect(server.requests, contains('sessions.setConfigOption'));
         expect(tester.takeException(), isNull);
       });
     }

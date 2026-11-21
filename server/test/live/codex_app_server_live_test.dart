@@ -246,6 +246,29 @@ Future<void> _readAndResume(_Live live) async {
         '${option.choices.map((c) => c.value).toList()}',
       );
     }
+    final models = first.configOptions!.option('model')!;
+    final alternative = models.choices
+        .where((choice) => choice.value != models.currentValue)
+        .firstOrNull;
+    if (alternative != null) {
+      await first.setConfigOption(models.id, alternative.value);
+      expect(
+        first.configOptions!.option(models.id)?.currentValue,
+        alternative.value,
+      );
+    }
+    final thinking = first.configOptions!.option('reasoning_effort');
+    final level = thinking?.choices
+        .where((choice) => choice.value != thinking.currentValue)
+        .firstOrNull;
+    if (thinking != null && level != null) {
+      await first.setConfigOption(thinking.id, level.value);
+      live.note('changed thinking level to ${level.value}');
+      expect(
+        first.configOptions!.option(thinking.id)?.currentValue,
+        level.value,
+      );
+    }
     await first.send(
       'Read hello.txt with a shell command, then reply with its contents '
       'and nothing else. Do not change any file.',

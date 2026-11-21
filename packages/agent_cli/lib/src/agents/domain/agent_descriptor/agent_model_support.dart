@@ -76,6 +76,7 @@ class AgentModelSupport {
     required this.slashCommand,
     required this.models,
     required this.evidence,
+    this.thinkingPickerCommand = '',
   }) : pickerCommand = '',
        style = AgentModelStyle.liveAndAtLaunch,
        listedLive = false;
@@ -87,6 +88,7 @@ class AgentModelSupport {
     required this.evidence,
     this.pickerCommand = '',
   }) : slashCommand = '',
+       thinkingPickerCommand = '',
        style = AgentModelStyle.atLaunchOnly,
        listedLive = false;
 
@@ -99,6 +101,7 @@ class AgentModelSupport {
   }) : flag = '',
        slashCommand = '',
        pickerCommand = '',
+       thinkingPickerCommand = '',
        style = AgentModelStyle.listedOnly,
        listedLive = false;
 
@@ -109,6 +112,7 @@ class AgentModelSupport {
     this.models,
     this.evidence,
     this.pickerCommand,
+    this.thinkingPickerCommand,
     this.listedLive,
   );
 
@@ -122,6 +126,7 @@ class AgentModelSupport {
     List.unmodifiable(found),
     evidence,
     pickerCommand,
+    thinkingPickerCommand,
     true,
   );
 
@@ -136,6 +141,7 @@ class AgentModelSupport {
       slashCommand = '',
       models = const [],
       evidence = '',
+      thinkingPickerCommand = '',
       pickerCommand = '',
       style = AgentModelStyle.unsupported,
       listedLive = false;
@@ -145,6 +151,9 @@ class AgentModelSupport {
   /// An in-session command that opens the agent's **own** model picker, for an
   /// agent whose model cannot be named in a running session. Empty when none.
   final String pickerCommand;
+
+  /// The terminal command for a separate effort picker, when the CLI has one.
+  final String thinkingPickerCommand;
 
   /// The launch option, e.g. `--model`. Empty when there is none.
   final String flag;

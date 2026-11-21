@@ -158,6 +158,18 @@ extension SessionPolicyVerbs on SessionLauncher {
       heldByHostOnly(sessionId) &&
       _ref.read(capabilitiesProvider).serverOffers(SessionSetModel.name);
 
+  /// Reveals the terminal face where the agent draws its native controls.
+  Future<bool> showModelTerminal(String sessionId) async {
+    final paneId = reveal(sessionId)
+        ? livePaneFor(sessionId)
+        : (await attachHosted(sessionId))?.paneId;
+    if (paneId == null) return false;
+    _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .showTerminalForPane(paneId);
+    return true;
+  }
+
   /// [setModel], or — for a session [modelSwitchesAtServer] — the same asked
   /// of the server, which writes the row and types the switch itself.
   Future<({bool switchedNow, String? command, ModelDeferral? deferral})>

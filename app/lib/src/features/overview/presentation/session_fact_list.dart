@@ -13,6 +13,7 @@ import '../../agents/presentation/agent_logo.dart';
 import '../../automations/presentation/session_origin_label.dart';
 import '../../sessions/application/acp_session_providers.dart';
 import '../../sessions/application/session_active_model_providers.dart';
+import '../../sessions/application/session_config_options_providers.dart';
 import '../../sessions/application/session_agent_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
@@ -23,6 +24,7 @@ import '../../sessions/presentation/model_chip.dart';
 import '../../sessions/presentation/operator_chip.dart';
 import '../../sessions/presentation/permission_mode_chip.dart';
 import '../../sessions/presentation/session_environment_mark.dart';
+import '../../sessions/presentation/session_config_option_picker.dart';
 import '../../sessions/presentation/session_mode_picker.dart';
 import '../../sessions/presentation/session_repositories_bar.dart';
 import '../../sessions/presentation/session_stats_dialog.dart';
@@ -57,6 +59,11 @@ class SessionFactList extends ConsumerWidget {
         overviewCardOf(ref.watch(overviewBoardProvider), sessionId);
     final native = card == null || card.entry.native != null;
     final acp = native && ref.watch(isAcpSessionProvider(sessionId));
+    final options = acp
+        ? SessionConfigPickers.selectable(
+            ref.watch(sessionConfigOptionsProvider(sessionId)),
+          )
+        : const [];
     final directory = card?.entry.directory;
     final branch = directory == null
         ? null
@@ -94,8 +101,22 @@ class SessionFactList extends ConsumerWidget {
             key: const ValueKey('session-list:model'),
             icon: AppIcons.robot,
             label: 'Model',
-            value: SessionModelValue(sessionId: sessionId, native: native),
+            value: SessionModelValue(
+              sessionId: sessionId,
+              native: native,
+              short: acp,
+            ),
           ),
+          for (final option in options)
+            if (!option.isModel)
+              FactRow(
+                icon: AppIcons.slidersHorizontal,
+                label: configOptionLabel(option),
+                value: SessionConfigOptionPicker(
+                  sessionId: sessionId,
+                  option: option,
+                ),
+              ),
           if (native)
             FactRow(
               key: const ValueKey('session-list:permission'),
