@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import '../../update/presentation/update_about_rows.dart';
 import '../application/store_rating.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
@@ -51,6 +52,7 @@ class AboutSection extends StatelessWidget {
               style: mono,
             ),
           ),
+          const UpdateAboutRows(),
           SettingsRow(
             label: 'Build',
             // Selectable, because the point of this line is that it ends up

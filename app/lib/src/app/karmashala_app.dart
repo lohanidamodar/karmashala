@@ -9,6 +9,7 @@ import 'probe_banner.dart';
 import '../features/settings/domain/app_theme_mode.dart';
 import '../features/ssh/presentation/ssh_prompt_host.dart';
 import '../features/terminal/presentation/session_host_banner.dart';
+import '../features/update/presentation/update_notice.dart';
 import '../features/update/update_listener.dart';
 import 'shell/app_shell.dart';
 import 'shell/native_menus.dart';
@@ -85,7 +86,12 @@ class KarmashalaApp extends ConsumerWidget {
           // One listener for files dropped from the OS, routed to the zone
           // under the pointer; it listens only where the client takes drops.
           child: FileDropRouter(
-            child: SshPromptHost(child: SessionHostBanner(child: AppShell())),
+            child: SshPromptHost(
+              // Above the host's strip: a release on offer reads first.
+              child: GitHubUpdateNotice(
+                child: SessionHostBanner(child: AppShell()),
+              ),
+            ),
           ),
         ),
       ),

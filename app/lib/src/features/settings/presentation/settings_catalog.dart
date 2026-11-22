@@ -244,6 +244,8 @@ enum SettingsSectionId {
       'licenses',
       'open source',
       'bug report',
+      'update',
+      'updates',
     ],
   );
 

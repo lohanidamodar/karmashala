@@ -80,6 +80,12 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['version', 'build', 'licences', 'licenses', 'source'],
   ),
   SettingsEntry(
+    'Check for updates',
+    anchor: SettingsAnchor.about,
+    description: 'Look for a newer release on GitHub, now or on its own.',
+    keywords: ['update', 'updates', 'upgrade', 'new version', 'release'],
+  ),
+  SettingsEntry(
     'Theme',
     anchor: SettingsAnchor.themeText,
     description: 'Follow the system, or stay light or dark.',

@@ -77,6 +77,8 @@ enum SettingsAnchor {
     'licences',
     'licenses',
     'repository',
+    'update',
+    'updates',
   ]),
   notes(SettingsSectionId.general, 'Notes', [
     'note',
