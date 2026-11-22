@@ -26,8 +26,9 @@ import 'package:agent_cli/stream.dart';
 
 /// **Operating a session that already exists**, by the server — `session_send`,
 /// `session_answer`, `session_wait`, `session_transcript`, `session_rename`,
-/// `session_end`, `session_settings`, `session_configure` — for every session (slice 5b: every agent runs in the
-/// server, so nothing is handed to an app). Its status, its screen and its PTY
+/// `session_end`, `session_settings`, `session_configure` — for every session
+/// (slice 5b: every agent runs in the server, so nothing is handed to an
+/// app). Its status, its screen and its PTY
 /// are the server's; a session not running here is answered from what the
 /// server knows — a transcript from the record, a wait that reads `ended` —
 /// and a message to one is its resume, the message its opening prompt.
