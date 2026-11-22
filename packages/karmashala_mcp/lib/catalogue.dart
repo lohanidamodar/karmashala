@@ -2,4 +2,5 @@
 /// annotation axes `tools/list` reports, and the guides behind them.
 library;
 
+export 'src/mcp_tool_access.dart';
 export 'src/mcp_tool_catalogue.dart';
