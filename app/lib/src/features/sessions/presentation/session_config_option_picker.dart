@@ -148,11 +148,16 @@ class SessionConfigPickers extends ConsumerWidget {
     required this.sessionId,
     this.maxLabelWidth = 120,
     this.modelOnly = false,
+    this.chatSettings = false,
     super.key,
   });
 
   final String sessionId;
   final double maxLabelWidth;
+
+  /// Only the model's and the thinking level's pickers, for the chat
+  /// composer beside Send; the rest (speed) stay on the session bar.
+  final bool chatSettings;
 
   /// Only the model's picker, for a phone's one-line bar; the rest (effort,
   /// speed) are in the session's sheet.
@@ -182,7 +187,10 @@ class SessionConfigPickers extends ConsumerWidget {
       for (final option in selectable(
         ref.watch(sessionConfigOptionsProvider(sessionId)),
       ))
-        if (!modelOnly || option.isModel) option,
+        if (modelOnly
+            ? option.isModel
+            : !chatSettings || option.isModel || option.isThinkingLevel)
+          option,
     ];
     if (options.isEmpty) return const SizedBox.shrink();
     if (options.length == 1) {

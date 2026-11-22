@@ -88,6 +88,7 @@ import 'chat_transcript.dart';
 import '../../../core/clipboard/image_clipboard.dart'
     show imageClipboardProvider, saveImageAs;
 import 'end_session_action.dart';
+import 'model_chip.dart' show SessionModelChip;
 import 'switch_agent_control.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';

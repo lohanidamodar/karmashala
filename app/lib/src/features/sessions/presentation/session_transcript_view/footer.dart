@@ -169,11 +169,20 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
           working: ref.watch(sessionTurnWorkingProvider(widget.sessionId)),
           uncertain: ref.watch(sessionTurnUncertainProvider(widget.sessionId)),
           onStop: _stop,
-          // Mode, model and stats are on the pane's status bar (owner,
-          // 2026-09-28); switching agent is the composer's (2026-10-03).
+          // Mode and stats are on the pane's status bar (owner, 2026-09-28);
+          // switching agent is the composer's (2026-10-03), and so are the
+          // model and the thinking level, beside Send (2026-11-22).
           chips: [
             if (caps.switchAgent && !widget.bot)
               SwitchAgentControl(sessionId: widget.sessionId),
+            // Not while the agent asks: the box is shut then, and the
+            // question needs the room on a phone.
+            if (!prompted)
+              SessionModelChip(
+                key: const ValueKey('composer-model'),
+                sessionId: widget.sessionId,
+                chatSettings: true,
+              ),
           ],
           // Read when the menu opens, never watched: the footer is
           // built once, and the library changing must not rebuild it.

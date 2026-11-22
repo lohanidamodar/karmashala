@@ -305,6 +305,25 @@ void main() {
     expect(find.text('xHigh'), findsNothing);
   });
 
+  testWidgets('the composer\'s pickers are the model and the thinking level '
+      'alone, and fit 360 px at text scale 1.6', (tester) async {
+    await pump(
+      tester,
+      size: const Size(360, 800),
+      textScale: 1.6,
+      body: const Padding(
+        padding: EdgeInsets.all(16),
+        child: SessionConfigPickers(sessionId: 's1', chatSettings: true),
+      ),
+    );
+    server.writeAsAnotherClient([claude]);
+    await tester.pumpAndSettle();
+    expect(find.byType(PickerFace), findsNWidgets(2));
+    expect(find.text('xHigh'), findsOneWidget);
+    expect(find.text('Standard'), findsNothing, reason: 'speed stays out');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a new list the agent announces mid-session redraws the '
       'picker: the model it offers now is there to pick', (tester) async {
     await pump(tester);

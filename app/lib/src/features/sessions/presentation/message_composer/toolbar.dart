@@ -3,7 +3,7 @@
 part of '../message_composer.dart';
 
 /// Attach, snippets, any chips a host adds, and the round send at the far
-/// end. At a pane's narrowest the chips take a row to themselves.
+/// end. At a pane's narrowest the chips scroll sideways on the same line.
 class _ComposerToolbar extends StatelessWidget {
   const _ComposerToolbar({
     required this.chips,
@@ -69,19 +69,30 @@ class _ComposerToolbar extends StatelessWidget {
         );
       }
 
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // Narrow: still one line, the chips scrolled sideways between the
+      // tools and Send. A second row cost a phone's chat a question's last
+      // option (2026-11-22).
+      return Row(
         children: [
-          Row(children: [...tools, const Spacer(), send]),
-          Padding(
-            padding: const EdgeInsets.only(top: Insets.xs),
-            child: Wrap(
-              spacing: Insets.xs,
-              runSpacing: Insets.xs,
-              children: chips,
+          ...tools,
+          Expanded(
+            child: SingleChildScrollView(
+              key: const ValueKey('composer-chips-scroll'),
+              scrollDirection: Axis.horizontal,
+              primary: false,
+              padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (i, chip) in chips.indexed) ...[
+                    if (i > 0) const SizedBox(width: Insets.xs),
+                    chip,
+                  ],
+                ],
+              ),
             ),
           ),
+          send,
         ],
       );
     },
