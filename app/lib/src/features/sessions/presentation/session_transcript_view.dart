@@ -89,6 +89,7 @@ import '../../../core/clipboard/image_clipboard.dart'
     show imageClipboardProvider, saveImageAs;
 import 'end_session_action.dart';
 import 'model_chip.dart' show SessionModelChip;
+import 'package:karmashala_ui/tokens.dart' show UiDensity;
 import 'switch_agent_control.dart';
 import 'session_recap_card.dart';
 import 'message_composer.dart';

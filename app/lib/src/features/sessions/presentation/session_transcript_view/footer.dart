@@ -177,7 +177,10 @@ mixin _TranscriptFooter on ConsumerState<SessionTranscriptView> {
               SwitchAgentControl(sessionId: widget.sessionId),
             // Not while the agent asks: the box is shut then, and the
             // question needs the room on a phone.
-            if (!prompted)
+            // Not on a phone: there they squeezed the words to a sliver
+            // (owner, 2026-11-22), and the session bar under the box
+            // already has the model, its Session sheet the thinking level.
+            if (!prompted && !UiDensity.of(context).isTouch)
               SessionModelChip(
                 key: const ValueKey('composer-model'),
                 sessionId: widget.sessionId,

@@ -379,4 +379,31 @@ void main() {
       expect(send, findsNothing);
     });
   }
+
+  // The model pickers beside Send left a phone's words a sliver (owner's
+  // screenshot, 2026-11-22); the phone's session bar has them instead.
+  testWidgets('at 360 px and text scale 1.6 a phone composer has no model '
+      'picker and the words keep its width', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pump(tester, size: const Size(360, 800), touch: true);
+    await working(tester, AgentActivityStatus.working);
+    await tester.enterText(find.byType(TextField), 'sfff\nsgcxv\ncx\nadfx');
+    await frames(tester);
+    expect(tester.takeException(), isNull);
+
+    expect(find.byKey(const ValueKey('composer-model')), findsNothing);
+    // "+", the agent switch, Stop and Send: the rest is the words'.
+    expect(
+      tester.getSize(find.byType(TextField)).width,
+      greaterThan(360 * 0.4),
+    );
+  });
+
+  testWidgets('on a desktop the model and thinking pickers stay beside Send', (
+    tester,
+  ) async {
+    await pump(tester, size: desktop);
+    expect(find.byKey(const ValueKey('composer-model')), findsOneWidget);
+  });
 }
