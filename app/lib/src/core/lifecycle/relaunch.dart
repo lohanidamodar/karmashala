@@ -4,16 +4,17 @@ import 'dart:io';
 /// machine a window is a client of starts it afresh, so nothing of the old
 /// server — its panes, copies, links — outlives the switch). The new process
 /// waits for this pid to exit, so the old one's ordered shutdown finishes
-/// first and the two never run side by side.
-Future<void> relaunchAfterExit() async {
-  final executable = Platform.resolvedExecutable;
+/// first and the two never run side by side. [executable] is this process's
+/// own unless given: an AppImage restarts from its file, not its mount.
+Future<void> relaunchAfterExit({String? executable}) async {
+  final path = executable ?? Platform.resolvedExecutable;
   final me = '$pid';
   if (Platform.isWindows) {
     await Process.start('powershell', [
       '-NoProfile',
       '-Command',
       'Wait-Process -Id $me -ErrorAction SilentlyContinue; '
-          "Start-Process -FilePath '${executable.replaceAll("'", "''")}'",
+          "Start-Process -FilePath '${path.replaceAll("'", "''")}'",
     ], mode: ProcessStartMode.detached);
     return;
   }
@@ -22,6 +23,6 @@ Future<void> relaunchAfterExit() async {
     'while kill -0 "\$1" 2>/dev/null; do sleep 0.2; done; exec "\$2"',
     'relaunch',
     me,
-    executable,
+    path,
   ], mode: ProcessStartMode.detached);
 }
