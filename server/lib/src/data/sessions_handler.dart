@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_mcp/catalogue.dart' show McpToolAccessPolicy;
 import 'package:karmashala_notes/karmashala_notes.dart' show recordIdProblem;
 import 'package:karmashala_projects/store.dart';
 import 'package:karmashala_session/events.dart';
@@ -104,6 +106,24 @@ class SessionsHandler {
       trustsRegisteredProjects(_db.readMetadata(kTrustRegisteredProjectsKey))
       ? const []
       : const [TrustRegisteredProjectsChanged(enabled: false)];
+
+  /// Replaces the agent tool access settings, read by the tool relay on each
+  /// call. What it cannot read is dropped, so every client is told what is
+  /// kept.
+  DataAck setToolAccess(AgentsToolAccessSet request, List<DataChange> changes) {
+    final policy = McpToolAccessPolicy.fromJson(request.policy).toJson();
+    _db.writeMetadata(kAgentToolAccessKey, jsonEncode(policy));
+    changes.add(ToolAccessChanged(policy));
+    return const DataAck();
+  }
+
+  /// What a subscribing client is told: nothing while it is the defaults.
+  List<DataChange> toolAccessGreeting() {
+    final policy = McpToolAccessPolicy.parse(
+      _db.readMetadata(kAgentToolAccessKey),
+    ).toJson();
+    return policy.isEmpty ? const [] : [ToolAccessChanged(policy)];
+  }
 
   Session create(SessionCreate request, List<DataChange> changes) {
     var session = request.session;

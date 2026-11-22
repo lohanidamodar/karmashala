@@ -145,7 +145,9 @@ import '../automations/webhooks/daemon_webhooks.dart';
 import '../automations/webhooks/server_hook_vault.dart';
 import '../automations/server_resume_runner.dart';
 import 'package:karmashala_session/session.dart'
-    show QueuedMessageOrigin, SessionStatus;
+    show QueuedMessageOrigin, SessionStatus, kAgentToolAccessKey;
+import 'package:karmashala_mcp/catalogue.dart' show McpToolAccessPolicy;
+import 'package:karmashala_projects/store.dart' show RepositoryDao;
 import 'package:karmashala_session/events.dart'
     show DecisionKind, DecisionOrigin, DecisionRecord;
 import '../automations/session_mcp_access.dart';
@@ -935,10 +937,20 @@ Future<int> _serve(
     liveness: liveness,
     slotWaits: slotWaits,
   );
+  final grantRepositories = RepositoryDao(database);
   final mcpTools = McpToolRelay(
     operatorGranted: (sessionId) =>
         grantRows.getById(sessionId)?.operatorGranted ?? false,
     checkpointOwner: (id) => grantCheckpoints.getById(id)?.sessionId,
+    toolAccess: McpToolAccessLookup(
+      policy: () =>
+          McpToolAccessPolicy.parse(database.readMetadata(kAgentToolAccessKey)),
+      projectOf: (sessionId) => switch (grantRows.getById(sessionId)) {
+        final row? => grantRepositories.getById(row.repositoryId)?.projectId,
+        null => null,
+      },
+      parentOf: (sessionId) => grantRows.getById(sessionId)?.parentSessionId,
+    ),
     tools: ServerTools([
       const InstructionsToolSet(),
       InventoryToolSet(

@@ -246,6 +246,9 @@ sealed class DataRequest<R> {
       AgentsTrustRegisteredProjectsSet.name => AgentsTrustRegisteredProjectsSet(
         enabled: args.boolean('enabled'),
       ),
+      AgentsToolAccessSet.name => AgentsToolAccessSet(
+        policy: args.value('policy', (json) => json),
+      ),
       SessionCreate.name => SessionCreate(
         args.value('session', Session.fromJson),
         repositories: args.strings('repositories', orEmpty: true),

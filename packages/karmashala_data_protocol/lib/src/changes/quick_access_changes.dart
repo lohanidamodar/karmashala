@@ -17,8 +17,27 @@ DataChange? _quickAccessChangeFromJson(
   'trustRegisteredProjectsChanged' => TrustRegisteredProjectsChanged(
     enabled: json['enabled'] != false,
   ),
+  'toolAccessChanged' => ToolAccessChanged(switch (json['policy']) {
+    final Map<Object?, Object?> policy => policy.cast<String, Object?>(),
+    _ => const {},
+  }),
   _ => null,
 };
+
+/// The agent tool access settings, whole, as `McpToolAccessPolicy`'s JSON. A
+/// client that subscribes is told them only when something is set: silence
+/// means the defaults.
+final class ToolAccessChanged extends DataChange {
+  const ToolAccessChanged(this.policy);
+
+  final Map<String, Object?> policy;
+
+  @override
+  Map<String, Object?> toJson() => {
+    'change': 'toolAccessChanged',
+    'policy': policy,
+  };
+}
 
 /// "Trust registered projects for agents" as it now stands. A client that
 /// subscribes is told it only while it is off: silence means on.

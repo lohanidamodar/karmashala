@@ -1,5 +1,9 @@
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
-    show AgentsTrustRegisteredProjectsSet, BotOpen, SessionsOperateByDefaultSet;
+    show
+        AgentsToolAccessSet,
+        AgentsTrustRegisteredProjectsSet,
+        BotOpen,
+        SessionsOperateByDefaultSet;
 
 /// What this server announces in `welcome.features`, the one place a client
 /// learns what it serves beyond the protocol number (spec §3.2 rule 3).
@@ -137,6 +141,10 @@ const Set<String> kServerFeatures = <String>{
   // `agents.trustRegisteredProjects.set` and `trustRegisteredProjectsChanged`:
   // the server's "Trust registered projects for agents", on by default.
   AgentsTrustRegisteredProjectsSet.feature,
+  // `agents.toolAccess.set` and `toolAccessChanged`: which operator tool
+  // groups a session may use without Operate Karmashala, globally and per
+  // project.
+  AgentsToolAccessSet.feature,
   // `bot.*` and the `bot…Changed` changes: the server's one hidden
   // conversation, its agent, Clear conversation and its approvals. A session
   // it started reaches a client with no parent and `viaBot` (PROJECT.md §26).

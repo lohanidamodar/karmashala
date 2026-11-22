@@ -1,4 +1,5 @@
 import 'package:karmashala_host/src/mcp/mcp_tool_relay.dart';
+import 'package:karmashala_mcp/catalogue.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tools.dart';
 import 'package:karmashala_host/src/mcp/tools/server_tool_set.dart';
 import 'package:test/test.dart';
@@ -146,5 +147,85 @@ void main() {
 
   test('a caller in no session is the person\'s own tooling', () async {
     expect(await relay.call('session_send', const {}, null), 'ran');
+  });
+
+  group('with tool access', () {
+    // me and sib are in p1, far in p2.
+    const projects = {'me': 'p1', 'sib': 'p1', 'far': 'p2'};
+    late McpToolAccessPolicy policy;
+
+    setUp(() {
+      tools = _Recording([...names, 'session_answer']);
+      policy = McpToolAccessPolicy.defaults;
+      relay = McpToolRelay(
+        tools: ServerTools([tools]),
+        operatorGranted: granted.contains,
+        toolAccess: McpToolAccessLookup(
+          policy: () => policy,
+          projectOf: (id) => projects[id],
+          parentOf: (_) => null,
+        ),
+      );
+    });
+
+    test('a session without the grant messages a sibling in its project, '
+        'and starts a session', () async {
+      expect(
+        await relay.call('session_send', {'sessionId': 'sib'}, 'me'),
+        'ran',
+      );
+      expect(await relay.call('open_new_session', const {}, 'me'), 'ran');
+    });
+
+    test('another project is refused, with the reason worded', () async {
+      await expectLater(
+        relay.call('session_send', {'sessionId': 'far'}, 'me'),
+        throwsA(
+          isA<McpToolRelayFailure>().having(
+            (f) => f.message,
+            'message',
+            allOf(
+              contains('session_send'),
+              contains('NOTHING WAS DONE'),
+              contains('Any project'),
+              contains(kMcpToolAccessLocation),
+            ),
+          ),
+        ),
+      );
+      expect(tools.ran, isEmpty);
+    });
+
+    test('session_answer is refused by default, naming its group', () async {
+      await expectLater(
+        relay.call('session_answer', {'sessionId': 'sib'}, 'me'),
+        throwsA(
+          isA<McpToolRelayFailure>().having(
+            (f) => f.message,
+            'message',
+            contains('"Answer approvals"'),
+          ),
+        ),
+      );
+    });
+
+    test('a change to the policy counts on the next call', () async {
+      await expectLater(
+        relay.call('snippet_insert', const {}, 'me'),
+        refused('snippet_insert'),
+      );
+      policy = McpToolAccessPolicy(
+        global: McpToolAccessOverrides.none.withGroup(McpToolGroup.panes, true),
+      );
+      expect(await relay.call('snippet_insert', const {}, 'me'), 'ran');
+    });
+
+    test('the session grant still wins', () async {
+      granted.add('me');
+      expect(
+        await relay.call('session_answer', {'sessionId': 'far'}, 'me'),
+        'ran',
+      );
+    });
   });
 }

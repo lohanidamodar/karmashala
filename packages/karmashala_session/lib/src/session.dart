@@ -17,6 +17,10 @@ const String kOperateNewSessionsKey = 'sessions.operate_by_default.v1';
 const String kTrustRegisteredProjectsKey =
     'agents.trust_registered_projects.v1';
 
+/// The server's agent tool access settings, as `McpToolAccessPolicy` JSON;
+/// absent is the defaults. Written only through `agents.toolAccess.set`.
+const String kAgentToolAccessKey = 'agents.tool_access.v1';
+
 /// Whether [stored], the value under [kTrustRegisteredProjectsKey], is on.
 bool trustsRegisteredProjects(String? stored) => stored != 'false';
 

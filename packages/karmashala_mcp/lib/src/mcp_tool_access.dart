@@ -5,9 +5,6 @@ import 'mcp_tool_catalogue.dart';
 /// Where the person turns a tool group on, as a refusal names it.
 const String kMcpToolAccessLocation = 'Settings → Permissions → Tool access';
 
-/// The server metadata key the whole [McpToolAccessPolicy] is kept under.
-const String kMcpToolAccessKey = 'agents.tool_access.v1';
-
 /// A set of operator tools a session may use without Operate Karmashala, when
 /// the person's tool access settings leave the group on.
 enum McpToolGroup {
@@ -187,7 +184,7 @@ class McpToolAccessPolicy {
     );
   }
 
-  /// What is stored under [kMcpToolAccessKey]; null or unreadable is the
+  /// What the server stores (`kAgentToolAccessKey`); null or unreadable is the
   /// defaults.
   factory McpToolAccessPolicy.parse(String? stored) {
     if (stored == null || stored.isEmpty) return defaults;

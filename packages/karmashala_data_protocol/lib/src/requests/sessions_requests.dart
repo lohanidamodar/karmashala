@@ -73,6 +73,33 @@ final class AgentsTrustRegisteredProjectsSet extends DataRequest<DataAck> {
   DataAck resultFromJson(Object? json) => const DataAck();
 }
 
+/// Replaces the server's agent tool access settings, whole, told to every
+/// client as [ToolAccessChanged]. [policy] is `McpToolAccessPolicy`'s JSON
+/// (`karmashala_mcp`). An older server has no such request: a client reads
+/// [feature] in `welcome.features` first.
+final class AgentsToolAccessSet extends DataRequest<DataAck> {
+  const AgentsToolAccessSet({required this.policy});
+
+  static const String name = 'agents.toolAccess.set';
+
+  /// In `welcome.features` when the server keeps this setting.
+  static const String feature = 'agents.toolAccess';
+
+  final Map<String, Object?> policy;
+
+  @override
+  String get kind => name;
+
+  @override
+  Map<String, Object?> argumentsToJson() => {'policy': policy};
+
+  @override
+  Object? resultToJson(DataAck result) => null;
+
+  @override
+  DataAck resultFromJson(Object? json) => const DataAck();
+}
+
 /// Records a session under the client's id, linked to its repository as the
 /// primary checkout and to each of [repositories] beside it, in one
 /// transaction: a row no list can place is never left behind. Refused for a
