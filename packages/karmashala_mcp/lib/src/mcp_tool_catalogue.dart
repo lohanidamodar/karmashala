@@ -30,6 +30,8 @@ const Set<String> kMcpOperatorTools = {
 /// Tools free on the caller's own session and gated on any other.
 const Set<String> _kMcpOperatorToolsOnOthers = {
   'session_rename',
+  // Moves the agent onto another model, effort or mode.
+  'session_configure',
   'session_draft',
   'session_checkout_attach',
   'session_checkout_detach',
@@ -257,6 +259,13 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
     movesAttention: false,
   ),
   'session_rename': McpToolAnnotations(idempotent: true, movesAttention: false),
+  'session_settings': McpToolAnnotations.read,
+  // The session bar's own model, thinking and mode controls; setting the
+  // same values again changes nothing, and the old ones put it back.
+  'session_configure': McpToolAnnotations(
+    idempotent: true,
+    movesAttention: false,
+  ),
   // The transcript survives; the turn in flight does not. Closing the last
   // pane of a tab hands the active tab and the keyboard to another.
   'session_end': McpToolAnnotations(destructive: true, movesAttention: true),
@@ -780,6 +789,14 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'session_rename': McpToolListing(
     McpToolCategory.sessions,
     'Rename a session — the title every list and tab shows.',
+  ),
+  'session_settings': McpToolListing(
+    McpToolCategory.sessions,
+    'A session\'s model, thinking level, mode and options, with their choices.',
+  ),
+  'session_configure': McpToolListing(
+    McpToolCategory.sessions,
+    'Change a session\'s model, thinking level, mode or options.',
   ),
   'session_end': McpToolListing(
     McpToolCategory.sessions,

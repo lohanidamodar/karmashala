@@ -104,8 +104,8 @@ const List<McpGuide> kMcpGuides = <McpGuide>[
     body: '''
 **Operate Karmashala is a per-session grant from the person.** With it you may
 start, message and end other sessions and agents. Without it those calls are
-refused and nothing happens; renaming another session, drafting to it and
-changing its checkouts are refused too, and so are killing a terminal and
+refused and nothing happens; renaming another session, drafting to it,
+changing its model or settings and changing its checkouts are refused too, and so are killing a terminal and
 restoring another session's checkpoint. Your own session stays yours to act on.
 This is not a sandbox: devices, the browser, builds, terminals and your shell
 do not depend on it, and they can have effects outside Karmashala.
@@ -196,6 +196,14 @@ no yes or no for.
 
 **`session_end` ends the process.** The transcript survives. The turn in flight
 does not, and nothing brings it back.
+
+**`session_settings` and `session_configure` are the session bar.** The first
+reads a session's model, thinking level, mode and other options with their
+choices; the second changes them, checking every value against what the agent
+offers before it changes anything. Read each change's `result`: `applied` is
+the agent told now, `held` waits for the running turn to end, `recorded` takes
+effect only at the next launch, and `refused` says why. A session in a
+terminal can change only its model; the rest belong to an agent over ACP.
 
 **Tidy up the sessions you started: `session_archive`.** Once a child's work is
 merged or handed back, end it with `session_end`, then archive it, so the

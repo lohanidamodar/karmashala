@@ -45,6 +45,7 @@ void main() {
   group('tools aimed at a session', () {
     const tools = [
       'session_rename',
+      'session_configure',
       'session_draft',
       'session_checkout_attach',
       'session_checkout_detach',

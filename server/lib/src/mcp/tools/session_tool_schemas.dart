@@ -416,6 +416,150 @@ const List<Map<String, Object?>> sessionControlToolSchemas = [
     },
   },
   {
+    'name': 'session_settings',
+    'description':
+        "Read a session's agent settings — what a person sets from its "
+        'session bar: the agent, its model (the one chosen on the session and '
+        'the one the agent last said it runs), its thinking level, its mode '
+        'and every other option the agent exposes, each with its current '
+        'value and its choices. An agent running over ACP announces its '
+        'thinking level, modes and options while it runs; for any other '
+        'session only the model can be set, and the rest say so. Anything '
+        'not announced reads "not recorded", never a guess. session_configure '
+        'changes them.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'Which session. Defaults to the calling session.',
+        },
+      },
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {'type': 'string'},
+        'title': {'type': 'string'},
+        'agent': {
+          'type': ['object', 'string'],
+          'description': 'id and name, or "not recorded".',
+        },
+        'runsOver': {
+          'type': 'string',
+          'description': 'acp, terminal, or not running here.',
+        },
+        'model': {
+          'type': 'object',
+          'description':
+              'chosen (on the session), running (what the agent reported), '
+              'and the choices it can be moved to; optionId when an ACP agent '
+              'sets it as an option.',
+        },
+        'thinking': {
+          'type': ['object', 'string'],
+          'description':
+              'optionId, current and choices, or why it cannot be set.',
+        },
+        'mode': {
+          'type': ['object', 'string'],
+          'description': 'current and choices, or why it cannot be set.',
+        },
+        'options': {
+          'type': ['array', 'string'],
+          'description':
+              'Every option the agent exposes: id, name, kind (model, '
+              'thinking_level, mode or other), type, current and choices.',
+        },
+      },
+      'required': ['sessionId', 'model', 'thinking', 'mode', 'options'],
+    },
+  },
+  {
+    'name': 'session_configure',
+    'description':
+        "Change a session's model, thinking level, mode or other agent "
+        'options, exactly as its session bar would. Give any of model, '
+        'thinking, mode and options; omit sessionId to change your own '
+        'session. Every change is checked against what the agent offers '
+        '(session_settings lists it) before any is made: a value it does not '
+        'offer refuses the whole call with the valid choices, and nothing is '
+        'changed. Each change then reports its result: applied; held, sent '
+        'when the running turn ends; pickerOpened, the agent\'s own picker '
+        'opened for the person; recorded, for the next launch; or refused, '
+        'with the reason. A session in a terminal can change only its model. '
+        'Changing another session needs the person\'s Operate Karmashala '
+        'grant.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description': 'Which session. Defaults to the calling session.',
+        },
+        'model': {
+          'type': 'string',
+          'description':
+              'A model id from session_settings model.choices. On an ACP '
+              'agent that sets its model as an option, a choice of it.',
+        },
+        'thinking': {
+          'type': 'string',
+          'description':
+              'A value from session_settings thinking.choices: the '
+              "agent's thinking level or effort.",
+        },
+        'mode': {
+          'type': 'string',
+          'description': 'A value from session_settings mode.choices.',
+        },
+        'options': {
+          'type': 'object',
+          'description':
+              'Option id to value, for any option in session_settings '
+              'options: a choice value for a select, true or false for a '
+              'boolean.',
+          'additionalProperties': {
+            'type': ['string', 'boolean'],
+          },
+        },
+      },
+    },
+    'outputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {'type': 'string'},
+        'title': {'type': 'string'},
+        'changes': {
+          'type': 'array',
+          'items': {
+            'type': 'object',
+            'properties': {
+              'setting': {'type': 'string'},
+              'value': {
+                'type': ['string', 'boolean'],
+              },
+              'result': {
+                'type': 'string',
+                'enum': [
+                  'applied',
+                  'held',
+                  'pickerOpened',
+                  'recorded',
+                  'refused',
+                ],
+              },
+              'note': {'type': 'string'},
+              'reason': {'type': 'string'},
+            },
+            'required': ['setting', 'value', 'result'],
+          },
+        },
+      },
+      'required': ['sessionId', 'changes'],
+    },
+  },
+  {
     'name': 'session_end',
     'description':
         'Stop the agent process behind a session. DESTRUCTIVE: the turn in '

@@ -20,12 +20,13 @@ import '../../sessions/session_queue.dart';
 import 'launch_tool_set.dart' show revealFor;
 import 'server_tool_context.dart';
 import 'server_tool_set.dart';
+import 'session_settings_tools.dart';
 import 'session_tool_schemas.dart';
 import 'package:agent_cli/stream.dart';
 
 /// **Operating a session that already exists**, by the server — `session_send`,
 /// `session_answer`, `session_wait`, `session_transcript`, `session_rename`,
-/// `session_end` — for every session (slice 5b: every agent runs in the
+/// `session_end`, `session_settings`, `session_configure` — for every session (slice 5b: every agent runs in the
 /// server, so nothing is handed to an app). Its status, its screen and its PTY
 /// are the server's; a session not running here is answered from what the
 /// server knows — a transcript from the record, a wait that reads `ended` —
@@ -43,10 +44,31 @@ class SessionToolSet extends ServerToolSet {
     this.sentBy,
     this.endedBy,
     this.slotWaits,
+    AcpAnnounced? Function(String sessionId)? acpAnnounced,
   }) : _sessions = SessionDao(_context.database),
        waits = waits ?? HostedSessionWait(status: prompts.status) {
     this.typist = typist ?? typistOver(prompts);
+    settings = SessionSettingsTools(
+      _context,
+      rowOf: _sessions.getById,
+      agentOf: prompts.status.installedAgentOf,
+      acpOf: acpAnnounced ?? _announcedBy(prompts),
+      runsHere: _runsHere,
+    );
   }
+
+  /// What the ACP runtime running a session here last announced.
+  static AcpAnnounced? Function(String) _announcedBy(
+    DaemonPromptAnswers prompts,
+  ) => (sessionId) {
+    final runtime = prompts.status.acpRuntimeOf(sessionId);
+    return runtime == null
+        ? null
+        : (modes: runtime.modes, options: runtime.configOptions);
+  };
+
+  /// `session_settings` and `session_configure`.
+  late final SessionSettingsTools settings;
 
   final ServerToolContext _context;
   final DaemonPromptAnswers prompts;
@@ -93,6 +115,8 @@ class SessionToolSet extends ServerToolSet {
     'session_transcript',
     'session_rename',
     'session_end',
+    'session_settings',
+    'session_configure',
   };
 
   @override
@@ -236,6 +260,10 @@ class SessionToolSet extends ServerToolSet {
           () =>
               _rename(sessionId, argumentOf<String>(arguments, 'title') ?? ''),
         );
+      case 'session_settings':
+        return runTool(() => settings.settings(sessionId));
+      case 'session_configure':
+        return runTool(() => settings.configure(sessionId, arguments));
       case 'session_end':
         return runTool(() async {
           if (held && !runsHere) {
