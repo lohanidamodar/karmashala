@@ -1472,6 +1472,16 @@ only when `sessionId` names another session; `terminal_close` when it kills;
 `checkpoint_restore` on another session's checkpoint. Any tool missing from the
 catalogue is gated, and everything else is outside the grant.
 
+**Tool access** decides a gated call when the session has no grant
+(`mcpToolAccessRefusal`). Each gated tool is in one group of `kMcpToolGroups`;
+Message sessions and Start sessions are on by default, the rest off. The first
+of the project's tool override, its group override, the global tool override
+and the global group switch that is set wins, else the group's default; the
+project is the caller's repository's. Message sessions reaches only the
+caller's project, parent and children unless "Any project" is on. The policy is
+one JSON value under `agents.tool_access.v1`, changed only by
+`agents.toolAccess.set` and read by the relay on every call.
+
 **It is not a sandbox, and copy must not imply one.** Without the grant an agent
 still has devices, the browser, builds, terminals and its shell. A tool that
 turns out to drive another session joins the gate.
