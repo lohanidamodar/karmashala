@@ -8,6 +8,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../core/capabilities/capabilities.dart';
+import '../../features/agents/presentation/toolbar_usage_strip.dart'
+    show PhoneUsageButton;
 import '../../features/bot/presentation/bot_button.dart';
 import '../../features/explorer/application/agent_state_providers.dart';
 import '../../features/explorer/application/session_list_snapshot.dart';
@@ -24,8 +26,8 @@ import 'phone_shell.dart';
 import 'quick_open/quick_open.dart';
 
 /// The phone's top bar: which server this is (and a switch to another), the
-/// route it is reached by (and a switch to another), search, and how many
-/// sessions need you.
+/// route it is reached by (and a switch to another), each account's usage,
+/// search, and how many sessions need you.
 class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
   const PhoneTopBar({super.key});
 
@@ -38,6 +40,8 @@ class PhoneTopBar extends StatelessWidget implements PreferredSizeWidget {
     title: const PhoneHostSwitcher(),
     actions: [
       const LinkRouteChip(),
+      // Each account's usage, as the desktop's toolbar shows it.
+      const PhoneUsageButton(),
       const BotButton(touch: true),
       const _SearchButton(),
       const _NeedsYouCount(),

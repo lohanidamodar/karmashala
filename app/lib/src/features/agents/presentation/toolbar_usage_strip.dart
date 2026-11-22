@@ -9,6 +9,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/workbench_tabs.dart';
+import '../../../app/widgets/adaptive_modal.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_nav.dart';
 import '../application/agent_account_switch.dart';
@@ -562,5 +563,135 @@ mixin _FollowsSwitches<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) act();
     });
+  }
+}
+
+/// The most the phone's usage button takes in its top bar: the tightest
+/// account's mark, its gauge and its number.
+const double kPhoneUsageButtonWidth = 88;
+
+/// **The phone's quick usage overview**, in its top bar: the tightest
+/// account's mark, gauge and short window, as the desktop toolbar's first chip
+/// shows it. A tap opens every account's card in one sheet — the cards the
+/// toolbar's chips open, with their refresh and the way to the Usage page.
+/// Nothing while no account is signed in.
+class PhoneUsageButton extends ConsumerWidget {
+  const PhoneUsageButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accounts = ref.watch(usageAccountsProvider);
+    if (accounts.isEmpty) return const SizedBox.shrink();
+    final account = accounts.first;
+    final now = ref.watch(clockProvider).nowUtc();
+    final view = _viewOf(ref, account, now);
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final short = view.short;
+    final style = theme.textTheme.labelMedium?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final summary = [
+      for (final a in accounts)
+        '${_shortName(a.agentId)} ${_viewOf(ref, a, now).tooltip}',
+    ].join('\n');
+    return Semantics(
+      button: true,
+      label: 'Usage: $summary. Show every account',
+      excludeSemantics: true,
+      child: InkWell(
+        key: const ValueKey('phone-top-usage'),
+        borderRadius: BorderRadius.circular(Radii.sm),
+        onTap: () => _open(context),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minWidth: Touch.target,
+            minHeight: Touch.target,
+            maxWidth: kPhoneUsageButtonWidth,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+            // Shrinks rather than clips at a large text size: the number is
+            // the button.
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AgentLogo(agentId: account.agentId, color: muted),
+                    const SizedBox(width: Insets.xs),
+                    if (short == null)
+                      Text('—', style: style?.copyWith(color: muted))
+                    else ...[
+                      _UsageGauge(short: short, long: view.long),
+                      const SizedBox(width: Insets.xs),
+                      Text(
+                        '${short.percent}%',
+                        style: style?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: short.tone == UsageTone.healthy
+                              ? theme.colorScheme.onSurface
+                              : _toneColor(context, short.tone),
+                        ),
+                      ),
+                    ],
+                    if (accounts.length > 1) ...[
+                      const SizedBox(width: Insets.xs),
+                      Text(
+                        '+${accounts.length - 1}',
+                        style: style?.copyWith(color: muted),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context) {
+    return showAdaptiveModal<void>(
+      context: context,
+      title: 'Usage',
+      builder: (_) => const _PhoneUsageSheet(),
+    );
+  }
+}
+
+/// Every account's card, tightest first, live: a reading landing while the
+/// sheet is open updates it in place. Details and Settings close it first.
+class _PhoneUsageSheet extends ConsumerWidget {
+  const _PhoneUsageSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final accounts = ref.watch(usageAccountsProvider);
+    final now = ref.watch(clockProvider).nowUtc();
+    void leave() => Navigator.of(context).maybePop();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (accounts.isEmpty)
+            const ListTile(title: Text('No agent account is signed in')),
+          for (final account in accounts)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Insets.sm),
+              child: _accountCard(
+                context,
+                ref,
+                account,
+                _viewOf(ref, account, now),
+                onLeave: leave,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
