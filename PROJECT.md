@@ -517,6 +517,40 @@ PopupBits apps), `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
 `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. The package name,
 `com.popupbits.karmashala`, is set in the workflow, not a secret.
 
+### In-app updates
+
+Two paths, in `lib/src/features/update/`. A Play install keeps Play's
+flexible update (`UpdateListener`, phone only). Every other install updates
+from GitHub releases (`GitHubUpdateController`, notice `GitHubUpdateNotice`
+above the shell, rows in Settings › About).
+
+- **Check.** `GET /repos/lohanidamodar/karmashala/releases/latest`,
+  unauthenticated, with `If-None-Match` (a 304 is free against the 60-an-hour
+  limit). 30 s after launch, then every 6 h, while *Check for updates
+  automatically* is on, plus the button in About. An unstamped build (empty
+  `appVersion`) and a probe never check on their own. Automatic failures go
+  to the log only. Settings keeps `checkForUpdates` and
+  `skippedUpdateVersion` (a tag).
+- **Install kind** (`detectInstallKind`, pure): `unins*.exe` beside the exe
+  means the Windows installer, otherwise portable. `APPIMAGE` set means an
+  AppImage, otherwise the tarball. On Android, `InstallSourceChannel` (in
+  `MainActivity`) names the installer: `com.android.vending` means Play. An
+  unanswered channel also counts as Play, so a Play install is never offered an
+  APK.
+- **Update.** Installer: download `Karmashala-Setup-<v>.exe` to temp, verify,
+  confirm, start it detached with `/SILENT /SUPPRESSMSGBOXES /NORESTART
+  /KARMASHALARESTART`, then quit through `SystemIntegrationService.quit()`.
+  The script's `[Run]` entry with `Check: RestartRequested` relaunches through
+  Explorer. AppImage: download to `<appimage>.download`, verify, `chmod +x`,
+  rename over the running file, then *Restart* (relaunched from `$APPIMAGE`,
+  not the mount). macOS: download and verify the DMG, then `open` it. Sideloaded
+  APK: open the asset link. Portable and tarball: open the release page. A
+  missing asset also falls back to the page.
+- **Verify.** GitHub's asset `digest` (`sha256:`) when present, else the size.
+  A mismatch deletes the file and says so.
+- Tests fake `UpdateHttp` and `UpdateSystem` (`application/update_ports.dart`).
+  No test touches the network or a real file.
+
 ---
 
 ## 14. Code Review Checklist
