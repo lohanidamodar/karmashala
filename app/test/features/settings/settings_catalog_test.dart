@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
 import 'package:karmashala_browser/browser.dart' show kBrowserConsentLocation;
+import 'package:karmashala_mcp/catalogue.dart' show kMcpToolAccessLocation;
 
 /// The catalogue the rail, search, page layout and deep links all read. A
 /// page nobody can land on, a section with nothing searchable in it, or an old
@@ -306,6 +307,15 @@ void main() {
       kBrowserConsentLocation,
       'Settings → ${SettingsAnchor.browser.page.label} → '
       '${SettingsAnchor.browser.title}',
+    );
+  });
+
+  test('tool access sits where the tool relay\'s refusals send people', () {
+    expect(SettingsAnchor.toolAccess.page, SettingsSectionId.permissions);
+    expect(
+      kMcpToolAccessLocation,
+      'Settings → ${SettingsAnchor.toolAccess.page.label} → '
+      '${SettingsAnchor.toolAccess.title}',
     );
   });
 

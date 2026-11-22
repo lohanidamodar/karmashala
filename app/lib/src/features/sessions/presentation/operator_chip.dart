@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_mcp/catalogue.dart'
+    show McpToolGroup, kMcpToolAccessLocation;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../agents/presentation/picker_face.dart';
 import '../application/session_providers.dart';
 import '../application/session_signals.dart';
+import '../application/tool_access_providers.dart';
 
 /// What a message starts with to let its session operate Karmashala: typed,
 /// it is the person's own act, so it asks nothing further.
@@ -34,6 +37,23 @@ const String kOperatorNotGrantedHelp =
     'This agent cannot start, message or end other sessions and agents. This '
     'is not a sandbox: it can still use devices, the browser, builds and its '
     'shell.';
+
+/// [kOperatorNotGrantedHelp] where the server keeps tool access: what the
+/// session can already do without the grant, by the groups [open] to it.
+String operatorNotGrantedHelp(List<McpToolGroup>? open) {
+  if (open == null) return kOperatorNotGrantedHelp;
+  final names = [for (final group in open) group.label];
+  final what = switch (names.length) {
+    0 => 'none of the tool groups',
+    1 => 'only ${names.single}',
+    _ =>
+      'only ${names.sublist(0, names.length - 1).join(', ')} and '
+          '${names.last}',
+  };
+  return 'Without it, this agent may use $what ($kMcpToolAccessLocation). '
+      'This is not a sandbox: it can still use devices, the browser, builds '
+      'and its shell.';
+}
 
 /// Lets session [sessionId]'s agent operate Karmashala, or takes it back.
 /// Turning it on from the chip asks first ([confirm]); `/operator` does not,
@@ -106,12 +126,15 @@ class OperatorChip extends ConsumerWidget {
     if (row == null) return const SizedBox.shrink();
     final on = row.operatorGranted;
     if (onlyWhenOn && !on) return const SizedBox.shrink();
+    final open = on
+        ? null
+        : ref.watch(sessionToolGroupsOpenProvider(sessionId));
     return Tooltip(
       key: onlyWhenOn ? const ValueKey('session-operator-badge') : null,
       message: on
           ? '$kOperatorGrantedHelp Click to take it back.'
-          : '$kOperatorNotGrantedHelp Click to let it operate Karmashala — or '
-                'start a message with /operator.',
+          : '${operatorNotGrantedHelp(open)} Click to let it operate '
+                'Karmashala — or start a message with /operator.',
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.sm),
         onTap: () => setOperatorGrant(context, ref, sessionId, granted: !on),

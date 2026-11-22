@@ -1,6 +1,7 @@
 import 'about_page.dart';
 import 'new_session_grant_section.dart';
 import 'notifications_page.dart';
+import 'tool_access_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -187,6 +188,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   ),
 
   SettingsAnchor.newSessionGrant => const NewSessionGrantSection(),
+  SettingsAnchor.toolAccess => const ToolAccessSection(),
   SettingsAnchor.bot => const BotSettingsSection(),
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),
   SettingsAnchor.childReport => const ChildReportSection(),

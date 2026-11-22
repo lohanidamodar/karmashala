@@ -332,6 +332,17 @@ enum SettingsAnchor {
     'trust',
     'folder',
   ]),
+  // Quoted as kMcpToolAccessLocation in the tool relay's refusals.
+  toolAccess(SettingsSectionId.permissions, 'Tool access', [
+    'tool access',
+    'tools',
+    'operate',
+    'operator',
+    'message',
+    'groups',
+    'approvals',
+    'pipelines',
+  ]),
   // Quoted as kBrowserConsentLocation in the browser tools' refusals and
   // schemas. Was Tools › Browser, then Tools and reach › Browser; now
   // Permissions › Browser. The enum name is kept so old links resolve.
@@ -498,6 +509,7 @@ enum SettingsAnchor {
     dataBackup || dataRestore => caps.hostsServer && caps.serverSettings,
     // An older server has no such setting.
     newSessionGrant => caps.operateByDefault || caps.trustRegisteredProjects,
+    toolAccess => caps.toolAccess,
     bot => caps.manageBot,
     _ => true,
   };

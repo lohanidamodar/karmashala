@@ -188,6 +188,12 @@ class FakeDataServer {
   /// What a change to it is refused with, when a test wants that.
   String? trustRefusal;
 
+  /// Agent tool access, as `McpToolAccessPolicy` JSON; empty is the defaults.
+  Map<String, Object?> toolAccess = const {};
+
+  /// What a change to it is refused with, when a test wants that.
+  String? toolAccessRefusal;
+
   /// The workspace domain's four tables, shaped like the server's DAOs so a
   /// test seeds them the way the server's store is written. A write here
   /// after a client connected reaches it as another client's change.
@@ -649,6 +655,8 @@ class FakeDataServer {
           operateNewSessions = enabled;
         case TrustRegisteredProjectsChanged(:final enabled):
           trustRegisteredProjects = enabled;
+        case ToolAccessChanged(:final policy):
+          toolAccess = policy;
         case BotRowChanged() || BotApprovalChanged() || BotAgentChanged():
           break;
         case StoresChanged() ||
@@ -922,6 +930,14 @@ class FakeDataServer {
         }
         trustRegisteredProjects = enabled;
         changes.add(TrustRegisteredProjectsChanged(enabled: enabled));
+        return const DataAck();
+      }(),
+      AgentsToolAccessSet(:final policy) => () {
+        if (toolAccessRefusal case final words?) {
+          throw DataRefused.denied(words);
+        }
+        toolAccess = policy;
+        changes.add(ToolAccessChanged(policy));
         return const DataAck();
       }(),
       final CheckpointsRequest<Object?> r => checkpointRows._handle(r, changes),
@@ -1367,6 +1383,7 @@ class FakeDataServer {
     if (!trustRegisteredProjects) {
       origin.tell(const [TrustRegisteredProjectsChanged(enabled: false)]);
     }
+    if (toolAccess.isNotEmpty) origin.tell([ToolAccessChanged(toolAccess)]);
     return const DataAck();
   }
 

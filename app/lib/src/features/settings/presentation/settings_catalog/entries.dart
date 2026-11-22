@@ -529,6 +529,21 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['operate', 'operator', 'grant', 'default', 'new sessions'],
   ),
   SettingsEntry(
+    'Tool access',
+    anchor: SettingsAnchor.toolAccess,
+    description:
+        'Which tool groups a session may use without Operate Karmashala: '
+        'message and start sessions, answer approvals, pipelines.',
+    keywords: [
+      'tool access',
+      'message sessions',
+      'start sessions',
+      'answer approvals',
+      'any project',
+      'operate',
+    ],
+  ),
+  SettingsEntry(
     'Trust registered projects for agents',
     anchor: SettingsAnchor.newSessionGrant,
     description:

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
     show
+        AgentsToolAccessSet,
         AgentsTrustRegisteredProjectsSet,
         BotOpen,
         ProjectFoldersCreate,
@@ -342,6 +343,10 @@ final class Capabilities {
   /// server keeps it and a phone may start sessions.
   bool get trustRegisteredProjects =>
       serverOffers(AgentsTrustRegisteredProjectsSet.feature) && mayStart;
+
+  /// Settings and project pages can change agent tool access, where the
+  /// server keeps it and a phone may start sessions.
+  bool get toolAccess => serverOffers(AgentsToolAccessSet.feature) && mayStart;
 
   /// The server has a bot. An older one has none: the button is not drawn.
   bool get bot => serverOffers(BotOpen.feature);

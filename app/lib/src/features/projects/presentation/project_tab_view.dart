@@ -34,6 +34,8 @@ import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart' show SettingsCard;
+import '../../settings/presentation/tool_access_section.dart'
+    show ProjectToolAccessRows;
 import '../../workspaces/application/workspaces_controller.dart';
 import '../application/project_page.dart';
 import '../application/projects_controller.dart';
@@ -304,6 +306,11 @@ class _DetailsSection extends ConsumerWidget {
             ),
           ],
         ),
+        if (ref.watch(capabilitiesProvider.select((c) => c.toolAccess)))
+          _Group(
+            title: 'Tool access',
+            children: [ProjectToolAccessRows(projectId: project.id)],
+          ),
         _Group(
           title: 'Remove',
           children: [

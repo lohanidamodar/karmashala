@@ -2,6 +2,7 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/capabilities/capabilities.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
@@ -12,7 +13,10 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/projects/presentation/project_tab_view.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_data_protocol/karmashala_data_protocol.dart'
+    show AgentsToolAccessSet;
 import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_mcp/catalogue.dart' show McpToolAccessPolicy;
 import 'package:karmashala_session/delivery.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -81,12 +85,17 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(1440, 900),
     double textScale = 1,
+    Set<String>? features,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final container = ProviderContainer(
       overrides: [
+        if (features != null)
+          serverOfferProvider.overrideWithValue(
+            ServerOffer(sameMachine: true, features: features),
+          ),
         ...fakeTerminalOverrides(machine: db, data: await server.override()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('w-')),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -223,6 +232,48 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  group('Tool access', () {
+    const offered = {AgentsToolAccessSet.feature};
+
+    testWidgets('Details has a picker per group, and sets this project', (
+      tester,
+    ) async {
+      await pump(tester, features: offered);
+      expect(find.text('TOOL ACCESS'), findsOneWidget);
+      final on = find.descendant(
+        of: byKey('project-tool-access-picker:answer'),
+        matching: find.text('On'),
+      );
+      await tester.ensureVisible(on);
+      await tester.pumpAndSettle();
+      await tester.tap(on);
+      await tester.pumpAndSettle();
+      expect(
+        McpToolAccessPolicy.fromJson(
+          server.toolAccess,
+        ).toolOn('session_answer', projectId: 'p1'),
+        isTrue,
+      );
+    });
+
+    testWidgets('an older server shows none', (tester) async {
+      await pump(tester, features: const {});
+      expect(find.text('TOOL ACCESS'), findsNothing);
+    });
+
+    for (final (name, size, scale) in const [
+      ('a 360 px phone at text scale 1.6', Size(360, 780), 1.6),
+      ('a desktop at text scale 1.6', Size(1440, 900), 1.6),
+    ]) {
+      testWidgets('fits $name', (tester) async {
+        await pump(tester, size: size, textScale: scale, features: offered);
+        await tester.ensureVisible(byKey('project-tool-access:panes'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
 
   testWidgets('its tab is named for the project, and closes with it', (
     tester,

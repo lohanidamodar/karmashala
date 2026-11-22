@@ -8,6 +8,7 @@ import 'package:karmashala_comparisons/comparisons.dart'
     show Comparison, sameComparison;
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
+import 'package:karmashala_mcp/catalogue.dart' show McpToolAccessPolicy;
 import 'package:karmashala_verification/verification.dart'
     show VerificationRun, sameVerificationHeader;
 import 'package:karmashala_environments/ssh.dart';
@@ -544,6 +545,23 @@ class DataClient {
     if (!_trustRegisteredProjectsChanges.isClosed) {
       _trustRegisteredProjectsChanges.add(enabled);
     }
+  }
+
+  /// The server's agent tool access settings, as last told. A new link starts
+  /// from the defaults: the server greets it only when something is set.
+  McpToolAccessPolicy toolAccess = McpToolAccessPolicy.defaults;
+
+  final _toolAccessChanges = StreamController<McpToolAccessPolicy>.broadcast(
+    sync: true,
+  );
+
+  /// The settings each time they change, here or on another client.
+  Stream<McpToolAccessPolicy> get toolAccessChanges =>
+      _toolAccessChanges.stream;
+
+  void _setToolAccess(McpToolAccessPolicy policy) {
+    toolAccess = policy;
+    if (!_toolAccessChanges.isClosed) _toolAccessChanges.add(policy);
   }
 
   /// The server's bot as last told; null until a link has followed it
@@ -1329,6 +1347,8 @@ class DataClient {
           _setOperateByDefault(enabled);
         case TrustRegisteredProjectsChanged(:final enabled):
           _setTrustRegisteredProjects(enabled);
+        case ToolAccessChanged(:final policy):
+          _setToolAccess(McpToolAccessPolicy.fromJson(policy));
         // Told only to a client that asked (`bot.subscribe`).
         case BotRowChanged(:final row):
           _applyBotRow(row);
@@ -1399,6 +1419,9 @@ class DataClient {
     if (quickAccessPins.isNotEmpty) _setQuickAccess(const []);
     if (operateByDefault) _setOperateByDefault(false);
     if (!trustRegisteredProjects) _setTrustRegisteredProjects(true);
+    if (toolAccess != McpToolAccessPolicy.defaults) {
+      _setToolAccess(McpToolAccessPolicy.defaults);
+    }
   }
 
   Future<void> _attach(DataEndpoint endpoint) async {
@@ -1579,6 +1602,7 @@ class DataClient {
     unawaited(_quickAccessChanges.close());
     unawaited(_operateByDefaultChanges.close());
     unawaited(_trustRegisteredProjectsChanges.close());
+    unawaited(_toolAccessChanges.close());
     unawaited(_botChanges.close());
     unawaited(_storesChanges.close());
     unawaited(_storeChangeNotices.close());

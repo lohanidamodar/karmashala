@@ -20,6 +20,7 @@ import '../../sessions/application/session_agent_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/tool_access_providers.dart';
 import '../../sessions/presentation/delivery_strip.dart';
 import '../../sessions/presentation/end_session_action.dart';
 import '../../sessions/presentation/model_chip.dart';
@@ -397,11 +398,14 @@ class _OperateRow extends ConsumerWidget {
     final on = row.operatorGranted;
     void set(bool granted) =>
         setOperatorGrant(context, ref, sessionId, granted: granted);
+    final open = on
+        ? null
+        : ref.watch(sessionToolGroupsOpenProvider(sessionId));
     return Tooltip(
       message: on
           ? kOperatorGrantedHelp
-          : '$kOperatorNotGrantedHelp Start a message with /operator to let '
-                'it.',
+          : '${operatorNotGrantedHelp(open)} Start a message with /operator '
+                'to let it do everything.',
       child: FactRow(
         key: const ValueKey('session-list:operator'),
         icon: AppIcons.robot,
