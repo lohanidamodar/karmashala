@@ -67,6 +67,14 @@ signed and not notarised. Linux comes as a tarball and as an AppImage, which
 carries its own libraries but uses the system's GTK 3 and OpenGL. The phone app
 targets Android first, then iOS.
 
+**Updates.** The desktop app checks GitHub for a new release soon after it opens
+and every six hours; turn this off in Settings › About. The installer, the DMG and the
+AppImage update from inside the app, after a SHA-256 check. The portable zip
+and the tarball are only linked, never replaced. Homebrew, Scoop and winget
+manifests are in [`packaging/`](packaging/README.md), with their one-line
+installs ([docs/research/desktop-updates.md](docs/research/desktop-updates.md)
+explains the design).
+
 ## Requirements
 
 - **Flutter**, stable channel, with the desktop toolchain for your platform.
@@ -175,7 +183,11 @@ distribution; [`tool/live_tests.ps1`](tool/live_tests.ps1) runs them.
   [`release-build.yml`](.github/workflows/release-build.yml), which attaches the
   Windows installer and portable zip, the macOS DMG, the Linux tarball and
   AppImage ([`tool/package_appimage.sh`](tool/package_appimage.sh)), the server
-  bundles and the Android APK.
+  bundles and the Android APK. Then it adds `SHA256SUMS.txt`
+  ([`tool/release_sums.dart`](tool/release_sums.dart)), and
+  bumps the Homebrew tap and Scoop bucket
+  ([`tool/package_manifests.dart`](tool/package_manifests.dart)) once their
+  token is set.
 - [`android-release.yml`](.github/workflows/android-release.yml) uploads to
   Google Play, and only when run by hand.
 

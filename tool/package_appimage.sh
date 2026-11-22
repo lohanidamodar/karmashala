@@ -71,10 +71,16 @@ for lib in "$app"/lib/*.so "$app"/host/lib/*.so; do
 done
 
 out="$PWD/Karmashala-$version-x86_64.AppImage"
+# Update information in the image, so AppImageUpdate, Gear Lever and other
+# AppImage managers find the next release and fetch only the changed blocks
+# through the .zsync file written beside it. Karmashala's own updater swaps
+# the whole file instead (docs/research/desktop-updates.md).
+update_info="gh-releases-zsync|lohanidamodar|karmashala|latest|Karmashala-*-x86_64.AppImage.zsync"
 # The plugin is found beside linuxdeploy, on PATH. The bundle's own lib/ dirs
 # are on the search path because its plugins link libflutter_linux_gtk.so
 # beside them, which they otherwise reach only through the binary's rpath.
 PATH="$work:$PATH" OUTPUT="$out" \
+LDAI_UPDATE_INFORMATION="$update_info" UPDATE_INFORMATION="$update_info" \
 LD_LIBRARY_PATH="$app/lib:$app/host/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   "$work/linuxdeploy" \
   --appdir "$work/AppDir" \
@@ -84,4 +90,4 @@ LD_LIBRARY_PATH="$app/lib:$app/host/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   --icon-file "$work/karmashala.png" \
   "${excluded[@]}" \
   --output appimage
-ls -l "$out"
+ls -l "$out" "$out.zsync" 2>/dev/null || ls -l "$out"

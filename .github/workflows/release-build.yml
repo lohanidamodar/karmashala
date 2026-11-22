@@ -109,12 +109,56 @@ jobs:
         with:
           name: host-linux
           path: app/build/windows/x64/runner/Release
+      # Authenticode, only once a code-signing certificate is a secret
+      # (docs/research/desktop-updates.md). Unsigned, SmartScreen warns on the
+      # first run of each new download; signed, the warning fades as the
+      # certificate earns reputation.
+      - name: Load the code-signing certificate, when there is one
+        id: authenticode
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+        run: |
+          if (-not $env:PFX_BASE64) {
+            "::warning::No WINDOWS_SIGNING_PFX_BASE64 secret: the app and installer are unsigned."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String(($env:PFX_BASE64 -replace '\s', '')))
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' | Sort-Object FullName | Select-Object -Last 1
+          "pfx=$pfx" >> $env:GITHUB_OUTPUT
+          "signtool=$($signtool.FullName)" >> $env:GITHUB_OUTPUT
+      - name: Sign the app's executables
+        if: steps.authenticode.outputs.pfx != ''
+        shell: pwsh
+        env:
+          PFX: ${{ steps.authenticode.outputs.pfx }}
+          SIGNTOOL: ${{ steps.authenticode.outputs.signtool }}
+          PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $files = Get-ChildItem app/build/windows/x64/runner/Release -Recurse -Include *.exe, *.dll |
+            Where-Object { $_.Name -notmatch '^(msvcp|vcruntime|concrt)' }
+          & $env:SIGNTOOL sign /f $env:PFX /p $env:PFX_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $files.FullName
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           & $iscc "/DMyAppVersion=$env:VERSION" "app\windows\installer\karmashala.iss"
+      - name: Sign the installer
+        if: steps.authenticode.outputs.pfx != ''
+        shell: pwsh
+        env:
+          PFX: ${{ steps.authenticode.outputs.pfx }}
+          SIGNTOOL: ${{ steps.authenticode.outputs.signtool }}
+          PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          & $env:SIGNTOOL sign /f $env:PFX /p $env:PFX_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "app/windows/installer/output/Karmashala-Setup-$env:VERSION.exe"
+          Remove-Item $env:PFX
       - name: Archive portable Windows build
         shell: pwsh
         run: |
@@ -290,7 +334,39 @@ jobs:
       # The lock file as committed: a fresh resolution on a runner has dropped
       # packages the app needs (zmodem, quiver, equatable, 2026-09-27).
       - run: flutter pub get --enforce-lockfile
+      # Developer ID signing, only once its certificate is a secret
+      # (docs/research/desktop-updates.md); without it the build stays ad-hoc
+      # signed as before. A throwaway keychain, deleted with the runner.
+      - name: Import the Developer ID certificate, when there is one
+        id: devid
+        env:
+          P12_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$P12_BASE64" ]; then
+            echo "::warning::No MACOS_DEVELOPER_ID_P12_BASE64 secret: the app is ad-hoc signed and not notarised."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          kpass=$(uuidgen)
+          printf '%s' "$P12_BASE64" | tr -d '\r\n' | base64 -D > "$RUNNER_TEMP/devid.p12"
+          security create-keychain -p "$kpass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$kpass" "$keychain"
+          security import "$RUNNER_TEMP/devid.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kpass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/devid.p12"
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)
+          if [ -z "$identity" ]; then
+            echo "The certificate holds no Developer ID Application identity." >&2
+            exit 1
+          fi
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
       - name: Build, bundle, sign and package
+        env:
+          MACOS_SIGN_IDENTITY: ${{ steps.devid.outputs.identity }}
         run: tool/build_release.sh
       - name: Name the DMG for the release
         run: |
@@ -298,6 +374,30 @@ jobs:
           mkdir -p build/artifacts
           dmg=$(ls app/build/macos/karmashala-*.dmg)
           cp "$dmg" "build/artifacts/Karmashala-macOS-$VERSION.dmg"
+      # Notarised with the App Store Connect API key the iOS pipeline already
+      # uses (docs/releases.md), so Gatekeeper opens the app without asking.
+      - name: Sign, notarise and staple the DMG, when signed
+        if: steps.devid.outputs.identity != ''
+        env:
+          IDENTITY: ${{ steps.devid.outputs.identity }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+        run: |
+          set -euo pipefail
+          dmg="build/artifacts/Karmashala-macOS-$VERSION.dmg"
+          codesign --force --timestamp --sign "$IDENTITY" "$dmg"
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_CONTENT" ]; then
+            echo "::warning::No App Store Connect key secrets: the DMG is signed but not notarised."
+            exit 0
+          fi
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$ASC_KEY_CONTENT" | tr -d '\r\n' | base64 -D > "$key"
+          xcrun notarytool submit "$dmg" --key "$key" --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" --wait --timeout 30m
+          rm -f "$key"
+          xcrun stapler staple "$dmg"
+          spctl --assess --type open --context context:primary-signature -v "$dmg"
       - name: Upload macOS artifact to release
         uses: softprops/action-gh-release@v2
         with:
@@ -449,8 +549,126 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-0 libmpv2 libsecret-1-0 libkeybinder-3.0-0 libayatana-appindicator3-1 libnotify4 libsqlite3-0 imagemagick file
       - name: Package as an AppImage
         run: bash tool/package_appimage.sh build/linux/Karmashala-linux.tar.gz "$VERSION"
+      # The .zsync is what AppImage managers read for a delta update; a run
+      # whose tools wrote none still ships the AppImage.
       - name: Upload the AppImage to the release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          files: Karmashala-${{ env.VERSION }}-x86_64.AppImage
+          fail_on_unmatched_files: false
+          files: |
+            Karmashala-${{ env.VERSION }}-x86_64.AppImage
+            Karmashala-${{ env.VERSION }}-x86_64.AppImage.zsync
+
+  # SHA256SUMS.txt, once every file is on the release, for Scoop's autoupdate
+  # and anyone verifying by hand (the desktop app reads GitHub's digests itself).
+  # Built from the digests GitHub computed on upload, so nothing is downloaded
+  # again. Runs even when a platform failed, so the rest still hear of the
+  # release; it then warns which desktop file is missing.
+  publish-checksums:
+    needs:
+      - prepare
+      - build-windows
+      - build-host-linux
+      - build-host-desktop
+      - attach-installers
+      - build-macos
+      - build-android
+      - build-linux
+      - build-linux-appimage
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: Write SHA256SUMS.txt
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release.json"
+          dart tool/release_sums.dart --release "$RUNNER_TEMP/release.json" --out build/sums
+          cat build/sums/SHA256SUMS.txt
+      - name: Upload it to the release
+        run: gh release upload "$RELEASE_TAG" build/sums/SHA256SUMS.txt --clobber
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sums
+          path: build/sums
+
+  # The Homebrew tap and the Scoop bucket follow every release. Each is its own
+  # repository, written with a token that can push to both; until that token
+  # is a secret this job says so and does nothing. packaging/README.md lists
+  # the repositories and the secret.
+  bump-package-managers:
+    needs: [prepare, publish-checksums]
+    if: ${{ needs.publish-checksums.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TOKEN: ${{ secrets.PACKAGING_REPOS_TOKEN }}
+      TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'lohanidamodar/homebrew-tap' }}
+      BUCKET_REPO: ${{ vars.SCOOP_BUCKET_REPO || 'lohanidamodar/scoop-bucket' }}
+    steps:
+      - name: Check for the token
+        id: token
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::No PACKAGING_REPOS_TOKEN secret: the Homebrew tap and Scoop bucket were not bumped."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.present == 'true'
+      - uses: dart-lang/setup-dart@v1
+        if: steps.token.outputs.present == 'true'
+      - uses: actions/download-artifact@v4
+        if: steps.token.outputs.present == 'true'
+        with:
+          name: release-sums
+          path: build/sums
+      # A pre-release never reaches a package manager.
+      - name: Commit the new version to the tap and the bucket
+        if: steps.token.outputs.present == 'true' && !contains(needs.prepare.outputs.version, '-')
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bump() {
+            local repo=$1 only=$2 dir="$RUNNER_TEMP/$2"
+            git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${repo}.git" "$dir"
+            dart tool/package_manifests.dart --version "$VERSION" \
+              --sums build/sums/SHA256SUMS.txt --only "$only" --out "$RUNNER_TEMP/out-$only"
+            cp -R "$RUNNER_TEMP/out-$only/$only/." "$dir/"
+            git -C "$dir" add -A
+            if git -C "$dir" diff --cached --quiet; then
+              echo "$repo already has $VERSION."
+              return
+            fi
+            git -C "$dir" commit -m "karmashala $VERSION"
+            git -C "$dir" push origin HEAD
+          }
+          bump "$TAP_REPO" homebrew
+          bump "$BUCKET_REPO" scoop
+
+  # winget: a pull request to microsoft/winget-pkgs for each release, once the
+  # first version is merged there by hand and WINGET_SUBMIT is set to true.
+  # wingetcreate fetches the installer and hashes it itself.
+  bump-winget:
+    needs: [prepare, publish-checksums]
+    if: ${{ needs.publish-checksums.result == 'success' && vars.WINGET_SUBMIT == 'true' && !contains(needs.prepare.outputs.version, '-') }}
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Submit the new version to winget-pkgs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:WINGET_TOKEN) { throw 'WINGET_SUBMIT is true but there is no WINGET_TOKEN secret.' }
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          $url = "https://github.com/${{ github.repository }}/releases/download/v$env:VERSION/Karmashala-Setup-$env:VERSION.exe"
+          .\wingetcreate.exe update PopupBits.Karmashala --version $env:VERSION --urls $url --submit --token $env:WINGET_TOKEN

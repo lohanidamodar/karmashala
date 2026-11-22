@@ -106,8 +106,31 @@ COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf \
 # Flutter's own build applied, and an app with a broken signature is refused by
 # Gatekeeper with a message that names nothing useful. Ad-hoc (`-`) is what an
 # unnotarised local build gets anyway.
+#
+# With MACOS_SIGN_IDENTITY (a "Developer ID Application: …" identity in the
+# keychain) it is signed for distribution instead: hardened runtime and a
+# secure timestamp, which notarisation requires. Every Mach-O inside is signed
+# first, innermost out, because `--deep` does not apply the runtime option to
+# nested code reliably and the notary rejects anything unsigned.
 echo "=== SIGN ==="
-codesign --force --deep --sign - "$APP"
+if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
+  ENTITLEMENTS="app/macos/Runner/Release.entitlements"
+  sign() { codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY" "$@"; }
+  # The loose code beside the app binary: the MCP bridge, the session host and
+  # its SQLite. The app binary itself is signed with the bundle, last.
+  find "$APP/Contents/MacOS" -type f ! -path "$APP/Contents/MacOS/karmashala" -print0 |
+    while IFS= read -r -d '' bin; do
+      if file -b "$bin" | grep -q 'Mach-O'; then sign "$bin"; fi
+    done
+  # Frameworks as bundles, not through the binary inside them.
+  for fw in "$APP"/Contents/Frameworks/*.framework "$APP"/Contents/Frameworks/*.dylib; do
+    [ -e "$fw" ] && sign "$fw"
+  done
+  codesign --force --timestamp --options runtime \
+    --entitlements "$ENTITLEMENTS" --sign "$MACOS_SIGN_IDENTITY" "$APP"
+else
+  codesign --force --deep --sign - "$APP"
+fi
 codesign --verify --deep --strict "$APP" && echo "signature ok"
 
 echo "=== DMG ==="
