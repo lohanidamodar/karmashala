@@ -97,6 +97,10 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""K
 ; pnpm's node_modules would too. Asked to open the file, Explorer has the
 ; running shell start it, which gives the app the shell's policy instead.
 Filename: "{win}\explorer.exe"; Parameters: """{app}\{#MyAppExeName}"""; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+; The app's own update runs this Setup with /SILENT, which skips the entry
+; above, and passes /KARMASHALARESTART so the app comes back once it is
+; installed — through Explorer, for the same reason.
+Filename: "{win}\explorer.exe"; Parameters: """{app}\{#MyAppExeName}"""; Flags: nowait runasoriginaluser; Check: RestartRequested
 
 [UninstallRun]
 ; Ours to remove: rules naming an executable and a port that no longer exist
@@ -161,6 +165,22 @@ begin
   finally
     FindClose(Found);
   end;
+end;
+
+// --- Started by the app's own update ---------------------------------------
+// True when /KARMASHALARESTART is on the command line: the [Run] entry that
+// starts the app again after a silent update checks it.
+function RestartRequested: Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/KARMASHALARESTART') = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
