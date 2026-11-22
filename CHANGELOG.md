@@ -17,6 +17,13 @@ installs claim the same version name.
 
 ---
 
+## 1.34.27 — 2026-11-22 (build 94)
+
+- **Agents can message and start sessions without Operate Karmashala.** Settings › Permissions › Tool access turns tool groups on or off: Message sessions and Start sessions are on by default, with messaging limited to the caller's project, its parent and its children unless "Any project" is on. Changing other sessions, answering approvals, pipelines and worktrees, and typing into panes stay off. Each group lists its tools under Advanced, and each project's page can override any group. A refused tool tells the agent which group to turn on.
+- **Model and thinking level beside Send.** The chat composer, on desktop and phone, has pickers for the session's model and thinking level.
+- **Agents can read and change a session's settings** with the `session_settings` and `session_configure` tools.
+- **Usage in the phone's top bar.** A button shows the account closest to its limit, and a tap lists every account's usage.
+
 ## 1.34.26 — 2026-11-22 (build 93)
 
 - **Session details** puts Model, Thinking level, Speed and Permission in one place. Open it from the desktop session menu or the phone's Session button. Tap anywhere on a setting's row to open its picker.
