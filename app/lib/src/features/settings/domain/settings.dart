@@ -145,6 +145,8 @@ class Settings {
     this.notesEnabled = true,
     this.hideEmptySections = true,
     this.botPinned = false,
+    this.checkForUpdates = true,
+    this.skippedUpdateVersion = '',
     this.explorerAgentFilter = const [],
     this.hiddenSidePanelSurfaces = const [],
     this.explorerProjectDetails = true,
@@ -406,6 +408,14 @@ class Settings {
   /// it, where the window has room. This device's choice.
   final bool botPinned;
 
+  /// Whether the app looks for a newer GitHub release on its own: shortly
+  /// after launch and every six hours. Settings › About checks either way.
+  final bool checkForUpdates;
+
+  /// The release tag the person chose to skip; its notice never comes
+  /// back. Empty when none is skipped.
+  final String skippedUpdateVersion;
+
   /// The `AgentDescriptor.id`s the Explorer is narrowed to, empty for "every
   /// agent". Persisted, so the header names what it is holding back.
   final List<String> explorerAgentFilter;
@@ -539,6 +549,8 @@ class Settings {
     bool? notesEnabled,
     bool? hideEmptySections,
     bool? botPinned,
+    bool? checkForUpdates,
+    String? skippedUpdateVersion,
     List<String>? explorerAgentFilter,
     List<String>? hiddenSidePanelSurfaces,
     bool? explorerProjectDetails,
@@ -636,6 +648,8 @@ class Settings {
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
     botPinned: botPinned ?? this.botPinned,
+    checkForUpdates: checkForUpdates ?? this.checkForUpdates,
+    skippedUpdateVersion: skippedUpdateVersion ?? this.skippedUpdateVersion,
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
     hiddenSidePanelSurfaces:
         hiddenSidePanelSurfaces ?? this.hiddenSidePanelSurfaces,
@@ -749,6 +763,8 @@ class Settings {
     'notesEnabled',
     'hideEmptySections',
     'botPinned',
+    'checkForUpdates',
+    'skippedUpdateVersion',
     'explorerAgentFilter',
     'hiddenSidePanelSurfaces',
     'explorerProjectDetails',
@@ -838,6 +854,9 @@ class Settings {
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
     'botPinned': botPinned,
+    if (!checkForUpdates) 'checkForUpdates': false,
+    if (skippedUpdateVersion.isNotEmpty)
+      'skippedUpdateVersion': skippedUpdateVersion,
     'explorerAgentFilter': explorerAgentFilter,
     if (hiddenSidePanelSurfaces.isNotEmpty)
       'hiddenSidePanelSurfaces': hiddenSidePanelSurfaces,
@@ -1074,6 +1093,10 @@ class Settings {
           ? json['notesEnabled'] as bool
           : true,
       botPinned: json['botPinned'] == true,
+      checkForUpdates: json['checkForUpdates'] != false,
+      skippedUpdateVersion: json['skippedUpdateVersion'] is String
+          ? json['skippedUpdateVersion'] as String
+          : '',
       hideEmptySections: json['hideEmptySections'] is bool
           ? json['hideEmptySections'] as bool
           : true,
@@ -1176,6 +1199,8 @@ class Settings {
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
       other.botPinned == botPinned &&
+      other.checkForUpdates == checkForUpdates &&
+      other.skippedUpdateVersion == skippedUpdateVersion &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
       _listEquals(other.hiddenSidePanelSurfaces, hiddenSidePanelSurfaces) &&
       other.explorerProjectDetails == explorerProjectDetails &&
@@ -1262,7 +1287,12 @@ class Settings {
             resumeMessages.entries.map((e) => Object.hash(e.key, e.value)),
           ),
         ),
-        Object.hash(hideEmptySections, botPinned),
+        Object.hash(
+          hideEmptySections,
+          botPinned,
+          checkForUpdates,
+          skippedUpdateVersion,
+        ),
         Object.hashAll(explorerAgentFilter),
         Object.hashAll(hiddenSidePanelSurfaces),
         explorerProjectDetails,

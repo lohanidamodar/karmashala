@@ -96,6 +96,20 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Whether the app looks for a newer release on its own.
+  void setCheckForUpdates(bool value) {
+    if (state.checkForUpdates == value) return;
+    state = state.copyWith(checkForUpdates: value);
+    _save();
+  }
+
+  /// The release tag whose notice never comes back; empty for none.
+  void setSkippedUpdateVersion(String tag) {
+    if (state.skippedUpdateVersion == tag) return;
+    state = state.copyWith(skippedUpdateVersion: tag);
+    _save();
+  }
+
   /// Which agents the Explorer shows; empty is "every agent". Written sorted,
   /// so a reordered identical choice is not a change `Settings ==` reports.
   void setExplorerAgentFilter(Set<String> agentIds) {
