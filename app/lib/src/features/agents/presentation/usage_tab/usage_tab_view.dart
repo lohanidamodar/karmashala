@@ -103,8 +103,8 @@ class _UsagePage extends ConsumerWidget {
         child: Text(
           'No account has a usage reading yet. Usage appears here once an '
           'agent is signed in and its limits have been read — open a session '
-          'with Claude Code or Codex, or refresh from an account chip in the '
-          'title bar.',
+          'with Claude Code, Codex, or Antigravity, or refresh from an account '
+          'chip in the title bar.',
           style: muted,
         ),
       );

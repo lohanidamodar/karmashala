@@ -34,11 +34,12 @@ class UsageToolSet extends ServerToolSet {
             .firstOrNull
             ?.id;
     if (agentId == null) throw StateError('No agent here reports usage.');
+    final folded = registry.foldedIdOf(agentId);
     final account = _usage
         .accounts()
         .where(
           (i) =>
-              i.agentId == agentId &&
+              registry.foldedIdOf(i.agentId) == folded &&
               (environmentId == null || i.environmentId == environmentId),
         )
         .firstOrNull;
@@ -79,10 +80,9 @@ const List<Map<String, Object?>> usageToolSchemas = [
         '"claude", "codex" or "antigravity"; environmentId is optional '
         '(defaults to the first matching installation). Each window carries '
         'a label and, when the agent reported one, a "percent" used and a '
-        '"resetsAt". A window with no "percent" was not measured — '
-        'Antigravity names the account\'s tiers and reports no quota '
-        'against them — and that absence means unknown, never zero. '
-        '"fetchedAt" is when the reading was taken.',
+        '"resetsAt". A window with no "percent" was not measured — that '
+        'absence means unknown, never zero. "fetchedAt" is when the reading '
+        'was taken.',
     'inputSchema': {
       'type': 'object',
       'properties': {

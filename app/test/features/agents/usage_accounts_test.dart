@@ -54,6 +54,40 @@ void main() {
     expect(codex.accountKeys, {'codex@wsl:arch', 'codex@win'});
   });
 
+  test('chat and terminal forms of one agent fold under the canonical agent id '
+      'and merge when signed into the same email', () {
+    final accounts = usageAccountsOf([
+      state(
+        'antigravity-acp',
+        'win',
+        email: 'dev@example.com',
+        percent: 20,
+        at: t0,
+      ),
+      state(
+        'antigravity',
+        'wsl:arch',
+        email: 'Dev@Example.com',
+        percent: 25,
+        at: t0.add(const Duration(minutes: 2)),
+      ),
+    ]);
+
+    expect(accounts, hasLength(1));
+    final agy = accounts.single;
+    expect(agy.agentId, 'antigravity');
+    expect(agy.latest.accountKey, 'antigravity@wsl:arch');
+    expect(agy.environmentIds, ['wsl:arch', 'win']);
+    expect(agy.accountKeys, {'antigravity@wsl:arch', 'antigravity-acp@win'});
+
+    // Chat-only account alone still surfaces under the folded canonical id.
+    final chatOnly = usageAccountsOf([
+      state('antigravity-acp', 'win', email: 'dev@example.com', percent: 40),
+    ]);
+    expect(chatOnly.single.agentId, 'antigravity');
+    expect(chatOnly.single.latest.accountKey, 'antigravity-acp@win');
+  });
+
   test('the same agent under two emails is two accounts, and so is one whose '
       'email is unknown', () {
     final accounts = usageAccountsOf([

@@ -1,8 +1,10 @@
+import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
 
 import '../data/agents_data.dart';
+import 'agent_providers.dart';
 
 /// **One signed-in account**, however many environments it is signed in from:
 /// Codex on Windows and Codex in WSL under the same email are one quota, so
@@ -51,15 +53,23 @@ class UsageAccount {
 /// has neither read nor failed to read is left out — a failure alone (an
 /// expired sign-in) is shown, since it is what needs doing. Ones with no email
 /// are never merged, since nothing says two of them are one account.
-List<UsageAccount> usageAccountsOf(Iterable<AccountUsageState> states) {
+///
+/// Chat and terminal forms of one agent fold under the agent's canonical id
+/// ([AgentRegistry.foldedIdOf]), so an agent signed in via its chat form on
+/// one machine and its CLI on another appears once under the agent's name.
+List<UsageAccount> usageAccountsOf(
+  Iterable<AccountUsageState> states, {
+  AgentRegistry registry = AgentRegistry.builtIn,
+}) {
   final groups = <String, List<AccountUsageState>>{};
   for (final state in states) {
     final usage = state.usage;
     if (usage == null && state.failure == null) continue;
+    final foldedId = registry.foldedIdOf(state.agentId);
     final email = usage?.email;
     final key = email == null
         ? '${state.accountKey}\u0000'
-        : '${state.agentId}\u0000${email.toLowerCase()}';
+        : '$foldedId\u0000${email.toLowerCase()}';
     (groups[key] ??= []).add(state);
   }
   final accounts = [
@@ -73,7 +83,7 @@ List<UsageAccount> usageAccountsOf(Iterable<AccountUsageState> states) {
           ),
         );
         return UsageAccount(
-          agentId: group.first.agentId,
+          agentId: registry.foldedIdOf(group.first.agentId),
           email: group.first.usage?.email,
           latest: group.first,
           states: List.unmodifiable(group),
@@ -96,9 +106,10 @@ List<UsageAccount> usageAccountsOf(Iterable<AccountUsageState> states) {
 /// Every account the server has a usage reading for, merged and ordered.
 final usageAccountsProvider = Provider.autoDispose<List<UsageAccount>>((ref) {
   final usage = ref.watch(agentWorkProvider).usage;
+  final registry = ref.watch(agentRegistryProvider);
   final listening = usage.changes.listen((_) => ref.invalidateSelf());
   ref.onDispose(listening.cancel);
-  return usageAccountsOf(usage.values);
+  return usageAccountsOf(usage.values, registry: registry);
 });
 
 /// One agent's accounts, for a list grouped by agent.

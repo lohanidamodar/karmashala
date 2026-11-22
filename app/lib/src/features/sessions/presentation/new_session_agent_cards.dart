@@ -285,8 +285,9 @@ class _FormChoice extends StatelessWidget {
 
 /// The account's tightest window as a short bar and a percentage — or what
 /// is known instead, in words. Never a spinner: this must not animate the
-/// dialog while a lookup is slow. Read once per card, off the terminal form:
-/// both forms spend the same account.
+/// dialog while a lookup is slow. Read once per card, preferring the terminal
+/// form when present and falling back to the chat form when its adapter reads
+/// usage.
 class _AgentUsageLine extends ConsumerWidget {
   const _AgentUsageLine({required this.group, required this.muted});
 
@@ -295,10 +296,16 @@ class _AgentUsageLine extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // An agent only spoken to over ACP has no account to read: the protocol
-    // carries no limits, only what a running session reports of itself.
-    final installation = group.installationFor(AgentRunForm.terminal);
-    if (installation == null) {
+    // Prefer the terminal installation where present; otherwise use the chat
+    // installation if its adapter declares a usage endpoint (such as
+    // Antigravity · Chat). Agents with no usage endpoint say limits are not
+    // reported over ACP.
+    final registry = ref.watch(agentRegistryProvider);
+    final installation =
+        group.installationFor(AgentRunForm.terminal) ??
+        group.installationFor(AgentRunForm.chat);
+    if (installation == null ||
+        registry.adapterFor(installation.agentId)?.usage == null) {
       return Text(kAcpUsageLimitsNote, style: muted);
     }
     final usage = ref.watch(agentUsageProvider(installation));

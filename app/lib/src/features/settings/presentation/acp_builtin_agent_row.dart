@@ -24,11 +24,15 @@ const acpAgentsNote =
     'under their own default mode.';
 
 /// How one install is started: `npx -y <package>` when discovery fell back
-/// to the package runner, else the binary's path.
-String describeAgentLaunch(AgentInstallation install) =>
-    install.leadingArguments.isEmpty
-    ? install.executable.path
-    : 'npx ${install.leadingArguments.join(' ')}';
+/// to the package runner, `<path> <subcommand>` for a CLI subcommand such as
+/// `agy acp`, else the binary's path.
+String describeAgentLaunch(AgentInstallation install) {
+  if (install.leadingArguments.isEmpty) return install.executable.path;
+  final args = install.leadingArguments.join(' ');
+  return isNpxExecutable(install.executable.path)
+      ? 'npx $args'
+      : '${install.executable.path} $args';
+}
 
 /// **A shipped ACP agent, one row** (Grok, or a chat form whose agent this
 /// registry lacks): its health, where it is installed, how each machine

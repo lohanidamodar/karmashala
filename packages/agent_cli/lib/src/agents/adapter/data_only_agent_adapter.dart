@@ -2,6 +2,7 @@ import '../domain/agent_descriptor.dart';
 import 'agent_adapter.dart';
 import 'agent_artifact_markers.dart';
 import 'agent_presentation.dart';
+import 'agent_usage_support.dart';
 
 /// **An agent that exists only as data**: a descriptor and no code.
 ///
@@ -15,6 +16,7 @@ class DataOnlyAgentAdapter extends AgentAdapter {
     this.descriptor, {
     AgentPresentation? presentation,
     this.artifactMarkers,
+    this.usage,
   }) : _presentation = presentation;
 
   @override
@@ -26,6 +28,11 @@ class DataOnlyAgentAdapter extends AgentAdapter {
   /// protocol is one whose own skills write one.
   @override
   final AgentArtifactMarkers? artifactMarkers;
+
+  /// Usage endpoint for a data-only adapter whose store holds credentials
+  /// Karmashala can read (such as `antigravity-acp`).
+  @override
+  final AgentUsageSupport? usage;
 
   /// As given, else the display name's first word and the default glyph.
   @override

@@ -1,3 +1,4 @@
+import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:karmashala_data_protocol/karmashala_data_protocol.dart';
@@ -5,6 +6,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../data/agents_data.dart';
+import 'agent_providers.dart';
 
 /// **Usage as the server reads it.** The server asks each agent's usage
 /// endpoint on its own schedule — the floor while the quota moves, longer
@@ -12,15 +14,37 @@ import '../data/agents_data.dart';
 /// account's state as it changes. Nothing here asks a vendor: [refresh] asks
 /// the server, whose throttle decides whether that costs a request.
 class UsageReadings {
-  UsageReadings(this._work, this._now);
+  UsageReadings(
+    this._work,
+    this._now, [
+    this._registry = AgentRegistry.builtIn,
+  ]);
 
   final AgentWorkData _work;
   final DateTime Function() _now;
+  final AgentRegistry _registry;
 
   /// [installation]'s account as the server last read it, or null before it
-  /// has said anything of it.
-  AccountUsageState? stateOf(AgentInstallation installation) =>
-      _work.usage[usageAccountKey(installation)];
+  /// has said anything of it. Falls back to the folded account key when the
+  /// server tracks the sibling form (terminal vs chat) in the same environment.
+  AccountUsageState? stateOf(AgentInstallation installation) {
+    final directKey = usageAccountKey(installation);
+    final direct = _work.usage[directKey];
+    if (direct != null) return direct;
+    final foldedId = _registry.foldedIdOf(installation.agentId);
+    final foldedKey = '$foldedId@${installation.environmentId}';
+    if (foldedKey != directKey) {
+      final byFolded = _work.usage[foldedKey];
+      if (byFolded != null) return byFolded;
+    }
+    for (final state in _work.usage.values) {
+      if (state.environmentId == installation.environmentId &&
+          _registry.foldedIdOf(state.agentId) == foldedId) {
+        return state;
+      }
+    }
+    return null;
+  }
 
   /// The last reading of [installation]'s account, however old.
   AgentUsage? remembered(AgentInstallation installation) =>
@@ -55,7 +79,9 @@ class UsageReadings {
     } on DataRefused catch (refusal) {
       throw UsageException(refusal.message, kind: UsageFailureKind.notAsked);
     }
-    final state = states.where((s) => s.accountKey == key).firstOrNull;
+    final state =
+        states.where((s) => s.accountKey == key).firstOrNull ??
+        states.firstOrNull;
     return _readingOf(state);
   }
 
@@ -69,7 +95,10 @@ class UsageReadings {
     } on DataRefused catch (refusal) {
       throw UsageException(refusal.message, kind: UsageFailureKind.notAsked);
     }
-    _readingOf(states.where((s) => s.accountKey == accountKey).firstOrNull);
+    _readingOf(
+      states.where((s) => s.accountKey == accountKey).firstOrNull ??
+          states.firstOrNull,
+    );
   }
 
   AgentUsage _readingOf(AccountUsageState? state) {
@@ -87,6 +116,7 @@ final usageReadingsProvider = Provider<UsageReadings>(
   (ref) => UsageReadings(
     ref.watch(agentWorkProvider),
     () => ref.read(clockProvider).nowUtc(),
+    ref.watch(agentRegistryProvider),
   ),
 );
 
@@ -109,9 +139,15 @@ final accountUsageProvider = Provider.autoDispose
 /// said anything.
 final agentUsageProvider = Provider.autoDispose
     .family<AsyncValue<AgentUsage>, AgentInstallation>((ref, installation) {
-      final state = ref.watch(
-        accountUsageProvider(usageAccountKey(installation)),
-      );
+      final registry = ref.watch(agentRegistryProvider);
+      final directKey = usageAccountKey(installation);
+      final foldedKey =
+          '${registry.foldedIdOf(installation.agentId)}@${installation.environmentId}';
+      final state =
+          ref.watch(accountUsageProvider(directKey)) ??
+          (foldedKey == directKey
+              ? null
+              : ref.watch(accountUsageProvider(foldedKey)));
       final failure = state?.failure;
       if (failure != null) {
         return AsyncError(

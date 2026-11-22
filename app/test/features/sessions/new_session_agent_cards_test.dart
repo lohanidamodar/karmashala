@@ -101,28 +101,29 @@ void main() {
     expect(find.text('Windows'), findsOneWidget);
   });
 
-  testWidgets('an ACP agent says limits are not reported, never checks', (
-    tester,
-  ) async {
+  testWidgets('an ACP agent without a usage endpoint says limits are not '
+      'reported, while one with a usage endpoint checks', (tester) async {
     // Every ACP adapter, decided by its capability and not its id.
     final acp = AgentRegistry.builtIn.adapters
         .where((a) => a.acp != null)
-        .map((a) => a.id)
         .toList();
-    // Installed only as chat: the forms with no terminal agent installed here.
+    // Installed only as chat: forms with no terminal agent installed here.
     final chatOnly = acp
         .where(
-          (id) => AgentRegistry.builtIn.foldedIdOf(id) != AgentIds.claudeCode,
+          (a) => AgentRegistry.builtIn.foldedIdOf(a.id) != AgentIds.claudeCode,
         )
-        .length;
+        .toList();
+    final chatWithUsage = chatOnly.where((a) => a.usage != null).length;
+    final chatWithoutUsage = chatOnly.where((a) => a.usage == null).length;
     await pump(tester, [
       agentInstallation(),
-      for (final id in acp) agentInstallation(id: 'i-$id', agentId: id),
+      for (final a in acp) agentInstallation(id: 'i-${a.id}', agentId: a.id),
     ]);
-    // Claude's chat form folds into its terminal card, which reads the
-    // account once.
-    expect(find.text('Checking usage…'), findsOneWidget);
-    expect(find.text(kAcpUsageLimitsNote), findsNWidgets(chatOnly));
+    // Claude's chat form folds into its terminal card (1 check), plus any
+    // chat-only ACP adapter that declares its own usage endpoint (e.g.
+    // Antigravity · Chat).
+    expect(find.text('Checking usage…'), findsNWidgets(1 + chatWithUsage));
+    expect(find.text(kAcpUsageLimitsNote), findsNWidgets(chatWithoutUsage));
   });
 
   group('an agent with a terminal and a chat form', () {

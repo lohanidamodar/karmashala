@@ -18,12 +18,46 @@ class UsageHttp {
   Future<Map<String, dynamic>> getJson(
     Uri url,
     Map<String, String> headers,
+  ) => _sendJson((client) async {
+    final request = await client.getUrl(url);
+    headers.forEach(request.headers.set);
+    return request.close();
+  });
+
+  Future<Map<String, dynamic>> postJson(
+    Uri url,
+    Map<String, String> headers,
+    Object body,
+  ) => _sendJson((client) async {
+    final request = await client.postUrl(url);
+    headers.forEach(request.headers.set);
+    request.write(jsonEncode(body));
+    return request.close();
+  });
+
+  /// POSTs an `application/x-www-form-urlencoded` payload (such as an OAuth2
+  /// token refresh) and parses the JSON object reply.
+  Future<Map<String, dynamic>> postFormJson(
+    Uri url,
+    Map<String, String> fields, {
+    Map<String, String> headers = const {},
+  }) => _sendJson((client) async {
+    final request = await client.postUrl(url);
+    request.headers.set(
+      HttpHeaders.contentTypeHeader,
+      'application/x-www-form-urlencoded',
+    );
+    headers.forEach(request.headers.set);
+    request.write(Uri(queryParameters: fields).query);
+    return request.close();
+  });
+
+  Future<Map<String, dynamic>> _sendJson(
+    Future<HttpClientResponse> Function(HttpClient client) send,
   ) async {
     final client = _newClient();
     try {
-      final request = await client.getUrl(url);
-      headers.forEach(request.headers.set);
-      final response = await request.close();
+      final response = await send(client);
       final status = response.statusCode;
       // Read the header before the body. On a `429` the body is a vendor error
       // blob we do not parse, and `Retry-After` — the one thing RFC 9110 says
@@ -90,42 +124,6 @@ class UsageHttp {
         'Could not reach the usage service: $e',
         kind: UsageFailureKind.unreachable,
       );
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<Map<String, dynamic>> postJson(
-    Uri url,
-    Map<String, String> headers,
-    Object body,
-  ) async {
-    final client = _newClient();
-    try {
-      final request = await client.postUrl(url);
-      headers.forEach(request.headers.set);
-      request.write(jsonEncode(body));
-      final response = await request.close();
-      final resBody = await response.transform(utf8.decoder).join();
-      if (response.statusCode == 401) {
-        throw UsageException(
-          'Access token expired. Run the agent once to refresh, then retry.',
-        );
-      }
-      if (response.statusCode != 200) {
-        throw UsageException(
-          'Usage request failed (HTTP ${response.statusCode}).',
-        );
-      }
-      final decoded = jsonDecode(resBody);
-      if (decoded is! Map<String, dynamic>) {
-        throw UsageException('Unexpected usage response shape.');
-      }
-      return decoded;
-    } on UsageException {
-      rethrow;
-    } catch (e) {
-      throw UsageException('Could not reach the usage service: $e');
     } finally {
       client.close(force: true);
     }

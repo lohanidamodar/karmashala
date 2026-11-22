@@ -46,6 +46,9 @@ class FakeHttpClient implements HttpClient {
     );
   }
 
+  @override
+  Future<HttpClientRequest> postUrl(Uri url) => getUrl(url);
+
   /// The service closes its client in a `finally`, so this is on the path of
   /// every fetch including the failing ones.
   @override
@@ -93,6 +96,12 @@ class _FakeRequest implements HttpClientRequest {
   final HttpHeaders headers = _FakeHeaders({});
 
   @override
+  void add(List<int> data) {}
+
+  @override
+  void write(Object? object) {}
+
+  @override
   Future<HttpClientResponse> close() async {
     sentAuthorization.add((headers as _FakeHeaders).values['authorization']);
     return response;
@@ -110,6 +119,9 @@ class _FakeHeaders implements HttpHeaders {
       };
 
   final Map<String, String> values;
+
+  @override
+  ContentType? contentType;
 
   @override
   void set(String name, Object value, {bool preserveHeaderCase = false}) =>

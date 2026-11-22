@@ -78,12 +78,15 @@ void main() {
       expect(adapter.modelLister!.source, 'agy models');
     });
 
-    test('the curated fallback carries Argon 4, as listed on 2026-10-12', () {
+    test('the curated fallback carries Argon 4, as listed on 2026-11-22', () {
       final curated = AgentRegistry.builtIn
           .byId(AgentIds.antigravity)!
           .launch
           .model;
-      expect(curated.modelFor('agy-demo-high')?.label, 'Gemini 4 Argon (High)');
+      expect(
+        curated.modelFor('gemini-4-argon-high')?.label,
+        'Gemini 4 Argon (High)',
+      );
       expect(curated.listedLive, isFalse);
     });
   });
@@ -129,7 +132,7 @@ void main() {
         live: const [
           AgentModel(id: 'argon-4', label: 'argon-4', summary: ''),
           AgentModel(
-            id: 'agy-demo-high',
+            id: 'gemini-4-argon-high',
             label: 'Gemini 4 Argon (High)',
             summary: 'Preview',
           ),
@@ -156,22 +159,22 @@ void main() {
 
     test('a chosen id the live list dropped stays, marked', () {
       final live = descriptor.launch.model.withModels(const [
-        AgentModel(id: 'agy-demo-high', label: 'Argon', summary: ''),
+        AgentModel(id: 'gemini-4-argon-high', label: 'Argon', summary: ''),
       ]);
       final options = modelOptionsFor(
         descriptor,
-        current: 'gemini-3.1-pro-high',
+        current: 'gemini-3.8-flash-high',
         support: live,
       );
       expect(options.map((o) => o.model.id), [
-        'agy-demo-high',
-        'gemini-3.1-pro-high',
+        'gemini-4-argon-high',
+        'gemini-3.8-flash-high',
       ]);
       final gone = options.last;
       expect(gone.fit, AgentModelFit.noLongerListed);
       expect(gone.fitLabel, 'no longer listed');
       // Named the way the curated list named it, not as a raw id.
-      expect(gone.model.label, 'Gemini 3.1 Pro (High)');
+      expect(gone.model.label, 'Gemini 3.8 Flash (High)');
       expect(gone.summary, contains('no longer lists'));
     });
 

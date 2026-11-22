@@ -56,6 +56,13 @@ void main() {
               span: kUsageFiveHourWindow,
               resetsAt: start.add(const Duration(hours: 2)),
             )
+          else if (installation.agentId == AgentIds.antigravityAcp)
+            UsageWindow(
+              label: 'Gemini · 5-hour',
+              percent: 42,
+              span: kUsageFiveHourWindow,
+              resetsAt: start.add(const Duration(hours: 3)),
+            )
           else
             const UsageWindow(label: 'Gemini Code Assist'),
         ],
@@ -97,6 +104,35 @@ void main() {
     final answer = await call({'cli': 'antigravity'}) as Map<String, Object?>;
     final window = (answer['windows']! as List).single as Map;
     expect(window.containsKey('percent'), isFalse);
+  });
+
+  test('get_usage(cli: antigravity) resolves a chat-only antigravity-acp '
+      'installation', () async {
+    data.reconcileProbe(
+      environmentId: localHostEnvironmentId,
+      readAt: start,
+      found: [
+        AgentInstallation(
+          id: 'agy-acp',
+          agentId: AgentIds.antigravityAcp,
+          executable: const EnvironmentPath(
+            environmentId: localHostEnvironmentId,
+            path: r'C:\acp\agy_acp_server.exe',
+          ),
+          createdAt: start,
+        ),
+      ],
+      probed: const {
+        AgentIds.claudeCode,
+        AgentIds.antigravity,
+        AgentIds.antigravityAcp,
+      },
+      readings: const {},
+    );
+    final answer = await call({'cli': 'antigravity'}) as Map<String, Object?>;
+    final window = (answer['windows']! as List).single as Map;
+    expect(window['label'], 'Gemini · 5-hour');
+    expect(window['percent'], 42);
   });
 
   test('the server\'s failure is the agent\'s error, in its words', () async {

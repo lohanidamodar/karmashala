@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import '../../util/clock.dart';
 import '../../cli_detection/data/cli_store.dart';
 import '../../environments/execution_environment.dart';
+import '../../process/command_runner.dart';
 import '../adapter/agent_usage_endpoint.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_registry.dart';
@@ -235,6 +236,22 @@ class AgentUsageService {
         paths: home.paths,
         localMacHost: home.localMacHost,
         homeFromVariable: home.fromVariable,
+        executablePath: installation.executable.path,
+        runExecutable: (arguments) async {
+          try {
+            final runner = storeLocator.runnerFor(installation.environmentId);
+            final result = await runner.run(
+              CommandRequest(
+                executable: installation.executable.path,
+                arguments: arguments,
+                timeout: const Duration(seconds: 20),
+              ),
+            );
+            return result.ok;
+          } on Object {
+            return false;
+          }
+        },
         io: home.io,
         http: _http,
         clock: clock,

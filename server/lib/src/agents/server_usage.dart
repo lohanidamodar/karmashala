@@ -59,15 +59,24 @@ class ServerUsage {
   var _running = false;
 
   /// One installation per account whose adapter reads usage — two installs
-  /// of one CLI in one place share an account.
+  /// of one CLI (or its terminal and chat forms) in one place share an
+  /// account; where both forms exist, the terminal installation is kept so
+  /// the CLI executable is available to refresh credentials when needed.
   List<AgentInstallation> accounts() {
-    final seen = <String>{};
-    return [
-      for (final installation in _data.installations)
-        if (registry.adapterFor(installation.agentId)?.usage != null &&
-            seen.add(usageAccountKey(installation)))
-          installation,
-    ];
+    final chosen = <String, AgentInstallation>{};
+    for (final installation in _data.installations) {
+      final adapter = registry.adapterFor(installation.agentId);
+      if (adapter?.usage == null) continue;
+      final key = _foldedAccountKey(installation);
+      final existing = chosen[key];
+      if (existing == null) {
+        chosen[key] = installation;
+      } else if (registry.byId(existing.agentId)?.chatFormOf != null &&
+          adapter!.descriptor.chatFormOf == null) {
+        chosen[key] = installation;
+      }
+    }
+    return chosen.values.toList();
   }
 
   /// Every account as last read, in the installations' order.
@@ -86,9 +95,12 @@ class ServerUsage {
   /// Reads [accountKey] now (every account when null), through the
   /// throttle, and answers the accounts as they then stand.
   Future<List<AccountUsageState>> refresh({String? accountKey}) async {
+    final targetFolded = accountKey == null ? null : _foldedKey(accountKey);
     final asked = [
       for (final installation in accounts())
-        if (accountKey == null || usageAccountKey(installation) == accountKey)
+        if (accountKey == null ||
+            usageAccountKey(installation) == accountKey ||
+            _foldedAccountKey(installation) == targetFolded)
           installation,
     ];
     if (accountKey != null && asked.isEmpty) {
@@ -126,7 +138,7 @@ class ServerUsage {
         case SessionRowChanged(:final session):
           for (final installation in _data.installations) {
             if (installation.id == session.agentInstallationId) {
-              keys.add(usageAccountKey(installation));
+              keys.add(_foldedAccountKey(installation));
             }
           }
         case InstallationChanged() || InstallationRemoved():
@@ -143,6 +155,17 @@ class ServerUsage {
       );
     }
     if (accountsMoved) unawaited(_tick());
+  }
+
+  String _foldedAccountKey(AgentInstallation installation) =>
+      '${registry.foldedIdOf(installation.agentId)}@${installation.environmentId}';
+
+  String _foldedKey(String key) {
+    final at = key.lastIndexOf('@');
+    if (at <= 0) return key;
+    final agentId = key.substring(0, at);
+    final envId = key.substring(at + 1);
+    return '${registry.foldedIdOf(agentId)}@$envId';
   }
 
   Future<void> _tick() async {

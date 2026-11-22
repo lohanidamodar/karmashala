@@ -109,8 +109,10 @@ class _AccountUsage extends ConsumerWidget {
     final account =
         '${registry.displayNameFor(installation.agentId)} · '
         '${ref.watch(environmentLabelForIdProvider(installation.environmentId))}';
-    // An agent spoken to over ACP has no account to read.
-    if (agentSpeaksAcp(registry, installation.agentId)) {
+    // An ACP agent whose adapter declares no usage endpoint has no account to
+    // read.
+    if (registry.adapterFor(installation.agentId)?.usage == null &&
+        agentSpeaksAcp(registry, installation.agentId)) {
       return _UsageUnavailable(account: account, reason: kAcpUsageLimitsNote);
     }
     final usage = ref.watch(agentUsageProvider(installation));
@@ -121,7 +123,7 @@ class _AccountUsage extends ConsumerWidget {
     // had; reading the error first printed "not recorded" over a held number.
     final value =
         usage.value ??
-        ref.watch(accountUsageProvider(usageAccountKey(installation)))?.usage;
+        ref.read(usageReadingsProvider).remembered(installation);
     if (value == null) {
       // Slow, offline, or a token being refreshed — none of which is the
       // dialog's problem. Deliberately plain text and not a spinner: this row
@@ -136,7 +138,7 @@ class _AccountUsage extends ConsumerWidget {
     final reading = _tightest(value);
     // A reply that measured nothing is reported the same way an unreachable
     // account is: no windows at all, or windows the endpoint named and reported
-    // no quota against — every Antigravity tier. Neither is 0%.
+    // no quota against. Neither is 0%.
     if (reading == null) {
       return _UsageUnavailable(
         account: account,

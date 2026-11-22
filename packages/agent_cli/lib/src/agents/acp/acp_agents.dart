@@ -1,5 +1,7 @@
 import '../adapter/agent_presentation.dart';
+import '../adapter/agent_usage_support.dart';
 import '../adapter/data_only_agent_adapter.dart';
+import '../antigravity/antigravity_usage_endpoint.dart';
 import '../codex/codex_visualize_markers.dart';
 import 'antigravity_acp_descriptor.dart';
 import 'claude_acp_descriptor.dart';
@@ -26,6 +28,10 @@ const antigravityAcpAdapter = DataOnlyAgentAdapter(
     shortName: 'Antigravity',
     mark: AgentMark.antigravity,
   ),
+  // Reads Antigravity quota from `antigravity-oauth-token` (`agy acp`) or
+  // `acp_token.json` (`agy_acp_server`), so chat-only installs still report
+  // live usage.
+  usage: AgentUsageSupport(endpoint: AntigravityUsageEndpoint()),
 );
 
 /// The public registry publishes an icon per entry for clients to draw; a

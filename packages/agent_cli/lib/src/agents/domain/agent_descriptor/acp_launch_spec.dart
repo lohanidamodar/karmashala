@@ -31,6 +31,39 @@ class AcpVersionedArgument {
       compareAgentVersions(version, since) >= 0;
 }
 
+/// A terminal CLI that gained a built-in ACP subcommand from release [since]
+/// onward (e.g. `agy acp` from `agy` 1.5.0), preferred over a separate
+/// standalone adapter binary when a new enough CLI is installed.
+class AcpCliSubcommand {
+  const AcpCliSubcommand({
+    required this.binaries,
+    required this.since,
+    required this.arguments,
+    this.terminalLogin,
+    required this.evidence,
+  });
+
+  /// Binary names and Windows install locations for the terminal CLI.
+  final AgentBinaries binaries;
+
+  /// First CLI release that ships the ACP subcommand.
+  final String since;
+
+  /// Leading arguments that start ACP mode on the CLI (e.g. `['acp']`).
+  final List<String> arguments;
+
+  /// Terminal login offered when running through this CLI subcommand (e.g.
+  /// `['--login']`, appended after [arguments] to run `agy acp --login`).
+  final AcpTerminalLogin? terminalLogin;
+
+  final String evidence;
+
+  /// Whether the CLI at [version] is new enough to run [arguments].
+  bool supportedBy(String version) =>
+      compareAgentVersions(version, '0.0.0') > 0 &&
+      compareAgentVersions(version, since) >= 0;
+}
+
 /// How one of an agent's auth methods completes, in words a login dialog
 /// shows before it starts, with where that was read.
 class AcpAuthCompletion {
@@ -78,6 +111,7 @@ class AcpLaunchSpec {
     this.authCompletions = const {},
     this.terminalLogin,
     this.screenedModes = const {},
+    this.cliSubcommand,
   });
 
   /// Modes in which the agent's own reviewer decides what runs: what it still
@@ -90,6 +124,10 @@ class AcpLaunchSpec {
   /// The agent's own terminal login, for an agent whose ACP methods cannot
   /// show a person where to sign in (a link it opens and never prints).
   final AcpTerminalLogin? terminalLogin;
+
+  /// Built-in ACP subcommand on the companion CLI (e.g. `agy acp`), preferred
+  /// over standalone adapter binaries when a new enough CLI is present.
+  final AcpCliSubcommand? cliSubcommand;
 
   /// Set when the agent is spoken to in its own protocol, through
   /// [arguments], and translated to ACP in-process; null for an agent that
@@ -130,6 +168,26 @@ class AcpLaunchSpec {
   /// prebuilt archive Karmashala can install into its managed folder
   /// (`~/karmashala/acp/<registryId>/<version>/`) and find there again.
   final String? registryId;
+
+  /// Whether [leadingArguments] launches this agent through [cliSubcommand]
+  /// rather than the standalone adapter binary.
+  bool isCliSubcommand(List<String> leadingArguments) {
+    final sub = cliSubcommand;
+    if (sub == null || leadingArguments.length != sub.arguments.length) {
+      return false;
+    }
+    for (var i = 0; i < leadingArguments.length; i++) {
+      if (leadingArguments[i] != sub.arguments[i]) return false;
+    }
+    return true;
+  }
+
+  /// Terminal login available for an installation with [leadingArguments]:
+  /// prefers [cliSubcommand]'s own terminal login when running through it.
+  AcpTerminalLogin? terminalLoginFor(List<String> leadingArguments) =>
+      isCliSubcommand(leadingArguments)
+      ? (cliSubcommand!.terminalLogin ?? terminalLogin)
+      : terminalLogin;
 
   /// The mode argv for one machine: [arguments], then [linuxArguments] when
   /// [linux], then the [versionedArguments] its [version] accepts.
@@ -178,6 +236,7 @@ class AcpLaunchSpec {
     authCompletions: authCompletions,
     terminalLogin: terminalLogin,
     screenedModes: screenedModes,
+    cliSubcommand: cliSubcommand,
   );
 
   /// What `initialize` announces as `clientInfo.name`.

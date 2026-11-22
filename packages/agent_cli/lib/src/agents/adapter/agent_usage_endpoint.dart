@@ -6,6 +6,11 @@ import '../data/auth_file_io.dart';
 import '../data/usage_http.dart';
 import '../domain/agent_usage.dart';
 
+/// Runs the installation's executable with [arguments] in its environment and
+/// returns whether it exited cleanly. Used by endpoints whose CLI refreshes its
+/// own short-lived OAuth token on disk (such as `agy models`).
+typedef UsageExecutableRunner = Future<bool> Function(List<String> arguments);
+
 /// Everything one usage reading may need from the host.
 class UsageReadContext {
   const UsageReadContext({
@@ -17,6 +22,8 @@ class UsageReadContext {
     required this.keychain,
     required this.io,
     this.homeFromVariable = false,
+    this.executablePath,
+    this.runExecutable,
   });
 
   /// The agent's store home in the installation's environment, spelled so [io]
@@ -39,6 +46,12 @@ class UsageReadContext {
   /// Whether the environment moved [storeHome] with the agent's own variable
   /// (`AgentStoreSpec.homeVariable`) rather than it being the default.
   final bool homeFromVariable;
+
+  /// The installation's executable path, when known.
+  final String? executablePath;
+
+  /// Runs [executablePath] in the installation's environment, when available.
+  final UsageExecutableRunner? runExecutable;
 
   final UsageHttp http;
   final Clock clock;

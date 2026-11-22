@@ -147,7 +147,9 @@ class ServerAcpAuth {
   Future<AcpAuthMethods> methods(String installationId) async {
     final target = _target(installationId);
     return _talk(target, readTimeout, (_, init) async {
-      final own = target.spec.terminalLogin;
+      final own = target.spec.terminalLoginFor(
+        target.installation.leadingArguments,
+      );
       return AcpAuthMethods(
         installationId: installationId,
         methods: [
@@ -357,7 +359,7 @@ class ServerAcpAuth {
     String methodId,
   ) async {
     final installation = target.installation;
-    final own = target.spec.terminalLogin;
+    final own = target.spec.terminalLoginFor(installation.leadingArguments);
     if (methodId == kAcpOwnTerminalLoginId) {
       if (own == null) {
         throw DataRefused.invalid('${target.name} has no terminal login');

@@ -4,8 +4,9 @@ import 'package:agent_cli/discovery.dart'
 
 /// The argv [installation] starts [spec]'s agent with over ACP — for a
 /// session, its login and its version read alike: what discovery put in
-/// front (`-y <package>` for an agent found only through npx) and the spec's
-/// own mode arguments.
+/// front (`-y <package>` for an agent found only through npx, or a CLI's
+/// built-in ACP subcommand such as `agy acp`) and the spec's own mode
+/// arguments.
 ///
 /// An npx row with nothing in front runs the package the spec declares; a
 /// person's own agent whose command is npx names its package among the
@@ -18,6 +19,7 @@ List<String> acpArgumentsFor(
   required bool linux,
 }) {
   final leading = installation.leadingArguments;
+  if (spec.isCliSubcommand(leading)) return [...leading];
   final package = spec.npxPackage;
   final mode = spec.argumentsFor(linux: linux, version: installation.version);
   if (!isNpxExecutable(installation.executable.path)) {

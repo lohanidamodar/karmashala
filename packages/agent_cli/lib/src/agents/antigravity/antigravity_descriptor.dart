@@ -418,84 +418,134 @@ const antigravityDescriptor = AgentDescriptor(
       slashCommand: '/model',
       models: [
         AgentModel(
+          id: 'gemini-4-neon-high',
+          label: 'Gemini 4 Neon (High)',
+          summary: 'Gemini 4 Neon, high reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-4-neon-xhigh',
+          label: 'Gemini 4 Neon (XHigh)',
+          summary: 'Gemini 4 Neon, maximum reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-4-neon-medium',
+          label: 'Gemini 4 Neon (Medium)',
+          summary: 'Gemini 4 Neon, balanced.',
+        ),
+        AgentModel(
+          id: 'gemini-4-neon-low',
+          label: 'Gemini 4 Neon (Low)',
+          summary: 'Gemini 4 Neon, fastest.',
+        ),
+        AgentModel(
+          id: 'gemini-4-carbon-high',
+          label: 'Gemini 4 Carbon (High)',
+          summary: 'Gemini 4 Carbon, high reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-4-carbon-medium',
+          label: 'Gemini 4 Carbon (Medium)',
+          summary: 'Gemini 4 Carbon, balanced.',
+        ),
+        AgentModel(
+          id: 'gemini-4-carbon-low',
+          label: 'Gemini 4 Carbon (Low)',
+          summary: 'Gemini 4 Carbon, fastest.',
+        ),
+        AgentModel(
+          id: 'gemini-4-argon-high',
+          label: 'Gemini 4 Argon (High)',
+          summary: 'Gemini 4 Argon, high reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-4-argon-medium',
+          label: 'Gemini 4 Argon (Medium)',
+          summary: 'Gemini 4 Argon, balanced.',
+        ),
+        AgentModel(
+          id: 'gemini-4-argon-low',
+          label: 'Gemini 4 Argon (Low)',
+          summary: 'Gemini 4 Argon, fastest.',
+        ),
+        AgentModel(
+          id: 'gemini-4-hydrogen-high',
+          label: 'Gemini 4 Hydrogen (High)',
+          summary: 'Gemini 4 Hydrogen, high reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-4-hydrogen-xhigh',
+          label: 'Gemini 4 Hydrogen (XHigh)',
+          summary: 'Gemini 4 Hydrogen, maximum reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-4-hydrogen-medium',
+          label: 'Gemini 4 Hydrogen (Medium)',
+          summary: 'Gemini 4 Hydrogen, balanced.',
+        ),
+        AgentModel(
+          id: 'gemini-4-hydrogen-low',
+          label: 'Gemini 4 Hydrogen (Low)',
+          summary: 'Gemini 4 Hydrogen, fastest.',
+        ),
+        AgentModel(
+          id: 'gemini-pro-orchestrator-neon',
+          label: 'Orchestrator (Neon)',
+          summary: 'Multi-model orchestrator on Neon.',
+        ),
+        AgentModel(
+          id: 'gemini-pro-orchestrator',
+          label: 'Orchestrator (Carbon)',
+          summary: 'Multi-model orchestrator on Carbon.',
+        ),
+        AgentModel(
+          id: 'gemini-pro-orchestrator-argon',
+          label: 'Orchestrator (Argon)',
+          summary: 'Multi-model orchestrator on Argon.',
+        ),
+        AgentModel(
           id: 'gemini-3.8-flash-high',
           label: 'Gemini 3.8 Flash (High)',
-          summary: 'Latest Flash, at the most reasoning.',
+          summary: 'Gemini 3.8 Flash, high reasoning.',
         ),
         AgentModel(
           id: 'gemini-3.8-flash-medium',
           label: 'Gemini 3.8 Flash (Medium)',
-          summary: 'Latest Flash, balanced.',
+          summary: 'Gemini 3.8 Flash, balanced.',
         ),
         AgentModel(
           id: 'gemini-3.8-flash-low',
           label: 'Gemini 3.8 Flash (Low)',
-          summary: 'Latest Flash, fastest.',
+          summary: 'Gemini 3.8 Flash, fastest.',
         ),
         AgentModel(
-          id: 'gemini-3.7-flash-high',
-          label: 'Gemini 3.7 Flash (High)',
-          summary: 'Previous Flash, at the most reasoning.',
+          id: 'claude-opus-5-5-high',
+          label: 'Claude Opus 5.5 (High)',
+          summary: 'Anthropic\'s Opus 5.5, served through Antigravity.',
         ),
         AgentModel(
-          id: 'gemini-3.7-flash-medium',
-          label: 'Gemini 3.7 Flash (Medium)',
-          summary: 'Previous Flash, balanced.',
+          id: 'claude-opus-5-5-medium',
+          label: 'Claude Opus 5.5 (Medium)',
+          summary: 'Anthropic\'s Opus 5.5, balanced.',
         ),
         AgentModel(
-          id: 'gemini-3.7-flash-low',
-          label: 'Gemini 3.7 Flash (Low)',
-          summary: 'Previous Flash, fastest.',
+          id: 'claude-opus-5-5-low',
+          label: 'Claude Opus 5.5 (Low)',
+          summary: 'Anthropic\'s Opus 5.5, fastest.',
         ),
         AgentModel(
-          id: 'agy-demo-high',
-          label: 'Gemini 4 Argon (High)',
-          summary: 'Argon 4 preview, at the most reasoning.',
+          id: 'claude-sonnet-5-5-high',
+          label: 'Claude Sonnet 5.5 (High)',
+          summary: 'Anthropic\'s Sonnet 5.5, served through Antigravity.',
         ),
         AgentModel(
-          id: 'agy-demo-medium',
-          label: 'Gemini 4 Argon (Medium)',
-          summary: 'Argon 4 preview, balanced.',
+          id: 'claude-sonnet-5-5-medium',
+          label: 'Claude Sonnet 5.5 (Medium)',
+          summary: 'Anthropic\'s Sonnet 5.5, balanced.',
         ),
         AgentModel(
-          id: 'agy-demo-low',
-          label: 'Gemini 4 Argon (Low)',
-          summary: 'Argon 4 preview, fastest.',
-        ),
-        AgentModel(
-          id: 'gemini-3.6-flash-high',
-          label: 'Gemini 3.6 Flash (High)',
-          summary: 'Older Flash, at the most reasoning.',
-        ),
-        AgentModel(
-          id: 'gemini-3.6-flash-medium',
-          label: 'Gemini 3.6 Flash (Medium)',
-          summary: 'Older Flash, balanced.',
-        ),
-        AgentModel(
-          id: 'gemini-3.6-flash-low',
-          label: 'Gemini 3.6 Flash (Low)',
-          summary: 'Older Flash, fastest.',
-        ),
-        AgentModel(
-          id: 'gemini-3.1-pro-high',
-          label: 'Gemini 3.1 Pro (High)',
-          summary: 'Gemini Pro, at the most reasoning.',
-        ),
-        AgentModel(
-          id: 'gemini-3.1-pro-low',
-          label: 'Gemini 3.1 Pro (Low)',
-          summary: 'The same model with reasoning turned down.',
-        ),
-        AgentModel(
-          id: 'claude-sonnet-4-6',
-          label: 'Claude Sonnet 4.6 (Thinking)',
-          summary: 'Anthropic\'s model, served through Antigravity.',
-        ),
-        AgentModel(
-          id: 'claude-opus-4-6-thinking',
-          label: 'Claude Opus 4.6 (Thinking)',
-          summary: 'Anthropic\'s model, served through Antigravity.',
+          id: 'claude-sonnet-5-5-low',
+          label: 'Claude Sonnet 5.5 (Low)',
+          summary: 'Anthropic\'s Sonnet 5.5, fastest.',
         ),
         AgentModel(
           id: 'gpt-oss-120b-medium',
@@ -509,7 +559,7 @@ const antigravityDescriptor = AgentDescriptor(
           '"Added a `/model <name>` argument that switches to a model by name, '
           'slug or label … `/model` on its own still opens the picker"), '
           'corroborated by commands/model.go declaring a CompleteArg; slugs '
-          'from `agy models` (agy 1.3.3, WSL) on 2026-10-12',
+          'from `agy models` (agy 1.5.13, WSL) on 2026-11-22',
     ),
   ),
   // Where the CLI keeps its data, confirmed against a live install on both

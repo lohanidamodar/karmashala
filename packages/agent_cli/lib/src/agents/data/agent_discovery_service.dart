@@ -252,8 +252,8 @@ class DiscoveredAgent {
   final EnvironmentPath executable;
   final String? version;
 
-  /// See `AgentInstallation.leadingArguments`: non-empty only when
-  /// [executable] is `npx` standing in for an uninstalled agent.
+  /// See `AgentInstallation.leadingArguments`: non-empty when [executable]
+  /// runs through `npx` or a CLI's own ACP subcommand (such as `agy acp`).
   final List<String> leadingArguments;
 }
 
@@ -410,6 +410,9 @@ class AgentDiscoveryService {
   }
 
   Future<DiscoveredAgent?> _probe(AgentDescriptor descriptor) async {
+    final subcommand = await _probeCliSubcommand(descriptor);
+    if (subcommand != null) return subcommand;
+
     var path = await _locateOnPath(descriptor);
     String? version;
 
@@ -446,6 +449,50 @@ class AgentDiscoveryService {
       descriptor: descriptor,
       executable: EnvironmentPath(environmentId: environment.id, path: path),
       version: version,
+    );
+  }
+
+  /// Prefers a companion CLI's built-in ACP subcommand (e.g. `agy acp` on
+  /// `agy` >= 1.5.0) when that CLI is installed and new enough. Returns null
+  /// when absent or older, falling through to the standalone adapter binary.
+  Future<DiscoveredAgent?> _probeCliSubcommand(
+    AgentDescriptor descriptor,
+  ) async {
+    final sub = descriptor.acp?.cliSubcommand;
+    if (sub == null) return null;
+    var path = await _locateBinariesOnPath(sub.binaries);
+    String? version;
+    if (path == null) {
+      final hit = await _locateBinariesAtDeclaredPath(
+        sub.binaries,
+        const ['--version'],
+      );
+      if (hit == null) return null;
+      path = hit.path;
+      version = hit.version;
+    } else {
+      path = _traversable(path);
+    }
+    if (version == null) {
+      try {
+        final versionResult = await runner.run(
+          CommandRequest(
+            executable: path,
+            arguments: const ['--version'],
+            timeout: kProbeTimeout,
+          ),
+        );
+        if (versionResult.ok) version = parseAgentVersion(versionResult.stdout);
+      } on CommandException {
+        return null;
+      }
+    }
+    if (version == null || !sub.supportedBy(version)) return null;
+    return DiscoveredAgent(
+      descriptor: descriptor,
+      executable: EnvironmentPath(environmentId: environment.id, path: path),
+      version: version,
+      leadingArguments: sub.arguments,
     );
   }
 
@@ -509,8 +556,11 @@ class AgentDiscoveryService {
   /// this service's own rule rather than [locateOnPath]'s: a probe that could
   /// not run tells us nothing, and `probeEnvironment` already reports
   /// reachability separately so a sweep never deletes on this answer.
-  Future<String?> _locateOnPath(AgentDescriptor descriptor) async {
-    final names = descriptor.binaries.forKind(environment.kind);
+  Future<String?> _locateOnPath(AgentDescriptor descriptor) =>
+      _locateBinariesOnPath(descriptor.binaries);
+
+  Future<String?> _locateBinariesOnPath(AgentBinaries binaries) async {
+    final names = binaries.forKind(environment.kind);
     // A person-added agent may name its command by an absolute path, which
     // PATH knows nothing about: it is taken as given.
     for (final name in names) {
@@ -542,10 +592,20 @@ class AgentDiscoveryService {
   Future<({String path, String? version})?> _locateAtDeclaredPath(
     AgentDescriptor descriptor,
   ) async {
-    if (environment.kind != EnvironmentKind.windowsNative) return null;
     if (!descriptor.discovery.probeVersion) return null;
+    return _locateBinariesAtDeclaredPath(
+      descriptor.binaries,
+      descriptor.discovery.versionArguments,
+    );
+  }
 
-    for (final template in descriptor.binaries.windowsInstallPaths) {
+  Future<({String path, String? version})?> _locateBinariesAtDeclaredPath(
+    AgentBinaries binaries,
+    List<String> versionArguments,
+  ) async {
+    if (environment.kind != EnvironmentKind.windowsNative) return null;
+
+    for (final template in binaries.windowsInstallPaths) {
       final declared = expandWindowsPath(template, hostEnvironment);
       if (declared == null) continue; // An unset variable is not a path.
       for (final path in _declaredCandidates(declared)) {
@@ -553,7 +613,7 @@ class AgentDiscoveryService {
           final result = await runner.run(
             CommandRequest(
               executable: path,
-              arguments: descriptor.discovery.versionArguments,
+              arguments: versionArguments,
               timeout: kProbeTimeout,
             ),
           );

@@ -69,13 +69,20 @@ class _AccountComparison extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final registry = ref.watch(agentRegistryProvider);
     final bars = <BarDatum>[];
     final seen = <String>{};
     for (final installation in installations) {
-      if (!seen.add(usageAccountKey(installation))) continue;
-      final usage = ref
-          .watch(accountUsageProvider(usageAccountKey(installation)))
-          ?.usage;
+      final foldedKey =
+          '${registry.foldedIdOf(installation.agentId)}@${installation.environmentId}';
+      if (!seen.add(foldedKey)) continue;
+      final directKey = usageAccountKey(installation);
+      final usage =
+          (ref.watch(accountUsageProvider(directKey)) ??
+                  (foldedKey == directKey
+                      ? null
+                      : ref.watch(accountUsageProvider(foldedKey))))
+              ?.usage;
       if (usage == null) continue;
       UsageWindow? tightest;
       for (final window in usage.windows) {
@@ -190,12 +197,11 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     final where = ref.watch(
       environmentLabelForIdProvider(widget.installation.environmentId),
     );
-    // An agent spoken to over ACP has no account to read: said instead of a
-    // button that would check forever.
-    if (agentSpeaksAcp(
-      ref.watch(agentRegistryProvider),
-      widget.installation.agentId,
-    )) {
+    // An ACP agent whose adapter declares no usage endpoint has no account to
+    // read: said instead of a button that would check forever.
+    final registry = ref.watch(agentRegistryProvider);
+    if (registry.adapterFor(widget.installation.agentId)?.usage == null &&
+        agentSpeaksAcp(registry, widget.installation.agentId)) {
       return SettingsCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -301,7 +307,12 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                 ),
               const SizedBox(height: Insets.sm),
               UsageHistoryPanel(
-                accountKey: usageAccountKey(widget.installation),
+                accountKey:
+                    ref
+                        .read(usageReadingsProvider)
+                        .stateOf(widget.installation)
+                        ?.accountKey ??
+                    usageAccountKey(widget.installation),
                 usage: usage,
                 now: now,
               ),

@@ -6,9 +6,11 @@ import '../data/usage_throttle.dart'
 import '../domain/agent_usage.dart';
 import '../domain/usage_failure.dart';
 
-/// Antigravity's usage, authorised with the OAuth token `agy` keeps in its
-/// store: the quota buckets `retrieveUserQuotaSummary` reports
-/// ([parseAntigravityQuota]).
+/// Antigravity's usage, authorised with the OAuth credential `agy`
+/// (`antigravity-oauth-token`) or `agy_acp_server` (`acp_token.json`) keeps in
+/// its store: the quota buckets `retrieveUserQuotaSummary` reports
+/// ([parseAntigravityQuota]), supplemented with `retrieveUserQuota`
+/// ([parseAntigravityModelQuota]) when the summary omits Gemini's quota group.
 ///
 /// The service answers only a caller that says it is the Antigravity IDE
 /// ([kAntigravityClientHeaders]). Without that it refuses the quota with
@@ -21,57 +23,244 @@ class AntigravityUsageEndpoint implements AgentUsageEndpoint {
   static final _tokenInfoUrl = Uri.parse(
     'https://oauth2.googleapis.com/tokeninfo',
   );
+  static final _defaultTokenUrl = Uri.parse(
+    'https://oauth2.googleapis.com/token',
+  );
+
+  static const _hosts = [
+    'daily-cloudcode-pa.googleapis.com',
+    'cloudcode-pa.googleapis.com',
+  ];
 
   @override
   Future<AgentUsage> read(UsageReadContext context) async {
     final home = context.storeHome;
     if (home == null) {
-      throw UsageException('No Antigravity store for this install.');
-    }
-    final tokenFile = context.paths.join(home, 'antigravity-oauth-token');
-    final auth = await readUsageCredential(tokenFile, io: context.io);
-    final tokenObj = auth?['token'];
-    final token = tokenObj is Map<String, dynamic>
-        ? tokenObj['access_token'] as String?
-        : null;
-    if (token == null || token.isEmpty) {
-      throw UsageException('Not signed in to Antigravity in this environment.');
+      throw UsageException(
+        'No Antigravity store for this install.',
+        kind: UsageFailureKind.notAsked,
+      );
     }
 
-    DateTime? tokenExpiry;
-    final expiryStr = tokenObj is Map<String, dynamic>
-        ? tokenObj['expiry'] as String?
-        : null;
-    if (expiryStr != null) {
-      tokenExpiry = DateTime.tryParse(expiryStr);
-      if (tokenExpiry != null && context.clock.nowUtc().isAfter(tokenExpiry)) {
+    var auth = await _resolveToken(context, home, allowCliRefresh: true);
+    try {
+      return await _fetchQuota(context, auth);
+    } on UsageException catch (e) {
+      // A token that appeared unexpired on disk can still be rejected with 401
+      // (clock skew or revocation); give `agy` one chance to refresh it.
+      if (e.kind == UsageFailureKind.auth &&
+          auth.fromCliToken &&
+          await _refreshViaCli(context)) {
+        auth = await _resolveToken(context, home, allowCliRefresh: false);
+        return _fetchQuota(context, auth);
+      }
+      rethrow;
+    }
+  }
+
+  /// Resolves a usable Bearer token from [home] (trying `antigravity-oauth-token`
+  /// then `acp_token.json`, then the sibling Antigravity store under `.gemini`).
+  Future<_AntigravityAuth> _resolveToken(
+    UsageReadContext context,
+    String home, {
+    required bool allowCliRefresh,
+  }) async {
+    final paths = context.paths;
+    final parent = paths.dirname(home);
+    final candidates = <({String path, bool isAcp})>[
+      (path: paths.join(home, 'antigravity-oauth-token'), isAcp: false),
+      (path: paths.join(home, 'acp_token.json'), isAcp: true),
+      if (parent != home) ...[
+        (
+          path: paths.join(parent, 'antigravity-cli', 'antigravity-oauth-token'),
+          isAcp: false,
+        ),
+        (
+          path: paths.join(parent, 'antigravity-acp', 'acp_token.json'),
+          isAcp: true,
+        ),
+      ],
+    ];
+
+    final seen = <String>{};
+    UsageException? expiredCli;
+    for (final candidate in candidates) {
+      if (!seen.add(candidate.path)) continue;
+      final blob = await readUsageCredential(candidate.path, io: context.io);
+      if (blob == null) continue;
+      if (!candidate.isAcp) {
+        final read = await _readCliToken(
+          context,
+          candidate.path,
+          blob,
+          allowCliRefresh: allowCliRefresh,
+        );
+        if (read.auth != null) return read.auth!;
+        expiredCli ??= read.expired;
+      } else {
+        final acp = await _exchangeAcpToken(context, blob);
+        if (acp != null) return acp;
+      }
+    }
+    if (expiredCli != null) throw expiredCli;
+    throw UsageException(
+      'Not signed in to Antigravity in this environment.',
+      kind: UsageFailureKind.auth,
+    );
+  }
+
+  Future<({_AntigravityAuth? auth, UsageException? expired})> _readCliToken(
+    UsageReadContext context,
+    String tokenFile,
+    Map<String, dynamic> initialBlob, {
+    required bool allowCliRefresh,
+  }) async {
+    Map<String, dynamic>? blob = initialBlob;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final tokenObj = blob?['token'];
+      final token = tokenObj is Map<String, dynamic>
+          ? tokenObj['access_token'] as String?
+          : null;
+      if (token == null || token.isEmpty) return (auth: null, expired: null);
+
+      DateTime? tokenExpiry;
+      final expiryStr = tokenObj is Map<String, dynamic>
+          ? tokenObj['expiry'] as String?
+          : null;
+      if (expiryStr != null) tokenExpiry = DateTime.tryParse(expiryStr);
+
+      final isExpired =
+          tokenExpiry != null && context.clock.nowUtc().isAfter(tokenExpiry);
+      if (isExpired) {
+        if (attempt == 0 && allowCliRefresh && await _refreshViaCli(context)) {
+          blob = await readUsageCredential(tokenFile, io: context.io);
+          continue;
+        }
+        return (
+          auth: null,
+          expired: UsageException(
+            'Access token expired. Run the agent once to refresh, then retry.',
+            kind: UsageFailureKind.auth,
+          ),
+        );
+      }
+
+      final idEmail = blob?['id_token_email'] as String?;
+      final email = (idEmail != null && idEmail.isNotEmpty)
+          ? idEmail
+          : emailFromJwt(blob?['id_token'] as String?) ??
+                emailFromJwt(
+                  tokenObj is Map<String, dynamic>
+                      ? tokenObj['id_token'] as String?
+                      : null,
+                );
+      return (
+        auth: _AntigravityAuth(
+          accessToken: token,
+          email: email,
+          tokenExpiry: tokenExpiry,
+          fromCliToken: true,
+        ),
+        expired: null,
+      );
+    }
+    return (auth: null, expired: null);
+  }
+
+  /// Exchanges an `acp_token.json` refresh token in-memory for a short-lived
+  /// access token without writing anything to disk.
+  Future<_AntigravityAuth?> _exchangeAcpToken(
+    UsageReadContext context,
+    Map<String, dynamic> blob,
+  ) async {
+    final refreshToken = blob['refresh_token'] as String?;
+    final clientId = blob['client_id'] as String?;
+    final clientSecret = blob['client_secret'] as String?;
+    if (refreshToken == null ||
+        refreshToken.isEmpty ||
+        clientId == null ||
+        clientId.isEmpty ||
+        clientSecret == null ||
+        clientSecret.isEmpty) {
+      return null;
+    }
+    final tokenUriStr = blob['token_uri'] as String?;
+    final tokenUri = (tokenUriStr != null && tokenUriStr.isNotEmpty)
+        ? (Uri.tryParse(tokenUriStr) ?? _defaultTokenUrl)
+        : _defaultTokenUrl;
+    final Map<String, dynamic> reply;
+    try {
+      reply = await context.http.postFormJson(tokenUri, {
+        'grant_type': 'refresh_token',
+        'client_id': clientId,
+        'client_secret': clientSecret,
+        'refresh_token': refreshToken,
+      });
+    } on UsageException catch (e) {
+      // OAuth2 returns HTTP 400 (invalid_grant) when a refresh token was
+      // revoked or expired; surface that as an auth failure.
+      if (e.kind == UsageFailureKind.unusable) {
         throw UsageException(
-          'Access token expired. Run the agent once to refresh, then retry.',
+          'Antigravity sign-in expired. Sign in again, then retry.',
           kind: UsageFailureKind.auth,
         );
       }
+      rethrow;
     }
+    final accessToken = reply['access_token'] as String?;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw UsageException(
+        'Antigravity sign-in refresh returned no access token.',
+        kind: UsageFailureKind.auth,
+      );
+    }
+    final expiresIn = reply['expires_in'];
+    final tokenExpiry = expiresIn is num && expiresIn > 0
+        ? context.clock.nowUtc().add(Duration(seconds: expiresIn.round()))
+        : null;
+    final email = emailFromJwt(reply['id_token'] as String?);
+    return _AntigravityAuth(
+      accessToken: accessToken,
+      email: email,
+      tokenExpiry: tokenExpiry,
+      fromCliToken: false,
+    );
+  }
 
-    String? email =
-        emailFromJwt(auth?['id_token'] as String?) ??
-        emailFromJwt(
-          tokenObj is Map<String, dynamic>
-              ? tokenObj['id_token'] as String?
-              : null,
-        );
+  /// Invokes `agy models` once so the CLI refreshes its own OAuth token file.
+  /// Only runs when the installation's executable is `agy` (never
+  /// `agy_acp_server`, which does not have a `models` subcommand).
+  Future<bool> _refreshViaCli(UsageReadContext context) async {
+    final run = context.runExecutable;
+    if (run == null) return false;
+    final exe = context.executablePath;
+    if (exe != null && !_isAgyCliExecutable(exe)) return false;
+    return run(const ['models']);
+  }
+
+  static bool _isAgyCliExecutable(String path) {
+    final base = path.split(RegExp(r'[/\\]')).last.toLowerCase();
+    return base == 'agy' || base == 'agy.exe';
+  }
+
+  Future<AgentUsage> _fetchQuota(
+    UsageReadContext context,
+    _AntigravityAuth auth,
+  ) async {
+    var email = auth.email;
     if (email == null) {
       try {
         final tokenInfo = await context.http.getJson(_tokenInfoUrl, {
-          'Authorization': 'Bearer $token',
+          'Authorization': 'Bearer ${auth.accessToken}',
         });
         email = tokenInfo['email'] as String?;
       } catch (_) {
-        // Non-fatal if tokeninfo cannot be retrieved
+        // Non-fatal if tokeninfo cannot be retrieved.
       }
     }
 
     final headers = {
-      'Authorization': 'Bearer $token',
+      'Authorization': 'Bearer ${auth.accessToken}',
       'Content-Type': 'application/json',
       ...kAntigravityClientHeaders,
     };
@@ -80,31 +269,82 @@ class AntigravityUsageEndpoint implements AgentUsageEndpoint {
     // The daily host first, as the Antigravity app asks; the production one
     // answers the same summary when the daily one does not.
     UsageException? refused;
-    for (final url in _quotaUrls) {
+    for (final host in _hosts) {
+      final summaryUrl = Uri.parse(
+        'https://$host/v1internal:retrieveUserQuotaSummary',
+      );
       try {
-        final json = await context.http.postJson(url, headers, const {});
-        final usage = parseAntigravityQuota(
-          json,
+        final summaryJson = await context.http.postJson(
+          summaryUrl,
+          headers,
+          const {},
+        );
+        final summary = parseAntigravityQuota(
+          summaryJson,
           now,
           email: email,
-          tokenExpiry: tokenExpiry,
+          tokenExpiry: auth.tokenExpiry,
         );
-        if (usage != null) return usage;
-        refused = UsageException('Antigravity reported no quota buckets.');
+        final summaryWindows = summary?.windows ?? const <UsageWindow>[];
+        final hasGemini = summaryWindows.any(
+          (w) => w.label.toLowerCase().startsWith('gemini'),
+        );
+        if (summary != null && hasGemini) return summary;
+
+        // Current accounts often receive only third-party (Claude + GPT) groups
+        // from retrieveUserQuotaSummary; fetch per-model buckets to include
+        // Gemini's live quota window.
+        List<UsageWindow> supplemented = const [];
+        try {
+          final bucketsUrl = Uri.parse(
+            'https://$host/v1internal:retrieveUserQuota',
+          );
+          final bucketsJson = await context.http.postJson(
+            bucketsUrl,
+            headers,
+            const {},
+          );
+          supplemented = parseAntigravityModelQuota(
+            bucketsJson,
+            includeThirdParty: summaryWindows.isEmpty,
+          );
+        } on UsageException {
+          // Keep whatever summary windows succeeded if per-model lookup failed.
+        }
+
+        final combined = [...supplemented, ...summaryWindows];
+        if (combined.isNotEmpty) {
+          return AgentUsage(
+            windows: combined,
+            fetchedAt: now,
+            email: email,
+            tokenExpiresAt: auth.tokenExpiry,
+          );
+        }
+        refused = UsageException(
+          'Antigravity reported no quota buckets.',
+          kind: UsageFailureKind.unusable,
+        );
       } on UsageException catch (e) {
         refused = e;
       }
     }
     throw refused!;
   }
+}
 
-  static final _quotaUrls = [
-    for (final host in [
-      'daily-cloudcode-pa.googleapis.com',
-      'cloudcode-pa.googleapis.com',
-    ])
-      Uri.parse('https://$host/v1internal:retrieveUserQuotaSummary'),
-  ];
+class _AntigravityAuth {
+  const _AntigravityAuth({
+    required this.accessToken,
+    required this.email,
+    required this.tokenExpiry,
+    required this.fromCliToken,
+  });
+
+  final String accessToken;
+  final String? email;
+  final DateTime? tokenExpiry;
+  final bool fromCliToken;
 }
 
 /// What the Antigravity IDE says of itself on every Cloud Code call. The
@@ -175,6 +415,66 @@ AgentUsage? parseAntigravityQuota(
     email: email,
     tokenExpiresAt: tokenExpiry,
   );
+}
+
+/// **Per-model quota buckets**, from `retrieveUserQuota`: folds `gemini-*`
+/// buckets that carry a `resetTime` (excluding `tab_*` autocomplete buckets)
+/// into one `Gemini · 5-hour` window using the lowest `remainingFraction`
+/// (tightest model quota). When [includeThirdParty] is true, folds `claude-*`
+/// and `gpt-*` buckets into `Claude + GPT · 5-hour` as well.
+List<UsageWindow> parseAntigravityModelQuota(
+  Map<String, dynamic> json, {
+  bool includeThirdParty = false,
+}) {
+  final payload = json['response'] is Map<String, dynamic>
+      ? json['response'] as Map<String, dynamic>
+      : json;
+  final buckets = payload['buckets'];
+  if (buckets is! List) return const [];
+
+  UsageWindow? foldGroup(String label, bool Function(String modelId) matches) {
+    double? lowestRemaining;
+    DateTime? resetAt;
+    for (final bucket in buckets.whereType<Map<String, dynamic>>()) {
+      final modelId = (bucket['modelId'] as String? ?? '').toLowerCase();
+      if (modelId.isEmpty || modelId.startsWith('tab_') || !matches(modelId)) {
+        continue;
+      }
+      final left = bucket['remainingFraction'];
+      final resetStr = bucket['resetTime'] as String?;
+      final parsedReset = resetStr == null
+          ? null
+          : DateTime.tryParse(resetStr)?.toUtc();
+      if (left is! num || parsedReset == null) continue;
+      final remaining = left.toDouble().clamp(0.0, 1.0);
+      if (lowestRemaining == null ||
+          remaining < lowestRemaining ||
+          (remaining == lowestRemaining &&
+              (resetAt == null || parsedReset.isBefore(resetAt)))) {
+        lowestRemaining = remaining;
+        resetAt = parsedReset;
+      }
+    }
+    if (lowestRemaining == null) return null;
+    return UsageWindow(
+      label: label,
+      percent: ((1 - lowestRemaining) * 100).clamp(0, 100).toDouble(),
+      resetsAt: resetAt,
+      span: kUsageFiveHourWindow,
+    );
+  }
+
+  final gemini = foldGroup(
+    'Gemini · 5-hour',
+    (id) => id.startsWith('gemini-'),
+  );
+  final thirdParty = includeThirdParty
+      ? foldGroup(
+          'Claude + GPT · 5-hour',
+          (id) => id.startsWith('claude-') || id.startsWith('gpt-'),
+        )
+      : null;
+  return [?gemini, ?thirdParty];
 }
 
 /// A group's name without the words that only pad it: `Gemini Models` is

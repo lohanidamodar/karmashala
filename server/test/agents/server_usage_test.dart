@@ -57,11 +57,14 @@ void main() {
     createdAt: start,
   );
 
-  void record(List<AgentInstallation> rows) => service.reconcileProbe(
+  void record(
+    List<AgentInstallation> rows, {
+    Set<String> probed = const {},
+  }) => service.reconcileProbe(
     environmentId: localHostEnvironmentId,
     readAt: clock.nowUtc(),
     found: rows,
-    probed: const {},
+    probed: probed,
     readings: const {},
   );
 
@@ -252,6 +255,58 @@ void main() {
     );
     await usage.refresh();
     expect(vendor.asked.map((i) => i.agentId), [AgentIds.claudeCode]);
+  });
+
+  test('a chat-only Antigravity install is tracked, and coexisting terminal '
+      'and chat installs fold to the terminal one', () async {
+    const probed = {
+      AgentIds.claudeCode,
+      AgentIds.antigravity,
+      AgentIds.antigravityAcp,
+    };
+    record([
+      installation(
+        'agy-chat',
+        AgentIds.antigravityAcp,
+        path: r'C:\acp\agy_acp_server.exe',
+      ),
+    ], probed: probed);
+    expect(work.usage.accounts().map((i) => i.id), ['agy-chat']);
+    final chatReply = await app.handleLater(
+      const UsageRefresh(
+        accountKey: '${AgentIds.antigravity}@$localHostEnvironmentId',
+      ),
+    );
+    expect(
+      chatReply.value.single.accountKey,
+      '${AgentIds.antigravityAcp}@$localHostEnvironmentId',
+    );
+    expect(chatReply.value.single.usage!.windows.single.percent, 20);
+
+    // Adding the terminal form in the same environment deduplicates both into
+    // one tracked account, preferring the terminal installation.
+    record([
+      installation(
+        'agy-chat',
+        AgentIds.antigravityAcp,
+        path: '/home/u/.local/bin/agy',
+      ),
+      installation(
+        'agy-cli',
+        AgentIds.antigravity,
+        path: '/home/u/.local/bin/agy',
+      ),
+    ], probed: probed);
+    expect(work.usage.accounts().map((i) => i.id), ['agy-cli']);
+    final folded = await app.handleLater(
+      const UsageRefresh(
+        accountKey: '${AgentIds.antigravityAcp}@$localHostEnvironmentId',
+      ),
+    );
+    expect(
+      folded.value.single.accountKey,
+      '${AgentIds.antigravity}@$localHostEnvironmentId',
+    );
   });
 
   test('a session row moving asks again — free inside the floor', () async {
