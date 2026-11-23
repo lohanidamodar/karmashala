@@ -17,6 +17,13 @@ installs claim the same version name.
 
 ---
 
+## 1.34.28 — 2026-11-23 (build 95)
+
+- **Updates from GitHub releases.** The app checks for a newer release shortly after launch and every six hours (Settings › About can turn that off, and has "Check for updates"). A notice offers Update, What's new, Skip this version and Later. On Windows the installer downloads, is checked against GitHub's digest, runs silently and restarts the app; an AppImage replaces itself; macOS opens the new DMG; a portable zip, the Linux tarball and a sideloaded APK open the download. A Play install keeps Play's own update.
+- **The phone's message box keeps its width.** The model and thinking pickers stay beside Send on a desktop; on a phone they are in the session bar under the box and its Session sheet.
+- **Antigravity usage and its native ACP mode** are read correctly, with the current Gemini models.
+- **Release files have checksums.** Every release carries `SHA256SUMS.txt`, and Homebrew, Scoop and winget manifests are kept in `packaging/`.
+
 ## 1.34.27 — 2026-11-22 (build 94)
 
 - **Agents can message and start sessions without Operate Karmashala.** Settings › Permissions › Tool access turns tool groups on or off: Message sessions and Start sessions are on by default, with messaging limited to the caller's project, its parent and its children unless "Any project" is on. Changing other sessions, answering approvals, pipelines and worktrees, and typing into panes stay off. Each group lists its tools under Advanced, and each project's page can override any group. A refused tool tells the agent which group to turn on.
