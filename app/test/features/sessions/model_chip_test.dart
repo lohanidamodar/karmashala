@@ -658,7 +658,7 @@ void main() {
       models: const [
         AgentModel(id: 'argon-4', label: 'argon-4', summary: ''),
         AgentModel(
-          id: 'agy-demo-high',
+          id: 'gemini-4-argon-high',
           label: 'Gemini 4 Argon (High)',
           summary: '',
         ),
@@ -672,21 +672,21 @@ void main() {
       final h = await harness(
         tester,
         agentId: AgentIds.antigravity,
-        model: 'gemini-3.1-pro-high',
+        model: 'gemini-4-neon-high',
         catalogs: {'a1': argon()},
       );
       addTearDown(h.container.dispose);
       await tester.pumpWidget(h.app);
       await tester.pumpAndSettle();
 
-      expect(find.text('Gemini 3.1 Pro (High)'), findsOneWidget);
+      expect(find.text('Gemini 4 Neon (High)'), findsOneWidget);
       expect(find.text('· no longer listed'), findsOneWidget);
 
       await openMenu(tester);
       expect(find.text('Argon 4'), findsOneWidget);
       expect(find.text('Gemini 4 Argon (High)'), findsOneWidget);
       // A curated model the agent no longer lists is not offered.
-      expect(find.text('Gemini 3.8 Flash (Low)'), findsNothing);
+      expect(find.text('Gemini 4 Carbon (Low)'), findsNothing);
       expect(find.text(kRefreshModelsLabel), findsOneWidget);
       expect(find.text('Read just now from agy models'), findsOneWidget);
     });
